@@ -72,7 +72,7 @@ ifeq ($(BAE_API),IOS)
 	SRC       :=	BAE_API_$(BAE_API).c
 endif
 ifeq ($(BAE_API),SDL2)
-	BAE_FLAGS += 	-DX_PLATFORM=SDL2
+	BAE_FLAGS += 	-DX_PLATFORM=X_SDL2
 	SRC       :=	BAE_API_$(BAE_API).c
 endif
 ## End Easy API -> X_PLATFORM

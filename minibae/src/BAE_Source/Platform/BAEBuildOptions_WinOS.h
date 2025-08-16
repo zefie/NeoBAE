@@ -32,7 +32,7 @@
 /*
 **  BAEBuildOptions_WinOS.h
 **
-**  © Copyright 1999-2000 Beatnik, Inc, All Rights Reserved.
+**  ï¿½ Copyright 1999-2000 Beatnik, Inc, All Rights Reserved.
 **
 **  Beatnik products contain certain trade secrets and confidential and
 **  proprietary information of Beatnik.  Use, reproduction, disclosure
@@ -96,7 +96,7 @@
 #define BAE_COMPLETE                    1
 #define USE_STREAM_API                  TRUE
 #define SUPPORT_IGOR_FEATURE            TRUE
-#define SUPPORT_KARAOKE			FALSE
+#define SUPPORT_KARAOKE			        FALSE
 
 
 // Overwritable Flags -- default values

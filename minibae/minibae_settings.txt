@@ -1,0 +1,1 @@
+last_bank=BXBanks/soundbank-min.gm

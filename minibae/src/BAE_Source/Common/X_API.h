@@ -313,6 +313,7 @@
 #define X_EPOC              15      // Symbian Quartz6.0 CPP port
 #define X_MACINTOSH         16      // MacOSX
 #define X_IOS               17      // iOS
+#define X_SDL2              18      // SDL2
 
 // types for CPU_TYPE
 #define k68000              0
@@ -408,6 +409,8 @@
     #include "BAEBuildOptions_ANSI.h"
 #elif X_PLATFORM == X_EPOC
     #include "BAEBuildOptions_EPOC.h"
+#elif X_PLATFORM == X_SDL2
+    #include "BAEBuildOptions_SDL2.h"
 #endif
 
 //-----------------------------------------------------------------------------------

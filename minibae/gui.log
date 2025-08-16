@@ -1,0 +1,39 @@
+[2025-08-16 10:03:54] Loaded 24 banks from BXBanks.xml
+[2025-08-16 10:03:54] Attempting to restore last bank: BXBanks/soundbank-min.gm
+[2025-08-16 10:03:54] Loaded bank BXBanks/soundbank-min.gm
+[2025-08-16 10:04:02] Loaded 24 banks from BXBanks.xml
+[2025-08-16 10:04:02] Attempting to restore last bank: BXBanks/soundbank-min.gm
+[2025-08-16 10:04:02] Loaded bank BXBanks/soundbank-min.gm
+[2025-08-16 10:13:14] Loaded 24 banks from BXBanks.xml
+[2025-08-16 10:13:14] No last bank setting found
+[2025-08-16 10:13:14] Bank restore failed, trying fallback discovery
+[2025-08-16 10:13:14] Trying fallback bank: BXBanks/soundbank-min.gm
+[2025-08-16 10:13:14] Loaded bank BXBanks/soundbank-min.gm
+[2025-08-16 10:13:14] Fallback bank loaded successfully: BXBanks/soundbank-min.gm
+[2025-08-16 10:13:21] Loaded 24 banks from BXBanks.xml
+[2025-08-16 10:13:21] No last bank setting found
+[2025-08-16 10:13:21] Bank restore failed, trying fallback discovery
+[2025-08-16 10:13:21] Trying fallback bank: BXBanks/soundbank-min.gm
+[2025-08-16 10:13:22] Loaded bank BXBanks/soundbank-min.gm
+[2025-08-16 10:13:22] Fallback bank loaded successfully: BXBanks/soundbank-min.gm
+[2025-08-16 10:13:26] Loaded 24 banks from BXBanks.xml
+[2025-08-16 10:13:26] No last bank setting found
+[2025-08-16 10:13:26] Bank restore failed, trying fallback discovery
+[2025-08-16 10:13:26] Trying fallback bank: BXBanks/soundbank-min.gm
+[2025-08-16 10:13:26] Loaded bank BXBanks/soundbank-min.gm
+[2025-08-16 10:13:26] Fallback bank loaded successfully: BXBanks/soundbank-min.gm
+[2025-08-16 10:13:40] Loaded 24 banks from BXBanks.xml
+[2025-08-16 10:13:40] No last bank setting found
+[2025-08-16 10:13:40] Bank restore failed, trying fallback discovery
+[2025-08-16 10:13:40] Trying fallback bank: BXBanks/soundbank-min.gm
+[2025-08-16 10:13:40] Loaded bank BXBanks/soundbank-min.gm
+[2025-08-16 10:13:40] Fallback bank loaded successfully: BXBanks/soundbank-min.gm
+[2025-08-16 10:13:47] Drag and drop: Loading bank file: D:\bin\BXPlayer\BXBanks\minibae-wtv.hsb
+[2025-08-16 10:13:47] Loaded bank D:\bin\BXPlayer\BXBanks\minibae-wtv.hsb
+[2025-08-16 10:13:47] About to save settings with path: D:\bin\BXPlayer\BXBanks\minibae-wtv.hsb
+[2025-08-16 10:13:47] Converted path 'D:\bin\BXPlayer\BXBanks\minibae-wtv.hsb' to absolute: 'D:\bin\BXPlayer\BXBanks\minibae-wtv.hsb'
+[2025-08-16 10:13:47] Path 'D:\bin\BXPlayer\BXBanks\minibae-wtv.hsb' is already absolute
+[2025-08-16 10:13:47] Saved settings: last_bank=D:\bin\BXPlayer\BXBanks\minibae-wtv.hsb
+[2025-08-16 10:13:47] Auto-reloading song with new bank: D:\Music\MIDI\WebTV\ClassicROM\world1.mid
+[2025-08-16 10:13:47] Song reloaded successfully with new bank
+[2025-08-16 10:13:47] Successfully loaded dropped bank: D:\bin\BXPlayer\BXBanks\minibae-wtv.hsb
