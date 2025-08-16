@@ -1,6 +1,7 @@
 BAE_BUILT_IN_PATCHES	:= 1
 BAE_API			:= SDL2
 DEBUG			:= 0
+BUILD_GUI   := 1
 include inc/Makefile.common
 
 ARCH		:= -m32 -static
@@ -11,7 +12,7 @@ AR      	:= ar
 STRIP		:= strip
 
 OPTI            := -O2 -fPIC
-CFLAGS  	:= $(ARCH) $(OPTI) $(INC_PATH) -D_THREAD_SAFE -Wno-unused-value
+CFLAGS  	:= $(ARCH) $(OPTI) $(INC_PATH) -D_THREAD_SAFE -DGUI_WITH_TTF -Wno-unused-value
 
 ifneq ($(BAE_FLAGS),)
 	CFLAGS	+= $(BAE_FLAGS)
@@ -23,15 +24,24 @@ CFLAGS		+= -D_VERSION=\""$(VERSION)"\"
 CXXFLAGS 	:= $(CFLAGS)
 LDFLAGS		:= $(ARCH) $(OPTI) -s
 
-LIBS	= 	-lpthread -lm -ldl
-
+LIBS	= 	-lpthread -lm -LDFLAGS
 UNAME_S:=$(shell uname -s 2>/dev/null)
 # System SDL for Linux (dynamic) if pkg-config available
 ifneq (,$(findstring Linux,$(UNAME_S)))
 	SDL2_CFLAGS := $(shell pkg-config --cflags sdl2 2>/dev/null)
 	SDL2_LIBS   := $(shell pkg-config --libs sdl2 2>/dev/null)
+	# Try SDL2_ttf
+	SDL2_TTF_CFLAGS := $(shell pkg-config --cflags SDL2_ttf 2>/dev/null)
+	SDL2_TTF_LIBS   := $(shell pkg-config --libs SDL2_ttf 2>/dev/null)
 	ifneq ($(SDL2_LIBS),)
 		CFLAGS += $(SDL2_CFLAGS)
+		ifneq ($(SDL2_TTF_LIBS),)
+			CFLAGS += $(SDL2_TTF_CFLAGS)
+			LIBS := $(SDL2_TTF_LIBS) $(LIBS)
+		else
+			# Fallback: hope -lSDL2_ttf works
+			LIBS := -lSDL2_ttf $(LIBS)
+		endif
 		# Prepend pkg-config libs; they already have -lSDL2 and any needed deps
 		LIBS := $(SDL2_LIBS) $(filter-out -lSDL2,$(LIBS))
 		# If you kept -static in ARCH but want dynamic SDL, strip it here:
@@ -42,18 +52,26 @@ ifneq (,$(findstring Linux,$(UNAME_S)))
 	else
 		# Fallback minimal guess
 		CFLAGS += -I/usr/include/SDL2
-		LIBS := -lSDL2 $(LIBS)
+		LIBS := -lSDL2 -lSDL2_ttf $(LIBS)
 	endif
 else
 	# Non-Linux (e.g., BSD) fallback
 	SDL2_CFLAGS := $(shell pkg-config --cflags sdl2 2>/dev/null)
 	SDL2_LIBS   := $(shell pkg-config --libs sdl2 2>/dev/null)
+	SDL2_TTF_CFLAGS := $(shell pkg-config --cflags SDL2_ttf 2>/dev/null)
+	SDL2_TTF_LIBS   := $(shell pkg-config --libs SDL2_ttf 2>/dev/null)
 	ifneq ($(SDL2_LIBS),)
 		CFLAGS += $(SDL2_CFLAGS)
+		ifneq ($(SDL2_TTF_LIBS),)
+			CFLAGS += $(SDL2_TTF_CFLAGS)
+			LIBS := $(SDL2_TTF_LIBS) $(LIBS)
+		else
+			LIBS := -lSDL2_ttf $(LIBS)
+		endif
 		LIBS := $(SDL2_LIBS) $(LIBS)
 	else
 		CFLAGS += -I/usr/include/SDL2
-		LIBS := -lSDL2 $(LIBS)
+		LIBS := -lSDL2 -lSDL2_ttf $(LIBS)
 	endif
 endif
 

@@ -41,15 +41,15 @@ mkdir "${ODIR}"
 
 echo "Building MingW32 DirectSound..."
 runcmd make -f Makefile.mingw clean all pack
-install_file "${BDIR}/playbae.exe.gz" "${ODIR}/playbae.exe.gz"
-runcmd cd "${BDIR}" && runcmd zip -u "${ODIR}/libMiniBAE_win.zip" *.dll *.lib
+install_file "${BDIR}/playbae.exe.gz" "${ODIR}/playbae_dsound.exe.gz"
+runcmd cd "${BDIR}" && runcmd zip -u "${ODIR}/libMiniBAE_win_dsound.zip" *.dll *.lib
 runcmd cd "${RDIR}"
 runcmd make -f Makefile.mingw clean
 
 echo "Building MingW32 SDL2..."
 runcmd make -f Makefile.mingw clean all pack
-install_file "${BDIR}/playbae.exe.gz" "${ODIR}/playbae.exe.gz"
-runcmd cd "${BDIR}" && runcmd zip -u "${ODIR}/libMiniBAE_win.zip" *.dll *.lib
+install_file "${BDIR}/playbae.exe.gz" "${ODIR}/playbae_sdl2.exe.gz"
+runcmd cd "${BDIR}" && runcmd zip -u "${ODIR}/libMiniBAE_win_sdl2.zip" *.dll *.lib
 runcmd cd "${RDIR}"
 runcmd make -f Makefile.mingw USE_SDL=1 clean
 

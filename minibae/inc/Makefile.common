@@ -9,7 +9,11 @@ ifeq ($(TARGET_LIB),)
 endif
 
 ifeq ($(TARGET_BIN),)
-	TARGET_BIN	:= playbae
+	ifneq ($(BUILD_GUI),) 
+		TARGET_BIN	:= minibae_gui
+	else
+		TARGET_BIN	:= playbae
+	endif
 endif
 
 ifeq ($(TEST_BIN_PREFIX),)
@@ -21,7 +25,11 @@ endif
 
 vpath	%.c src/BAE_Source/Common src/BAE_Source/Platform
 vpath	%.c src/banks/patches111
+ifneq ($(BUILD_GUI),) 
+vpath	%.c gui
+else
 vpath	%.c src/playbae
+endif
 vpath	%.c src/BAE_MPEG_Source_II
 
 INC_PATH	:= -Isrc/BAE_Source/Common
@@ -127,7 +135,11 @@ BAE_FLAGS += -DUSE_MINIMP3_WRAPPER=1 -DUSE_MPEG_DECODER=1
 SRC += XMPEG_minimp3_wrapper.c XMPEGFilesSun.c
 
 # playbae = libMiniBAE srcs + playbae.c
+ifneq ($(BUILD_GUI),)
+SRC_BIN		:= $(SRC) gui_main.c
+else
 SRC_BIN		:= $(SRC) playbae.c
+endif
 
 OBJ_DIR 	:= $(BUILD_DIR)obj/
 OBJ 		:= $(addprefix $(OBJ_DIR),$(addsuffix .o,$(basename ${SRC})))
