@@ -87,7 +87,7 @@ char const copyrightInfo[] =
 char const usageString[] =
 {
    "USAGE:  playbae  -p  {patches.hsb}\n"
-   "                 -f  {Play a file (MIDI, RMF, WAV or AIFF}\n"
+   "                 -f  {Play a file (MIDI, RMF, WAV, AIFF, MP3)}\n"
    "                 -o  {write output to file}\n"
    "                 -mr {mixer sample rate ie. 11025}\n"
    "                 -l  {# of times to loop}\n"
@@ -113,6 +113,7 @@ char const usageStringExtra[] =
    "                 -a  {Play a AIF file}\n"
    "                 -r  {Play a RMF file}\n"
    "                 -m  {Play a MID file}\n"
+   "                 -mp {Play an MP3/MPEG audio file}\n"
 };
 
 char const reverbTypeList[] =
@@ -565,6 +566,23 @@ static BAEResult PlayRMF(BAEMixer theMixer, char *fileName, BAE_UNSIGNED_FIXED v
    return(err);
 }
 
+static int PV_IsFileExtension(const char *path, const char *ext) {
+   size_t lp, le;
+   if (!path || !ext) return 0;
+   lp = strlen(path);
+   le = strlen(ext);
+   if (le > lp) return 0;
+   return _stricmp(path + lp - le, ext) == 0;
+}
+
+static int PV_IsLikelyMP3Header(const unsigned char header[4]) {
+   /* ID3 tag */
+   if (header[0]=='I' && header[1]=='D' && header[2]=='3') return 1;
+   /* Frame sync 11 bits 0xFFE, we check first 2 bytes */
+   if (header[0] == 0xFF && (header[1] & 0xE0) == 0xE0) return 1;
+   return 0;
+}
+
 BAEResult playFile(BAEMixer theMixer, char *parmFile, BAE_UNSIGNED_FIXED volume, unsigned int timeLimit, unsigned int loopCount, BAEReverbType reverbType, char *midiMuteChannels) {
 	BAEResult err = BAE_NO_ERROR;
 	char fileHeader[5] = {0}; // 4 char + 1 null byte
@@ -585,6 +603,10 @@ BAEResult playFile(BAEMixer theMixer, char *parmFile, BAE_UNSIGNED_FIXED volume,
 		} else if (strcmp(fileHeader,X_FILETYPE_WAVE) == 0) {
        		    playbae_printf("Playing WAVE %s\n", parmFile);
 	            err = PlayPCM(theMixer, parmFile, BAE_AIFF_TYPE, volume, timeLimit);
+		} else if (PV_IsLikelyMP3Header((unsigned char*)fileHeader) ||
+		           PV_IsFileExtension(parmFile, ".mp3") || PV_IsFileExtension(parmFile, ".mp2") || PV_IsFileExtension(parmFile, ".mpg")) {
+		    playbae_printf("Playing MP3 %s\n", parmFile);
+		    err = PlayPCM(theMixer, parmFile, BAE_MPEG_TYPE, volume, timeLimit);
 		} else {
 		    err = (BAEResult)10069;
 		}
