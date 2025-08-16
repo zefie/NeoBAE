@@ -29,22 +29,29 @@ rm -f "${ODIR}/"*
 rmdir "${ODIR}" 2>/dev/null
 mkdir "${ODIR}"
 
-echo "Building Linux 32bit..."
-runcmd make -f Makefile clean pack
-install_file "${BDIR}/playbae_linux32_static.gz" "${ODIR}/playbae_linux32_static.gz"
-runcmd make -f Makefile clean
+#echo "Building Linux 32bit..."
+#runcmd make -f Makefile clean pack
+#install_file "${BDIR}/playbae_linux32_static.gz" "${ODIR}/playbae_linux32_static.gz"
+#runcmd make -f Makefile clean
 
-echo "Building Linux 32bit clang..."
-runcmd make -f Makefile.clang clean pack
-install_file "${BDIR}/playbae_linux32_clang_static.gz" "${ODIR}/playbae_linux32_clang_static.gz"
-runcmd make -f Makefile.clang clean
+#echo "Building Linux 32bit clang..."
+#runcmd make -f Makefile.clang clean pack
+#install_file "${BDIR}/playbae_linux32_clang_static.gz" "${ODIR}/playbae_linux32_clang_static.gz"
+#runcmd make -f Makefile.clang clean
 
-echo "Building MingW32..."
+echo "Building MingW32 DirectSound..."
 runcmd make -f Makefile.mingw clean all pack
 install_file "${BDIR}/playbae.exe.gz" "${ODIR}/playbae.exe.gz"
 runcmd cd "${BDIR}" && runcmd zip -u "${ODIR}/libMiniBAE_win.zip" *.dll *.lib
 runcmd cd "${RDIR}"
 runcmd make -f Makefile.mingw clean
+
+echo "Building MingW32 SDL2..."
+runcmd make -f Makefile.mingw clean all pack
+install_file "${BDIR}/playbae.exe.gz" "${ODIR}/playbae.exe.gz"
+runcmd cd "${BDIR}" && runcmd zip -u "${ODIR}/libMiniBAE_win.zip" *.dll *.lib
+runcmd cd "${RDIR}"
+runcmd make -f Makefile.mingw USE_SDL=1 clean
 
 echo "Building Enscripten WASM32..."
 runcmd make -f Makefile.emcc clean pack

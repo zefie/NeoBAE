@@ -54,6 +54,12 @@ static volatile int fadeOut = TRUE;
 static short positionDisplayMultiplier = 10; // 100 = 1 second
 static short positionDisplayMultiplierCounter = 0;
 
+#ifdef _WIN32
+    #define stricmp _stricmp
+#else
+    #define stricmp strcasecmp
+#endif
+
 void intHandler(int dummy) {
     interruptPlayBack = TRUE;
 }
@@ -572,7 +578,7 @@ static int PV_IsFileExtension(const char *path, const char *ext) {
    lp = strlen(path);
    le = strlen(ext);
    if (le > lp) return 0;
-   return _stricmp(path + lp - le, ext) == 0;
+   return stricmp(path + lp - le, ext) == 0;
 }
 
 static int PV_IsLikelyMP3Header(const unsigned char header[4]) {

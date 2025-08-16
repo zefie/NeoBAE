@@ -1,5 +1,5 @@
 BAE_BUILT_IN_PATCHES	:= 1
-BAE_API			:= Ansi
+BAE_API			:= SDL2
 DEBUG			:= 0
 
 include inc/Makefile.common
@@ -30,8 +30,42 @@ ifneq ($(DEBUG),0)
 	LDFLAGS		+= $(CLANG_SANI)
 endif
 
-LIBS	= 	-lm \
-		-lpthread
+LIBS	= 	-lpthread -lm -ldl
+
+# ------------------------------------------------------------
+# SDL2 integration (vendored static or system dynamic)
+# Mirrors logic in main Makefile (gcc). Use:
+#   make -f Makefile.clang BAE_API=SDL2            (system via pkg-config)
+#   make -f Makefile.clang BAE_API=SDL2 VENDORED_SDL2=../SDL2-prefix  (static)
+# ------------------------------------------------------------
+UNAME_S:=$(shell uname -s 2>/dev/null)
+
+ifneq (,$(findstring Linux,$(UNAME_S)))
+	SDL2_CFLAGS := $(shell pkg-config --cflags sdl2 2>/dev/null)
+	SDL2_LIBS   := $(shell pkg-config --libs sdl2 2>/dev/null)
+	ifneq ($(SDL2_LIBS),)
+		CFLAGS += $(SDL2_CFLAGS)
+		LIBS   := $(SDL2_LIBS) $(filter-out -lSDL2,$(LIBS))
+		# Drop -static if present to allow dynamic SDL
+		ifneq (,$(findstring -static,$(ARCH)))
+			ARCH := $(filter-out -static,$(ARCH))
+			LDFLAGS := $(filter-out -static,$(LDFLAGS))
+		endif
+	else
+		CFLAGS += -I/usr/include/SDL2
+		LIBS := -lSDL2 $(LIBS)
+	endif
+else
+	SDL2_CFLAGS := $(shell pkg-config --cflags sdl2 2>/dev/null)
+	SDL2_LIBS   := $(shell pkg-config --libs sdl2 2>/dev/null)
+	ifneq ($(SDL2_LIBS),)
+		CFLAGS += $(SDL2_CFLAGS)
+		LIBS := $(SDL2_LIBS) $(LIBS)
+	else
+		CFLAGS += -I/usr/include/SDL2
+		LIBS := -lSDL2 $(LIBS)
+	endif
+endif
 
 all: $(TARGET_LIB).a ${TARGET_LIB}.so $(TARGET_BIN)
 

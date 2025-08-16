@@ -1,7 +1,13 @@
 TARGET_BIN		:= playbae.exe
 TEST_BIN_PREFIX 	:= "wine "
 BAE_BUILT_IN_PATCHES	:= 1
+
+ifneq ($(USE_SDL),)
+BAE_API			:= SDL2
+else
 BAE_API			:= WinOS
+endif
+
 DEBUG			:= 0
 
 include inc/Makefile.common
@@ -13,8 +19,8 @@ LD		:= $(CC)
 AR      	:= i686-w64-mingw32-gcc-ar-win32
 STRIP      	:= i686-w64-mingw32-strip
 DLLTOOL		:= i686-w64-mingw32-dlltool
-OPTI            := -O2
-CFLAGS  	:= $(ARCH) $(OPTI) $(INC_PATH) -D_THREAD_SAFE -Wno-unused-value
+OPTI            := -O2 
+CFLAGS  	:= $(ARCH) $(OPTI) $(INC_PATH) -D_THREAD_SAFE -Wno-unused-value 
 
 ifneq ($(BAE_FLAGS),)
 	CFLAGS	+= $(BAE_FLAGS)
@@ -24,24 +30,53 @@ include inc/Makefile.versioning
 CFLAGS		+= -D_VERSION=\""$(VERSION)"\"
 
 CXXFLAGS 	:= $(CFLAGS)
-LDFLAGS		:= $(ARCH) $(OPTI) -s
+LDFLAGS		:= $(ARCH) $(OPTI) -s 
 
-LIBS	= 	-ldxguid \
-		-ldsound \
-		-lole32 \
-		-lwinmm \
-		-lkernel32 \
-		-luser32 \
-		-lgdi32 \
-		-lwinspool \
-		-lcomdlg32 \
-		-ladvapi32 \
-		-lshell32 \
-		-loleaut32 \
-		-luuid \
-		-lodbc32 \
-		-lodbccp32
 
+LIBS   = \
+                -ldxguid \
+                -ldsound \
+                -lole32 \
+                -lwinmm \
+                -lkernel32 \
+                -luser32 \
+                -loleaut32 \
+                -lwinspool \
+                -lcomdlg32 \
+                -ladvapi32 \
+                -loleaut32 \
+                -lodbc32 \
+                -lodbccp32
+
+ifneq ($(USE_SDL),)
+    CFLAGS  += -I../SDL2-2.32.8/i686-w64-mingw32/include/SDL2
+    LDFLAGS += -L../SDL2-2.32.8/i686-w64-mingw32/lib
+    # Override LIBS completely for SDL build to enforce correct ordering
+    LIBS = \
+                -lmingw32 \
+                -lSDL2 \
+                -lsetupapi \
+                -lcfgmgr32 \
+                -lversion \
+                -limm32 \
+                -lwinmm \
+                -lole32 \
+                -loleaut32 \
+                -ladvapi32 \
+                -luser32 \
+                -lgdi32 \
+                -lshell32 \
+                -lshlwapi \
+                -ldxguid \
+                -ldsound \
+                -luuid \
+                -lkernel32 \
+                -lcomdlg32 \
+                -lwinspool \
+                -lwinpthread \
+                -lodbc32 \
+                -lodbccp32
+endif
 
 all: $(TARGET_LIB).a ${TARGET_LIB}.dll $(TARGET_BIN)
 
@@ -56,7 +91,7 @@ $(TARGET_LIB).dll: ${OBJ}
 	@cat $(OBJ_DIR)$(TARGET_LIB).def2 | grep "BAE" >> $(OBJ_DIR)$(TARGET_LIB).def
 	@rm -f $(OBJ_DIR)$(TARGET_LIB).def2 $(OBJ_DIR)exports.o
 	@$(DLLTOOL) -e $(OBJ_DIR)exports.o -d $(OBJ_DIR)$(TARGET_LIB).def -l $(TARGET_OUT)$(TARGET_LIB).lib $(OBJ)
-	${CC} -shared $(LDFLAGS) ${OBJ} $(OBJ_DIR)exports.o -Wl,--subsystem,windows ${LIBS} -o $(TARGET_OUT)${TARGET_LIB}.dll
+	${CC} -shared $(LDFLAGS) ${OBJ} $(OBJ_DIR)exports.o -Wl,--subsystem,windows -o $(TARGET_OUT)${TARGET_LIB}.dll ${LIBS}
 
 $(TARGET_BIN): ${OBJ_BIN}
 	@mkdir -p $(TARGET_OUT)
