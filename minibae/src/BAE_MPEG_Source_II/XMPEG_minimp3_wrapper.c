@@ -45,7 +45,7 @@ typedef struct Minimp3Stream {
     int             channels;
     int             bitrate_kbps; /* last frame */
     int             frame_samples; /* samples per channel in last decoded frame */
-    unsigned long   max_frames_est; /* rough estimate */
+    uint32_t   max_frames_est; /* rough estimate */
     size_t          pcm_frame_bytes; /* last frame decoded bytes */
 
     /* For seeking we just reposition raw offset and re-init decoder */
@@ -76,11 +76,11 @@ void * MPG_NewStreamXFILE(XFILE file) {
     s->closeFile = FALSE;
     /* Load entire file into memory (simpler than streaming) */
     {
-        unsigned long length = (unsigned long)XFileGetLength(file);
+        uint32_t length = (uint32_t)XFileGetLength(file);
         if (length == 0) { XDisposePtr((XPTR)s); return NULL; }
         uint8_t *buf = (uint8_t*)XNewPtr(length);
         if (!buf) { XDisposePtr((XPTR)s); return NULL; }
-        if (XFileSetPosition(file, 0) != 0 || XFileRead(file, buf, (long)length) != 0) {
+        if (XFileSetPosition(file, 0) != 0 || XFileRead(file, buf, (int32_t)length) != 0) {
             XDisposePtr((XPTR)buf);
             XDisposePtr((XPTR)s);
             return NULL;
@@ -118,7 +118,7 @@ void * MPG_NewStreamXFILENAME(XFILENAME *fileName_in) {
     return s;
 }
 
-void * MPG_NewStreamFromMemory(void *mpeg_stream, unsigned long mpeg_stream_length) {
+void * MPG_NewStreamFromMemory(void *mpeg_stream, uint32_t mpeg_stream_length) {
     if (!mpeg_stream || !mpeg_stream_length) return NULL;
     Minimp3Stream *s = (Minimp3Stream*)XNewPtr(sizeof(Minimp3Stream));
     if (!s) return NULL;
@@ -151,7 +151,7 @@ static int mm_decode_next(Minimp3Stream *s, void *out) {
     if (s->readMode == MM_READ_MEMORY) {
         const uint8_t *ptr; size_t remain = mm_peek(s, &ptr);
         while (remain) {
-            samples = mp3dec_decode_frame(&s->dec, ptr, (int)remain, (short*)out, &info);
+            samples = mp3dec_decode_frame(&s->dec, ptr, (int)remain, (int16_t*)out, &info);
             if (info.frame_bytes > 0) {
                 s->raw_offset += info.frame_bytes;
                 if (samples > 0) {
@@ -159,7 +159,7 @@ static int mm_decode_next(Minimp3Stream *s, void *out) {
                     if (info.channels) s->channels = info.channels;
                     if (info.bitrate_kbps) s->bitrate_kbps = info.bitrate_kbps;
                     s->frame_samples = samples; /* samples per channel */
-                    s->pcm_frame_bytes = (size_t)samples * (size_t)s->channels * sizeof(short);
+                    s->pcm_frame_bytes = (size_t)samples * (size_t)s->channels * sizeof(int16_t);
                     return 0; /* success */
                 }
                 /* no PCM but a frame consumed, continue */
@@ -188,17 +188,17 @@ int MPG_GetChannels(void *reference) { Minimp3Stream *s = (Minimp3Stream*)refere
 int MPG_GetBitSize(void *reference) { (void)reference; return 16; }
 int MPG_GetBitrate(void *reference) { Minimp3Stream *s=(Minimp3Stream*)reference; return s? s->bitrate_kbps*1000:0; }
 int MPG_GetSampleRate(void *reference){ Minimp3Stream *s=(Minimp3Stream*)reference; return s? s->sample_rate:0; }
-unsigned long MPG_GetMaxBuffers(void *reference){ Minimp3Stream *s=(Minimp3Stream*)reference; return s? s->max_frames_est:0; }
-unsigned long MPG_GetSizeInBytes(void *reference){ Minimp3Stream *s=(Minimp3Stream*)reference; if(!s) return 0; if(s->pcm_frame_bytes && s->max_frames_est) return (unsigned long)(s->pcm_frame_bytes * s->max_frames_est); return (unsigned long)s->mem_size; }
-unsigned long MPG_GetNumberOfSamples(void *reference){ unsigned long bytes=MPG_GetSizeInBytes(reference); int ch=MPG_GetChannels(reference); return ch? bytes/ (ch*2):0; }
-int MPG_SeekStream(void *reference, unsigned long newPos){ Minimp3Stream *s=(Minimp3Stream*)reference; if(!s) return -1; if(s->readMode!=MM_READ_MEMORY) return -1; if(newPos>=s->mem_size) newPos = (unsigned long)s->mem_size; s->raw_offset=newPos; mp3dec_init(&s->dec); return 0; }
+uint32_t MPG_GetMaxBuffers(void *reference){ Minimp3Stream *s=(Minimp3Stream*)reference; return s? s->max_frames_est:0; }
+uint32_t MPG_GetSizeInBytes(void *reference){ Minimp3Stream *s=(Minimp3Stream*)reference; if(!s) return 0; if(s->pcm_frame_bytes && s->max_frames_est) return (uint32_t)(s->pcm_frame_bytes * s->max_frames_est); return (uint32_t)s->mem_size; }
+uint32_t MPG_GetNumberOfSamples(void *reference){ uint32_t bytes=MPG_GetSizeInBytes(reference); int ch=MPG_GetChannels(reference); return ch? bytes/ (ch*2):0; }
+int MPG_SeekStream(void *reference, uint32_t newPos){ Minimp3Stream *s=(Minimp3Stream*)reference; if(!s) return -1; if(s->readMode!=MM_READ_MEMORY) return -1; if(newPos>=s->mem_size) newPos = (uint32_t)s->mem_size; s->raw_offset=newPos; mp3dec_init(&s->dec); return 0; }
 
 /* Stubs for encoder side to satisfy linkage if old code compiled with USE_MPEG_ENCODER=0 */
-void * MPG_EncodeNewStream(unsigned long a,unsigned long b,unsigned long c,XPTR d,unsigned long e){(void)a;(void)b;(void)c;(void)d;(void)e;return NULL;}
-int MPG_EncodeProcess(void *s, XPTR *b, unsigned long *sz, XBOOL *last){(void)s;(void)b;(void)sz;(void)last;return 0;}
+void * MPG_EncodeNewStream(uint32_t a,uint32_t b,uint32_t c,XPTR d,uint32_t e){(void)a;(void)b;(void)c;(void)d;(void)e;return NULL;}
+int MPG_EncodeProcess(void *s, XPTR *b, uint32_t *sz, XBOOL *last){(void)s;(void)b;(void)sz;(void)last;return 0;}
 void MPG_EncodeFreeStream(void *s){(void)s;}
-unsigned long MPG_EncodeMaxFrames(void *s){(void)s; return 0;}
-unsigned long MPG_EncodeMaxFrameSize(void *s){(void)s; return 0;}
+uint32_t MPG_EncodeMaxFrames(void *s){(void)s; return 0;}
+uint32_t MPG_EncodeMaxFrameSize(void *s){(void)s; return 0;}
 void MPG_EncodeSetRefillCallback(void *s, MPEGFillBufferFn cb, void *r){(void)s;(void)cb;(void)r;}
 
 XMPEGEncodeRate XGetMPEGEncodeRate(SndCompressionType type){(void)type;return (XMPEGEncodeRate)0;}
@@ -208,7 +208,7 @@ XFIXED XGetClosestMPEGSampleRate(XFIXED sourceRate, SndCompressionSubType subTyp
 void XGetClosestMPEGSampleRateAndEncodeRate(XFIXED inSampleRate, XMPEGEncodeRate inEncodeRate, XFIXED *outSampleRate, XMPEGEncodeRate *outEncodeRate, SndCompressionSubType subType){if(outSampleRate)*outSampleRate=inSampleRate; if(outEncodeRate)*outEncodeRate=inEncodeRate; (void)subType;}
 
 /* Map bitrate (bps) to legacy SndCompressionType constants (C_MPEG_xx) */
-SndCompressionType XGetMPEGBitrateType(unsigned long bitrate) {
+SndCompressionType XGetMPEGBitrateType(uint32_t bitrate) {
     /* Accept bitrate in bits/sec (wrapper calls return kbps*1000) */
     if (bitrate < 36000) return C_MPEG_32;
     if (bitrate < 44000) return C_MPEG_40;
@@ -242,7 +242,7 @@ static int mm_probe_first_frame(Minimp3Stream *s) {
     const uint8_t *data = s->mem; size_t size = s->mem_size;
     int skip = mm_skip_id3v2(data, size);
     s->raw_offset = skip;
-    mp3dec_frame_info_t info; short temp[1152*2];
+    mp3dec_frame_info_t info; int16_t temp[1152*2];
     size_t remain;
     while ((remain = size - s->raw_offset) > 16) {
         int samples = mp3dec_decode_frame(&s->dec, data + s->raw_offset, (int)remain, temp, &info);
@@ -252,8 +252,8 @@ static int mm_probe_first_frame(Minimp3Stream *s) {
                 s->channels = info.channels;
                 s->bitrate_kbps = info.bitrate_kbps;
                 s->frame_samples = samples;
-                s->pcm_frame_bytes = (size_t)samples * info.channels * sizeof(short);
-                s->max_frames_est = info.frame_bytes ? (unsigned long)( (size - s->raw_offset) / info.frame_bytes ) : 0;
+                s->pcm_frame_bytes = (size_t)samples * info.channels * sizeof(int16_t);
+                s->max_frames_est = info.frame_bytes ? (uint32_t)( (size - s->raw_offset) / info.frame_bytes ) : 0;
                 return 0;
             }
             s->raw_offset += info.frame_bytes; /* consumed but no PCM */

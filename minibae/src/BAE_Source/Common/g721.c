@@ -46,23 +46,23 @@
 
 #if USE_HIGHLEVEL_FILE_API != FALSE
 
-static short qtab_721[7] = {-124, 80, 178, 246, 300, 349, 400};
+static int16_t qtab_721[7] = {-124, 80, 178, 246, 300, 349, 400};
 /*
  * Maps G.721 code word to reconstructed scale factor normalized log
  * magnitude values.
  */
-static const short  _dqlntab[16] = {-2048, 4, 135, 213, 273, 323, 373, 425,
+static const int16_t  _dqlntab[16] = {-2048, 4, 135, 213, 273, 323, 373, 425,
                             425, 373, 323, 273, 213, 135, 4, -2048};
 
 /* Maps G.721 code word to log of scale factor multiplier. */
-static const short  _witab[16] = {-12, 18, 41, 64, 112, 198, 355, 1122,
+static const int16_t  _witab[16] = {-12, 18, 41, 64, 112, 198, 355, 1122,
                             1122, 355, 198, 112, 64, 41, 18, -12};
 /*
  * Maps G.721 code words to a set of values whose long and short
  * term averages are computed and then compared to give an indication
  * how stationary (steady state) the signal is.
  */
-static const short  _fitab[16] = {0, 0, 0, 0x200, 0x200, 0x200, 0x600, 0xE00,
+static const int16_t  _fitab[16] = {0, 0, 0, 0x200, 0x200, 0x200, 0x600, 0xE00,
                             0xE00, 0x600, 0x200, 0x200, 0x200, 0, 0, 0};
 
 #if 0
@@ -78,12 +78,12 @@ g721_encoder(
     int     in_coding,
     struct g72x_state *state_ptr)
 {
-    short       sezi, se, sez;      /* ACCUM */
-    short       d;          /* SUBTA */
-    short       sr;         /* ADDB */
-    short       y;          /* MIX */
-    short       dqsez;          /* ADDC */
-    short       dq, i;
+    int16_t       sezi, se, sez;      /* ACCUM */
+    int16_t       d;          /* SUBTA */
+    int16_t       sr;         /* ADDB */
+    int16_t       y;          /* MIX */
+    int16_t       dqsez;          /* ADDC */
+    int16_t       dq, i;
 
     switch (in_coding) {    /* linearize input sample to 14-bit PCM */
     case AUDIO_ENCODING_ALAW:
@@ -136,11 +136,11 @@ g721_decoder(
     int     out_coding,
     struct g72x_state *state_ptr)
 {
-    short       sezi, sei, sez, se; /* ACCUM */
-    short       y;          /* MIX */
-    short       sr;         /* ADDB */
-    short       dq;
-    short       dqsez;
+    int16_t       sezi, sei, sez, se; /* ACCUM */
+    int16_t       y;          /* MIX */
+    int16_t       sr;         /* ADDB */
+    int16_t       dq;
+    int16_t       dqsez;
 
     i &= 0x0f;          /* mask to get proper bits */
     sezi = predictor_zero(state_ptr);

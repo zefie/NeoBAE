@@ -47,13 +47,13 @@
  * Maps G.723_40 code word to ructeconstructed scale factor normalized log
  * magnitude values.
  */
-static const short  _dqlntab[32] = {-2048, -66, 28, 104, 169, 224, 274, 318,
+static const int16_t  _dqlntab[32] = {-2048, -66, 28, 104, 169, 224, 274, 318,
                                     358, 395, 429, 459, 488, 514, 539, 566,
                                     566, 539, 514, 488, 459, 429, 395, 358,
                                     318, 274, 224, 169, 104, 28, -66, -2048};
 
 /* Maps G.723_40 code word to log of scale factor multiplier. */
-static const short _witab[32] = {448, 448, 768, 1248, 1280, 1312, 1856, 3200,
+static const int16_t _witab[32] = {448, 448, 768, 1248, 1280, 1312, 1856, 3200,
                                     4512, 5728, 7008, 8960, 11456, 14080, 16928, 22272,
                                     22272, 16928, 14080, 11456, 8960, 7008, 5728, 4512,
                                     3200, 1856, 1312, 1280, 1248, 768, 448, 448};
@@ -63,12 +63,12 @@ static const short _witab[32] = {448, 448, 768, 1248, 1280, 1312, 1856, 3200,
  * term averages are computed and then compared to give an indication
  * how stationary (steady state) the signal is.
  */
-static const short _fitab[32] = {0, 0, 0, 0, 0, 0x200, 0x200, 0x200,
+static const int16_t _fitab[32] = {0, 0, 0, 0, 0, 0x200, 0x200, 0x200,
                                 0x200, 0x200, 0x400, 0x600, 0x800, 0xA00, 0xC00, 0xC00,
                                 0xC00, 0xC00, 0xA00, 0x800, 0x600, 0x400, 0x200, 0x200,
                                 0x200, 0x200, 0x200, 0, 0, 0, 0, 0};
 
-static const short qtab_723_40[15] = {-122, -16, 68, 139, 198, 250, 298, 339,
+static const int16_t qtab_723_40[15] = {-122, -16, 68, 139, 198, 250, 298, 339,
                                         378, 413, 445, 475, 502, 528, 553};
 #if 0
 /*
@@ -84,12 +84,12 @@ g723_40_encoder(
     int     in_coding,
     struct g72x_state *state_ptr)
 {
-    short       sei, sezi, se, sez; /* ACCUM */
-    short       d;          /* SUBTA */
-    short       y;          /* MIX */
-    short       sr;         /* ADDB */
-    short       dqsez;          /* ADDC */
-    short       dq, i;
+    int16_t       sei, sezi, se, sez; /* ACCUM */
+    int16_t       d;          /* SUBTA */
+    int16_t       y;          /* MIX */
+    int16_t       sr;         /* ADDB */
+    int16_t       dqsez;          /* ADDC */
+    int16_t       dq, i;
 
     switch (in_coding) {    /* linearize input sample to 14-bit PCM */
     case AUDIO_ENCODING_ALAW:
@@ -141,11 +141,11 @@ g723_40_decoder(
     int     out_coding,
     struct g72x_state *state_ptr)
 {
-    short       sezi, sei, sez, se; /* ACCUM */
-    short       y;          /* MIX */
-    short       sr;         /* ADDB */
-    short       dq;
-    short       dqsez;
+    int16_t       sezi, sei, sez, se; /* ACCUM */
+    int16_t       y;          /* MIX */
+    int16_t       sr;         /* ADDB */
+    int16_t       dq;
+    int16_t       dqsez;
 
     i &= 0x1f;          /* mask to get proper bits */
     sezi = predictor_zero(state_ptr);
@@ -164,9 +164,9 @@ g723_40_decoder(
 
     switch (out_coding) {
     case AUDIO_ENCODING_ALAW:
-        return (tandem_adjust_alaw(sr, se, y, i, 0x10, (short *)qtab_723_40));
+        return (tandem_adjust_alaw(sr, se, y, i, 0x10, (int16_t *)qtab_723_40));
     case AUDIO_ENCODING_ULAW:
-        return (tandem_adjust_ulaw(sr, se, y, i, 0x10, (short *)qtab_723_40));
+        return (tandem_adjust_ulaw(sr, se, y, i, 0x10, (int16_t *)qtab_723_40));
     case AUDIO_ENCODING_LINEAR:
         return (sr << 2);   /* sr was of 14-bit dynamic range */
     default:

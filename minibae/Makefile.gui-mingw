@@ -3,7 +3,9 @@ BAE_API			:= SDL2
 DEBUG			:= 0
 BUILD_GUI   := 1
 include inc/Makefile.common
+SOURCE_DIR = $(CURDIR)
 
+ifeq ($(BITS),32)
 ARCH		:= -m32 -static
 CC		:= i686-w64-mingw32-gcc-win32
 CXX		:= i686-w64-mingw32-g++-win32
@@ -11,6 +13,15 @@ LD		:= $(CC)
 AR      	:= i686-w64-mingw32-gcc-ar-win32
 STRIP      	:= i686-w64-mingw32-strip
 DLLTOOL		:= i686-w64-mingw32-dlltool
+else
+ARCH		:= -m64 -static
+CC		:= x86_64-w64-mingw32-gcc-win32
+CXX		:= x86_64-w64-mingw32-g++-win32
+LD		:= $(CC)
+AR      	:= x86_64-w64-mingw32-gcc-ar-win32
+STRIP      	:= x86_64-w64-mingw32-strip
+DLLTOOL		:= x86_64-w64-mingw32-dlltool
+endif
 
 OPTI            := -O2 -fPIC
 CFLAGS  	:= $(ARCH) $(OPTI) $(INC_PATH) -D_THREAD_SAFE -DGUI_WITH_TTF -Wno-unused-value
@@ -24,9 +35,13 @@ CFLAGS		+= -D_VERSION=\""$(VERSION)"\"
 
 CXXFLAGS 	:= $(CFLAGS)
 LDFLAGS		:= $(ARCH) $(OPTI) -s
-
+ifeq ($(BITS),32)
 CFLAGS  += -I../SDL2-2.32.8/i686-w64-mingw32/include/SDL2 -I../SDL2_ttf-2.24.0/i686-w64-mingw32/include/SDL2
 LDFLAGS += -L../SDL2-2.32.8/i686-w64-mingw32/lib -L ../SDL2_ttf-2.24.0/i686-w64-mingw32/lib
+else
+CFLAGS  += -I../SDL2-2.32.8/x86_64-w64-mingw32/include/SDL2 -I../SDL2_ttf-2.24.0/x86_64-w64-mingw32/include/SDL2
+LDFLAGS += -L../SDL2-2.32.8/x86_64-w64-mingw32/lib -L ../SDL2_ttf-2.24.0/x86_64-w64-mingw32/lib
+endif
 # Override LIBS completely for SDL build to enforce correct ordering
 LIBS = \
 			-lmingw32 \
@@ -74,7 +89,7 @@ $(TARGET_LIB).dll: ${OBJ}
 
 $(TARGET_BIN): ${OBJ_BIN}
 	@mkdir -p $(TARGET_OUT)/Banks
-	@$(SH) src/banks/copy.sh $(TARGET_OUT)/Banks
+	$(${SOURCE_DIR}/src/banks/copy.sh $(TARGET_OUT)/Banks)
 	${LD} -o $(TARGET_OUT)${TARGET_BIN} ${LDFLAGS} ${OBJ_BIN} -Wl,--subsystem,windows ${LIBS}
 
 pack: ${TARGET_BIN}
@@ -92,10 +107,10 @@ $(OBJ_DIR)%.o : %.c
 	@${CC} -c ${CFLAGS} $< -o $@
 
 clean:
-	@rm -rdf $(TARGET_OUT)
-	@rm -rdf $(OBJ_DIR)
-	@rm -rdf $(BUILD_DIR)
-	@rm -rdf $(TEST_OUT_DIR)
+	@rm -rf $(TARGET_OUT)
+	@rm -rf $(OBJ_DIR)
+	@rm -rf $(BUILD_DIR)
+	@rm -rf $(TEST_OUT_DIR)
 	@echo Cleaned!
 
 include inc/Makefile.tests

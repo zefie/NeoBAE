@@ -33,7 +33,7 @@
 #define SEG_SHIFT   (4)     /* Left shift for segment number. */
 #define SEG_MASK    (0x70)      /* Segment field mask. */
 
-static const short seg_end[8] = {0xFF, 0x1FF, 0x3FF, 0x7FF,
+static const int16_t seg_end[8] = {0xFF, 0x1FF, 0x3FF, 0x7FF,
                 0xFFF, 0x1FFF, 0x3FFF, 0x7FFF};
 
 /* copy from CCITT G.711 specifications */
@@ -76,7 +76,7 @@ static const unsigned char _a2u[128] = {            /* A- to u-law conversions *
 static int
 search(
     int     val,
-    short       *table,
+    int16_t       *table,
     int     size)
 {
     int     i;
@@ -123,7 +123,7 @@ linear2alaw(
     }
 
     /* Convert the scaled magnitude to segment number. */
-    seg = search(pcm_val, (short *)seg_end, 8);
+    seg = search(pcm_val, (int16_t *)seg_end, 8);
 
     /* Combine the sign, segment, and quantization bits. */
 
@@ -217,7 +217,7 @@ linear2ulaw(
     }
 
     /* Convert the scaled magnitude to segment number. */
-    seg = search(pcm_val, (short *)seg_end, 8);
+    seg = search(pcm_val, (int16_t *)seg_end, 8);
 
     /*
      * Combine the sign, segment, quantization bits;

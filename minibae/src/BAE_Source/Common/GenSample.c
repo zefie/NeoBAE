@@ -242,14 +242,15 @@
 
 */
 
+#include <stdint.h>
 
 #if X_PLATFORM != X_WEBTV
 // Process any fading effects voices
 static void PV_ServeEffectsFades(void)
 {
-    long        count, minValue, maxValue;
+    int32_t        count, minValue, maxValue;
     GM_Voice    *pVoice;
-    long        value;
+    int32_t        value;
     GM_Mixer    *pMixer;
 
     pMixer = GM_GetCurrentMixer();
@@ -280,7 +281,7 @@ static void PV_ServeEffectsFades(void)
                     pVoice->NoteMIDIVolume = (INT16)value;
                     if ((pVoice->soundFadeRate == 0) && pVoice->soundEndAtFade)
                     {
-                        GM_EndSample((VOICE_REFERENCE)count);
+                        GM_EndSample((VOICE_REFERENCE)&MusicGlobals->NoteEntry[count]);
                     }
                 }
             }
@@ -292,8 +293,8 @@ static void PV_ServeEffectsFades(void)
 #if USE_CALLBACKS
 static void PV_ServeEffectCallbacks(void *threadContext)
 {
-    long                    count, minValue, maxValue;
-    unsigned long           offsetStart, offsetEnd;
+    int32_t                    count, minValue, maxValue;
+    uint32_t           offsetStart, offsetEnd;
     GM_Voice                *pVoice;
     GM_SampleCallbackEntry  *pCallbackEntry;
     GM_Mixer                *pMixer;
@@ -352,7 +353,7 @@ void GM_SetEffectsVolume(INT16 newVolume)
     register GM_Mixer       *pMixer;
     register LOOPCOUNT      count;
     register GM_Voice       *pVoice;
-    short int               minValue, maxValue;
+    int16_t               minValue, maxValue;
 
     if (newVolume < 0)
     {
@@ -414,7 +415,7 @@ INT16 GM_GetEffectsVolume(void)
 
 static GM_Voice * PV_FindFreeSampleVoice(GM_Mixer *pMixer, VOICE_REFERENCE *pOutputIndex)
 {
-    long        min, max, count;
+    int32_t        min, max, count;
     GM_Voice    *pVoice;
 
     pVoice = NULL;
@@ -431,7 +432,7 @@ static GM_Voice * PV_FindFreeSampleVoice(GM_Mixer *pMixer, VOICE_REFERENCE *pOut
             if (pMixer->NoteEntry[count].voiceMode == VOICE_UNUSED)
             {
                 pVoice = &pMixer->NoteEntry[count];
-                *pOutputIndex = (VOICE_REFERENCE)count;
+                *pOutputIndex = (VOICE_REFERENCE)pVoice;
                 break;
             }
         }
@@ -448,9 +449,11 @@ XBOOL GM_IsSoundReferenceValid(VOICE_REFERENCE reference)
     XBOOL   goodVoice;
     
     goodVoice = FALSE;
-    if (MusicGlobals)
+    if (MusicGlobals && reference)
     {
-        if ( ((long)reference >= 0) && ((long)reference < (MusicGlobals->MaxNotes+MusicGlobals->MaxEffects)) )
+        GM_Voice *voiceStart = &MusicGlobals->NoteEntry[0];
+        GM_Voice *voiceEnd = &MusicGlobals->NoteEntry[MusicGlobals->MaxNotes + MusicGlobals->MaxEffects];
+        if ((reference >= (VOICE_REFERENCE)voiceStart) && (reference < (VOICE_REFERENCE)voiceEnd))
         {
             goodVoice = TRUE;
         }
@@ -466,7 +469,7 @@ GM_Voice * PV_GetVoiceFromSoundReference(VOICE_REFERENCE reference)
     pVoice = NULL;
     if (GM_IsSoundReferenceValid(reference))
     {
-        pVoice = &MusicGlobals->NoteEntry[(long)reference];
+        pVoice = (GM_Voice *)reference;
         // is voice alive?
         if (pVoice->voiceMode == VOICE_UNUSED)
         {
@@ -488,21 +491,21 @@ XBOOL GM_IsSoundDone(VOICE_REFERENCE reference)
 // scan through fast, and get the largest peak
 static void PV_CalculateLargestPeak(GM_Voice *pVoice)
 {
-    short           min = 0;
-    short           max = 0;
-    short           sample;
-    unsigned long   noiseMin, noiseMax;
+    int16_t           min = 0;
+    int16_t           max = 0;
+    int16_t           sample;
+    uint32_t   noiseMin, noiseMax;
     char            *pStartB;
-    short           *pStartW;
+    int16_t           *pStartW;
     char            *pEndB;
-    short           *pEndW;
+    int16_t           *pEndW;
     int             step;
 
     if (pVoice)
     {
-        pStartW = (short *)pVoice->NotePtr;
+        pStartW = (int16_t *)pVoice->NotePtr;
         pStartB = (char *)pVoice->NotePtr;
-        pEndW = (short *)pVoice->NotePtrEnd;
+        pEndW = (int16_t *)pVoice->NotePtrEnd;
         pEndB = (char *)pVoice->NotePtrEnd;
         pVoice->largestPeak = 0;
 
@@ -514,7 +517,7 @@ static void PV_CalculateLargestPeak(GM_Voice *pVoice)
                 // 8 bit data is unsigned
                 while (pStartB < pEndB)
                 {
-                    sample = (short)*pStartB;
+                    sample = (int16_t)*pStartB;
                     sample = (sample - 128) * 256;      // convert to 16 bit
                     if (sample > max)
                     {
@@ -532,7 +535,7 @@ static void PV_CalculateLargestPeak(GM_Voice *pVoice)
                 // 16 bit data is signed
                 while (pStartW < pEndW)
                 {
-                    sample = (short)*pStartW;
+                    sample = (int16_t)*pStartW;
                     if (sample > max)
                     {
                         max = sample;
@@ -544,8 +547,8 @@ static void PV_CalculateLargestPeak(GM_Voice *pVoice)
                     pStartW += step;
                 }
             }
-            noiseMin = ((long)min + 32768L);
-            noiseMax = ((long)32768L - max);
+            noiseMin = ((int32_t)min + 32768L);
+            noiseMax = ((int32_t)32768L - max);
             if (noiseMin < noiseMax)
             {
                 pVoice->largestPeak = noiseMin;
@@ -913,10 +916,10 @@ void GM_EndAllSamples(void)
 
 #if X_PLATFORM != X_WEBTV
 
-unsigned long GM_GetSampleStartTimeStamp(VOICE_REFERENCE reference)
+uint32_t GM_GetSampleStartTimeStamp(VOICE_REFERENCE reference)
 {
     GM_Voice        *pVoice;
-    unsigned long   time;
+    uint32_t   time;
 
     time = 0;
     pVoice = PV_GetVoiceFromSoundReference(reference);
@@ -928,9 +931,9 @@ unsigned long GM_GetSampleStartTimeStamp(VOICE_REFERENCE reference)
 }
 
 // given a valid voice, return the current playback position
-unsigned long GM_GetSamplePlaybackPosition(VOICE_REFERENCE reference)
+uint32_t GM_GetSamplePlaybackPosition(VOICE_REFERENCE reference)
 {
-    unsigned long   position;
+    uint32_t   position;
     GM_Voice        *pVoice;
 
     position = 0L;
@@ -944,7 +947,7 @@ unsigned long GM_GetSamplePlaybackPosition(VOICE_REFERENCE reference)
 }
 
 // given a valid voice, set the position of the current playback
-OPErr GM_SetSamplePlaybackPosition(VOICE_REFERENCE reference, unsigned long framePos)
+OPErr GM_SetSamplePlaybackPosition(VOICE_REFERENCE reference, uint32_t framePos)
 {
     GM_Voice        *pVoice;
     OPErr           err;
@@ -963,7 +966,7 @@ OPErr GM_SetSamplePlaybackPosition(VOICE_REFERENCE reference, unsigned long fram
     return err;
 }
 
-void * GM_GetSamplePlaybackPointer(VOICE_REFERENCE reference, unsigned long *outFrameLength)
+void * GM_GetSamplePlaybackPointer(VOICE_REFERENCE reference, uint32_t *outFrameLength)
 {
     void            *pointer;
     GM_Voice        *pVoice;
@@ -1022,7 +1025,7 @@ void GM_ChangeSamplePitch(VOICE_REFERENCE reference, XFIXED theNewRate)
     }
 }
 
-void GM_SetSampleRouteBus(VOICE_REFERENCE reference, short int routeBus)
+void GM_SetSampleRouteBus(VOICE_REFERENCE reference, int16_t routeBus)
 {
     GM_Voice    *pVoice;
     GM_Mixer    *pMixer;
@@ -1044,7 +1047,7 @@ void GM_SetSampleRouteBus(VOICE_REFERENCE reference, short int routeBus)
 }
 
 // amount range is -255 to 255
-void GM_SetSampleLowPassAmountFilter(VOICE_REFERENCE reference, short int amount)
+void GM_SetSampleLowPassAmountFilter(VOICE_REFERENCE reference, int16_t amount)
 {
     GM_Voice    *pVoice;
 
@@ -1057,22 +1060,22 @@ void GM_SetSampleLowPassAmountFilter(VOICE_REFERENCE reference, short int amount
 }
 
 // amount range is -255 to 255
-short int GM_GetSampleLowPassAmountFilter(VOICE_REFERENCE reference)
+int16_t GM_GetSampleLowPassAmountFilter(VOICE_REFERENCE reference)
 {
     GM_Voice    *pVoice;
-    short int   amount;
+    int16_t   amount;
 
     amount = 0;
     pVoice = PV_GetVoiceFromSoundReference(reference);
     if (pVoice)
     {
-        amount = (short int)pVoice->LPF_lowpassAmount;
+        amount = (int16_t)pVoice->LPF_lowpassAmount;
     }
     return amount;
 }
 
 // resonance range is 0 to 256
-void GM_SetSampleResonanceFilter(VOICE_REFERENCE reference, short int resonance)
+void GM_SetSampleResonanceFilter(VOICE_REFERENCE reference, int16_t resonance)
 {
     GM_Voice    *pVoice;
 
@@ -1085,22 +1088,22 @@ void GM_SetSampleResonanceFilter(VOICE_REFERENCE reference, short int resonance)
 }
 
 // resonance range is 0 to 256
-short int GM_GetSampleResonanceFilter(VOICE_REFERENCE reference)
+int16_t GM_GetSampleResonanceFilter(VOICE_REFERENCE reference)
 {
     GM_Voice    *pVoice;
-    short int       resonance;
+    int16_t       resonance;
 
     resonance = 0;
     pVoice = PV_GetVoiceFromSoundReference(reference);
     if (pVoice)
     {
-        resonance = (short int)pVoice->LPF_resonance;
+        resonance = (int16_t)pVoice->LPF_resonance;
     }
     return resonance;
 }
 
 // frequency range is 512 to 32512
-void GM_SetSampleFrequencyFilter(VOICE_REFERENCE reference, short int frequency)
+void GM_SetSampleFrequencyFilter(VOICE_REFERENCE reference, int16_t frequency)
 {
     GM_Voice    *pVoice;
 
@@ -1113,16 +1116,16 @@ void GM_SetSampleFrequencyFilter(VOICE_REFERENCE reference, short int frequency)
 }
 
 // frequency range is 512 to 32512
-short int GM_GetSampleFrequencyFilter(VOICE_REFERENCE reference)
+int16_t GM_GetSampleFrequencyFilter(VOICE_REFERENCE reference)
 {
     GM_Voice    *pVoice;
-    short int   frequency;
+    int16_t   frequency;
 
     frequency = 0;
     pVoice = PV_GetVoiceFromSoundReference(reference);
     if (pVoice)
     {
-        frequency = (short int)pVoice->LPF_frequency;
+        frequency = (int16_t)pVoice->LPF_frequency;
     }
     return frequency;
 }
@@ -1133,9 +1136,9 @@ short int GM_GetSampleFrequencyFilter(VOICE_REFERENCE reference)
 
 #if REVERB_USED != REVERB_DISABLED
 // return the current amount of reverb mix. 0-127 is the range.
-short int GM_GetSampleReverbAmount(VOICE_REFERENCE reference)
+int16_t GM_GetSampleReverbAmount(VOICE_REFERENCE reference)
 {
-    short int   amount;
+    int16_t   amount;
     GM_Voice    *pVoice;
 
     amount = 0;
@@ -1149,7 +1152,7 @@ short int GM_GetSampleReverbAmount(VOICE_REFERENCE reference)
 
 // set amount of reverb to mix. 0-127 is the range.
 //MOE: "amount" should be typed UBYTE
-void GM_SetSampleReverbAmount(VOICE_REFERENCE reference, short int amount)
+void GM_SetSampleReverbAmount(VOICE_REFERENCE reference, int16_t amount)
 {
     GM_Voice    *pVoice;
 
@@ -1262,7 +1265,7 @@ void GM_ChangeSampleVolume(VOICE_REFERENCE reference, INT16 sampleVolume)
 }
 
 #if X_PLATFORM != X_WEBTV
-void GM_SetSampleLoopPoints(VOICE_REFERENCE reference, unsigned long start, unsigned long end)
+void GM_SetSampleLoopPoints(VOICE_REFERENCE reference, uint32_t start, uint32_t end)
 {
     register GM_Voice   *pVoice;
 
@@ -1284,7 +1287,7 @@ void GM_SetSampleLoopPoints(VOICE_REFERENCE reference, unsigned long start, unsi
 #endif
 
 
-OPErr GM_SetWaveformLoopPoints(GM_Waveform *pWave, unsigned long start, unsigned long end)
+OPErr GM_SetWaveformLoopPoints(GM_Waveform *pWave, uint32_t start, uint32_t end)
 {
     OPErr theErr;
 
@@ -1331,7 +1334,7 @@ OPErr GM_SetWaveformLoopPoints(GM_Waveform *pWave, unsigned long start, unsigned
 }
 
 
-OPErr GM_GetWaveformLoopPoints(GM_Waveform *pWave, unsigned long *outStart, unsigned long *outEnd)
+OPErr GM_GetWaveformLoopPoints(GM_Waveform *pWave, uint32_t *outStart, uint32_t *outEnd)
 {
     OPErr theErr;
 

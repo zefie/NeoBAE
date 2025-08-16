@@ -35,7 +35,7 @@
 **  Generalized Music Synthesis package. Part of SoundMusicSys.
 **  Confidential-- Internal use only
 **
-**  © Copyright 1993-2000 Beatnik, Inc, All Rights Reserved.
+**  ï¿½ Copyright 1993-2000 Beatnik, Inc, All Rights Reserved.
 **  Written by Jim Nitchals and Steve Hales
 **
 **  Beatnik products contain certain trade secrets and confidential and
@@ -76,6 +76,7 @@
 #include "GenSnd.h"
 #include "GenPriv.h"
 #include "X_Assert.h"
+#include <stdint.h>
 
 #if LOOPS_USED == U3232_LOOPS
 
@@ -469,11 +470,11 @@ FINISH:
     return;
 }
 
-// ¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥
-// ¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥
-// ¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥
-// ¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥
-// ¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥
+// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 
 // 16 bit cases
 void PV_ServeU3232FullBuffer16 (GM_Voice *this_voice)
@@ -494,15 +495,15 @@ void PV_ServeU3232FullBuffer16 (GM_Voice *this_voice)
     }
 #endif
     amplitude = this_voice->lastAmplitudeL;
-    //BAE_PRINTF("f0, amp = %ld n = %ld nve = %ld\n", (long)amplitude, (long)this_voice->NoteVolume,
-    //                                              (long)this_voice->NoteVolumeEnvelope);
+    //BAE_PRINTF("f0, amp = %ld n = %ld nve = %ld\n", (int32_t)amplitude, (int32_t)this_voice->NoteVolume,
+    //                                              (int32_t)this_voice->NoteVolumeEnvelope);
     amplitudeAdjust = (this_voice->NoteVolume * this_voice->NoteVolumeEnvelope) >> VOLUME_PRECISION_SCALAR;
     amplitudeAdjust = (amplitudeAdjust - amplitude) / MusicGlobals->Four_Loop >> 4;
     amplitude = amplitude >> 4;
-    //BAE_PRINTF("f1, amp = %ld aa = %ld\n", (long)amplitude, (long)amplitudeAdjust);
+    //BAE_PRINTF("f1, amp = %ld aa = %ld\n", (int32_t)amplitude, (int32_t)amplitudeAdjust);
 
     dest = &MusicGlobals->songBufferDry[0];
-    source = (short *) this_voice->NotePtr;
+    source = (int16_t *) this_voice->NotePtr;
     cur_wave_i = this_voice->samplePosition.i;
     cur_wave_f = this_voice->samplePosition.f;
 
@@ -583,11 +584,11 @@ void PV_ServeU3232PartialBuffer16 (GM_Voice *this_voice, XBOOL looping)
     amplitudeAdjust = (this_voice->NoteVolume * this_voice->NoteVolumeEnvelope) >> VOLUME_PRECISION_SCALAR;
     amplitudeAdjust = (amplitudeAdjust - amplitude) / MusicGlobals->Four_Loop >> 4;
     amplitude = amplitude >> 4;
-    //BAE_PRINTF("p,amp = %ld\n", (long)amplitude);
+    //BAE_PRINTF("p,amp = %ld\n", (int32_t)amplitude);
     dest = &MusicGlobals->songBufferDry[0];
     cur_wave_i = this_voice->samplePosition.i;
     cur_wave_f = this_voice->samplePosition.f;
-    source = (short *) this_voice->NotePtr;
+    source = (int16_t *) this_voice->NotePtr;
 
     wave_increment = PV_GetWavePitchU3232(this_voice->NotePitch);
 
@@ -709,7 +710,7 @@ void PV_ServeU3232StereoFullBuffer16 (GM_Voice *this_voice)
     cur_wave_i = this_voice->samplePosition.i;
     cur_wave_f = this_voice->samplePosition.f;
 
-    source = (short *) this_voice->NotePtr;
+    source = (int16_t *) this_voice->NotePtr;
 
     wave_increment = PV_GetWavePitchU3232(this_voice->NotePitch);
     {
@@ -816,7 +817,7 @@ void PV_ServeU3232StereoPartialBuffer16 (GM_Voice *this_voice, XBOOL looping)
     destL = &MusicGlobals->songBufferDry[0];
     cur_wave_i = this_voice->samplePosition.i;
     cur_wave_f = this_voice->samplePosition.f;
-    source = (short *) this_voice->NotePtr;
+    source = (int16_t *) this_voice->NotePtr;
 
     wave_increment = PV_GetWavePitchU3232(this_voice->NotePitch);
 

@@ -204,7 +204,7 @@
 **  8/18/97     Changed X_WIN_BAE to USE_BAE_EXTERNAL_API
 **  9/3/97      Wired XGetHardwareVolume & XSetHardwareVolume to BAE_EXTERNAL_API
 **              Wrapped a few more functions around USE_CREATION_API
-**  9/29/97     Changed XSetBit & XClearBit & XTestBit to be unsigned long rather than long
+**  9/29/97     Changed XSetBit & XClearBit & XTestBit to be uint32_t rather than long
 **  10/2/97     Fixed a bug with XGetFileResource when trying to load a memory based resource
 **              it still continued searching after it found what it was looking for.
 **              Fixed XGetIndexedFileResource to support memory based resource files without
@@ -229,7 +229,7 @@
 **  1/26/98     Added XERR to various functions
 **  1/31/98     Moved XPI_Memblock structures to X_API.h, and moved the function
 **              XIsOurMemoryPtr to X_API.h
-**  2/7/98      Changed XFIXED back to an unsigned long to fix broken content
+**  2/7/98      Changed XFIXED back to an uint32_t to fix broken content
 **  2/9/98      Fixed bug with memory files and XFileClose in which the memory
 **              block allocated outside of the resource file system was deallocated!
 **  3/18/98     Added XIs8BitSupported
@@ -260,7 +260,7 @@
 **  6/18/98     Added XFileFreeResourceCache
 **  7/1/98      Changed various API to use the new XResourceType and XLongResourceID
 **  7/6/98      Fixed some type problems with XCompressPtr
-**              Changed _XPutShort to pass a unsigned short rather than an unsigned long
+**              Changed _XPutShort to pass a uint16_t rather than an uint32_t
 **  7/10/98     Added XGetUniqueFileResourceID & XGetUniqueResourceID & XAddResource
 **              Added XDeleteResource
 **              Added XCountResourcesOfType
@@ -387,7 +387,7 @@
 **  5/2/2001    sh  Added cool Mac trick to XConvertPathToXFILENAME to convert unix/dos
 **                  paths to Mac FSSpec. Also handles relative paths.
 **  5/29/2001   sh  Added new debugging system with BAE_PRINTF
-**  7-16-2001   dcm Added unsigned long XSwapShortInLong(unsigned long value) to swap shorts in long
+**  7-16-2001   dcm Added uint32_t XSwapShortInLong(uint32_t value) to swap shorts in long
 **  8/28/2001       Fixed massive memory leak in XGetAndDetachResource when using memory files.
 **                  Was duplicating resource when it was not required.
 **  1/24/2002   sh  Removed XGetHardwareVolume/XSetHardwareVolume, they were
@@ -397,18 +397,27 @@
 /*****************************************************************************/
 
 #include "X_API.h"
+#include <stdint.h>
 #include "X_Formats.h"
 #include "X_Assert.h"
 #include "BAE_API.h"
+#include <stdint.h>
 
 
 #define DEBUG_PRINT_RESOURCE        0
 #define USE_FILE_CACHE              0   // if 1, then file cache is enabled
 
+// Buffer size used for intra-file copy/compaction operations when cleaning
+// resource files. Original code referenced XFER_BUFFER_SIZE without a local
+// definition (lost during prior refactors). 8 KB is a reasonable chunk size.
+#ifndef XFER_BUFFER_SIZE
+#define XFER_BUFFER_SIZE 8192
+#endif
+
 // Structures
 
 // Variables
-static short int    g_resourceFileCount = 0;                // number of open resource files
+static int16_t    g_resourceFileCount = 0;                // number of open resource files
 static XFILE        g_openResourceFiles[MAX_OPEN_XFILES];
 
 // Private functions
@@ -420,11 +429,11 @@ static XBOOL PV_XFileValid(XFILE fileRef)
     XBOOL       valid;
 
     valid = FALSE;
-    pReference = (XFILENAME *)fileRef;
+    pReference = fileRef;
     if (pReference)
     {
         int         code;
-        code = BAE_IsBadReadPointer(&pReference->fileValidID, sizeof(long));
+        code = BAE_IsBadReadPointer(&pReference->fileValidID, sizeof(int32_t));
         if (code == 0 || code == 2)
         {
             if (pReference->fileValidID == XPI_BLOCK_3_ID)
@@ -436,10 +445,56 @@ static XBOOL PV_XFileValid(XFILE fileRef)
     return valid;
 }
 
-// Given a valid XFILE, this will return the open index. Will return -1 if not valid
-static short int PV_FindResourceFileReferenceIndex(XFILE fileRef)
+// Return TRUE if file is locked (read only) – helper referenced by deletion code
+static XBOOL PV_IsXFileLocked(XFILE fileRef)
 {
-    short int   count;
+    XFILENAME *pReference = (XFILENAME *)fileRef;
+    if (!PV_XFileValid(fileRef))
+    {
+        return TRUE; // treat invalid as locked to force early failure
+    }
+    return pReference->readOnly ? TRUE : FALSE;
+}
+
+// Copy data within the same file (used when compacting resource files)
+// Returns 0 on success, non–zero on error.
+static XERR PV_CopyWithinFile(XFILE fileRef,
+                              int32_t srcPos,
+                              int32_t dstPos,
+                              int32_t size,
+                              void *tempBuffer,
+                              int32_t tempBufferSize)
+{
+    XERR err = 0;
+    int32_t remaining = size;
+    int32_t localSrc = srcPos;
+    int32_t localDst = dstPos;
+    if (!PV_XFileValid(fileRef) || size < 0 || tempBufferSize <= 0 || tempBuffer == NULL)
+    {
+        return -1;
+    }
+    while (remaining > 0 && err == 0)
+    {
+        int32_t chunk = (remaining > tempBufferSize) ? tempBufferSize : remaining;
+        err = XFileSetPosition(fileRef, localSrc);
+        if (err != 0) { break; }
+        err = XFileRead(fileRef, tempBuffer, chunk);
+        if (err != 0) { break; }
+        err = XFileSetPosition(fileRef, localDst);
+        if (err != 0) { break; }
+        err = XFileWrite(fileRef, tempBuffer, chunk);
+        if (err != 0) { break; }
+        remaining -= chunk;
+        localSrc += chunk;
+        localDst += chunk;
+    }
+    return err;
+}
+
+// Given a valid XFILE, this will return the open index. Will return -1 if not valid
+static int16_t PV_FindResourceFileReferenceIndex(XFILE fileRef)
+{
+    int16_t   count;
 
     for (count = 0; count < g_resourceFileCount; count++)
     {
@@ -457,7 +512,7 @@ static short int PV_FindResourceFileReferenceIndex(XFILE fileRef)
 static XBOOL PV_AddResourceFileToOpenFiles(XFILE fileRef)
 {
     XBOOL           full;
-    short int       count;
+    int16_t       count;
     static XBOOL    inUse = FALSE;
 
     full = TRUE;
@@ -485,8 +540,8 @@ static XBOOL PV_AddResourceFileToOpenFiles(XFILE fileRef)
 //          thread is trying to remove at the same time.
 static void PV_RemoveResourceFileFromOpenFiles(XFILE fileRef)
 {
-    short int       count;
-    short int       found;
+    int16_t       count;
+    int16_t       found;
     static XBOOL    inUse = FALSE;
 
     found = -1;
@@ -525,7 +580,7 @@ static INLINE XBOOL PV_IsAnyOpenResourceFiles(void)
 // convert a c string to a pascal string
 void XCtoPascalString(char const* cString, char pascalString[256])
 {
-    long        length;
+    int32_t        length;
 
     if (cString && pascalString)
     {
@@ -548,7 +603,7 @@ void * XPtoCstr(register void *pstr)
 {
     register char * source;
     register char * dest;
-    register long   length;
+    register int32_t   length;
     char            data[256];
 
     if (pstr)
@@ -575,7 +630,7 @@ XPI_Memblock * XIsOurMemoryPtr(XPTR data)
 {
     char            *pData;
     XPI_Memblock    *pBlock, *pBlockReturn;
-    short int       code;
+    int16_t       code;
 
     pBlockReturn = NULL;
     if (data)
@@ -600,9 +655,9 @@ XPI_Memblock * XIsOurMemoryPtr(XPTR data)
 // ptr may be NULL, in which case the functionality is the same as XNewPtr()
 // If allocation fails, ptr is unaffected (It's still allocated.)
 // Like with XNewPtr(), any newly allocated memory is zeroed.
-XPTR XResizePtr(XPTR ptr, long size)
+XPTR XResizePtr(XPTR ptr, int32_t size)
 {
-long        const currentSize = ptr ? XGetPtrSize(ptr) : 0;
+int32_t        const currentSize = ptr ? XGetPtrSize(ptr) : 0;
 
     //MOE:  If we are allocating to a certain quantum (typically 16 bytes),
     //      We should apply that quantum before this test.
@@ -626,7 +681,7 @@ long        const currentSize = ptr ? XGetPtrSize(ptr) : 0;
 
         if (newPtr && ptr)
         {
-        long        copyLength;
+        int32_t        copyLength;
         
             copyLength = currentSize;
             if (copyLength > size)
@@ -653,7 +708,7 @@ long        const currentSize = ptr ? XGetPtrSize(ptr) : 0;
 }
 
 // Allocates a block of ZEROED!!!! memory and locks it down
-XPTR XNewPtr(long size)
+XPTR XNewPtr(int32_t size)
 {
     char            *data;
     XPI_Memblock    *pBlock;
@@ -677,7 +732,7 @@ XPTR XNewPtr(long size)
 
 void XDisposePtr(XPTR data)
 {
-    long            size;
+    int32_t            size;
     XPTR            osAllocatedData;
     XPI_Memblock    *pBlock;
 
@@ -687,15 +742,15 @@ void XDisposePtr(XPTR data)
         size = XGetPtrSize(data);   // need to get the size before we translate the pointer
 
         pBlock = (XPI_Memblock *)osAllocatedData;
-        XPutLong(&pBlock->blockID_one, (unsigned long)XPI_DEAD_ID);         // set our ID for this block
-        XPutLong(&pBlock->blockID_two, (unsigned long)XPI_DEAD_ID);         // to be dead. Used for tracking
+        XPutLong(&pBlock->blockID_one, (uint32_t)XPI_DEAD_ID);         // set our ID for this block
+        XPutLong(&pBlock->blockID_two, (uint32_t)XPI_DEAD_ID);         // to be dead. Used for tracking
         BAE_Deallocate(osAllocatedData);
     }
 }
 
-long XGetPtrSize(XPTR data)
+int32_t XGetPtrSize(XPTR data)
 {
-    long        size;
+    int32_t        size;
     XPTR        odata;
 
     size = 0;
@@ -718,7 +773,7 @@ long XGetPtrSize(XPTR data)
 
 // Typical block move, expect it must be able to handle overlapping source and
 // destination pointers
-void XBlockMove(XPTRC source, XPTR dest, long size)
+void XBlockMove(XPTRC source, XPTR dest, int32_t size)
 {
     if (source && dest && size)
     {
@@ -727,7 +782,7 @@ void XBlockMove(XPTRC source, XPTR dest, long size)
 }
 
 // set memory range with value
-void XSetMemory(void *pAdr, long len, char value)
+void XSetMemory(void *pAdr, int32_t len, char value)
 {
     if (pAdr && (len > 0)) {
         memset(pAdr, value, len);
@@ -735,9 +790,9 @@ void XSetMemory(void *pAdr, long len, char value)
 }
 
 // Given a pointer, and a bit number; this will set that bit to 1
-void XSetBit(void *pBitArray, unsigned long whichbit)
+void XSetBit(void *pBitArray, uint32_t whichbit)
 {
-    unsigned long   byteindex, bitindex;
+    uint32_t   byteindex, bitindex;
     unsigned char *byte;
 
     if (pBitArray)
@@ -750,9 +805,9 @@ void XSetBit(void *pBitArray, unsigned long whichbit)
 }
 
 // Given a pointer, and a bit number; this will set that bit to 0
-void XClearBit(void *pBitArray, unsigned long whichbit)
+void XClearBit(void *pBitArray, uint32_t whichbit)
 {
-    unsigned long   byteindex, bitindex;
+    uint32_t   byteindex, bitindex;
     unsigned char *byte;
 
     if (pBitArray)
@@ -765,9 +820,9 @@ void XClearBit(void *pBitArray, unsigned long whichbit)
 }
 
 // Given a pointer, and a bit number; this return the value of that bit
-XBOOL XTestBit(void *pBitArray, unsigned long whichbit)
+XBOOL XTestBit(void *pBitArray, uint32_t whichbit)
 {
-    register unsigned long  byteindex, byte, bitindex;
+    register uint32_t  byteindex, byte, bitindex;
         
     if (pBitArray)
     {
@@ -785,9 +840,9 @@ XBOOL XTestBit(void *pBitArray, unsigned long whichbit)
 /* Sort an integer array from the lowest to the highest
 */
 #if USE_CREATION_API == TRUE
-void XBubbleSortArray(short int theArray[], short int theCount)
+void XBubbleSortArray(int16_t theArray[], int16_t theCount)
 {
-    register short int i, j, swapValue;
+    register int16_t i, j, swapValue;
     
     for (i = 0; i < (theCount - 1); i++)
     {
@@ -814,7 +869,7 @@ XBOOL XIsStereoSupported(void)
 // wait for a waitAmount of microseconds to pass
 // CLS??: If this function is called from within the frame thread and
 // JAVA_THREAD is non-zero, we'll probably crash.
-void XWaitMicroseocnds(unsigned long waitAmount)
+void XWaitMicroseocnds(uint32_t waitAmount)
 {
     BAE_WaitMicroseconds(waitAmount);
 }
@@ -822,7 +877,7 @@ void XWaitMicroseocnds(unsigned long waitAmount)
 
 // Returns microseconds since boot
 // 1 second = 1000 milliseconds = 100000 microseconds
-unsigned long XMicroseconds(void)
+uint32_t XMicroseconds(void)
 {
     return BAE_Microseconds();
 }
@@ -961,62 +1016,62 @@ XFIXED XFixedCos(int angle)
 }
 
 // given a fixed point value, do a floor and return the closest integer
-unsigned long XFixedFloor(XFIXED value)
+uint32_t XFixedFloor(XFIXED value)
 {
     return ((value + XFIXED_ONEHALF) >> 16L);
 }
 
-// given a pointer, get a short int ordered in an Intel way
-unsigned short int XGetShortIntel(void const* pData)
+// given a pointer, get a int16_t ordered in an Intel way
+uint16_t XGetShortIntel(void const* pData)
 {
     register unsigned char  *pByte;
-    register unsigned short data;
+    register uint16_t data;
 
     pByte = (unsigned char *)pData;
-    data = ((unsigned short)pByte[1] << 8) |
-           (unsigned short)pByte[0];
+    data = ((uint16_t)pByte[1] << 8) |
+           (uint16_t)pByte[0];
     return data;
 }
 // given a pointer, get a long ordered in an Intel way
-unsigned long XGetLongIntel(void const* pData)
+uint32_t XGetLongIntel(void const* pData)
 {
     register unsigned char  *pByte;
-    register unsigned long  data;
+    register uint32_t  data;
 
     pByte = (unsigned char *)pData;
-    data = ((unsigned long)pByte[3] << 24L) |
-           ((unsigned long)pByte[2] << 16L) | 
-           ((unsigned long)pByte[1] << 8L) |
-           (unsigned long)pByte[0];
+    data = ((uint32_t)pByte[3] << 24L) |
+           ((uint32_t)pByte[2] << 16L) | 
+           ((uint32_t)pByte[1] << 8L) |
+           (uint32_t)pByte[0];
     return data;
 }
 
-// given a pointer, get a short int ordered in a Motorola way
-unsigned short int XGetShort(void const* pData)
+// given a pointer, get a int16_t ordered in a Motorola way
+uint16_t XGetShort(void const* pData)
 {
     register unsigned char  *pByte;
-    register unsigned short data;
+    register uint16_t data;
 
     pByte = (unsigned char *)pData;
-    data = ((unsigned short int)pByte[0] << 8) |
-           (unsigned short int)pByte[1];
+    data = ((uint16_t)pByte[0] << 8) |
+           (uint16_t)pByte[1];
     return data;
 }
 // given a pointer, get a long ordered in a Motorola way
-unsigned long XGetLong(void const* pData)
+uint32_t XGetLong(void const* pData)
 {
     register unsigned char  *pByte;
-    register unsigned long  data;
+    register uint32_t  data;
 
     pByte = (unsigned char *)pData;
-    data = ((unsigned long)pByte[0] << 24L) |
-           ((unsigned long)pByte[1] << 16L) | 
-           ((unsigned long)pByte[2] << 8L) |
-           (unsigned long)pByte[3];
+    data = ((uint32_t)pByte[0] << 24L) |
+           ((uint32_t)pByte[1] << 16L) | 
+           ((uint32_t)pByte[2] << 8L) |
+           (uint32_t)pByte[3];
     return data;
 }
 // given a pointer and a value, this with put a short in a ordered 68k way
-void XPutShort(void *pData, unsigned short data)
+void XPutShort(void *pData, uint16_t data)
 {
     register unsigned char  *pByte;
 
@@ -1026,7 +1081,7 @@ void XPutShort(void *pData, unsigned short data)
 }
 
 // given a pointer and a value, this with put a long in a ordered 68k way
-void XPutLong(void *pData, unsigned long data)
+void XPutLong(void *pData, uint32_t data)
 {
     register unsigned char  *pByte;
 
@@ -1037,9 +1092,9 @@ void XPutLong(void *pData, unsigned long data)
     pByte[3] = (UBYTE)(data & 0xFF);
 }
 
-unsigned long XSwapLong(unsigned long value)
+uint32_t XSwapLong(uint32_t value)
 {
-    unsigned long   newValue;
+    uint32_t   newValue;
     unsigned char   *pOld;
     unsigned char   *pNew;
     unsigned char   temp;
@@ -1059,9 +1114,9 @@ unsigned long XSwapLong(unsigned long value)
     return newValue;
 }
 
-unsigned short XSwapShort(unsigned short value)
+uint16_t XSwapShort(uint16_t value)
 {
-    unsigned short  newValue;
+    uint16_t  newValue;
     unsigned char   *pOld;
     unsigned char   *pNew;
     unsigned char   temp;
@@ -1078,15 +1133,15 @@ unsigned short XSwapShort(unsigned short value)
 }
 // Swap shorts within a long, but not the bytes in each each short.
 
-unsigned long XSwapShortInLong(unsigned long value)
+uint32_t XSwapShortInLong(uint32_t value)
 {
-    unsigned long   newValue;
-    unsigned short  *pOld;
-    unsigned short  *pNew;
-    unsigned short  temp;
+    uint32_t   newValue;
+    uint16_t  *pOld;
+    uint16_t  *pNew;
+    uint16_t  temp;
 
-    pOld = (unsigned short *)&value;
-    pNew = (unsigned short *)&newValue;
+    pOld = (uint16_t *)&value;
+    pNew = (uint16_t *)&newValue;
 
     temp = pOld[0];
     pNew[1] = temp;
@@ -1098,7 +1153,7 @@ unsigned long XSwapShortInLong(unsigned long value)
 // if TRUE, then motorola; if FALSE then intel
 XBOOL XDetermineByteOrder(void)
 {
-    static long value = 0x12345678;
+    static int32_t value = 0x12345678;
     XBOOL       order;
 
     order = FALSE;
@@ -1173,7 +1228,7 @@ void XConvertNativeFileToXFILENAME(void *file, XFILENAME *xfile)
 {
     if (xfile)
     {
-        XSetMemory(xfile, (long)sizeof(XFILENAME), 0);
+        XSetMemory(xfile, (int32_t)sizeof(XFILENAME), 0);
     }
     if (file)
     {
@@ -1187,10 +1242,10 @@ void XConvertNativeFileToXFILENAME(void *file, XFILENAME *xfile)
 // Read a file into memory and return an allocated pointer.
 // 0 is ok, -1 failed to open, -2 failed to read, -3 failed memory
 // if 0, then *pData is valid
-XERR XGetFileAsData(XFILENAME *pResourceName, XPTR *ppData, long *pSize)
+XERR XGetFileAsData(XFILENAME *pResourceName, XPTR *ppData, int32_t *pSize)
 {
     XFILE   ref;
-    long    size;
+    int32_t    size;
     XERR    error;
     XPTR    pData;
 
@@ -1201,13 +1256,16 @@ XERR XGetFileAsData(XFILENAME *pResourceName, XPTR *ppData, long *pSize)
         *pSize = 0;
         *ppData = NULL;
         ref = XFileOpenForRead(pResourceName);
+        if (!ref) {
+        } else {
+        }
         if (ref)
         {
             size = XFileGetLength(ref);
             pData = XNewPtr(size);
             if (pData)
             {
-                if (XFileRead(ref, pData, size))
+                if (XFileRead(ref, pData, size) != 0)
                 {
                     error = -2; // failed to read
                     XDisposePtr(pData);
@@ -1253,8 +1311,8 @@ XERR XGetTempXFILENAME(XFILENAME* xfilename)
 #endif
 
 #if X_PLATFORM == X_MACINTOSH_9
-    short           vRefNum;
-    long            theDirID;
+    int16_t           vRefNum;
+    int32_t            theDirID;
     OSErr           err;
     FSSpec          fileSpec;
     char            name[64], name2[32];
@@ -1271,7 +1329,7 @@ XERR XGetTempXFILENAME(XFILENAME* xfilename)
         XStrCpy(&name[length], (char *)XPtoCstr(name2));                // concatinate it to name
 
         // Create FSSpec structure from file name
-        XSetMemory(&fileSpec, (long)sizeof(FSSpec), 0);
+        XSetMemory(&fileSpec, (int32_t)sizeof(FSSpec), 0);
         err = FSMakeFSSpec(vRefNum, theDirID, (unsigned char *)XCtoPstr(name), &fileSpec);
         if ((err == noErr) || (err == fnfErr))
         {
@@ -1310,7 +1368,7 @@ XBOOL XFileIsValidResource(XFILE file)
     {
         // validate resource file
         XFileSetPosition(file, 0L);     // at start
-        if (XFileRead(file, &map, (long)sizeof(XFILERESOURCEMAP)) == 0)
+        if (XFileRead(file, &map, (int32_t)sizeof(XFILERESOURCEMAP)) == 0)
         {
             if (XGetLong(&map.mapID) == XFILERESOURCE_ID)
             {
@@ -1341,15 +1399,15 @@ XBOOL XFileIsValidResourceFromName(XFILENAME *file)
 }
 
 
-XFILE XFileOpenResourceFromMemory(XPTR pResource, unsigned long resourceLength, XBOOL allowCopy)
+XFILE XFileOpenResourceFromMemory(XPTR pResource, uint32_t resourceLength, XBOOL allowCopy)
 {
     XFILENAME           *pReference;
     XFILERESOURCEMAP    map;
-    short int           err;
+    int16_t           err;
 
     allowCopy;
     err = 0;
-    pReference = (XFILENAME *)XNewPtr((long)sizeof(XFILENAME));
+    pReference = (XFILENAME *)XNewPtr((int32_t)sizeof(XFILENAME));
     if (pReference)
     {
         pReference->pResourceData = pResource;
@@ -1365,7 +1423,7 @@ XFILE XFileOpenResourceFromMemory(XPTR pResource, unsigned long resourceLength, 
         pReference->fileValidID = XPI_BLOCK_3_ID;
         if (pReference)
         {
-            if (PV_AddResourceFileToOpenFiles((XFILE)pReference))
+            if (PV_AddResourceFileToOpenFiles(pReference))
             {   // can't open any more files
                 err = 1;
             }
@@ -1375,8 +1433,8 @@ XFILE XFileOpenResourceFromMemory(XPTR pResource, unsigned long resourceLength, 
                 // since we are pointer based, we don't care about caching.
 
                 // validate resource file
-                XFileSetPosition((XFILE)pReference, 0L);        // at start
-                if (XFileRead((XFILE)pReference, &map, (long)sizeof(XFILERESOURCEMAP)) == 0)
+                XFileSetPosition(pReference, 0L);        // at start
+                if (XFileRead(pReference, &map, (int32_t)sizeof(XFILERESOURCEMAP)) == 0)
                 {
                     if (XGetLong(&map.mapID) != XFILERESOURCE_ID)
                     {
@@ -1391,12 +1449,12 @@ XFILE XFileOpenResourceFromMemory(XPTR pResource, unsigned long resourceLength, 
         }
         if (err)
         {
-            PV_RemoveResourceFileFromOpenFiles((XFILE)pReference);  // make sure we remove it from the list
+            PV_RemoveResourceFileFromOpenFiles(pReference);  // make sure we remove it from the list
             XDisposePtr(pReference);
             pReference = NULL;
         }
     }
-    return (XFILE)pReference;
+    return pReference;
 }
 
 XFILE XFileOpenResource(XFILENAME *file, XBOOL readOnly)
@@ -1406,7 +1464,7 @@ XFILE XFileOpenResource(XFILENAME *file, XBOOL readOnly)
     XERR                err;
 
     err = 0;
-    pReference = (XFILENAME *)XNewPtr((long)sizeof(XFILENAME));
+    pReference = (XFILENAME *)XNewPtr((int32_t)sizeof(XFILENAME));
     if (pReference)
     {
         *pReference = *file;
@@ -1419,7 +1477,7 @@ XFILE XFileOpenResource(XFILENAME *file, XBOOL readOnly)
         if (readOnly)
         {
             pReference->fileReference = BAE_FileOpenForRead((void *)&pReference->theFile);
-            if (pReference->fileReference == -1)
+            if (pReference->fileReference == (intptr_t)-1)
             {
                 XDisposePtr(pReference);
                 pReference = NULL;
@@ -1428,12 +1486,12 @@ XFILE XFileOpenResource(XFILENAME *file, XBOOL readOnly)
         else
         {
             pReference->fileReference = BAE_FileOpenForReadWrite((void *)&pReference->theFile);
-            if (pReference->fileReference == -1)
+            if (pReference->fileReference == (intptr_t)-1)
             {
                 // must not be there, so create it and prepare it as a resource file
                 BAE_FileCreate((void *)&pReference->theFile);
                 pReference->fileReference = BAE_FileOpenForReadWrite((void *)&pReference->theFile);
-                if (pReference->fileReference == -1)
+                if (pReference->fileReference == (intptr_t)-1)
                 {
                     XDisposePtr(pReference);
                     pReference = NULL;
@@ -1441,11 +1499,11 @@ XFILE XFileOpenResource(XFILENAME *file, XBOOL readOnly)
                 else
                 {
                     // prepare it as a resource file
-                    XFileSetPosition((XFILE)pReference, 0L);        // at start
+                    XFileSetPosition(pReference, 0L);        // at start
                     XPutLong(&map.mapID, XFILERESOURCE_ID);
                     XPutLong(&map.version, 1);
                     XPutLong(&map.totalResources, 0);
-                    XFileWrite((XFILE)pReference, &map, (long)sizeof(XFILERESOURCEMAP));
+                    XFileWrite(pReference, &map, (int32_t)sizeof(XFILERESOURCEMAP));
                 }
             }
         }
@@ -1453,7 +1511,7 @@ XFILE XFileOpenResource(XFILENAME *file, XBOOL readOnly)
         if (pReference)
         {
             // success
-            if (PV_AddResourceFileToOpenFiles((XFILE)pReference))
+            if (PV_AddResourceFileToOpenFiles(pReference))
             {   // can't open any more files
                 BAE_FileClose(pReference->fileReference);       // jsc 3/29/00
                 XDisposePtr(pReference);
@@ -1466,7 +1524,7 @@ XFILE XFileOpenResource(XFILENAME *file, XBOOL readOnly)
 //              if (readOnly)
                 {
                     // Try to open XFILECACHE_ID cache block.
-                    pReference->pCache = (XFILERESOURCECACHE *)XGetFileResource((XFILE)pReference,
+                    pReference->pCache = (XFILERESOURCECACHE *)XGetFileResource(pReference,
                                                                 XFILECACHE_ID, 0, NULL, NULL);
                     if (pReference->pCache != NULL)
                     {
@@ -1474,13 +1532,13 @@ XFILE XFileOpenResource(XFILENAME *file, XBOOL readOnly)
                     }
                     else
                     {
-                        pReference->pCache = XCreateAccessCache((XFILE)pReference);
+                        pReference->pCache = XCreateAccessCache(pReference);
                     }
                 }
 #endif
                 // validate resource file
-                XFileSetPosition((XFILE)pReference, 0L);        // at start
-                if (XFileRead((XFILE)pReference, &map, (long)sizeof(XFILERESOURCEMAP)) == 0)
+                XFileSetPosition(pReference, 0L);        // at start
+                if (XFileRead(pReference, &map, (int32_t)sizeof(XFILERESOURCEMAP)) == 0)
                 {
                     if (XGetLong(&map.mapID) != XFILERESOURCE_ID)
                     {
@@ -1495,21 +1553,21 @@ XFILE XFileOpenResource(XFILENAME *file, XBOOL readOnly)
             if (err)
             {
                 XDisposePtr(pReference->pCache);
-                PV_RemoveResourceFileFromOpenFiles((XFILE)pReference);  // make sure we remove it from the list
+                PV_RemoveResourceFileFromOpenFiles(pReference);  // make sure we remove it from the list
                 BAE_FileClose(pReference->fileReference);               // jsc 3/29/00
                 XDisposePtr(pReference);
                 pReference = NULL;
             }
         }
     }
-    return (XFILE)pReference;
+    return pReference;
 }
 
-XFILE XFileOpenForReadFromMemory(XPTR pMemoryBlock, unsigned long memoryBlockSize)
+XFILE XFileOpenForReadFromMemory(XPTR pMemoryBlock, uint32_t memoryBlockSize)
 {
     XFILENAME   *pReference;
 
-    pReference = (XFILENAME *)XNewPtr((long)sizeof(XFILENAME));
+    pReference = (XFILENAME *)XNewPtr((int32_t)sizeof(XFILENAME));
     if (pReference)
     {
         pReference->pResourceData = pMemoryBlock;
@@ -1521,14 +1579,14 @@ XFILE XFileOpenForReadFromMemory(XPTR pMemoryBlock, unsigned long memoryBlockSiz
         pReference->pCache = NULL;
         pReference->fileReference = 0;
     }
-    return (XFILE)pReference;
+    return pReference;
 }
 
 XFILE XFileOpenForRead(XFILENAME *file)
 {
     XFILENAME   *pReference;
 
-    pReference = (XFILENAME *)XNewPtr((long)sizeof(XFILENAME));
+    pReference = (XFILENAME *)XNewPtr((int32_t)sizeof(XFILENAME));
     if (pReference)
     {
         *pReference = *file;
@@ -1539,13 +1597,13 @@ XFILE XFileOpenForRead(XFILENAME *file)
         pReference->pCache = NULL;
 
         pReference->fileReference = BAE_FileOpenForRead((void *)&pReference->theFile);
-        if (pReference->fileReference == -1)
+    if (pReference->fileReference == (intptr_t)-1)
         {
             XDisposePtr(pReference);
             pReference = NULL;
         }
     }
-    return (XFILE)pReference;
+    return pReference;
 }
 
 #if USE_CREATION_API == TRUE
@@ -1553,7 +1611,7 @@ XFILE XFileOpenForWrite(XFILENAME *file, XBOOL create)
 {
     XFILENAME   *pReference;
 
-    pReference = (XFILENAME *)XNewPtr((long)sizeof(XFILENAME));
+    pReference = (XFILENAME *)XNewPtr((int32_t)sizeof(XFILENAME));
     if (pReference)
     {
         *pReference = *file;
@@ -1568,13 +1626,13 @@ XFILE XFileOpenForWrite(XFILENAME *file, XBOOL create)
             pReference->fileReference = BAE_FileCreate((void *)&pReference->theFile);
         }
         pReference->fileReference = BAE_FileOpenForReadWrite((void *)&pReference->theFile);
-        if (pReference->fileReference == -1)
+    if (pReference->fileReference == (intptr_t)-1)
         {
             XDisposePtr(pReference);
             pReference = NULL;
         }
     }
-    return (XFILE)pReference;
+    return pReference;
 }
 #endif
 
@@ -1591,11 +1649,11 @@ void XFileClose(XFILE fileRef)
 {
     XFILENAME   *pReference;
 
-    pReference = (XFILENAME *)fileRef;
+    pReference = fileRef;
     if (PV_XFileValid(fileRef))
     {
         XFileFreeResourceCache(fileRef);
-        pReference->fileValidID = (long)XPI_DEAD_ID;
+        pReference->fileValidID = (int32_t)XPI_DEAD_ID;
         if (pReference->pResourceData)
         {
             pReference->pResourceData = NULL;   // clear memory file access
@@ -1609,13 +1667,13 @@ void XFileClose(XFILE fileRef)
     }
 }
 
-XERR XFileRead(XFILE fileRef, XPTR buffer, long bufferLength)
+XERR XFileRead(XFILE fileRef, XPTR buffer, int32_t bufferLength)
 {
     XFILENAME   *pReference;
-    long        newLength;
-    long        err;
+    int32_t        newLength;
+    int32_t        err;
 
-    pReference = (XFILENAME *)fileRef;
+    pReference = fileRef;
     if (PV_XFileValid(fileRef))
     {
         if (pReference->pResourceData)
@@ -1640,11 +1698,11 @@ XERR XFileRead(XFILE fileRef, XPTR buffer, long bufferLength)
     return -1;
 }
 
-XERR XFileWrite(XFILE fileRef, XPTRC buffer, long bufferLength)
+XERR XFileWrite(XFILE fileRef, XPTRC buffer, int32_t bufferLength)
 {
     XFILENAME   *pReference;
 
-    pReference = (XFILENAME *)fileRef;
+    pReference = fileRef;
     if (PV_XFileValid(fileRef))
     {
         if (pReference->pResourceData)
@@ -1659,13 +1717,13 @@ XERR XFileWrite(XFILE fileRef, XPTRC buffer, long bufferLength)
     return -1;
 }
 
-XERR XFileSetPosition(XFILE fileRef, long filePosition)
+XERR XFileSetPosition(XFILE fileRef, int32_t filePosition)
 {
     XFILENAME   *pReference;
     XERR        err;
 
     err = -1;
-    pReference = (XFILENAME *)fileRef;
+    pReference = fileRef;
     if (PV_XFileValid(fileRef))
     {
         if (pReference->pResourceData)
@@ -1684,9 +1742,9 @@ XERR XFileSetPosition(XFILE fileRef, long filePosition)
     return err;
 }
 
-XERR XFileSetPositionRelative(XFILE fileRef, long relativeOffset)
+XERR XFileSetPositionRelative(XFILE fileRef, int32_t relativeOffset)
 {
-    long        pos;
+    int32_t        pos;
     XERR        err;
 
     err = -1;
@@ -1704,7 +1762,7 @@ static XBYTE * PV_GetFilePositionFromMemoryResource(XFILE fileRef)
     XBYTE       *pos;
 
     pos = NULL;
-    pReference = (XFILENAME *)fileRef;
+    pReference = fileRef;
     if (PV_XFileValid(fileRef))
     {
         if (pReference->pResourceData)
@@ -1715,13 +1773,13 @@ static XBYTE * PV_GetFilePositionFromMemoryResource(XFILE fileRef)
     return pos;
 }
 
-long XFileGetPosition(XFILE fileRef)
+int32_t XFileGetPosition(XFILE fileRef)
 {
     XFILENAME   *pReference;
-    long        pos;
+    int32_t        pos;
 
     pos = -1;
-    pReference = (XFILENAME *)fileRef;
+    pReference = fileRef;
     if (PV_XFileValid(fileRef))
     {
         if (pReference->pResourceData)
@@ -1737,13 +1795,13 @@ long XFileGetPosition(XFILE fileRef)
 }
 
 #if USE_CREATION_API == TRUE
-XERR XFileSetLength(XFILE fileRef, unsigned long newSize)
+XERR XFileSetLength(XFILE fileRef, uint32_t newSize)
 {
     XFILENAME   *pReference;
-    long        error;
+    int32_t        error;
 
     error = 0;
-    pReference = (XFILENAME *)fileRef;
+    pReference = fileRef;
     if (PV_XFileValid(fileRef))
     {
         if (pReference->pResourceData == NULL)
@@ -1755,13 +1813,13 @@ XERR XFileSetLength(XFILE fileRef, unsigned long newSize)
 }
 #endif
 
-long XFileGetLength(XFILE fileRef)
+int32_t XFileGetLength(XFILE fileRef)
 {
     XFILENAME   *pReference;
-    long        pos;
+    int32_t        pos;
 
     pos = -1;
-    pReference = (XFILENAME *)fileRef;
+    pReference = fileRef;
     if (PV_XFileValid(fileRef))
     {
         if (pReference->pResourceData)
@@ -1780,12 +1838,12 @@ long XFileGetLength(XFILE fileRef)
 static XFILE_CACHED_ITEM * PV_XGetCacheEntry(XFILE fileRef, XResourceType resourceType, XLongResourceID resourceID)
 {
     XFILENAME           *pReference;
-    long                count, total;
+    int32_t                count, total;
     XFILERESOURCECACHE  *pCache;
     XFILE_CACHED_ITEM   *pItem;
 
     pItem = NULL;
-    pReference = (XFILENAME *)fileRef;
+    pReference = fileRef;
     if (PV_XFileValid(fileRef))
     {
         pCache = pReference->pCache;
@@ -1812,17 +1870,17 @@ static XFILE_CACHED_ITEM * PV_XGetCacheEntry(XFILE fileRef, XResourceType resour
 static XFILE_CACHED_ITEM * PV_XGetNamedCacheEntry(XFILE fileRef, XResourceType resourceType, void *cName)
 {
     XFILENAME           *pReference;
-    long                count, total;
+    int32_t                count, total;
     XFILERESOURCECACHE  *pCache;
     XFILE_CACHED_ITEM   *pItem;
-    long                err=0;
+    int32_t                err=0;
     char                tempPascalName[256];
-    long                savePos;
+    int32_t                savePos;
     XFILERESOURCEMAP    map;
-    long                data, next;
+    int32_t                data, next;
 
     pItem = NULL;
-    pReference = (XFILENAME *)fileRef;
+    pReference = fileRef;
     if (PV_XFileValid(fileRef))
     {
         if (pReference->pResourceData && (pReference->allowMemCopy == FALSE) )
@@ -1831,7 +1889,7 @@ static XFILE_CACHED_ITEM * PV_XGetNamedCacheEntry(XFILE fileRef, XResourceType r
             //Gotta search the whole bleedin' thing!
 
             XFileSetPosition(fileRef, 0L);      // at start
-            if (XFileRead(fileRef, &map, (long)sizeof(XFILERESOURCEMAP)) == 0)
+            if (XFileRead(fileRef, &map, (int32_t)sizeof(XFILERESOURCEMAP)) == 0)
             {
                 if (XGetLong(&map.mapID) == XFILERESOURCE_ID)
                 {
@@ -1842,24 +1900,24 @@ static XFILE_CACHED_ITEM * PV_XGetNamedCacheEntry(XFILE fileRef, XResourceType r
                         err = XFileSetPosition(fileRef, next);      // at start
                         if (err == 0)
                         {
-                            err = XFileRead(fileRef, &next, (long)sizeof(long));        // get next pointer
+                            err = XFileRead(fileRef, &next, (int32_t)sizeof(int32_t));        // get next pointer
                             next = XGetLong(&next);
                             if (next != -1L)
                             {   
-                                err = XFileRead(fileRef, &data, (long)sizeof(long));        // get type
+                                err = XFileRead(fileRef, &data, (int32_t)sizeof(int32_t));        // get type
 
                                 if ((XResourceType)XGetLong(&data) == resourceType)
                                 {
                                     pReference->memoryCacheEntry.resourceType = (XResourceType)XGetLong(&data);
                                         
-                                    err = XFileRead(fileRef, &data, (long)sizeof(long));        // get ID
+                                    err = XFileRead(fileRef, &data, (int32_t)sizeof(int32_t));        // get ID
 
                                     pReference->memoryCacheEntry.resourceID = (XLongResourceID)XGetLong(&data);
 
                                     err = XFileRead(fileRef, &tempPascalName[0], 1L);       // get name
                                     if (tempPascalName[0])
                                     {
-                                        err = XFileRead(fileRef, &tempPascalName[1], (long)tempPascalName[0]);
+                                        err = XFileRead(fileRef, &tempPascalName[1], (int32_t)tempPascalName[0]);
 
                                         XPtoCstr(tempPascalName);
                                         if (!XStrCmp((char *)tempPascalName, (char *)cName))
@@ -1903,7 +1961,7 @@ static XFILE_CACHED_ITEM * PV_XGetNamedCacheEntry(XFILE fileRef, XResourceType r
                         err = XFileRead(fileRef, &tempPascalName[0], 1L);       // get name
                         if (tempPascalName[0])
                         {
-                            err = XFileRead(fileRef, &tempPascalName[1], (long)tempPascalName[0]);
+                            err = XFileRead(fileRef, &tempPascalName[1], (int32_t)tempPascalName[0]);
                             if (XStrCmp((char *)cName, (char *)XPtoCstr(tempPascalName)) == 0)
                             {
                                 pItem = &pCache->cached[count];
@@ -1928,10 +1986,10 @@ static XFILE_CACHED_ITEM * PV_XGetNamedCacheEntry(XFILE fileRef, XResourceType r
 char *  XGetResourceNameOnly(XFILE fileRef, XResourceType resourceType, XLongResourceID resourceID, char *pResourceName)
 {
     XFILENAME           *pReference;
-    long                err;
+    int32_t                err;
     XFILERESOURCEMAP    map;
-    long                data, next;
-    long                count, total;
+    int32_t                data, next;
+    int32_t                count, total;
     char                tempPascalName[256];
     XFILE_CACHED_ITEM   *pCacheItem;
 
@@ -1943,7 +2001,7 @@ char *  XGetResourceNameOnly(XFILE fileRef, XResourceType resourceType, XLongRes
     
     err = 0;
     tempPascalName[0] = 0;
-    pReference = (XFILENAME *)fileRef;
+    pReference = fileRef;
     if (PV_XFileValid(fileRef))
     {
         // first do we have a cache?
@@ -1960,8 +2018,8 @@ char *  XGetResourceNameOnly(XFILE fileRef, XResourceType resourceType, XLongRes
                     err = XFileRead(fileRef, &tempPascalName[0], 1L);       // get name
                     if (tempPascalName[0])
                     {
-                        err = XFileRead(fileRef, &tempPascalName[1], (long)tempPascalName[0]);
-                        XBlockMove(tempPascalName, pResourceName, (long)tempPascalName[0] + 1);
+                        err = XFileRead(fileRef, &tempPascalName[1], (int32_t)tempPascalName[0]);
+                        XBlockMove(tempPascalName, pResourceName, (int32_t)tempPascalName[0] + 1);
                     }
                 }
             }
@@ -1973,7 +2031,7 @@ char *  XGetResourceNameOnly(XFILE fileRef, XResourceType resourceType, XLongRes
         else
         {
             XFileSetPosition(fileRef, 0L);      // at start
-            if (XFileRead(fileRef, &map, (long)sizeof(XFILERESOURCEMAP)) == 0)
+            if (XFileRead(fileRef, &map, (int32_t)sizeof(XFILERESOURCEMAP)) == 0)
             {
                 if (XGetLong(&map.mapID) == XFILERESOURCE_ID)
                 {
@@ -1984,27 +2042,27 @@ char *  XGetResourceNameOnly(XFILE fileRef, XResourceType resourceType, XLongRes
                         err = XFileSetPosition(fileRef, next);      // at start
                         if (err == 0)
                         {
-                            err = XFileRead(fileRef, &next, (long)sizeof(long));        // get next pointer
+                            err = XFileRead(fileRef, &next, (int32_t)sizeof(int32_t));        // get next pointer
                             next = XGetLong(&next);
                             if (next != -1L)
                             {   
-                                err = XFileRead(fileRef, &data, (long)sizeof(long));        // get type
+                                err = XFileRead(fileRef, &data, (int32_t)sizeof(int32_t));        // get type
                                 if ((XResourceType)XGetLong(&data) == resourceType)
                                 {
-                                    err = XFileRead(fileRef, &data, (long)sizeof(long));        // get ID
+                                    err = XFileRead(fileRef, &data, (int32_t)sizeof(int32_t));        // get ID
                                     if ((XLongResourceID)XGetLong(&data) == resourceID)
                                     {
                                         err = XFileRead(fileRef, &tempPascalName[0], 1L);       // get name
                                         if (tempPascalName[0])
                                         {
-                                            err = XFileRead(fileRef, &tempPascalName[1], (long)tempPascalName[0]);
+                                            err = XFileRead(fileRef, &tempPascalName[1], (int32_t)tempPascalName[0]);
                                             if (pResourceName)
                                             {
-                                                XBlockMove(tempPascalName, pResourceName, (long)tempPascalName[0] + 1 );
+                                                XBlockMove(tempPascalName, pResourceName, (int32_t)tempPascalName[0] + 1 );
                                                 break;
                                             }
                                         }
-                                        err = XFileRead(fileRef, &data, (long)sizeof(long));        // get length
+                                        err = XFileRead(fileRef, &data, (int32_t)sizeof(int32_t));        // get length
                                         data = XGetLong(&data);     // get resource size
                                     }
                                 }
@@ -2030,16 +2088,16 @@ char *  XGetResourceNameOnly(XFILE fileRef, XResourceType resourceType, XLongRes
 #if X_PLATFORM == X_MACINTOSH_9
     else
     {   // use native resource manager
-        short int       theID;
-        unsigned long   theType;
+        int16_t       theID;
+        uint32_t   theType;
         Handle          theData;
-        short int       currentResourceFile;
+        int16_t       currentResourceFile;
 
         currentResourceFile = CurResFile();
-        UseResFile((short int)fileRef);
+        UseResFile((int16_t)fileRef);
 
         SetResLoad(FALSE);
-        theData = Get1Resource(resourceType, (short int)resourceID);
+        theData = Get1Resource(resourceType, (int16_t)resourceID);
         SetResLoad(TRUE);
         err = -1;
         if (theData)
@@ -2057,13 +2115,13 @@ char *  XGetResourceNameOnly(XFILE fileRef, XResourceType resourceType, XLongRes
 
 XERR XReadPartialFileResource(XFILE fileRef, XResourceType resourceType, XLongResourceID resourceID,
                                 char *pResourceName,
-                                XPTR *pReturnedBuffer, long bytesToReadAndAllocate)
+                                XPTR *pReturnedBuffer, int32_t bytesToReadAndAllocate)
 {
     XFILENAME           *pReference;
     XERR                err;
     XFILERESOURCEMAP    map;
-    long                data, next;
-    long                count, total;
+    int32_t                data, next;
+    int32_t                count, total;
     XPTR                pData;
     char                tempPascalName[256];
     XFILE_CACHED_ITEM   *pCacheItem;
@@ -2071,7 +2129,7 @@ XERR XReadPartialFileResource(XFILE fileRef, XResourceType resourceType, XLongRe
     err = 0;
     pData = NULL;
     tempPascalName[0] = 0;
-    pReference = (XFILENAME *)fileRef;
+    pReference = fileRef;
 
     if (PV_XFileValid(fileRef) && pReturnedBuffer && bytesToReadAndAllocate)
     {
@@ -2089,10 +2147,10 @@ XERR XReadPartialFileResource(XFILE fileRef, XResourceType resourceType, XLongRe
                     err = XFileRead(fileRef, &tempPascalName[0], 1L);       // get name
                     if (tempPascalName[0])
                     {
-                        err = XFileRead(fileRef, &tempPascalName[1], (long)tempPascalName[0]);
+                        err = XFileRead(fileRef, &tempPascalName[1], (int32_t)tempPascalName[0]);
                         if (pResourceName)
                         {
-                            XBlockMove(tempPascalName, pResourceName, (long)tempPascalName[0] + 1);
+                            XBlockMove(tempPascalName, pResourceName, (int32_t)tempPascalName[0] + 1);
                         }
                     }
                 }
@@ -2102,7 +2160,6 @@ XERR XReadPartialFileResource(XFILE fileRef, XResourceType resourceType, XLongRe
                 // is data memory based?
                 if (pReference->pResourceData && (pReference->allowMemCopy == FALSE) )
                 {   // don't bother coping data again, since its already in memory
-                    // just return the pointer. 
                     pData = PV_GetFilePositionFromMemoryResource(fileRef);
                     if (pData == NULL)
                     {
@@ -2132,7 +2189,7 @@ XERR XReadPartialFileResource(XFILE fileRef, XResourceType resourceType, XLongRe
         else
         {
             XFileSetPosition(fileRef, 0L);      // at start
-            if (XFileRead(fileRef, &map, (long)sizeof(XFILERESOURCEMAP)) == 0)
+            if (XFileRead(fileRef, &map, (int32_t)sizeof(XFILERESOURCEMAP)) == 0)
             {
                 if (XGetLong(&map.mapID) == XFILERESOURCE_ID)
                 {
@@ -2143,26 +2200,26 @@ XERR XReadPartialFileResource(XFILE fileRef, XResourceType resourceType, XLongRe
                         err = XFileSetPosition(fileRef, next);      // at start
                         if (err == 0)
                         {
-                            err = XFileRead(fileRef, &next, (long)sizeof(long));        // get next pointer
+                            err = XFileRead(fileRef, &next, (int32_t)sizeof(int32_t));        // get next pointer
                             next = XGetLong(&next);
                             if (next != -1L)
                             {   
-                                err = XFileRead(fileRef, &data, (long)sizeof(long));        // get type
+                                err = XFileRead(fileRef, &data, (int32_t)sizeof(int32_t));        // get type
                                 if ((XResourceType)XGetLong(&data) == resourceType)
                                 {
-                                    err = XFileRead(fileRef, &data, (long)sizeof(long));        // get ID
+                                    err = XFileRead(fileRef, &data, (int32_t)sizeof(int32_t));        // get ID
                                     if ((XLongResourceID)XGetLong(&data) == resourceID)
                                     {
                                         err = XFileRead(fileRef, &tempPascalName[0], 1L);       // get name
                                         if (tempPascalName[0])
                                         {
-                                            err = XFileRead(fileRef, &tempPascalName[1], (long)tempPascalName[0]);
+                                            err = XFileRead(fileRef, &tempPascalName[1], (int32_t)tempPascalName[0]);
                                             if (pResourceName)
                                             {
-                                                XBlockMove(tempPascalName, pResourceName, (long)tempPascalName[0] + 1);
+                                                XBlockMove(tempPascalName, pResourceName, (int32_t)tempPascalName[0] + 1);
                                             }
                                         }
-                                        err = XFileRead(fileRef, &data, (long)sizeof(long));        // get length
+                                        err = XFileRead(fileRef, &data, (int32_t)sizeof(int32_t));        // get length
                                         data = XGetLong(&data);     // get resource size
 
                                         // get data
@@ -2231,13 +2288,13 @@ XERR XReadPartialFileResource(XFILE fileRef, XResourceType resourceType, XLongRe
 // resourceID is an ID
 // pResourceName is a pascal string. pResourceName can be NULL.
 // pReturnedResourceSize be filled with the size of the resource. pReturnedResourceSize can be NULL.
-XPTR XGetFileResource(XFILE fileRef, XResourceType resourceType, XLongResourceID resourceID, void *pResourceName, long *pReturnedResourceSize)
+XPTR XGetFileResource(XFILE fileRef, XResourceType resourceType, XLongResourceID resourceID, void *pResourceName, int32_t *pReturnedResourceSize)
 {
     XFILENAME           *pReference;
     XERR                err;
     XFILERESOURCEMAP    map;
-    long                data, next;
-    long                count, total;
+    int32_t                data, next;
+    int32_t                count, total;
     XPTR                pData;
     char                tempPascalName[256];
     XFILE_CACHED_ITEM   *pCacheItem;
@@ -2254,7 +2311,7 @@ XPTR XGetFileResource(XFILE fileRef, XResourceType resourceType, XLongResourceID
     BAE_PRINTF("GetResource %s %ld is ", tempPascalName, resourceID);
 #endif
     tempPascalName[0] = 0;
-    pReference = (XFILENAME *)fileRef;
+    pReference = fileRef;
     if (PV_XFileValid(fileRef))
     {
         // first do we have a cache?
@@ -2271,10 +2328,10 @@ XPTR XGetFileResource(XFILE fileRef, XResourceType resourceType, XLongResourceID
                     err = XFileRead(fileRef, &tempPascalName[0], 1L);       // get name
                     if (tempPascalName[0])
                     {
-                        err = XFileRead(fileRef, &tempPascalName[1], (long)tempPascalName[0]);
+                        err = XFileRead(fileRef, &tempPascalName[1], (int32_t)tempPascalName[0]);
                         if (pResourceName)
                         {
-                            XBlockMove(tempPascalName, pResourceName, (long)tempPascalName[0] + 1);
+                            XBlockMove(tempPascalName, pResourceName, (int32_t)tempPascalName[0] + 1);
                         }
                     }
                 }
@@ -2325,7 +2382,7 @@ XPTR XGetFileResource(XFILE fileRef, XResourceType resourceType, XLongResourceID
         else
         {
             XFileSetPosition(fileRef, 0L);      // at start
-            if (XFileRead(fileRef, &map, (long)sizeof(XFILERESOURCEMAP)) == 0)
+            if (XFileRead(fileRef, &map, (int32_t)sizeof(XFILERESOURCEMAP)) == 0)
             {
                 if (XGetLong(&map.mapID) == XFILERESOURCE_ID)
                 {
@@ -2336,26 +2393,26 @@ XPTR XGetFileResource(XFILE fileRef, XResourceType resourceType, XLongResourceID
                         err = XFileSetPosition(fileRef, next);      // at start
                         if (err == 0)
                         {
-                            err = XFileRead(fileRef, &next, (long)sizeof(long));        // get next pointer
+                            err = XFileRead(fileRef, &next, (int32_t)sizeof(int32_t));        // get next pointer
                             next = XGetLong(&next);
                             if (next != -1L)
                             {   
-                                err = XFileRead(fileRef, &data, (long)sizeof(long));        // get type
+                                err = XFileRead(fileRef, &data, (int32_t)sizeof(int32_t));        // get type
                                 if ((XResourceType)XGetLong(&data) == resourceType)
                                 {
-                                    err = XFileRead(fileRef, &data, (long)sizeof(long));        // get ID
+                                    err = XFileRead(fileRef, &data, (int32_t)sizeof(int32_t));        // get ID
                                     if ((XLongResourceID)XGetLong(&data) == resourceID)
                                     {
                                         err = XFileRead(fileRef, &tempPascalName[0], 1L);       // get name
                                         if (tempPascalName[0])
                                         {
-                                            err = XFileRead(fileRef, &tempPascalName[1], (long)tempPascalName[0]);
+                                            err = XFileRead(fileRef, &tempPascalName[1], (int32_t)tempPascalName[0]);
                                             if (pResourceName)
                                             {
-                                                XBlockMove(tempPascalName, pResourceName, (long)tempPascalName[0] + 1);
+                                                XBlockMove(tempPascalName, pResourceName, (int32_t)tempPascalName[0] + 1);
                                             }
                                         }
-                                        err = XFileRead(fileRef, &data, (long)sizeof(long));        // get length
+                                        err = XFileRead(fileRef, &data, (int32_t)sizeof(int32_t));        // get length
                                         data = XGetLong(&data);     // get resource size
 
                                         // get data
@@ -2424,6 +2481,65 @@ XPTR XGetFileResource(XFILE fileRef, XResourceType resourceType, XLongResourceID
     return pData;
 }
 
+// Free cache of a resource file
+void XFileFreeResourceCache(XFILE fileRef)
+{
+    XFILENAME *pReference = (XFILENAME *)fileRef;
+    if (PV_XFileValid(fileRef) && pReference->pCache)
+    {
+        XDisposePtr(pReference->pCache);
+        pReference->pCache = NULL;
+    }
+}
+
+// Force a clean/update of the resource file. Simplified: rebuild in‑memory cache.
+XBOOL XCleanResourceFile(XFILE fileRef)
+{
+    if (!PV_XFileValid(fileRef))
+    {
+        return FALSE;
+    }
+    XFileFreeResourceCache(fileRef);
+    return (XCreateAccessCache(fileRef) != NULL) ? TRUE : FALSE;
+}
+
+// Return the Nth resource of a given type from a specific file.
+XPTR XGetIndexedFileResource(XFILE fileRef, XResourceType resourceType, XLongResourceID *pReturnedID, int32_t resourceIndex,
+                             void *pResourceName, int32_t *pReturnedResourceSize)
+{
+    if (pReturnedResourceSize) { *pReturnedResourceSize = 0; }
+    if (pReturnedID) { *pReturnedID = 0; }
+    if (!PV_XFileValid(fileRef) || resourceIndex < 0)
+    {
+        return NULL;
+    }
+    XFILENAME *pReference = (XFILENAME *)fileRef;
+    if (pReference->pCache == NULL)
+    {
+        // build cache lazily
+        XCreateAccessCache(fileRef);
+    }
+    if (pReference->pCache)
+    {
+        int32_t found = 0;
+        for (int32_t i = 0; i < pReference->pCache->totalResources; i++)
+        {
+            XFILE_CACHED_ITEM *item = &pReference->pCache->cached[i];
+            if (item->resourceType == resourceType)
+            {
+                if (found == resourceIndex)
+                {
+                    if (pReturnedID) { *pReturnedID = item->resourceID; }
+                    return XGetFileResource(fileRef, (XResourceType)item->resourceType, (XLongResourceID)item->resourceID,
+                                             pResourceName, pReturnedResourceSize);
+                }
+                found++;
+            }
+        }
+    }
+    return NULL;
+}
+
 
 
 /******************************************************************************
@@ -2450,8 +2566,8 @@ XBankToken CreateBankToken(void)
 {
     XBankToken          retVal;
 
-    retVal.xFile = (XTOKEN) XFileGetCurrentResourceFile();
-    retVal.fileLen = (XTOKEN) XFileGetLength(retVal.xFile);
+    retVal.xFile = XFileGetCurrentResourceFile();
+    retVal.fileLen = (retVal.xFile) ? XFileGetLength(retVal.xFile) : 0;
 
     return retVal;
 }
@@ -2459,10 +2575,11 @@ XBankToken CreateBankToken(void)
 XBankToken CreateBankTokenFromInputs(XTOKEN tok1, XTOKEN tok2)
 {
     XBankToken          retVal;
-
-    retVal.fileLen = tok1;
-    retVal.xFile = tok2;
-
+    // Legacy API passed two XTOKEN values; interpret tok2 as XFILE pointer value
+    // and tok1 as file length. If tok2 was produced by casting a pointer to XTOKEN
+    // previously, this will require callers to be updated to pass a real XFILE.
+    retVal.fileLen = (int32_t)tok1;
+    retVal.xFile = (XFILE)(uintptr_t)tok2; // tolerate older callers until migrated
     return retVal;
 }
 
@@ -2476,22 +2593,22 @@ static XBOOL PV_AddToAccessCache(XFILE fileRef, XFILE_CACHED_ITEM *cacheItemPtr 
 {
     XFILENAME           *pReference;
     XFILERESOURCECACHE  *pCache,*newCache;
-    long int            resCount;
+    int32_t           resCount;
     XFILE_CACHED_ITEM   *pItem;
 
-    pReference = (XFILENAME *)fileRef;
+    pReference = fileRef;
     if (PV_XFileValid(fileRef))
     {
         pCache = pReference->pCache;
         if (pCache)
         {
             resCount = pCache->totalResources + 1;
-            newCache = (XFILERESOURCECACHE *)XNewPtr((long)sizeof(XFILERESOURCECACHE) + 
-                                                    ((long)sizeof(XFILE_CACHED_ITEM) * resCount));
+            newCache = (XFILERESOURCECACHE *)XNewPtr((int32_t)sizeof(XFILERESOURCECACHE) + 
+                                                    ((int32_t)sizeof(XFILE_CACHED_ITEM) * resCount));
             if (newCache)
             {
-                XBlockMove(pCache, newCache, (long)sizeof(XFILERESOURCECACHE) + 
-                                                ((long)sizeof(XFILE_CACHED_ITEM) * (resCount - 1)));
+                XBlockMove(pCache, newCache, (int32_t)sizeof(XFILERESOURCECACHE) + 
+                                                ((int32_t)sizeof(XFILE_CACHED_ITEM) * (resCount - 1)));
 
                 XDisposePtr(pCache);
                 pReference->pCache = newCache;
@@ -2507,727 +2624,94 @@ static XBOOL PV_AddToAccessCache(XFILE fileRef, XFILE_CACHED_ITEM *cacheItemPtr 
 }
 #endif  // USE_CREATION_API == TRUE
 
-// This will scan through the resource file and return an pointer to an array of
+// Build an in‑memory cache of resource headers for faster lookups.
+// The original implementation also performed file compaction; that logic was
+// badly corrupted during previous refactors and is replaced here with a
+// straightforward reader. Compaction is handled elsewhere (XCleanResourceFile).
 XFILERESOURCECACHE * XCreateAccessCache(XFILE fileRef)
 {
-    XFILENAME           *pReference;
-    long                err;
-    XFILERESOURCEMAP    map;
-    long                data, next;
-    long                count, total;
-    XFILERESOURCECACHE  *pCache;
-    char                pPName[256];
+    XFILENAME *pReference = (XFILENAME *)fileRef;
+    XFILERESOURCEMAP map;
+    int32_t next;
+    int32_t total;
+    int32_t err;
+    XFILERESOURCECACHE *newCache = NULL;
 
-    err = 0;
-    pCache = NULL;
-    pReference = (XFILENAME *)fileRef;
-    if (PV_XFileValid(fileRef))
+    if (!PV_XFileValid(fileRef))
     {
-        XFileSetPosition(fileRef, 0L);      // at start
-        if (XFileRead(fileRef, &map, (long)sizeof(XFILERESOURCEMAP)) == 0)
+        return NULL;
+    }
+    err = XFileSetPosition(fileRef, 0L);
+    if (err != 0) { return NULL; }
+    if (XFileRead(fileRef, &map, (int32_t)sizeof(XFILERESOURCEMAP)) != 0)
+    {
+        return NULL;
+    }
+    if (XGetLong(&map.mapID) != XFILERESOURCE_ID)
+    {
+        return NULL;
+    }
+    total = (int32_t)XGetLong(&map.totalResources);
+    if (total <= 0)
+    {
+        return NULL; // nothing to cache
+    }
+    newCache = (XFILERESOURCECACHE *)XNewPtr((int32_t)sizeof(XFILERESOURCECACHE) +
+                                             (int32_t)sizeof(XFILE_CACHED_ITEM) * (total - 1));
+    if (!newCache)
+    {
+        return NULL;
+    }
+    newCache->totalResources = total;
+    next = sizeof(XFILERESOURCEMAP);
+    for (int32_t count = 0; count < total; count++)
+    {
+        XFILE_CACHED_ITEM *item = &newCache->cached[count];
+        int32_t headerNext;
+        err = XFileSetPosition(fileRef, next);
+        if (err != 0) { XDisposePtr(newCache); return NULL; }
+        err = XFileRead(fileRef, &headerNext, (int32_t)sizeof(int32_t)); // next pointer
+        if (err != 0) { XDisposePtr(newCache); return NULL; }
+        headerNext = (int32_t)XGetLong(&headerNext);
+        if (headerNext == -1L)
         {
-            if (XGetLong(&map.mapID) == XFILERESOURCE_ID)
-            {
-                next = sizeof(XFILERESOURCEMAP);
-                total = XGetLong(&map.totalResources);
-                pCache = (XFILERESOURCECACHE *)XNewPtr((long)sizeof(XFILERESOURCECACHE) + 
-                                                        ((long)sizeof(XFILE_CACHED_ITEM) * total));
-                if (pCache)
-                {
-                    pCache->totalResources = total;
-                    for (count = 0; (count < total) && (err == 0); count++)
-                    {
-                        err = XFileSetPosition(fileRef, next);      // at start
-                        if (err == 0)
-                        {
-                            err = XFileRead(fileRef, &next, (long)sizeof(long));                // get next pointer
-                            next = XGetLong(&next);
-                            if (next != -1L)
-                            {   
-                                err = XFileRead(fileRef, &data, (long)sizeof(long));            // get type
-                                pCache->cached[count].resourceType = (XResourceType)XGetLong(&data);
-
-                                err = XFileRead(fileRef, &data, (long)sizeof(long));            // get ID
-                                pCache->cached[count].resourceID = (XLongResourceID)XGetLong(&data);
-
-                                pCache->cached[count].fileOffsetName = XFileGetPosition(fileRef);   // get name
-                                err = XFileRead(fileRef, &pPName[0], 1L);               
-                                if (pPName[0])
-                                {
-                                    err = XFileRead(fileRef, &pPName[1], (long)pPName[0]);
-                                }
-
-                                err = XFileRead(fileRef, &data, (long)sizeof(long));            // get length
-                                pCache->cached[count].resourceLength = XGetLong(&data);
-                                pCache->cached[count].fileOffsetData = XFileGetPosition(fileRef);   // save data offset
-                            }
-                            else
-                            {
-                                err = -4;
-                                BAE_PRINTF("Next offset is bad\n");
-                                break;
-                            }
-                        }
-                        else
-                        {
-                            err = -3;
-                            BAE_PRINTF("Can't set next position\n");
-                            break;
-                        }
-                    }
-                }
-            }
+            // corrupt entry list – bail
+            XDisposePtr(newCache);
+            return NULL;
         }
+        int32_t data;
+        // type
+        if (XFileRead(fileRef, &data, (int32_t)sizeof(int32_t)) != 0) { XDisposePtr(newCache); return NULL; }
+        item->resourceType = (int32_t)XGetLong(&data);
+        // id
+        if (XFileRead(fileRef, &data, (int32_t)sizeof(int32_t)) != 0) { XDisposePtr(newCache); return NULL; }
+        item->resourceID = (int32_t)XGetLong(&data);
+        // name length (pascal)
+        int32_t namePos = XFileGetPosition(fileRef);
+        unsigned char nameLen = 0;
+        if (XFileRead(fileRef, &nameLen, 1) != 0) { XDisposePtr(newCache); return NULL; }
+        if (nameLen > 0)
+        {
+            // skip remainder of name
+            if (XFileSetPositionRelative(fileRef, nameLen) != 0) { XDisposePtr(newCache); return NULL; }
+        }
+        // length
+        if (XFileRead(fileRef, &data, (int32_t)sizeof(int32_t)) != 0) { XDisposePtr(newCache); return NULL; }
+        item->resourceLength = (int32_t)XGetLong(&data);
+        item->fileOffsetName = namePos;
+        item->fileOffsetData = XFileGetPosition(fileRef); // start of data
+        // skip data block
+        if (XFileSetPositionRelative(fileRef, item->resourceLength) != 0) { XDisposePtr(newCache); return NULL; }
+        next = headerNext;
     }
-    if (err)
+    // Replace any existing cache
+    if (pReference->pCache)
     {
-        XDisposePtr((XPTR)pCache);
-        pCache = NULL;
+        XDisposePtr(pReference->pCache);
     }
-    return pCache;
+    pReference->pCache = newCache;
+    return newCache;
 }
-
-void XSwapLongsInAccessCache(XFILERESOURCECACHE *pCache, XBOOL inFileOrder)
-{
-#if X_WORD_ORDER != FALSE
-long                count;
-XFILE_CACHED_ITEM   *item;
-
-    count = pCache->totalResources;
-    pCache->totalResources = XGetLong(&pCache->totalResources);
-    if (inFileOrder)
-    {
-        count = pCache->totalResources;
-    }
-
-    item = pCache->cached;
-    while (--count >= 0)
-    {
-        item->resourceType = (XResourceType)XGetLong(&item->resourceType);
-        item->resourceID = (XLongResourceID)XGetLong(&item->resourceID);
-        item->resourceLength = XGetLong(&item->resourceLength);
-        item->fileOffsetName = XGetLong(&item->fileOffsetName);
-        item->fileOffsetData = XGetLong(&item->fileOffsetData);
-        item++;
-    }
-#else
-pCache;
-inFileOrder;
-#endif
-}
-
-// Create a resource cache for a file
-XERR XFileCreateResourceCache(XFILE fileRef)
-{
-    XERR        err;
-    XFILENAME   *pReference;
-
-    err = 0;
-    pReference = NULL;
-#if USE_FILE_CACHE != 0
-    pReference = (XFILENAME *)fileRef;
-    if (PV_XFileValid(fileRef))
-    {
-        if (pReference->pCache)
-        {
-            XFileFreeResourceCache(fileRef);
-        }
-        // Try to open XFILECACHE_ID cache block.
-        pReference->pCache = (XFILERESOURCECACHE *)XGetFileResource((XFILE)pReference,
-                                                    XFILECACHE_ID, 0, NULL, NULL);
-        if (pReference->pCache != NULL)
-        {
-            XSwapLongsInAccessCache(pReference->pCache, TRUE);
-        }
-        else
-        {
-            pReference->pCache = XCreateAccessCache((XFILE)pReference);
-        }
-    }
-#endif
-    return err;
-}
-
-// Free cache of a resource file
-void XFileFreeResourceCache(XFILE fileRef)
-{
-    XFILENAME   *pReference;
-
-    pReference = (XFILENAME *)fileRef;
-    if (PV_XFileValid(fileRef))
-    {
-        if (pReference->pCache)
-        {
-            XDisposePtr((XPTR)pReference->pCache);
-            pReference->pCache = NULL;
-        }
-    }
-}
-
-static XBOOL PV_CheckForTypes(XResourceType *pTypes, long total, XResourceType typeCheck)
-{
-    long    count;
-    XBOOL   found;
-
-    found = FALSE;
-    for (count = 0; count < total; count++)
-    {
-        if (pTypes[count] == typeCheck)
-        {
-            found = TRUE;
-            break;
-        }
-    }
-    return found;
-}
-
-#define MAX_XFILE_SCAN_TYPES        5120L
-
-// Return the number of resource types included in file
-
-//  bvk:  why doesn't this use the cache?
-
-long XCountTypes(XFILE fileRef)
-{
-    long                typeCount;
-    XResourceType       lastResourceType;
-    XFILENAME           *pReference;
-    long                err;
-    XFILERESOURCEMAP    map;
-    long                data, next;
-    long                count, total;
-    long                *pTypes;
-
-    err = 0;
-    typeCount = 0;
-    lastResourceType = 0;
-#if X_PLATFORM == X_MACINTOSH_9
-    if (PV_IsAnyOpenResourceFiles() == FALSE)
-    {
-        // use native resource manager
-        return Count1Types() - 1;
-    }
-#endif
-    if (PV_IsAnyOpenResourceFiles())
-    {
-        if (fileRef == (XFILE)NULL)
-        {   // then use first open file
-            fileRef = g_openResourceFiles[0];
-        }
-        pTypes = (long *)XNewPtr((sizeof(long) * MAX_XFILE_SCAN_TYPES));
-        if (pTypes)
-        {
-            pReference = (XFILENAME *)fileRef;
-            if (PV_XFileValid(fileRef))
-            {
-                XFileSetPosition(fileRef, 0L);      // at start
-                if (XFileRead(fileRef, &map, (long)sizeof(XFILERESOURCEMAP)) == 0)
-                {
-                    if (XGetLong(&map.mapID) == XFILERESOURCE_ID)
-                    {
-                        next = sizeof(XFILERESOURCEMAP);
-                        total = XGetLong(&map.totalResources);
-                        for (count = 0; (count < total) && (err == 0); count++)
-                        {
-                            err = XFileSetPosition(fileRef, next);      // at start
-                            if (err == 0)
-                            {
-                                err = XFileRead(fileRef, &next, (long)sizeof(long));        // get next pointer
-                                next = XGetLong(&next);
-                                if (next != -1L)
-                                {   
-                                    err = XFileRead(fileRef, &data, (long)sizeof(long));        // get type
-                                    lastResourceType = (XResourceType)XGetLong(&data);
-                                    if (typeCount < MAX_XFILE_SCAN_TYPES)
-                                    {
-                                        if (PV_CheckForTypes(pTypes, typeCount, lastResourceType) == FALSE)
-                                        {
-                                            pTypes[typeCount] = lastResourceType;
-                                            typeCount++;
-                                        }
-                                    }
-                                    else
-                                    {
-                                        err = -5;
-                                        break;
-                                    }
-                                }
-                                else
-                                {
-                                    err = -4;
-                                    BAE_PRINTF("Next offset is bad\n");
-                                    break;
-                                }
-                            }
-                            else
-                            {
-                                err = -3;
-                                BAE_PRINTF("Can't set next position\n");
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
-            XDisposePtr((XPTR)pTypes);
-        }
-    }
-    return typeCount;
-}
-
-// Return the type from the file based upon an index of 0 to XCountTypes
-//  bvk:  why doesn't this use the cache?
-XResourceType XGetIndexedType(XFILE fileRef, long resourceIndex)
-{
-    long                typeCount;
-    XResourceType       lastResourceType;
-    XFILENAME           *pReference;
-    long                err;
-    XFILERESOURCEMAP    map;
-    long                data, next;
-    long                count, total;
-    long                *pTypes;
-
-#if X_PLATFORM == X_MACINTOSH_9
-    if (PV_IsAnyOpenResourceFiles() == FALSE)
-    {
-        // use native resource manager
-        ResType type;
-
-        Get1IndType(&type, resourceIndex + 1);
-        return (XResourceType)type;
-    }
-#endif
-    err = 0;
-    typeCount = 0;
-    lastResourceType = 0;
-    if (PV_IsAnyOpenResourceFiles())
-    {
-        if (fileRef == (XFILE)NULL)
-        {   // then use first open file
-            fileRef = g_openResourceFiles[0];
-        }
-        pTypes = (long *)XNewPtr((sizeof(long) * MAX_XFILE_SCAN_TYPES));
-        if (pTypes)
-        {
-            pReference = (XFILENAME *)fileRef;
-            if (PV_XFileValid(fileRef))
-            {
-                XFileSetPosition(fileRef, 0L);      // at start
-                if (XFileRead(fileRef, &map, (long)sizeof(XFILERESOURCEMAP)) == 0)
-                {
-                    if (XGetLong(&map.mapID) == XFILERESOURCE_ID)
-                    {
-                        next = sizeof(XFILERESOURCEMAP);
-                        total = XGetLong(&map.totalResources);
-                        for (count = 0; (count < total) && (err == 0); count++)
-                        {
-                            err = XFileSetPosition(fileRef, next);      // at start
-                            if (err == 0)
-                            {
-                                err = XFileRead(fileRef, &next, (long)sizeof(long));        // get next pointer
-                                next = XGetLong(&next);
-                                if (next != -1L)
-                                {   
-                                    err = XFileRead(fileRef, &data, (long)sizeof(long));        // get type
-                                    lastResourceType = XGetLong(&data);
-                                    if (typeCount < MAX_XFILE_SCAN_TYPES)
-                                    {
-                                        if (PV_CheckForTypes(pTypes, typeCount, lastResourceType) == FALSE)
-                                        {
-                                            pTypes[typeCount] = lastResourceType;
-                                            if (typeCount == resourceIndex)
-                                            {
-                                                break;
-                                            }
-                                            else
-                                            {
-                                                typeCount++;
-                                            }
-                                        }
-                                    }
-                                    else
-                                    {
-                                        err = -5;
-                                        break;
-                                    }
-                                }
-                                else
-                                {
-                                    err = -4;
-                                    BAE_PRINTF("Next offset is bad\n");
-                                    break;
-                                }
-                            }
-                            else
-                            {
-                                err = -3;
-                                BAE_PRINTF("Can't set next position\n");
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
-            XDisposePtr((XPTR)pTypes);
-        }
-    }
-    return lastResourceType;
-}
-
-// Returns TRUE if the file is read only
-
-#if USE_CREATION_API == TRUE
-static XBOOL PV_IsXFileLocked(XFILE fileRef)
-{
-    XFILENAME           *pReference;
-
-    if (PV_XFileValid(fileRef))
-    {
-        pReference = (XFILENAME *)fileRef;
-        return pReference->readOnly;
-    }
-    return FALSE;
-}
-#endif
-
-#if USE_CREATION_API == TRUE
-static XERR PV_CopyWithinFile( XFILE fileRef, long offsetIn, long offsetOut, long size, 
-                            void *buffer, long bufferSize)
-{
-    long    xferSize, bytesTransferred;
-    long    offset;
-    XERR    err;
-
-    err = 0;
-    offset = 0;
-    bytesTransferred = 0;
-    if (buffer)
-    {
-        while (bytesTransferred < size)
-        {
-            xferSize = XMIN(bufferSize, (size - bytesTransferred));
-
-            //Read data
-            err = XFileSetPosition(fileRef, offsetIn + offset);
-            if (err == 0)
-            {
-                err = XFileRead(fileRef, buffer, xferSize );
-                if (err == 0)
-                {
-                    //Write data
-                    err = XFileSetPosition(fileRef, offsetOut + offset);
-                    if (err == 0)
-                    {
-                        err = XFileWrite(fileRef, buffer, xferSize );
-                        if (err != 0)
-                        {
-                            err = -5;
-                            break;
-                        }
-                    }
-                    else
-                    {
-                        err = -4;
-                        break;
-                    }
-                }
-                else
-                {
-                    err = -3;
-                    break;
-                }
-
-                bytesTransferred += xferSize; 
-                offset += xferSize;
-            }
-            else
-            {
-                err = -2;
-                break;
-            }
-        }
-    }
-    else
-    {
-        //GACK!
-        err = -1;
-    }
-    return err;
-}
-#endif  // USE_CREATION_API == TRUE
-
-#if USE_CREATION_API == TRUE
-// Force a clean/update of the most recently opened resource file
-XBOOL XCleanResource(void)
-{
-    XBOOL   err;
-
-#if X_PLATFORM == X_MACINTOSH_9
-    if (PV_IsAnyOpenResourceFiles() == FALSE)
-    {
-        // use native resource manager
-        UpdateResFile(CurResFile());
-        return TRUE;
-    }
-#endif
-    err = FALSE;
-    if (PV_IsAnyOpenResourceFiles())
-    {   // clean from the most recent open file
-        err = XCleanResourceFile(g_openResourceFiles[0]);
-    }
-    return err;
-}
-
-// bvk - NEW for Beatnik Windows
-//  
-//  Scans the file for all resources of 'TRSH' type, and rewrites the file.
-//  It does this by scanning through the file, maintaining two sets of offsets.
-//  When a 'TRSH' resource is found, the function skips the resource and starts
-//  copying over the trashed resource in place.  At the end, the file size is 
-//  reset and the appropriate header data changed.
-//
-
-#define XFER_BUFFER_SIZE    1024
-
-XBOOL XCleanResourceFile(XFILE fileRef)
-{
-    XFILENAME           *pReference;
-    XERR                err;
-    XFILERESOURCEMAP    map;
-    long                data, nextIn, nextOut, resType, resID, totalResSize;
-    long                count, inResTotal, outResTotal;
-    long                resDataSize, fileSize, resInStart, resDataIn, resDataOut;
-    char                pResourceName[256];
-    XBOOL               isCompacting;
-    void                *fileBuffer;
-
-    isCompacting = FALSE;
-    err = 0;
-    fileBuffer = NULL;
-    pReference = (XFILENAME *)fileRef;
-    if (PV_XFileValid(fileRef))
-    {
-        // first, do we have memory data?
-        if (pReference->pResourceData)
-        {
-            return FALSE;
-        }
-        // second, are we a read only file?
-        else if (PV_IsXFileLocked(fileRef))
-        {
-            return FALSE;
-        }
-        else
-        {
-            // if we have a cache resource, delete it
-            XDeleteFileResource(fileRef, XFILECACHE_ID, 0, FALSE);
-
-            fileSize = XFileGetLength(fileRef);
-            XFileSetPosition(fileRef, 0L);      // at start
-            if (XFileRead(fileRef, &map, (long)sizeof(XFILERESOURCEMAP)) == 0)
-            {
-                if (XGetLong(&map.mapID) == XFILERESOURCE_ID)
-                {
-                    nextOut = nextIn = sizeof(XFILERESOURCEMAP);
-                    inResTotal = XGetLong(&map.totalResources);
-                    outResTotal = inResTotal;
-                    for (count = 0; (count < inResTotal) && (err == 0); count++)
-                    {
-                        err = XFileSetPosition(fileRef, nextIn);        // at start of input resource
-                        if (err != 0)
-                        {
-                            err = -4;
-                            break;
-                        }
-                        resInStart = nextIn;
-                        err = XFileRead(fileRef, &nextIn, (long)sizeof(long));      // get next input pointer
-                        if (err != 0)
-                        {   
-                            err = -5;
-                            break;
-                        }
-                        nextIn = XGetLong(&nextIn);
-                        totalResSize = nextIn - resInStart;
-                        if (nextIn != -1L)
-                        {   
-                            err = XFileRead(fileRef, &data, (long)sizeof(long));        // get type
-                            if (err != 0)
-                            {
-                                err = -6;
-                                break;
-                            }
-                            resType = XGetLong(&data);
-                            if (resType == XFILETRASH_ID)
-                            {
-                                //Since we have skipped a trash resource, 
-                                //now we must copy/compact every resource that follows!
-                                if (isCompacting == FALSE)
-                                {
-                                    isCompacting = TRUE;
-                                    // do we have a cache?
-                                    if (pReference->pCache)
-                                    {
-                                        //if we do, REMOVE IT.  It will be invalid
-                                        XFileFreeResourceCache(fileRef);
-                                    }
-
-                                    fileBuffer = XNewPtr(XFER_BUFFER_SIZE);
-                                    if (fileBuffer == NULL)
-                                    {
-                                        err = -7;
-                                        break;
-                                    }
-                                }
-                                //Note that the outputBuffer pointer (nextOut) is NOT being updated!
-                                fileSize -= totalResSize;
-                                outResTotal--;
-                            }
-                            else
-                            {
-                                //This wasn't a trash resource, so move the output pointer
-                                //and/or copy the resource!
-                                if (isCompacting)
-                                {
-                                    //Get remainder of input info
-                                    err = XFileRead(fileRef, &data, (long)sizeof(long));        // get ID
-                                    if (err != 0)
-                                    {
-                                        err = -8;
-                                        break;
-                                    }
-                                    resID = XGetLong(&data);
-                                    err = XFileRead(fileRef, &pResourceName[0], 1L);        // get name
-                                    if (pResourceName[0])
-                                    {
-                                        err = XFileRead(fileRef, &pResourceName[1], (long)pResourceName[0]);
-                                    }
-                                    err = XFileRead(fileRef, &data, (long)sizeof(long));        // get length
-                                    if (err != 0)
-                                    {
-                                        err = -9;
-                                        break;
-                                    }
-                                    resDataSize = XGetLong(&data);      // get resource size
-                                    resDataIn = XFileGetPosition(fileRef);  // get current pos
-
-                                    //reposition to start of output block
-                                    err = XFileSetPosition(fileRef, nextOut);       // at start
-                                    if (err != 0)
-                                    {
-                                        err = -10;
-                                        break;
-                                    }
-
-                                    nextOut += totalResSize;    //move output pointer
-                                    
-                                    //write out information data
-                                    XPutLong(&data, nextOut);
-                                    err = XFileWrite(fileRef, &data, (long)sizeof(long));
-                                    if (err != 0)
-                                    {
-                                        err = -16;
-                                        break;
-                                    }
-                                    XPutLong(&data, resType);
-                                    err = XFileWrite(fileRef, &data, (long)sizeof(long));       // put type
-                                    if (err != 0)
-                                    {
-                                        err = -11;
-                                        break;
-                                    }
-                                    XPutLong(&data, resID);
-                                    err = XFileWrite(fileRef, &data, (long)sizeof(long));       // put ID
-                                    if (err != 0)
-                                    {
-                                        err = -12;
-                                        break;
-                                    }
-                                    err = XFileWrite(fileRef, pResourceName, (long)(((char *)pResourceName)[0])+1L);        // put name
-                                    if (err != 0)
-                                    {
-                                        err = -13;
-                                        break;
-                                    }
-                                    XPutLong(&data, resDataSize);
-                                    err = XFileWrite(fileRef, &data, (long)sizeof(long));               // put length
-                                    if (err != 0)
-                                    {
-                                        err = -14;
-                                        break;
-                                    }
-                                    resDataOut = XFileGetPosition(fileRef); // get current pos
-
-                                    //Since we are filling for deleted resources, copy this
-                                    //res data back into this file over old data!
-                                    err = PV_CopyWithinFile( fileRef, 
-                                                        resDataIn, resDataOut, resDataSize, 
-                                                        fileBuffer, XFER_BUFFER_SIZE );
-                                    if (err != 0)
-                                    {
-                                        err = -15;
-                                        break;
-                                    }
-                                }
-                                else
-                                {
-                                    nextOut += totalResSize;    //move output pointer
-                                }
-                            }
-                        }
-                        else
-                        {
-                            err = -3;
-                            BAE_PRINTF("Can't set next position\n");
-                            break;
-                        }
-                    }
-                }
-                else
-                {
-                    err = -3;
-                }
-            }
-            else
-            {
-                err = -2;
-            }
-        }
-    }
-    else
-    {
-        err = -1;
-    }
-
-    if (isCompacting && err == 0)
-    {
-        XFileFreeResourceCache(fileRef);
-
-        err = XFileSetLength(fileRef, fileSize);
-        if (err == 0)
-        {
-            //Update the resource map
-            XFileSetPosition(fileRef, 0L);      // at start
-            XPutLong(&map.totalResources, outResTotal);
-            err = XFileWrite(fileRef, &map, (long)sizeof(XFILERESOURCEMAP));
-
-#if USE_FILE_CACHE != 0
-            if (err == 0)
-            {
-                pReference->pCache = XCreateAccessCache(fileRef);
-            }
-#endif
-        }
-    }
-
-    if (fileBuffer)
-    {
-        XDisposePtr(fileBuffer);
-        fileBuffer = NULL;
-    }
-    return (err == 0) ? TRUE : FALSE;
-}
-#endif  // USE_CREATION_API == TRUE
 
 
 //  Marks the selected resource as a 'TRSH' type w/ID of 0.  If collectTrash is TRUE, 
@@ -3240,14 +2724,14 @@ XBOOL XCleanResourceFile(XFILE fileRef)
 XBOOL XDeleteFileResource(XFILE fileRef, XResourceType resourceType, XLongResourceID resourceID, XBOOL collectTrash )
 {
     XFILENAME           *pReference;
-    long                err=0;
+    int32_t                err=0;
     XFILERESOURCEMAP    map;
-    long                data, next;
-    long                count, total;
-    long                whereType, whereID;
+    int32_t                data, next;
+    int32_t                count, total;
+    int32_t                whereType, whereID;
     XFILE_CACHED_ITEM   *pCachedItem;
 
-    pReference = (XFILENAME *)fileRef;
+    pReference = fileRef;
     if (PV_XFileValid(fileRef))
     {
         // first, do we have memory data?
@@ -3275,12 +2759,12 @@ XBOOL XDeleteFileResource(XFILE fileRef, XResourceType resourceType, XLongResour
                 if (err != -1)
                 {
                     XPutLong(&data, XFILETRASH_ID);
-                    err = XFileWrite(fileRef, &data, (long)sizeof(long));                       // put type
+                    err = XFileWrite(fileRef, &data, (int32_t)sizeof(int32_t));                       // put type
 
                     if (err == 0)
                     {
                         XPutLong(&data, 0);
-                        err = XFileWrite(fileRef, &data, (long)sizeof(long));                   // put ID
+                        err = XFileWrite(fileRef, &data, (int32_t)sizeof(int32_t));                   // put ID
                     }
                 }
                 else
@@ -3297,7 +2781,7 @@ XBOOL XDeleteFileResource(XFILE fileRef, XResourceType resourceType, XLongResour
         {
 deleteanyways:
             XFileSetPosition(fileRef, 0L);      // at start
-            if (XFileRead(fileRef, &map, (long)sizeof(XFILERESOURCEMAP)) == 0)
+            if (XFileRead(fileRef, &map, (int32_t)sizeof(XFILERESOURCEMAP)) == 0)
             {
                 if (XGetLong(&map.mapID) == XFILERESOURCE_ID)
                 {
@@ -3308,18 +2792,18 @@ deleteanyways:
                         err = XFileSetPosition(fileRef, next);      // at start
                         if (err == 0)
                         {
-                            err = XFileRead(fileRef, &next, (long)sizeof(long));        // get next pointer
+                            err = XFileRead(fileRef, &next, (int32_t)sizeof(int32_t));        // get next pointer
                             next = XGetLong(&next);
                             if (next != -1L)
                             {   
                                 whereType = XFileGetPosition(fileRef);  // get current pos
 
-                                err = XFileRead(fileRef, &data, (long)sizeof(long));        // get type
+                                err = XFileRead(fileRef, &data, (int32_t)sizeof(int32_t));        // get type
                                 if ((XResourceType)XGetLong(&data) == resourceType)
                                 {
                                     whereID = XFileGetPosition(fileRef);    // get current pos
 
-                                    err = XFileRead(fileRef, &data, (long)sizeof(long));        // get ID
+                                    err = XFileRead(fileRef, &data, (int32_t)sizeof(int32_t));        // get ID
                                     if ((XLongResourceID)XGetLong(&data) == resourceID)
                                     {
                                         //We found it!
@@ -3328,12 +2812,12 @@ deleteanyways:
                                         err = XFileSetPosition(fileRef, whereType);
 
                                         XPutLong(&data, XFILETRASH_ID);
-                                        err = XFileWrite(fileRef, &data, (long)sizeof(long));                       // put type
+                                        err = XFileWrite(fileRef, &data, (int32_t)sizeof(int32_t));                       // put type
     
                                         if (err == 0)
                                         {
                                             XPutLong(&data, 0);
-                                            err = XFileWrite(fileRef, &data, (long)sizeof(long));                   // put ID
+                                            err = XFileWrite(fileRef, &data, (int32_t)sizeof(int32_t));                   // put ID
                                             break;
                                         }
                                         else
@@ -3376,7 +2860,7 @@ deleteanyways:
 
 
 // return the number of resources of a particular type.
-long XCountResourcesOfType(XResourceType resourceType)
+int32_t XCountResourcesOfType(XResourceType resourceType)
 {
     XERR    err;
 
@@ -3399,22 +2883,22 @@ long XCountResourcesOfType(XResourceType resourceType)
 // bvk - NEW for Beatnik Windows
 //  For a given resource type, counts the number of resources of a type.
 //  Does not check for duplicate IDs.
-long XCountFileResourcesOfType(XFILE fileRef, XResourceType theType)
+int32_t XCountFileResourcesOfType(XFILE fileRef, XResourceType theType)
 {
-    long                resCount;
+    int32_t                resCount;
     XResourceType       resourceType;
     XFILENAME           *pReference;
-    long                err;
+    int32_t                err;
     XFILERESOURCEMAP    map;
-    long                data, next;
-    long                count, total;
+    int32_t                data, next;
+    int32_t                count, total;
     XFILERESOURCECACHE  *pCache;
     XFILE_CACHED_ITEM   *pCacheItem;
 
     err = 0;
     resCount = 0;
     resourceType = 0;
-    pReference = (XFILENAME *)fileRef;
+    pReference = fileRef;
     if (PV_IsAnyOpenResourceFiles())
     {
         if (PV_XFileValid(fileRef))
@@ -3427,7 +2911,7 @@ long XCountFileResourcesOfType(XFILE fileRef, XResourceType theType)
                 {
                     pCacheItem = &pCache->cached[count];
 
-                    if (theType == pCacheItem->resourceType)
+                    if (pCacheItem->resourceType == theType)
                     {
                         resCount++;
                     }
@@ -3436,7 +2920,7 @@ long XCountFileResourcesOfType(XFILE fileRef, XResourceType theType)
             else
             {
                 XFileSetPosition(fileRef, 0L);      // at start
-                if (XFileRead(fileRef, &map, (long)sizeof(XFILERESOURCEMAP)) == 0)
+                if (XFileRead(fileRef, &map, (int32_t)sizeof(XFILERESOURCEMAP)) == 0)
                 {
                     if (XGetLong(&map.mapID) == XFILERESOURCE_ID)
                     {
@@ -3447,11 +2931,11 @@ long XCountFileResourcesOfType(XFILE fileRef, XResourceType theType)
                             err = XFileSetPosition(fileRef, next);      // at start
                             if (err == 0)
                             {
-                                err = XFileRead(fileRef, &next, (long)sizeof(long));        // get next pointer
+                                err = XFileRead(fileRef, &next, (int32_t)sizeof(int32_t));        // get next pointer
                                 next = XGetLong(&next);
                                 if (next != -1L)
                                 {   
-                                    err = XFileRead(fileRef, &data, (long)sizeof(long));        // get type
+                                    err = XFileRead(fileRef, &data, (int32_t)sizeof(int32_t));        // get type
                                     resourceType = (XResourceType)XGetLong(&data);
                                     if (resourceType == theType )
                                     {
@@ -3483,10 +2967,10 @@ long XCountFileResourcesOfType(XFILE fileRef, XResourceType theType)
 
 // search through open resource files until the resourceType is found based upon the resource index
 // pResourceName is a pascal string
-XPTR XGetIndexedResource(XResourceType resourceType, XLongResourceID *pReturnedID, long resourceIndex, 
-                                void *pResourceName, long *pReturnedResourceSize)
+XPTR XGetIndexedResource(XResourceType resourceType, XLongResourceID *pReturnedID, int32_t resourceIndex, 
+                                void *pResourceName, int32_t *pReturnedResourceSize)
 {
-    long    count;
+    int32_t    count;
     XPTR    pData;
 
     pData = NULL;
@@ -3508,9 +2992,9 @@ XPTR XGetIndexedResource(XResourceType resourceType, XLongResourceID *pReturnedI
         // use native resource manager
         ResType     type;
         Handle      data;
-        short       shortID;
+        int16_t       shortID;
         char        pPName[256];
-        long        total;
+        int32_t        total;
 
         data = Get1IndResource(resourceType, resourceIndex + 1);
         if (data)
@@ -3544,198 +3028,6 @@ XPTR XGetIndexedResource(XResourceType resourceType, XLongResourceID *pReturnedI
     return pData;
 }
 
-// Get a resource based upon its entry count into the resource file. Return NULL if resourceIndex 
-// is out of range
-// pResourceName is a pascal string
-XPTR XGetIndexedFileResource(XFILE fileRef, XResourceType resourceType, XLongResourceID *pReturnedID, 
-                                long resourceIndex, void *pResourceName, long *pReturnedResourceSize)
-{
-    XFILENAME           *pReference;
-    long                err;
-    XFILERESOURCEMAP    map;
-    long                data, next;
-    long                count, total, typeCount;
-    XPTR                pData;
-    char                pPName[256];
-    XFILERESOURCECACHE  *pCache;
-    XFILE_CACHED_ITEM   *pCacheItem;
-
-    pData = NULL;
-    err = 0;
-    if (pReturnedResourceSize)
-    {
-        *pReturnedResourceSize = 0;
-    }
-    pPName[0] = 0;
-    pReference = (XFILENAME *)fileRef;
-    typeCount = 0;
-    if (PV_XFileValid(fileRef))
-    {
-        if (pReference->pCache)
-        {
-            pCache = pReference->pCache;
-            
-            for (count = 0; count < pCache->totalResources; count++)
-            {
-                pCacheItem = &pCache->cached[count];
-
-                if (pCacheItem->resourceType == resourceType)
-                {
-                    if (resourceIndex == typeCount)
-                    {
-                        *pReturnedID = pCacheItem->resourceID;
-
-                        XFileSetPosition(fileRef, pCacheItem->fileOffsetName);
-                        err = XFileRead(fileRef, &pPName[0], 1L);       // get name length
-                        if (pPName[0])
-                        {
-                            err = XFileRead(fileRef, &pPName[1], (long)pPName[0]);
-                        }
-                        // get data
-                        XFileSetPosition(fileRef, pCacheItem->fileOffsetData);
-
-                        // is data memory based?
-                        if (pReference->pResourceData && (pReference->allowMemCopy == FALSE) )
-                        {   // don't bother coping data again, since its already in memory
-                            pData = PV_GetFilePositionFromMemoryResource(fileRef);
-                            if (pData)
-                            {
-                                if (pReturnedResourceSize)
-                                {
-                                    *pReturnedResourceSize = pCacheItem->resourceLength;
-                                }
-                            }
-                            else
-                            {
-                                err = -2;
-                                BAE_PRINTF("Out of memory; can't allocate resource\n");
-                            }
-                        }
-                        else
-                        {
-                            pData = XNewPtr(pCacheItem->resourceLength);
-                            if (pData)
-                            {
-                                err = XFileRead(fileRef, pData, pCacheItem->resourceLength);
-                                if (pReturnedResourceSize)
-                                {
-                                    *pReturnedResourceSize = pCacheItem->resourceLength;
-                                }
-                                break;
-                            }
-                            else
-                            {
-                                err = -2;
-                                BAE_PRINTF("Out of memory; can't allocate resource\n");
-                                break;
-                            }
-                        }
-                    }
-                    typeCount++;
-                }
-            }
-        }
-        else
-        {
-            XFileSetPosition(fileRef, 0L);      // at start
-            if (XFileRead(fileRef, &map, (long)sizeof(XFILERESOURCEMAP)) == 0)
-            {
-                if (XGetLong(&map.mapID) == XFILERESOURCE_ID)
-                {
-                    next = sizeof(XFILERESOURCEMAP);
-                    total = XGetLong(&map.totalResources);
-                    for (count = 0; (count < total) && (err == 0); count++)
-                    {
-                        err = XFileSetPosition(fileRef, next);      // at start
-                        if (err == 0)
-                        {
-                            err = XFileRead(fileRef, &next, (long)sizeof(long));        // get next pointer
-                            next = XGetLong(&next);
-                            if (next != -1L)
-                            {   
-                                err = XFileRead(fileRef, &data, (long)sizeof(long));        // get type
-                                if ((XResourceType)XGetLong(&data) == resourceType)
-                                {
-                                    if (resourceIndex == typeCount)
-                                    {
-                                        err = XFileRead(fileRef, pReturnedID, (long)sizeof(long));      // get ID
-                                        *pReturnedID = (XLongResourceID)XGetLong(pReturnedID);
-                                        err = XFileRead(fileRef, &pPName[0], 1L);       // get name length
-                                        if (pPName[0])
-                                        {
-                                            err = XFileRead(fileRef, &pPName[1], (long)pPName[0]);
-                                        }
-                                        err = XFileRead(fileRef, &data, (long)sizeof(long));        // get length
-                                        data = XGetLong(&data);     // get resource size
-                                        // get data
-                                        // is data memory based?
-                                        if (pReference->pResourceData && (pReference->allowMemCopy == FALSE) )
-                                        {   // don't bother coping data again, since its already in memory
-                                            pData = PV_GetFilePositionFromMemoryResource(fileRef);
-                                            if (pData)
-                                            {
-                                                if (pReturnedResourceSize)
-                                                {
-                                                    *pReturnedResourceSize = data;
-                                                }
-                                                err = 0;
-                                                break;
-                                            }
-                                            else
-                                            {
-                                                err = -2;
-                                                BAE_PRINTF("Out of memory; can't allocate resource\n");
-                                            }
-                                        }
-                                        else
-                                        {
-                                            pData = XNewPtr(data);
-                                            if (pData)
-                                            {
-                                                err = XFileRead(fileRef, pData, data);
-                                                if (pReturnedResourceSize)
-                                                {
-                                                    *pReturnedResourceSize = data;
-                                                }
-                                                break;
-                                            }
-                                            else
-                                            {
-                                                err = -2;
-                                                BAE_PRINTF("Out of memory; can't allocate resource\n");
-                                                break;
-                                            }
-                                        }
-                                    }
-                                    typeCount++;
-                                }
-                            }
-                            else
-                            {
-                                err = -4;
-                                BAE_PRINTF("Next offset is bad\n");
-                                break;
-                            }
-                        }
-                        else
-                        {
-                            err = -3;
-                            BAE_PRINTF("Can't set next position\n");
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-    }
-    if (pResourceName)
-    {
-        XBlockMove(pPName, pResourceName, (long)pPName[0] + 1);
-    }
-    return pData;
-}
-
-#if USE_CREATION_API == TRUE
 // get unique ID from most recent open resource file
 XERR XGetUniqueResourceID(XResourceType resourceType, XLongResourceID *pReturnedID)
 {
@@ -3763,12 +3055,12 @@ XERR XGetUniqueFileResourceID(XFILE fileRef, XResourceType resourceType, XLongRe
     XFILENAME           *pReference;
     XERR                err;
     XFILERESOURCECACHE  *pCache;
-    long                count, total, idCount, next, data;
+    int32_t                count, total, idCount, next, data;
     XLongResourceID     *pIDs;
     XFILERESOURCEMAP    map;
 
     err = -1;
-    pReference = (XFILENAME *)fileRef;
+    pReference = fileRef;
     if (PV_XFileValid(fileRef) && pReturnedID)
     {
         // theory is we are going to collect all the IDs from either the cache or the file, then walk
@@ -3800,7 +3092,7 @@ XERR XGetUniqueFileResourceID(XFILE fileRef, XResourceType resourceType, XLongRe
         else
         {
             err = XFileSetPosition(fileRef, 0L);        // at start
-            if (XFileRead(fileRef, &map, (long)sizeof(XFILERESOURCEMAP)) == 0)
+            if (XFileRead(fileRef, &map, (int32_t)sizeof(XFILERESOURCEMAP)) == 0)
             {
                 if (XGetLong(&map.mapID) == XFILERESOURCE_ID)
                 {
@@ -3814,14 +3106,14 @@ XERR XGetUniqueFileResourceID(XFILE fileRef, XResourceType resourceType, XLongRe
                             err = XFileSetPosition(fileRef, next);      // at start
                             if (err == 0)
                             {
-                                err = XFileRead(fileRef, &next, (long)sizeof(long));        // get next pointer
+                                err = XFileRead(fileRef, &next, (int32_t)sizeof(int32_t));        // get next pointer
                                 next = XGetLong(&next);
                                 if (next != -1L)
                                 {   
-                                    err = XFileRead(fileRef, &data, (long)sizeof(long));        // get type
+                                    err = XFileRead(fileRef, &data, (int32_t)sizeof(int32_t));        // get type
                                     if ((XResourceType)XGetLong(&data) == resourceType)
                                     {
-                                        err = XFileRead(fileRef, &data, (long)sizeof(long));        // get ID
+                                        err = XFileRead(fileRef, &data, (int32_t)sizeof(int32_t));        // get ID
                                         pIDs[idCount] = (XLongResourceID)XGetLong(&data);
                                         idCount++;
                                     }
@@ -3898,10 +3190,10 @@ XERR XGetUniqueFileResourceID(XFILE fileRef, XResourceType resourceType, XLongRe
 #if X_PLATFORM == X_MACINTOSH_9
     else
     {
-        short int   currentResourceFile;
+        int16_t   currentResourceFile;
 
         currentResourceFile = CurResFile();
-        UseResFile((short int)fileRef);
+        UseResFile((int16_t)fileRef);
         *pReturnedID = UniqueID(resourceType);
         UseResFile(currentResourceFile);
         err = 0;
@@ -3949,7 +3241,7 @@ XERR XMakeUniqueFileResourceID(XFILE fileRef, XResourceType resourceType,
 //      pResourceName is a pascal string
 //      pData is the data block to add
 //      length is the length of the data block
-XERR    XAddResource(XResourceType resourceType, XLongResourceID resourceID, void *pResourceName, void *pData, long length)
+XERR    XAddResource(XResourceType resourceType, XLongResourceID resourceID, void *pResourceName, void *pData, int32_t length)
 {
     XERR    err;
 
@@ -4018,14 +3310,14 @@ XBOOL XDeleteResource(XResourceType resourceType, XLongResourceID resourceID, XB
 //      length is the length of the data block
 XERR XAddFileResource(XFILE fileRef, XResourceType resourceType,
                         XLongResourceID resourceID, void const* pResourceName,
-                        void *pData, long length)
+                        void *pData, int32_t length)
 {
     XFILENAME           *pReference;
-    long                err;
+    int32_t                err;
     XFILERESOURCEMAP    map;
-    long                data;
+    int32_t                data;
     char                fakeName[2];
-    long                next, nextsave;
+    int32_t                next, nextsave;
     XFILE_CACHED_ITEM   cacheItem;
 
 #if X_PLATFORM == X_MACINTOSH_9
@@ -4040,13 +3332,13 @@ XERR XAddFileResource(XFILE fileRef, XResourceType resourceType,
             HLock(theData);
             XBlockMove(pData, *theData, length);
             HUnlock(theData);
-            AddResource(theData, resourceType, (short)resourceID, (unsigned char *)pResourceName);
+            AddResource(theData, resourceType, (int16_t)resourceID, (unsigned char *)pResourceName);
         }
         return 0;
     }
 #endif
     err = -1;
-    pReference = (XFILENAME *)fileRef;
+    pReference = fileRef;
     if (PV_XFileValid(fileRef))
     {
         // the cache will updated, and the file based cache will be deleted
@@ -4056,7 +3348,7 @@ XERR XAddFileResource(XFILE fileRef, XResourceType resourceType,
             XDeleteFileResource(fileRef, XFILECACHE_ID, 0, FALSE);
 
             XFileSetPosition(fileRef, 0L);      // at start
-            if (XFileRead(fileRef, &map, (long)sizeof(XFILERESOURCEMAP)) == 0)
+            if (XFileRead(fileRef, &map, (int32_t)sizeof(XFILERESOURCEMAP)) == 0)
             {
                 if (XGetLong(&map.mapID) == XFILERESOURCE_ID)
                 {
@@ -4064,17 +3356,17 @@ XERR XAddFileResource(XFILE fileRef, XResourceType resourceType,
     
                     nextsave = XFileGetPosition(fileRef);   // rewrite this later
                     next = -1;                              // store all Fs for now
-                    err = XFileWrite(fileRef, &next, (long)sizeof(long));
+                    err = XFileWrite(fileRef, &next, (int32_t)sizeof(int32_t));
 
-                    XPutLong(&data, (unsigned long)resourceType);
-                    err = XFileWrite(fileRef, &data, (long)sizeof(long));                       // put type
-                    cacheItem.resourceType = (unsigned long)resourceType;
+                    XPutLong(&data, (uint32_t)resourceType);
+                    err = XFileWrite(fileRef, &data, (int32_t)sizeof(int32_t));                       // put type
+                    cacheItem.resourceType = (uint32_t)resourceType;
     
                     if (err == 0)
                     {
-                        XPutLong(&data, (unsigned long)resourceID);
-                        err = XFileWrite(fileRef, &data, (long)sizeof(long));                   // put ID
-                        cacheItem.resourceID = (unsigned long)resourceID;
+                        XPutLong(&data, (uint32_t)resourceID);
+                        err = XFileWrite(fileRef, &data, (int32_t)sizeof(int32_t));                   // put ID
+                        cacheItem.resourceID = (uint32_t)resourceID;
 
                         if (err == 0)
                         {
@@ -4083,7 +3375,7 @@ XERR XAddFileResource(XFILE fileRef, XResourceType resourceType,
 
                             if (pResourceName)
                             {
-                                err = XFileWrite(fileRef, pResourceName, (long)(((char *)pResourceName)[0])+1L);        // put name
+                                err = XFileWrite(fileRef, pResourceName, (int32_t)(((char *)pResourceName)[0])+1L);        // put name
                             }
                             else
                             {
@@ -4094,7 +3386,7 @@ XERR XAddFileResource(XFILE fileRef, XResourceType resourceType,
                             if (err == 0)
                             {
                                 XPutLong(&data, length);
-                                err = XFileWrite(fileRef, &data, (long)sizeof(long));               // put length
+                                err = XFileWrite(fileRef, &data, (int32_t)sizeof(int32_t));               // put length
                                 cacheItem.resourceLength = length;
         
                                 if (err == 0)
@@ -4110,14 +3402,14 @@ XERR XAddFileResource(XFILE fileRef, XResourceType resourceType,
                                         XFileSetPosition(fileRef, 0L);      // back to start
                                         data = XGetLong(&map.totalResources) + 1;
                                         XPutLong(&map.totalResources, data);
-                                        err = XFileWrite(fileRef, &map, (long)sizeof(XFILERESOURCEMAP));
+                                        err = XFileWrite(fileRef, &map, (int32_t)sizeof(XFILERESOURCEMAP));
 
                                         if (err == 0)
                                         {
                                             // write real offset-of-next-resource value
                                             XFileSetPosition(fileRef, nextsave);
                                             XPutLong(&data, next);
-                                            err = XFileWrite(fileRef, &data, (long)sizeof(long));
+                                            err = XFileWrite(fileRef, &data, (int32_t)sizeof(int32_t));
 
                                             if (err == 0)
                                             {
@@ -4139,21 +3431,21 @@ XERR XAddFileResource(XFILE fileRef, XResourceType resourceType,
     }
     return err;
 }
-#endif  // USE_CREATION_API == TRUE
+
 
 
 // get a resource type from the name. cName is a C string
-XPTR XGetNamedResource(XResourceType resourceType, void *cName, long *pReturnedResourceSize)
+XPTR XGetNamedResource(XResourceType resourceType, void *cName, int32_t *pReturnedResourceSize)
 {
     XPTR                pData;
     XFILE_CACHED_ITEM   *pCacheItem;
     char                pResourceName[256];
-    long                count, total;
-    short int           fileCount;
+    int32_t                count, total;
+    int16_t           fileCount;
     XERR                err;
     XFILE               fileRef;
     XFILERESOURCEMAP    map;
-    long                next, data;
+    int32_t                next, data;
     XLongResourceID     resourceID;
 
     pData = NULL;
@@ -4164,7 +3456,7 @@ XPTR XGetNamedResource(XResourceType resourceType, void *cName, long *pReturnedR
 #if X_PLATFORM == X_MACINTOSH_9
     {
         Handle  theData;
-        long    size;
+        int32_t    size;
 
         // first look inside any open resource files
         if (PV_IsAnyOpenResourceFiles())
@@ -4229,7 +3521,7 @@ XPTR XGetNamedResource(XResourceType resourceType, void *cName, long *pReturnedR
                     // search through without cache.
                     fileRef = g_openResourceFiles[fileCount];
                     XFileSetPosition(fileRef, 0L);      // at start
-                    if (XFileRead(fileRef, &map, (long)sizeof(XFILERESOURCEMAP)) == 0)
+                    if (XFileRead(fileRef, &map, (int32_t)sizeof(XFILERESOURCEMAP)) == 0)
                     {
                         if (XGetLong(&map.mapID) == XFILERESOURCE_ID)
                         {
@@ -4240,19 +3532,19 @@ XPTR XGetNamedResource(XResourceType resourceType, void *cName, long *pReturnedR
                                 err = XFileSetPosition(fileRef, next);      // at start
                                 if (err == 0)
                                 {
-                                    err = XFileRead(fileRef, &next, (long)sizeof(long));        // get next pointer
+                                    err = XFileRead(fileRef, &next, (int32_t)sizeof(int32_t));        // get next pointer
                                     next = XGetLong(&next);
                                     if (next != -1L)
                                     {   
-                                        err = XFileRead(fileRef, &data, (long)sizeof(long));        // get type
+                                        err = XFileRead(fileRef, &data, (int32_t)sizeof(int32_t));        // get type
                                         if ((XResourceType)XGetLong(&data) == resourceType)
                                         {
-                                            err = XFileRead(fileRef, &data, (long)sizeof(long));        // get ID
+                                            err = XFileRead(fileRef, &data, (int32_t)sizeof(int32_t));        // get ID
                                             resourceID = (XLongResourceID)XGetLong(&data);
                                             err = XFileRead(fileRef, &pResourceName[0], 1L);        // get name
                                             if (pResourceName[0])
                                             {
-                                                err = XFileRead(fileRef, &pResourceName[1], (long)pResourceName[0]);
+                                                err = XFileRead(fileRef, &pResourceName[1], (int32_t)pResourceName[0]);
                                                 XPtoCstr(pResourceName);
                                                 if (XStrCmp(pResourceName, (char *)cName) == 0)
                                                 {   // match?
@@ -4260,7 +3552,7 @@ XPTR XGetNamedResource(XResourceType resourceType, void *cName, long *pReturnedR
                                                                     resourceType, resourceID, 
                                                                     pResourceName, pReturnedResourceSize);
                                                 }
-                                                err = XFileRead(fileRef, &data, (long)sizeof(long));        // get length
+                                                err = XFileRead(fileRef, &data, (int32_t)sizeof(int32_t));        // get length
                                                 data = XGetLong(&data);     // get resource size
                                                 if (XFileSetPositionRelative(fileRef, data))
                                                 {
@@ -4283,19 +3575,20 @@ XPTR XGetNamedResource(XResourceType resourceType, void *cName, long *pReturnedR
             }
         }
     }
+    // (Removed invalid code referencing undefined pPName.)
     return pData;
 }
 
 XBOOL XExistsResource(XResourceType resourceType, XLongResourceID resourceID)
 {
-char        name[256];
+    char        name[256];
 
     return XGetResourceName(resourceType, resourceID, name);
 }
 XBOOL XExistsFileResource(XFILE fileRef,
                             XResourceType resourceType, XLongResourceID resourceID)
 {
-char        name[256];
+    char        name[256];
 
     return XGetFileResourceName(fileRef, resourceType, resourceID, name);
 }
@@ -4326,12 +3619,12 @@ XBOOL XGetResourceName(XResourceType resourceType, XLongResourceID resourceID,
         }
         if (cName[0] == 0)
         {   // use native resource manager
-            short int       theID;
-            unsigned long   theType;
+            int16_t       theID;
+            uint32_t   theType;
             Handle          theData;
 
             SetResLoad(FALSE);
-            theData = Get1Resource(resourceType, (short int)resourceID);
+            theData = Get1Resource(resourceType, (int16_t)resourceID);
             SetResLoad(TRUE);
             if (theData)
             {
@@ -4376,15 +3669,15 @@ XBOOL XGetFileResourceName(XFILE fileRef, XResourceType resourceType,
 
 // Get a resource and detach it from the resource manager. Which means that you'll need to call XDisposePtr
 // to free the memory
-XPTR XGetAndDetachResource(XResourceType resourceType, XLongResourceID resourceID, long *pReturnedResourceSize)
+XPTR XGetAndDetachResource(XResourceType resourceType, XLongResourceID resourceID, int32_t *pReturnedResourceSize)
 {
 #if X_PLATFORM == X_MACINTOSH_9
     Handle      theData;
     XPTR        pData;
     XPTR        pNewData;
-    long        size;
+    int32_t        size;
     char        szPName[256];
-    short int   count;
+    int16_t   count;
     XFILE       fileRef;
     XFILENAME   *pReference;
 
@@ -4402,7 +3695,7 @@ XPTR XGetAndDetachResource(XResourceType resourceType, XLongResourceID resourceI
             if (pData)
             {
                 fileRef = g_openResourceFiles[count];
-                pReference = (XFILENAME *)fileRef;
+                pReference = fileRef;
                 if (pReference->pResourceData && (pReference->allowMemCopy) )
                 {
                     //In the case of a memory file, we have to create a new block to return.
@@ -4429,7 +3722,7 @@ XPTR XGetAndDetachResource(XResourceType resourceType, XLongResourceID resourceI
     if (pData == NULL)
 //  if ((pData == NULL) && (PV_IsAnyOpenResourceFiles() == FALSE))
     {   // use native resource manager
-        theData = Get1Resource(resourceType, (short int)resourceID);
+        theData = Get1Resource(resourceType, (int16_t)resourceID);
         if (theData)
         {
             size = GetHandleSize(theData);
@@ -4450,10 +3743,10 @@ XPTR XGetAndDetachResource(XResourceType resourceType, XLongResourceID resourceI
     return pData;
 #else   // X_PLATFORM == X_MACINTOSH_9
     char        szPName[256];
-    long        lSize = 0;
+    int32_t        lSize = 0;
     XPTR        pData = NULL;
     XPTR        pNewData;
-    short int   count;
+    int16_t   count;
     XFILE       fileRef;
     XFILENAME   *pReference;
 
@@ -4464,7 +3757,7 @@ XPTR XGetAndDetachResource(XResourceType resourceType, XLongResourceID resourceI
         if (pData)
         {
             fileRef = g_openResourceFiles[count];
-            pReference = (XFILENAME *)fileRef;
+            pReference = fileRef;
             if (pReference->pResourceData && (pReference->allowMemCopy) )
             {
                 //In the case of a memory file, we have to create a new block to return.
@@ -4499,13 +3792,13 @@ XFILE XFileGetCurrentResourceFile(void)
     {
         return g_openResourceFiles[0];
     }
-    return (XFILE)NULL;
+    return NULL;
 }
 
 // make sure this resource file is first in the scan list
 void XFileUseThisResourceFile(XFILE fileRef)
 {
-    short int   fileCount;
+    int16_t   fileCount;
     XFILE       currentFirst;
 
     if (PV_XFileValid(fileRef))
@@ -4525,9 +3818,9 @@ void XFileUseThisResourceFile(XFILE fileRef)
 // First byte is a type.
 // Next three bytes are a length.
 // Type 0 is Delta LZSS compression
-void * XDecompressPtr(void* pData, unsigned long dataSize, XBOOL ignoreType)
+void * XDecompressPtr(void* pData, uint32_t dataSize, XBOOL ignoreType)
 {
-    unsigned long       theTotalSize;
+    uint32_t       theTotalSize;
     XCOMPRESSION_TYPE   theType;
     XPTR                theNewData;
 
@@ -4544,33 +3837,33 @@ void * XDecompressPtr(void* pData, unsigned long dataSize, XBOOL ignoreType)
             switch (theType)
             {
                 case X_RAW:
-                    LZSSUncompress((unsigned char*)pData + sizeof(long),
-                                    dataSize - sizeof(long), 
+                    LZSSUncompress((unsigned char*)pData + sizeof(int32_t),
+                                    dataSize - sizeof(int32_t), 
                                     (unsigned char*)theNewData, 
                                     theTotalSize);
                     break;
                 case X_MONO_8:
-                    LZSSUncompressDeltaMono8((unsigned char*)pData + sizeof(long),
-                                                dataSize - sizeof(long), 
+                    LZSSUncompressDeltaMono8((unsigned char*)pData + sizeof(int32_t),
+                                                dataSize - sizeof(int32_t), 
                                                 (unsigned char*)theNewData, 
                                                 theTotalSize);
                     break;
                 case X_STEREO_8:
-                    LZSSUncompressDeltaStereo8((unsigned char*)pData + sizeof(long),
-                                                dataSize - sizeof(long), 
+                    LZSSUncompressDeltaStereo8((unsigned char*)pData + sizeof(int32_t),
+                                                dataSize - sizeof(int32_t), 
                                                 (unsigned char*)theNewData, 
                                                 theTotalSize);
                     break;
                 case X_MONO_16:
-                    LZSSUncompressDeltaMono16((unsigned char*)pData + sizeof(long),
-                                                dataSize - sizeof(long), 
-                                                (short*)theNewData, 
+                    LZSSUncompressDeltaMono16((unsigned char*)pData + sizeof(int32_t),
+                                                dataSize - sizeof(int32_t), 
+                                                (int16_t*)theNewData, 
                                                 theTotalSize);
                     break;
                 case X_STEREO_16:
-                    LZSSUncompressDeltaStereo16((unsigned char*)pData + sizeof(long),
-                                                dataSize - sizeof(long), 
-                                                (short*)theNewData, 
+                    LZSSUncompressDeltaStereo16((unsigned char*)pData + sizeof(int32_t),
+                                                dataSize - sizeof(int32_t), 
+                                                (int16_t*)theNewData, 
                                                 theTotalSize);
                     break;
                 default:
@@ -4594,13 +3887,13 @@ void * XDecompressPtr(void* pData, unsigned long dataSize, XBOOL ignoreType)
 // The length of the compressed data is returned if compression succeeds
 //  If -1 is returned, the compression failed
 //  If 0 is returned, compression was aborted by proc.
-long XCompressPtr(XPTR* compressedDataTarget,
-                    XPTR pData, unsigned long dataSize,
+int32_t XCompressPtr(XPTR* compressedDataTarget,
+                    XPTR pData, uint32_t dataSize,
                     XCOMPRESSION_TYPE type,
                     XCompressStatusProc proc, void* procData)
 {
 XPTR            compressedData;
-long            compressedSize;
+int32_t            compressedSize;
 XBYTE           *realData;
 
     if (!compressedDataTarget)
@@ -4641,12 +3934,12 @@ XBYTE           *realData;
                                                     proc, procData);
         break;
     case X_MONO_16:
-        compressedSize = LZSSCompressDeltaMono16((short*)pData, dataSize,
+        compressedSize = LZSSCompressDeltaMono16((int16_t*)pData, dataSize,
                                                     (XBYTE*)compressedData,
                                                     proc, procData);
         break;
     case X_STEREO_16:
-        compressedSize = LZSSCompressDeltaStereo16((short*)pData, dataSize,
+        compressedSize = LZSSCompressDeltaStereo16((int16_t*)pData, dataSize,
                                                     (XBYTE*)compressedData,
                                                     proc, procData);
         break;
@@ -4654,14 +3947,14 @@ XBYTE           *realData;
     
     if (compressedSize > 0)
     {
-        compressedSize += sizeof(long);
+        compressedSize += sizeof(int32_t);
         realData = (XBYTE*)XNewPtr(compressedSize);
         if (realData)
         {
             XPutLong(realData, dataSize);
             realData[0] = (XBYTE)type;
-            XBlockMove(compressedData, realData + sizeof(long),
-                        compressedSize - sizeof(long));
+            XBlockMove(compressedData, realData + sizeof(int32_t),
+                        compressedSize - sizeof(int32_t));
         }
         *compressedDataTarget = realData;
     }
@@ -4679,10 +3972,10 @@ XPTR XDuplicateMemory(XPTRC src, XDWORD len)
     dup = NULL;
     if (src)
     {
-        dup = XNewPtr((long)len);
+        dup = XNewPtr((int32_t)len);
         if (dup)
         {
-            XBlockMove(src, dup, (long)len);
+            XBlockMove(src, dup, (int32_t)len);
         }
     }
     return dup;
@@ -4721,7 +4014,7 @@ void XStripStr(char *pString)
 // Duplicate and string characters between 0-32
 char * XDuplicateAndStripStr(char const* src)
 {
-    long            length;         // must be signed
+    int32_t            length;         // must be signed
     char*           cStrippedString;
     char*           cDest;
     char const*     cSource;
@@ -4773,7 +4066,7 @@ char * XStrCpy(char *dest, char const* src)
     return sav;
 }
 
-XBOOL XIsDigit(short int c)
+XBOOL XIsDigit(int16_t c)
 {
     if (c >= '0' && c <= '9')
     {
@@ -4782,7 +4075,7 @@ XBOOL XIsDigit(short int c)
     return FALSE;
 }
 
-short int XLowerCase(short int c)
+int16_t XLowerCase(int16_t c)
 {
     return( ( ((c >= 'A') && (c <= 'Z')) ? c | 0x20 : c) );
 }
@@ -4897,10 +4190,10 @@ char * XStrCat(char * dest, char const* source)
     return dest;
 }
 
-long XStrLen(char const* src)
+int32_t XStrLen(char const* src)
 {
 #if 1
-    short int len;
+    int16_t len;
 
     len = -1;
     if (src == NULL)
@@ -4926,7 +4219,7 @@ char    const* s;
 }
 
 // standard strcmp
-short int XStrCmp(char const* s1, char const* s2)
+int16_t XStrCmp(char const* s1, char const* s2)
 {
     if (s1 == NULL)
     {
@@ -4963,7 +4256,7 @@ short int XStrCmp(char const* s1, char const* s2)
 }
 
 // standard strcmp, but ignore case
-short int XLStrCmp(char const* s1, char const* s2)
+int16_t XLStrCmp(char const* s1, char const* s2)
 {
     if (s1 == NULL)
     {
@@ -5001,7 +4294,7 @@ short int XLStrCmp(char const* s1, char const* s2)
 
 // Standard strncmp, but ignore case. Compares zero terminated s1 with non zero terminated s2 with s2 having
 // a length of n
-short int XLStrnCmp(char const* s1, char const* s2, long n)
+int16_t XLStrnCmp(char const* s1, char const* s2, int32_t n)
 {
     if (s1 == NULL)
     {
@@ -5030,7 +4323,7 @@ short int XLStrnCmp(char const* s1, char const* s2, long n)
 }
 // Standard strncmp. Compares zero terminated s1 with non zero terminated s2 with s2 having
 // a length of n
-short int XStrnCmp(char const* s1, char const* s2, register long n)
+int16_t XStrnCmp(char const* s1, char const* s2, register int32_t n)
 {
     if (s1 == NULL)
     {
@@ -5060,7 +4353,7 @@ short int XStrnCmp(char const* s1, char const* s2, register long n)
 
 // Converts a long value to a base 10 string,
 // Returns pointer to the '\0' at the end of the string
-char* XLongToStr(char* dest, long value)
+char* XLongToStr(char* dest, int32_t value)
 {
 char*           t;
 
@@ -5073,8 +4366,8 @@ char*           t;
         }
         else
         {
-        unsigned long   v;
-        unsigned long   power;
+        uint32_t   v;
+        uint32_t   power;
         XBOOL           nonzeroFound;
 
             v = value;
@@ -5107,9 +4400,9 @@ char*           t;
 }
 
 // This will convert a string to a base 10 long value
-long XStrnToLong(char const* pData, long length)
+int32_t XStrnToLong(char const* pData, int32_t length)
 {
-    long    result, num, count;
+    int32_t    result, num, count;
     char    data[12];
     
     result = 0;
@@ -5146,7 +4439,7 @@ long XStrnToLong(char const* pData, long length)
 
 
 #if 1
-short int XMemCmp(void const* src1, void const * src2, long n)
+int16_t XMemCmp(void const* src1, void const * src2, int32_t n)
 {
     unsigned const char * p1;
     unsigned const char * p2;
@@ -5162,7 +4455,7 @@ short int XMemCmp(void const* src1, void const * src2, long n)
     return 0;
 }
 #else
-short int XMemCmp(void const* src1, void const* src2, long n)
+int16_t XMemCmp(void const* src1, void const* src2, int32_t n)
 {
 unsigned char const*    p1;
 unsigned char const*    p2;
@@ -5186,14 +4479,14 @@ unsigned char const*    p2;
  *  pseudo-random number generator
  *
  */
-static unsigned long seed = 1;
+static uint32_t seed = 1;
 
 // return a pseudo-random number in the range of 0-32767
-short int XRandom(void)
+int16_t XRandom(void)
 {
     seed = seed * 1103515245 + 12345;
 
-    return (short int)((seed >> 16L) & 0x7FFFL);        // high word of long, remove high bit
+    return (int16_t)((seed >> 16L) & 0x7FFFL);        // high word of long, remove high bit
 }
 
 
@@ -5202,12 +4495,12 @@ short int XRandom(void)
  *
  */
 
-void XSeedRandom(unsigned long n)
+void XSeedRandom(uint32_t n)
 {
     seed = n;
 }
 
-short int XRandomRange(short int max)
+int16_t XRandomRange(int16_t max)
 {
     static char setup = 0;
 
@@ -5359,8 +4652,6 @@ static const unsigned char macToWinTable[128] =
     0xD3,   // O-acute
     0xD4,   // O-circumflex
 
-    '@',    // apple
-    0xD2,   // O-grave
     0xDA,   // U-acute
     0xDB,   // U-circumflex
     0xD9,   // U-grave

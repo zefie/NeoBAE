@@ -73,13 +73,14 @@
 #include "GenSnd.h"
 #include "X_Assert.h"
 #include "GenSeqTools.h"
+#include <stdint.h>
 
-// given a pointer, get a short int ordered in a Motorola way, and only 
+// given a pointer, get a int16_t ordered in a Motorola way, and only 
 // access on word bounderies
-XWORD XGetShortWordAligned(XWORD *pData, long byteOffset)
+XWORD XGetShortWordAligned(XWORD *pData, int32_t byteOffset)
 {
-    short   wordOffset;
-    short   byteIndex;
+    int16_t   wordOffset;
+    int16_t   byteIndex;
     XWORD   result;
     
     if (byteOffset >= 0)
@@ -117,10 +118,10 @@ XWORD XGetShortWordAligned(XWORD *pData, long byteOffset)
 }
 
 // given a pointer, get a long ordered in a Motorola way
-XDWORD XGetLongWordAligned(XWORD *pData, long byteOffset)
+XDWORD XGetLongWordAligned(XWORD *pData, int32_t byteOffset)
 {
-    short   wordOffset;
-    short   byteIndex;
+    int16_t   wordOffset;
+    int16_t   byteIndex;
     XDWORD  result;
     
     if (byteOffset >= 0)
@@ -164,19 +165,19 @@ XDWORD XGetLongWordAligned(XWORD *pData, long byteOffset)
 }
 
 
-XWORD XGetCharWordAligned(XWORD *pData, long byteOffset)
+XWORD XGetCharWordAligned(XWORD *pData, int32_t byteOffset)
 {
     return (XGetShortWordAligned(pData, byteOffset) >> 8);
 }
 
 
-static short int PV_ToLower(short int c)
+static int16_t PV_ToLower(int16_t c)
 {
     return( ( ((c >= 'A') && (c <= 'Z')) ? c | 0x20 : c) );
 }
 
 
-short int XLStrnCmpWordAligned(const char* s1, XWORD *s2, long byteOffset, long n)
+int16_t XLStrnCmpWordAligned(const char* s1, XWORD *s2, int32_t byteOffset, int32_t n)
 {
     XWORD   ch1, ch2;
 
@@ -209,9 +210,9 @@ short int XLStrnCmpWordAligned(const char* s1, XWORD *s2, long byteOffset, long 
 }
 
 
-long XStrnToLongWordAligned(XWORD* pData, long byteOffset, long length)
+int32_t XStrnToLongWordAligned(XWORD* pData, int32_t byteOffset, int32_t length)
 {
-    long    result, numDigits, count;
+    int32_t    result, numDigits, count;
     XWORD   ch;
 
     result = 0;

@@ -15,5 +15,5 @@ cp "${BANK_DIR}/SonyUIQBank/SonyUIQBank_P800.hsb" "${TARGET_DIR}/sony-ericsson-p
 cp "${BANK_DIR}/SonyUIQBank/SonyUIQBank_P900.hsb" "${TARGET_DIR}/sony-ericsson-p900.hsb"
 cp "${BANK_DIR}/WTVBanks/wpatches-classic.hsb" "${TARGET_DIR}/minibae-wtv.hsb"
 cp "${BANK_DIR}/WTVBanks/wpatches-plus.hsb" "${TARGET_DIR}/patches-wtv.hsb"
+cp "${BANK_DIR}/nChippyBank/nChippyBank.hsb "${TARGET_DIR}/nChippyBank.hsb"
 find "${BANK_DIR}/other/" -type f -exec cp {} "${TARGET_DIR}/" \;
-#8664e092ecfd66e0adbbee871c9ff5bbbbaf0494  src/banks/nChippyBank/nChippyBank.hsb

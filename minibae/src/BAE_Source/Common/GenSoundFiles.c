@@ -188,6 +188,7 @@
 #include "X_Formats.h"
 #include "X_Assert.h"
 #include "GenSnd.h"
+#include <stdint.h>
 
 #if USE_HIGHLEVEL_FILE_API == TRUE
     #include <math.h>
@@ -199,7 +200,7 @@
     #include "XMPEG_BAE_API.h"
 #endif
 
-#define ODD(x)          ((long)(x) & 1L)
+#define ODD(x)          ((int32_t)(x) & 1L)
 
 #undef X_PACK_FAST
 #include "X_PackStructures.h"
@@ -375,37 +376,37 @@ enum
 
 typedef struct X_PACKBY1
 {
-    long    ckID;      /* ID */
-    long    ckSize;    /* size */
-    long    ckData;
+    int32_t    ckID;      /* ID */
+    int32_t    ckSize;    /* size */
+    int32_t    ckData;
 } XIFFChunk;
 
 typedef struct X_PACKBY1
 {
-    short int       numChannels;
-    unsigned long   numSampleFrames;
-    short int       sampleSize;
+    int16_t       numChannels;
+    uint32_t   numSampleFrames;
+    int16_t       sampleSize;
     unsigned char   sampleRate[10];
 } XAIFFHeader;
 
 typedef struct X_PACKBY1
 {
-    short int       numChannels;
-    unsigned long   numSampleFrames;
-    short int       sampleSize;
+    int16_t       numChannels;
+    uint32_t   numSampleFrames;
+    int16_t       sampleSize;
     unsigned char   sampleRate[10];
-    unsigned long   compressionType;
+    uint32_t   compressionType;
     char            compressionName[256];           /* variable length array, Pascal string */
 } XAIFFExtenedHeader;
 
 typedef struct X_PACKBY1
 {
-    unsigned short  numMarkers; // 2
-    short int       id1;        // 0
-    unsigned long   position1;
+    uint16_t  numMarkers; // 2
+    int16_t       id1;        // 0
+    uint32_t   position1;
     char            name1[8];   // 076265674C6F6F70 'begLoop'
-    short int       id2;        // 1
-    unsigned long   position2;
+    int16_t       id2;        // 1
+    uint32_t   position2;
     char            name2[8];   // 07656E644C6F6F70 'endLoop'
 } XSingleLoopMarker;
 
@@ -417,20 +418,20 @@ typedef struct X_PACKBY1
     unsigned char   highFrequency;
     unsigned char   lowVelocity;
     unsigned char   highVelocity;
-    short int       gain;
+    int16_t       gain;
 
-    short int       sustainLoop_playMode;
-    short int       sustainLoop_beginLoop;
-    short int       sustainLoop_endLoop;
-    short int       releaseLoop_beginLoop;
-    short int       releaseLoop_endLoop;
-    short int       extra;
+    int16_t       sustainLoop_playMode;
+    int16_t       sustainLoop_beginLoop;
+    int16_t       sustainLoop_endLoop;
+    int16_t       releaseLoop_beginLoop;
+    int16_t       releaseLoop_endLoop;
+    int16_t       extra;
 } XInstrumentHeader;
 
 typedef struct X_PACKBY1
 {
-    unsigned long   offset;
-    unsigned long   blockSize;
+    uint32_t   offset;
+    uint32_t   blockSize;
 } XSoundData;
 
 /**********************- AU Defines -**************************/
@@ -439,12 +440,12 @@ typedef struct X_PACKBY1
 
 typedef struct
 {
-    unsigned long magic;          // magic number 
-    unsigned long hdr_size;       // size of the whole header, including optional comment.
-    unsigned long data_size;      // optional data size - usually unusalble. 
-    unsigned long encoding;       // format of data contained in this file 
-    unsigned long sample_rate;    // sample rate of data in this file 
-    unsigned long channels;       // numbder of interleaved channels (usually 1 or 2) 
+    uint32_t magic;          // magic number 
+    uint32_t hdr_size;       // size of the whole header, including optional comment.
+    uint32_t data_size;      // optional data size - usually unusalble. 
+    uint32_t encoding;       // format of data contained in this file 
+    uint32_t sample_rate;    // sample rate of data in this file 
+    uint32_t channels;       // numbder of interleaved channels (usually 1 or 2) 
 } SunAudioFileHeader;
 
 typedef struct
@@ -476,10 +477,10 @@ typedef struct
 // internal structures
 typedef struct
 {
-    long            formType;               //  either X_RIFF, or X_FORM;
-    long            headerType;
-    long            formPosition;           //  position in file of current FORM
-    long            formLength;             //  length of FORM
+    int32_t            formType;               //  either X_RIFF, or X_FORM;
+    int32_t            headerType;
+    int32_t            formPosition;           //  position in file of current FORM
+    int32_t            formLength;             //  length of FORM
     OPErr           lastError;
     XFILE           fileReference;
 } X_IFF;
@@ -501,7 +502,7 @@ static OPErr IFF_Error(X_IFF *pIFF)
     return NO_ERR;
 }
 
-static void IFF_SetFormType(X_IFF *pIFF, long formType)
+static void IFF_SetFormType(X_IFF *pIFF, int32_t formType)
 {
     if (pIFF)
     {
@@ -511,11 +512,11 @@ static void IFF_SetFormType(X_IFF *pIFF, long formType)
 
 
 /* -1 is error */
-static long IFF_GetNextGroup(X_IFF *pIFF, XIFFChunk *pChunk)
+static int32_t IFF_GetNextGroup(X_IFF *pIFF, XIFFChunk *pChunk)
 {
-    long    err = 0;
+    int32_t    err = 0;
 
-    if (XFileRead(pIFF->fileReference, pChunk, (long)sizeof(XIFFChunk) - sizeof(long)) != -1)   // get chunk ID
+    if (XFileRead(pIFF->fileReference, pChunk, (int32_t)sizeof(XIFFChunk) - sizeof(int32_t)) != -1)   // get chunk ID
     {
         if (pIFF->formType == X_RIFF)
         {
@@ -538,7 +539,7 @@ static long IFF_GetNextGroup(X_IFF *pIFF, XIFFChunk *pChunk)
                 pIFF->formPosition = XFileGetPosition(pIFF->fileReference);  /* get current pos */
                 pIFF->formLength = pChunk->ckSize;
 
-                if (XFileRead(pIFF->fileReference, &pChunk->ckData, (long)sizeof(long)) == -1)
+                if (XFileRead(pIFF->fileReference, &pChunk->ckData, (int32_t)sizeof(int32_t)) == -1)
                 {
                     pIFF->lastError = BAD_FILE;
                 }
@@ -559,7 +560,7 @@ static long IFF_GetNextGroup(X_IFF *pIFF, XIFFChunk *pChunk)
 
 /******- Determine if a file is a IFF type -******************************/
 
-static long IFF_FileType(X_IFF *pIFF)
+static int32_t IFF_FileType(X_IFF *pIFF)
 {
     XIFFChunk type;
 
@@ -569,7 +570,7 @@ static long IFF_FileType(X_IFF *pIFF)
 
         pIFF->formPosition = 0;
         pIFF->formLength = 0;
-        XSetMemory(&type, (long)sizeof(XIFFChunk), 0);
+        XSetMemory(&type, (int32_t)sizeof(XIFFChunk), 0);
         IFF_GetNextGroup(pIFF, &type);
         return( (type.ckID == pIFF->formType) ? type.ckData : -1L);
     }
@@ -577,11 +578,11 @@ static long IFF_FileType(X_IFF *pIFF)
 }
 
 /*- scan past nested FORM's -*/
-static long IFF_NextBlock(X_IFF *pIFF, long blockID)
+static int32_t IFF_NextBlock(X_IFF *pIFF, int32_t blockID)
 {
-    long saveFORM, saveFLEN;
+    int32_t saveFORM, saveFLEN;
     XIFFChunk type;
-    long flag;
+    int32_t flag;
 
     flag = -1;
     while (XFileGetPosition(pIFF->fileReference) < (pIFF->formPosition + pIFF->formLength))
@@ -621,7 +622,7 @@ static long IFF_NextBlock(X_IFF *pIFF, long blockID)
 
 
 /******- Scan a FORM for a 4 letter block -*******************************/
-static long IFF_ScanToBlock(X_IFF *pIFF, long block)
+static int32_t IFF_ScanToBlock(X_IFF *pIFF, int32_t block)
 {
     if (XFileSetPosition(pIFF->fileReference, pIFF->formPosition + 4) == 0)     // set to inside of FORM
     {
@@ -635,9 +636,9 @@ static long IFF_ScanToBlock(X_IFF *pIFF, long block)
 }
 
 /******************- Return Chunk size -**********************************/
-static long IFF_ChunkSize(X_IFF *pIFF, long block)
+static int32_t IFF_ChunkSize(X_IFF *pIFF, int32_t block)
 {
-    long size;
+    int32_t size;
 
     // must back up. Variable length change based upon block ID
     if (IFF_ScanToBlock(pIFF, block) == -1L)
@@ -661,7 +662,7 @@ static long IFF_ChunkSize(X_IFF *pIFF, long block)
 
 
 /*- go inside a FORM that has been found -*/
-static long IFF_NextForm(X_IFF *pIFF)
+static int32_t IFF_NextForm(X_IFF *pIFF)
 {
     XIFFChunk type;
 
@@ -678,13 +679,13 @@ static long IFF_NextForm(X_IFF *pIFF)
     return -1;
 }
 
-static long IFF_CurrentForm(X_IFF *pIFF)
+static int32_t IFF_CurrentForm(X_IFF *pIFF)
 {
     pIFF->formPosition = XFileGetPosition(pIFF->fileReference);
     return IFF_NextForm(pIFF);
 }
 
-static long IFF_ReadBlock(X_IFF *pIFF, XPTR pData, long Length)
+static int32_t IFF_ReadBlock(X_IFF *pIFF, XPTR pData, int32_t Length)
 {
     if (XFileRead(pIFF->fileReference, pData, Length) == -1)
     {
@@ -694,7 +695,7 @@ static long IFF_ReadBlock(X_IFF *pIFF, XPTR pData, long Length)
 }
 
 
-static long IFF_GetChunk(X_IFF *pIFF, long block, long size, XPTR p)
+static int32_t IFF_GetChunk(X_IFF *pIFF, int32_t block, int32_t size, XPTR p)
 {
     if (IFF_ScanToBlock(pIFF, block) == -1L)
     {
@@ -703,7 +704,7 @@ static long IFF_GetChunk(X_IFF *pIFF, long block, long size, XPTR p)
     if (size == -1L)    /* size not known? */
     {
         XFileSetPositionRelative(pIFF->fileReference, -4L);     // back-up and get size
-        if (XFileRead(pIFF->fileReference, &size, (long)sizeof(long)) == -1)
+        if (XFileRead(pIFF->fileReference, &size, (int32_t)sizeof(int32_t)) == -1)
         {
             pIFF->lastError = BAD_FILE;
         }
@@ -729,7 +730,7 @@ static long IFF_GetChunk(X_IFF *pIFF, long block, long size, XPTR p)
 }
 
 
-static long IFF_NextChunk(X_IFF *pIFF, long block, long size, XPTR p)
+static int32_t IFF_NextChunk(X_IFF *pIFF, int32_t block, int32_t size, XPTR p)
 {
     if (IFF_NextBlock(pIFF, block) == -1)
     {
@@ -738,7 +739,7 @@ static long IFF_NextChunk(X_IFF *pIFF, long block, long size, XPTR p)
     if (size == -1L)    /* size not known? */
     {
         XFileSetPositionRelative(pIFF->fileReference, -4L);     // back-up and get size
-        if (XFileRead(pIFF->fileReference, &size, (long)sizeof(long)) == -1)
+        if (XFileRead(pIFF->fileReference, &size, (int32_t)sizeof(int32_t)) == -1)
         {
             pIFF->lastError = BAD_FILE;
         }
@@ -766,19 +767,19 @@ static long IFF_NextChunk(X_IFF *pIFF, long block, long size, XPTR p)
 #endif
 
 #if USE_CREATION_API == TRUE
-static void IFF_WriteType(X_IFF *pIFF, unsigned long type)
+static void IFF_WriteType(X_IFF *pIFF, uint32_t type)
 {
-    unsigned long   theType;
+    uint32_t   theType;
 
     theType = type;
     XPutLong(&theType, type);       // makes sure its motorola order
-    XFileWrite(pIFF->fileReference, &theType, sizeof(long));
+    XFileWrite(pIFF->fileReference, &theType, sizeof(int32_t));
 }
 
-static OPErr IFF_WriteBlock(X_IFF *pIFF, XPTR pData, unsigned long Length)
+static OPErr IFF_WriteBlock(X_IFF *pIFF, XPTR pData, uint32_t Length)
 {
     pIFF->lastError = NO_ERR;
-    if (XFileWrite(pIFF->fileReference, pData, (long)Length) == -1)
+    if (XFileWrite(pIFF->fileReference, pData, (int32_t)Length) == -1)
     {
         pIFF->lastError = BAD_FILE;
     }
@@ -786,9 +787,9 @@ static OPErr IFF_WriteBlock(X_IFF *pIFF, XPTR pData, unsigned long Length)
 }
 
 // write size of block, but order in the format particulars
-static long IFF_WriteSize(X_IFF *pIFF, unsigned long size)
+static int32_t IFF_WriteSize(X_IFF *pIFF, uint32_t size)
 {
-    unsigned long theSize;
+    uint32_t theSize;
 
     theSize = size;
     if (pIFF->formType == X_RIFF)
@@ -807,12 +808,12 @@ static long IFF_WriteSize(X_IFF *pIFF, unsigned long size)
     {
         XPutLong(&theSize, size);       // makes sure its motorola order
     }
-    return IFF_WriteBlock(pIFF, &theSize, (long)sizeof(unsigned long));
+    return IFF_WriteBlock(pIFF, &theSize, (int32_t)sizeof(uint32_t));
 }
 #endif
 
 #if USE_CREATION_API == TRUE
-static OPErr IFF_PutChunk(X_IFF *pIFF, long block, long unsigned size, XPTR p)
+static OPErr IFF_PutChunk(X_IFF *pIFF, int32_t block, uint32_t size, XPTR p)
 {
     OPErr err;
 
@@ -822,11 +823,11 @@ static OPErr IFF_PutChunk(X_IFF *pIFF, long block, long unsigned size, XPTR p)
     // SSND chunk in AIFF requires 8 bytes between size and sample data.
     if (pIFF->formType == X_FORM && block == X_SoundData)
     {
-        long tmp = 0;
+        int32_t tmp = 0;
 
         IFF_WriteSize(pIFF, size + 8);
-        IFF_WriteBlock(pIFF, (XPTR)&tmp, sizeof(long));     // offset to first sample
-        IFF_WriteBlock(pIFF, (XPTR)&tmp, sizeof(long));     // alignment block
+        IFF_WriteBlock(pIFF, (XPTR)&tmp, sizeof(int32_t));     // offset to first sample
+        IFF_WriteBlock(pIFF, (XPTR)&tmp, sizeof(int32_t));     // alignment block
     }
     else
     {
@@ -838,7 +839,7 @@ static OPErr IFF_PutChunk(X_IFF *pIFF, long block, long unsigned size, XPTR p)
          if (ODD(size)) /* is it odd? */
          {
             size = 0L;
-            XFileWrite(pIFF->fileReference, &size, (long)sizeof(char));
+            XFileWrite(pIFF->fileReference, &size, (int32_t)sizeof(char));
         }
     }
     return pIFF->lastError;
@@ -875,31 +876,31 @@ static int PV_UnpackInput(XFILE fileReference, unsigned int *in_buffer, int *in_
 #define MAX_AU_DECODE_BLOCK_SIZE        1024L
 // decode a sun file. If pState is non-zero then this is used between calls, otherwise it
 // uses clean state on the stack.
-static OPErr PV_ReadSunAUFile(  long encoding,
+static OPErr PV_ReadSunAUFile(  int32_t encoding,
                                 XFILE fileReference, 
                                 void *pSample,
-                                unsigned long sampleByteLength,
-                                unsigned long *pBufferLength,
+                                uint32_t sampleByteLength,
+                                uint32_t *pBufferLength,
                                 SunDecodeState *pState
                                 )
 {
     OPErr               err;
-    short               sample;
+    int16_t               sample;
     unsigned char       code;
     int                 count;
     int                 (*dec_routine)(int i, int out_coding, struct g72x_state *state_ptr);
     int                 dec_bits;
-    short int           *pSample16;
+    int16_t           *pSample16;
     unsigned char       *pSample8;
     unsigned char       codeBlock[MAX_AU_DECODE_BLOCK_SIZE];
-    unsigned long       writeLength;
+    uint32_t       writeLength;
     SunDecodeState      state;
 
     writeLength = 0;
     err = NO_ERR;
     dec_bits = 0;
     pSample8 = (unsigned char *)pSample;
-    pSample16 = (short int *)pSample;
+    pSample16 = (int16_t *)pSample;
     switch (encoding)
     {
         case SUN_AUDIO_FILE_ENCODING_LINEAR_16:
@@ -978,10 +979,10 @@ decode_adpcm:
             {
                 sample = (*dec_routine)(code, AUDIO_ENCODING_LINEAR, &pState->state);
                 *pSample16++ = sample;
-                writeLength += sizeof(short);
+                writeLength += sizeof(int16_t);
                 if (sampleByteLength > 0)
                 {
-                    sampleByteLength -= sizeof(short);
+                    sampleByteLength -= sizeof(int16_t);
                 }
                 else
                 {
@@ -1009,24 +1010,24 @@ decode_adpcm:
     #pragma mark ## WAVE read functions ##
 #endif
 
-static long IFF_GetWAVFormatTag(X_IFF *pIFF)
+static int32_t IFF_GetWAVFormatTag(X_IFF *pIFF)
 {
-    long        theErr;
+    int32_t        theErr;
     XWaveHeader header;
 
-    theErr = IFF_GetChunk(pIFF, X_FMT, (long)sizeof(XWaveHeader), (void *)&header);
+    theErr = IFF_GetChunk(pIFF, X_FMT, (int32_t)sizeof(XWaveHeader), (void *)&header);
 
     #if X_WORD_ORDER == FALSE   // motorola?
         header.wFormatTag = XSwapShort(header.wFormatTag);
     #endif
-    return (long)header.wFormatTag;
+    return (int32_t)header.wFormatTag;
 }
 
-static long IFF_GetWAVHeader(X_IFF *pIFF, XWaveHeader * pHeaderInfo)
+static int32_t IFF_GetWAVHeader(X_IFF *pIFF, XWaveHeader * pHeaderInfo)
 {
-    long    theErr;
+    int32_t    theErr;
 
-    theErr = IFF_GetChunk(pIFF, X_FMT, (long)sizeof(XWaveHeader), (void *)pHeaderInfo);
+    theErr = IFF_GetChunk(pIFF, X_FMT, (int32_t)sizeof(XWaveHeader), (void *)pHeaderInfo);
 
     #if X_WORD_ORDER == FALSE   // motorola?
         pHeaderInfo->nSamplesPerSec = XSwapLong(pHeaderInfo->nSamplesPerSec);
@@ -1040,11 +1041,11 @@ static long IFF_GetWAVHeader(X_IFF *pIFF, XWaveHeader * pHeaderInfo)
     return theErr;
 }
 
-static long IFF_GetWAVIMAHeader(X_IFF *pIFF, XWaveHeaderIMA * pHeaderInfo)
+static int32_t IFF_GetWAVIMAHeader(X_IFF *pIFF, XWaveHeaderIMA * pHeaderInfo)
 {
-    long    theErr;
+    int32_t    theErr;
 
-    theErr = IFF_GetChunk(pIFF, X_FMT, (long)sizeof(XWaveHeaderIMA), (void *)pHeaderInfo);
+    theErr = IFF_GetChunk(pIFF, X_FMT, (int32_t)sizeof(XWaveHeaderIMA), (void *)pHeaderInfo);
 
     #if X_WORD_ORDER == FALSE   // motorola?
         pHeaderInfo->wfx.nSamplesPerSec = XSwapLong(pHeaderInfo->wfx.nSamplesPerSec);
@@ -1060,9 +1061,9 @@ static long IFF_GetWAVIMAHeader(X_IFF *pIFF, XWaveHeaderIMA * pHeaderInfo)
 }
 
 // Get compressed and uncompressed size. Return 0 if successful, 1 if failure
-static long IFF_GetWAVSampleSize(X_IFF *pIFF, unsigned long *pUncompressedSize, unsigned long *pCompressedSize)
+static int32_t IFF_GetWAVSampleSize(X_IFF *pIFF, uint32_t *pUncompressedSize, uint32_t *pCompressedSize)
 {
-    long            size, error;
+    int32_t            size, error;
     XWaveHeaderIMA  header;
 
     error = 0;
@@ -1072,7 +1073,7 @@ static long IFF_GetWAVSampleSize(X_IFF *pIFF, unsigned long *pUncompressedSize, 
         if (IFF_ScanToBlock(pIFF, X_DATA) == 0) /* skip to body */
         {
             XFileSetPositionRelative(pIFF->fileReference, -4L);     // back-up and get size
-            if (XFileRead(pIFF->fileReference, &size, (long)sizeof(long)) == -1)
+            if (XFileRead(pIFF->fileReference, &size, (int32_t)sizeof(int32_t)) == -1)
             {
                 pIFF->lastError = BAD_FILE;
             }
@@ -1101,8 +1102,8 @@ static long IFF_GetWAVSampleSize(X_IFF *pIFF, unsigned long *pUncompressedSize, 
                     size *= 4;
 /*
                     {
-                        unsigned long   cBlocks;
-                        unsigned long   cbBytesPerBlock;
+                        uint32_t   cBlocks;
+                        uint32_t   cbBytesPerBlock;
 
                         //
                         //  how many destination PCM bytes are needed to hold
@@ -1161,7 +1162,7 @@ static OPErr IFF_WriteWAVLoopPoints(X_IFF *pIFF, GM_Waveform const* pWaveform)
     {
         if (pWaveform->startLoop && pWaveform->endLoop)
         {
-            XSetMemory(&sample, (long)sizeof(XSamplerChunk), 0);
+            XSetMemory(&sample, (int32_t)sizeof(XSamplerChunk), 0);
 
             // this rather complex process in setting these values makes sure the values in the structure are intel ordered, reguardless
             // of platform we're on. The structure pWaveform is always host ordered.
@@ -1174,7 +1175,7 @@ static OPErr IFF_WriteWAVLoopPoints(X_IFF *pIFF, GM_Waveform const* pWaveform)
             XPutLong(&sample.loops[0].dwPlayCount, XSwapLong(pWaveform->numLoops));
 
             // write WAVE loop block
-            return IFF_PutChunk(pIFF, X_SMPL, (long)sizeof(XSamplerChunk), (XPTR)&sample);
+            return IFF_PutChunk(pIFF, X_SMPL, (int32_t)sizeof(XSamplerChunk), (XPTR)&sample);
         }
     }
     return NO_ERR;
@@ -1182,11 +1183,11 @@ static OPErr IFF_WriteWAVLoopPoints(X_IFF *pIFF, GM_Waveform const* pWaveform)
 #endif
 
 // Returns WAV loop points, if there. Return 0 if successful, -1 if failure
-static long IFF_GetWAVLoopPoints(X_IFF *pIFF, unsigned long *pLoopStart, unsigned long *pLoopEnd, unsigned long *pLoopCount)
+static int32_t IFF_GetWAVLoopPoints(X_IFF *pIFF, uint32_t *pLoopStart, uint32_t *pLoopEnd, uint32_t *pLoopCount)
 {
     XSamplerChunk   *pSampler;
-    long            theErr;
-    unsigned long   size;
+    int32_t            theErr;
+    uint32_t   size;
 
     *pLoopStart = 0;
     *pLoopEnd = 0;
@@ -1194,7 +1195,7 @@ static long IFF_GetWAVLoopPoints(X_IFF *pIFF, unsigned long *pLoopStart, unsigne
     if (IFF_ScanToBlock(pIFF, X_SMPL) == 0) /* skip to body */
     {
         XFileSetPositionRelative(pIFF->fileReference, -4L);     // back-up and get size
-        if (XFileRead(pIFF->fileReference, &size, (long)sizeof(long)) == -1)
+        if (XFileRead(pIFF->fileReference, &size, (int32_t)sizeof(int32_t)) == -1)
         {
             pIFF->lastError = BAD_FILE;
             theErr = -1;
@@ -1255,13 +1256,13 @@ static long IFF_GetWAVLoopPoints(X_IFF *pIFF, unsigned long *pLoopStart, unsigne
 
 
 // return NO_ERR if successfull
-static OPErr PV_ReadWAVEAndDecompressIMA(XFILE fileReference, unsigned long sourceLength,
-                                            char *pDestSample, unsigned long destLength,
+static OPErr PV_ReadWAVEAndDecompressIMA(XFILE fileReference, uint32_t sourceLength,
+                                            char *pDestSample, uint32_t destLength,
                                             char outputBitSize, char channels,
-                                            XPTR pBlockBuffer, unsigned long blockSize,
-                                            unsigned long *pBufferLength)
+                                            XPTR pBlockBuffer, uint32_t blockSize,
+                                            uint32_t *pBufferLength)
 {
-    unsigned long           writeBufferLength, size, offset;
+    uint32_t           writeBufferLength, size, offset;
     OPErr                   error;
     XBOOL                   customBlockBuffer;
     
@@ -1330,7 +1331,7 @@ static OPErr PV_ReadWAVEAndDecompressIMA(XFILE fileReference, unsigned long sour
 // When disposing make sure and dispose of both the GM_Waveform structure and the
 // theWaveform inside of that structure with XDisposePtr
 static GM_Waveform* PV_ReadIntoMemoryWaveFile(XFILE file, XBOOL decodeData,
-                                                long *pFormat, unsigned long *pBlockSize,
+                                                int32_t *pFormat, uint32_t *pBlockSize,
                                                 OPErr *pError)
 {
     GM_Waveform         *wave;
@@ -1350,7 +1351,7 @@ static GM_Waveform* PV_ReadIntoMemoryWaveFile(XFILE file, XBOOL decodeData,
         if (wave)
         {
         XWaveHeaderIMA      waveHeader;
-        unsigned long       size, sourceLength;
+        uint32_t       size, sourceLength;
 
             if ((IFF_FileType(pIFF) == X_WAVE) &&
                 (IFF_GetWAVIMAHeader(pIFF, &waveHeader) == 0))
@@ -1433,7 +1434,7 @@ static GM_Waveform* PV_ReadIntoMemoryWaveFile(XFILE file, XBOOL decodeData,
 #if X_WORD_ORDER == FALSE
                                     if (wave->bitSize == 16)
                                     {
-                                        XSwapShorts((short*)wave->theWaveform,
+                                        XSwapShorts((int16_t*)wave->theWaveform,
                                                     wave->waveFrames * wave->channels);
                                     }
 #endif
@@ -1514,7 +1515,7 @@ static OPErr PV_WriteFromMemoryWaveFile(XFILENAME *file, GM_Waveform const* pAud
             return PARAM_ERR;
         }
 
-        pIFF = (X_IFF *)XNewPtr((long)sizeof(X_IFF));
+        pIFF = (X_IFF *)XNewPtr((int32_t)sizeof(X_IFF));
         if (pIFF)
         {
             IFF_SetFormType(pIFF, X_RIFF);
@@ -1550,13 +1551,13 @@ static OPErr PV_WriteFromMemoryWaveFile(XFILENAME *file, GM_Waveform const* pAud
                 #endif
 
                 // write wave header block
-                if (IFF_PutChunk(pIFF, X_FMT, (long)sizeof(XWaveHeader), (XPTR)&waveHeader) == NO_ERR)
+                if (IFF_PutChunk(pIFF, X_FMT, (int32_t)sizeof(XWaveHeader), (XPTR)&waveHeader) == NO_ERR)
                 {
                     #if X_WORD_ORDER == FALSE   // motorola?
                     if (pAudioData->bitSize == 16)
                     {
                         // swap to intel format
-                        XSwapShorts((short int*)pAudioData->theWaveform, pAudioData->waveFrames * pAudioData->channels);
+                        XSwapShorts((int16_t*)pAudioData->theWaveform, pAudioData->waveFrames * pAudioData->channels);
                     }
                     #endif
                     // write out loop points
@@ -1566,8 +1567,8 @@ static OPErr PV_WriteFromMemoryWaveFile(XFILENAME *file, GM_Waveform const* pAud
                         // write out sample data
                         if (IFF_PutChunk(pIFF, X_DATA, pAudioData->waveSize, pAudioData->theWaveform) == NO_ERR)
                         {
-                            unsigned long   end;
-                            unsigned long   size;
+                            uint32_t   end;
+                            uint32_t   size;
                             
                             // write end
                             end = XFileGetPosition(pIFF->fileReference);     // get current pos
@@ -1585,7 +1586,7 @@ static OPErr PV_WriteFromMemoryWaveFile(XFILENAME *file, GM_Waveform const* pAud
                     if (pAudioData->bitSize == 16)
                     {
                         // put back the way we found it
-                        XSwapShorts((short int*)pAudioData->theWaveform, pAudioData->waveFrames * pAudioData->channels);
+                        XSwapShorts((int16_t*)pAudioData->theWaveform, pAudioData->waveFrames * pAudioData->channels);
                     }
                     #endif
                 }
@@ -1670,7 +1671,7 @@ static OPErr PV_WriteFromMemorySunAUFile(XFILENAME *file, GM_Waveform const* pAu
             #if X_WORD_ORDER != FALSE   // intel?
             if (pAudioData->bitSize == 16)
             {
-                XSwapShorts((short int*)pAudioData->theWaveform, pAudioData->waveFrames * pAudioData->channels);
+                XSwapShorts((int16_t*)pAudioData->theWaveform, pAudioData->waveFrames * pAudioData->channels);
             }
             #endif
 
@@ -1686,7 +1687,7 @@ static OPErr PV_WriteFromMemorySunAUFile(XFILENAME *file, GM_Waveform const* pAu
             #if X_WORD_ORDER != FALSE   // intel?
             if (pAudioData->bitSize == 16)
             {
-                XSwapShorts((short int*)pAudioData->theWaveform, pAudioData->waveFrames * pAudioData->channels);
+                XSwapShorts((int16_t*)pAudioData->theWaveform, pAudioData->waveFrames * pAudioData->channels);
             }
             #endif
 
@@ -1773,7 +1774,7 @@ static float pv_ldexp(float x, int y)
  * conversions, and accommodated conversions involving +/- infinity,
  * NaN's, and denormalized numbers.
  */
-#define UNSIGNED_TO_FLOAT(u)         (((float)((long)(u - 2147483647L - 1))) + 2147483648.0)
+#define UNSIGNED_TO_FLOAT(u)         (((float)((int32_t)(u - 2147483647L - 1))) + 2147483648.0)
 
 /****************************************************************
  * Extended precision IEEE floating-point conversion routine.
@@ -1782,18 +1783,18 @@ XFIXED XConvertFromIeeeExtended(unsigned char *bytes)
 {
     float           f;
     int             expon;
-    unsigned long   hiMant, loMant;
+    uint32_t   hiMant, loMant;
     XFIXED          ieeeRate;
 
     expon = ((bytes[0] & 0x7F) << 8L) | (bytes[1] & 0xFF);
-    hiMant  =    ((unsigned long)(bytes[2] & 0xFF) << 24L)
-            |    ((unsigned long)(bytes[3] & 0xFF) << 16L)
-            |    ((unsigned long)(bytes[4] & 0xFF) << 8L)
-            |    ((unsigned long)(bytes[5] & 0xFF));
-    loMant  =    ((unsigned long)(bytes[6] & 0xFF) << 24L)
-            |    ((unsigned long)(bytes[7] & 0xFF) << 16L)
-            |    ((unsigned long)(bytes[8] & 0xFF) << 8L)
-            |    ((unsigned long)(bytes[9] & 0xFF));
+    hiMant  =    ((uint32_t)(bytes[2] & 0xFF) << 24L)
+            |    ((uint32_t)(bytes[3] & 0xFF) << 16L)
+            |    ((uint32_t)(bytes[4] & 0xFF) << 8L)
+            |    ((uint32_t)(bytes[5] & 0xFF));
+    loMant  =    ((uint32_t)(bytes[6] & 0xFF) << 24L)
+            |    ((uint32_t)(bytes[7] & 0xFF) << 16L)
+            |    ((uint32_t)(bytes[8] & 0xFF) << 8L)
+            |    ((uint32_t)(bytes[9] & 0xFF));
 
     if (expon == 0 && hiMant == 0 && loMant == 0) 
     {
@@ -1863,14 +1864,14 @@ XFIXED XConvertFromIeeeExtended(unsigned char *bytes)
  * NaN's, and denormalized numbers.
  */
 
-#define FLOAT_TO_UNSIGNED(f)      ((unsigned long)(((long)(f - 2147483648.0)) + 2147483647L + 1))
+#define FLOAT_TO_UNSIGNED(f)      ((uint32_t)(((int32_t)(f - 2147483648.0)) + 2147483647L + 1))
 
 void XConvertToIeeeExtended(XFIXED ieeeFixedRate, unsigned char *bytes)
 {
     int             sign;
     int             expon;
     double          fMant, fsMant;
-    unsigned long   hiMant, loMant;
+    uint32_t   hiMant, loMant;
     double          num;
 
     num = XFIXED_TO_FLOAT(ieeeFixedRate);
@@ -1932,11 +1933,11 @@ void XConvertToIeeeExtended(XFIXED ieeeFixedRate, unsigned char *bytes)
     #pragma mark ## AIFF read functions ##
 #endif
 // get AIFF header. Returns 0 if ok, -1 if failed
-static long IFF_GetAIFFHeader(X_IFF *pIFF, XAIFFHeader * pHeaderInfo)
+static int32_t IFF_GetAIFFHeader(X_IFF *pIFF, XAIFFHeader * pHeaderInfo)
 {
-    long    theErr;
+    int32_t    theErr;
 
-    theErr = IFF_GetChunk(pIFF, X_Common, (long)sizeof(XAIFFHeader), (void *)pHeaderInfo);
+    theErr = IFF_GetChunk(pIFF, X_Common, (int32_t)sizeof(XAIFFHeader), (void *)pHeaderInfo);
 
     #if X_WORD_ORDER != FALSE   // intel?
         pHeaderInfo->numChannels = XSwapShort(pHeaderInfo->numChannels);
@@ -1947,12 +1948,12 @@ static long IFF_GetAIFFHeader(X_IFF *pIFF, XAIFFHeader * pHeaderInfo)
 }
 
 // get AIFF extended header. Returns 0 if ok, -1 if failed
-static long IFF_GetAIFFExtenedHeader(X_IFF *pIFF, XAIFFExtenedHeader * pHeaderInfo)
+static int32_t IFF_GetAIFFExtenedHeader(X_IFF *pIFF, XAIFFExtenedHeader * pHeaderInfo)
 {
-    long    theErr;
+    int32_t    theErr;
     char    size;
 
-    theErr = IFF_GetChunk(pIFF, X_Common, (long)sizeof(XAIFFHeader) + sizeof(long), (void *)pHeaderInfo);
+    theErr = IFF_GetChunk(pIFF, X_Common, (int32_t)sizeof(XAIFFHeader) + sizeof(int32_t), (void *)pHeaderInfo);
 
     #if X_WORD_ORDER != FALSE   // intel?
         pHeaderInfo->numChannels = XSwapShort(pHeaderInfo->numChannels);
@@ -1967,11 +1968,11 @@ static long IFF_GetAIFFExtenedHeader(X_IFF *pIFF, XAIFFExtenedHeader * pHeaderIn
     return theErr;
 }
 
-static long IFF_GetAIFFInstrument(X_IFF *pIFF, XInstrumentHeader * pInstrumentInfo)
+static int32_t IFF_GetAIFFInstrument(X_IFF *pIFF, XInstrumentHeader * pInstrumentInfo)
 {
-    long    theErr;
+    int32_t    theErr;
 
-    theErr = IFF_GetChunk(pIFF, X_Instrument, (long)sizeof(XInstrumentHeader), (void *)pInstrumentInfo);
+    theErr = IFF_GetChunk(pIFF, X_Instrument, (int32_t)sizeof(XInstrumentHeader), (void *)pInstrumentInfo);
 
     #if X_WORD_ORDER != FALSE   // intel?
         pInstrumentInfo->gain = XSwapShort(pInstrumentInfo->gain);
@@ -1986,21 +1987,21 @@ static long IFF_GetAIFFInstrument(X_IFF *pIFF, XInstrumentHeader * pInstrumentIn
 }
 
 /*
-    unsigned short                  numMarkers;         // 2 markers
-    short                           id
-    unsigned long                   position;           // 1
+    uint16_t                  numMarkers;         // 2 markers
+    int16_t                           id
+    uint32_t                   position;           // 1
     pstring                         name;               // begloop
-    short                           id
-    unsigned long                   position;           // 2
+    int16_t                           id
+    uint32_t                   position;           // 2
     pstring                         name;               // endloop
 */
 // searches for MARK and pulls the ID marker's value
-static XBOOL IFF_GetAIFFMarkerValue(X_IFF *pIFF, short int ID, unsigned long *pMarkerValue)
+static XBOOL IFF_GetAIFFMarkerValue(X_IFF *pIFF, int16_t ID, uint32_t *pMarkerValue)
 {
     unsigned char   loopMark[1024];
-    long            theErr;
+    int32_t            theErr;
     unsigned char   *pData, *pEnd;
-    unsigned short  len;
+    uint16_t  len;
     
     *pMarkerValue = 0;
     theErr = IFF_GetChunk(pIFF, X_Marker, 1023L, loopMark);
@@ -2033,10 +2034,10 @@ static XBOOL IFF_GetAIFFMarkerValue(X_IFF *pIFF, short int ID, unsigned long *pM
 }
 
 // Returns AIFF loop points, if there. Return 0 if successful, -1 if failure
-static long IFF_GetAIFFLoopPoints(X_IFF *pIFF, unsigned long *pLoopStart, unsigned long *pLoopEnd)
+static int32_t IFF_GetAIFFLoopPoints(X_IFF *pIFF, uint32_t *pLoopStart, uint32_t *pLoopEnd)
 {
     XInstrumentHeader   inst;
-    long                err;
+    int32_t                err;
 
     *pLoopStart = 0;
     *pLoopEnd = 0;
@@ -2066,8 +2067,8 @@ static OPErr IFF_WriteAIFFLoopPoints(X_IFF *pIFF, GM_Waveform const* pWaveform)
     {
         if (pWaveform->startLoop && pWaveform->endLoop)
         {
-            XSetMemory(&inst, (long)sizeof(XInstrumentHeader), 0);
-            XSetMemory(&loop, (long)sizeof(XSingleLoopMarker), 0);
+            XSetMemory(&inst, (int32_t)sizeof(XInstrumentHeader), 0);
+            XSetMemory(&loop, (int32_t)sizeof(XSingleLoopMarker), 0);
 
             XPutShort(&loop.numMarkers, 2);
             XPutShort(&loop.id1, 0);        // ID 1
@@ -2082,10 +2083,10 @@ static OPErr IFF_WriteAIFFLoopPoints(X_IFF *pIFF, GM_Waveform const* pWaveform)
             XPutShort(&inst.sustainLoop_beginLoop, 0);  // ID 1
             XPutShort(&inst.sustainLoop_endLoop, 1);    // ID 2
 
-            err = IFF_PutChunk(pIFF, X_Instrument, (long)sizeof(XInstrumentHeader), (XPTR)&inst);
+            err = IFF_PutChunk(pIFF, X_Instrument, (int32_t)sizeof(XInstrumentHeader), (XPTR)&inst);
             if (err == NO_ERR)
             {
-                err = IFF_PutChunk(pIFF, X_Marker, (long)sizeof(XSingleLoopMarker), (XPTR)&loop);
+                err = IFF_PutChunk(pIFF, X_Marker, (int32_t)sizeof(XSingleLoopMarker), (XPTR)&loop);
             }
         }
     }
@@ -2094,10 +2095,10 @@ static OPErr IFF_WriteAIFFLoopPoints(X_IFF *pIFF, GM_Waveform const* pWaveform)
 #endif
 
 // Returns AIFF base pitch, if there. Return 0 if successful, -1 if failure
-static long IFF_GetAIFFBasePitch(X_IFF *pIFF, XWORD *pBasePitch)
+static int32_t IFF_GetAIFFBasePitch(X_IFF *pIFF, XWORD *pBasePitch)
 {
     XInstrumentHeader   inst;
-    long                err;
+    int32_t                err;
 
     err = IFF_GetAIFFInstrument(pIFF, &inst);
     if (err == 0)
@@ -2108,9 +2109,9 @@ static long IFF_GetAIFFBasePitch(X_IFF *pIFF, XWORD *pBasePitch)
 }
 
 // Get compressed and uncompressed size. Return 0 if successful, -1 if failure
-static long IFF_GetAIFFSampleSize(X_IFF *pIFF, long *pUncompressedSize, long *pCompressedSize)
+static int32_t IFF_GetAIFFSampleSize(X_IFF *pIFF, int32_t *pUncompressedSize, int32_t *pCompressedSize)
 {
-    long                size, error;
+    int32_t                size, error;
     XAIFFExtenedHeader  header;
 
     size = 0L;
@@ -2154,14 +2155,14 @@ static long IFF_GetAIFFSampleSize(X_IFF *pIFF, long *pUncompressedSize, long *pC
         else
         {
             XFileSetPositionRelative(pIFF->fileReference, -4L);     // back-up and get size
-            if (XFileRead(pIFF->fileReference, pCompressedSize, (long)sizeof(long)) == -1)
+            if (XFileRead(pIFF->fileReference, pCompressedSize, (int32_t)sizeof(int32_t)) == -1)
             {
                 pIFF->lastError = BAD_FILE;
                 error = -1;
             }
             BAE_ASSERT(pCompressedSize);
             *pCompressedSize = XGetLong(pCompressedSize);
-//          XFileSetPositionRelative(pIFF->fileReference, sizeof(long) * 2L);
+//          XFileSetPositionRelative(pIFF->fileReference, sizeof(int32_t) * 2L);
         }
     }
 
@@ -2185,7 +2186,7 @@ static OPErr PV_WriteFromMemoryAiffFile(XFILENAME *file, GM_Waveform const* pAud
             return PARAM_ERR;
         }
 
-        pIFF = (X_IFF *)XNewPtr((long)sizeof(X_IFF));
+        pIFF = (X_IFF *)XNewPtr((int32_t)sizeof(X_IFF));
         if (pIFF)
         {
             IFF_SetFormType(pIFF, X_FORM);
@@ -2214,13 +2215,13 @@ static OPErr PV_WriteFromMemoryAiffFile(XFILENAME *file, GM_Waveform const* pAud
                 #endif
 
                 // write aiff header block
-                if (IFF_PutChunk(pIFF, X_Common, (long)sizeof(XAIFFHeader), (XPTR)&aiffHeader) == NO_ERR)
+                if (IFF_PutChunk(pIFF, X_Common, (int32_t)sizeof(XAIFFHeader), (XPTR)&aiffHeader) == NO_ERR)
                 {
                     #if X_WORD_ORDER != FALSE   // intel?
                     if (pAudioData->bitSize == 16)
                     {
                         // swap to motorola format
-                        XSwapShorts((short int*)pAudioData->theWaveform, pAudioData->waveFrames * pAudioData->channels);
+                        XSwapShorts((int16_t*)pAudioData->theWaveform, pAudioData->waveFrames * pAudioData->channels);
                     }
                     #endif
 
@@ -2235,8 +2236,8 @@ static OPErr PV_WriteFromMemoryAiffFile(XFILENAME *file, GM_Waveform const* pAud
                     {
                         if (IFF_PutChunk(pIFF, X_SoundData, pAudioData->waveSize, pAudioData->theWaveform) == NO_ERR)
                         {
-                            unsigned long   end;
-                            unsigned long   size;
+                            uint32_t   end;
+                            uint32_t   size;
                             
                             // write end
                             end = XFileGetPosition(pIFF->fileReference);     // get current pos
@@ -2259,7 +2260,7 @@ static OPErr PV_WriteFromMemoryAiffFile(XFILENAME *file, GM_Waveform const* pAud
                     #if X_WORD_ORDER != FALSE   // intel?
                     if (pAudioData->bitSize == 16)
                     {
-                        XSwapShorts((short int*)pAudioData->theWaveform, pAudioData->waveFrames * pAudioData->channels);
+                        XSwapShorts((int16_t*)pAudioData->theWaveform, pAudioData->waveFrames * pAudioData->channels);
                     }
                     #endif
                 }
@@ -2291,14 +2292,14 @@ static OPErr PV_WriteFromMemoryAiffFile(XFILENAME *file, GM_Waveform const* pAud
 
 #define AIFF_IMA_BUFFER_SIZE    AIFF_IMA_BLOCK_BYTES * 40
 
-static OPErr PV_ReadAIFFAndDecompressIMA(XFILE fileReference, long sourceLength,
-                                            unsigned char *pDestSample, long destLength,
+static OPErr PV_ReadAIFFAndDecompressIMA(XFILE fileReference, int32_t sourceLength,
+                                            unsigned char *pDestSample, int32_t destLength,
                                             char outputBitSize, char channels,
-                                            unsigned long *pBufferLength,
-                                            short predictorCache[2])
+                                            uint32_t *pBufferLength,
+                                            int16_t predictorCache[2])
 {
     XBYTE       codeBlock[AIFF_IMA_BUFFER_SIZE];
-    long        writeBufferLength, size, offset;
+    int32_t        writeBufferLength, size, offset;
     OPErr       err;
 
     err = NO_ERR;
@@ -2363,7 +2364,7 @@ static OPErr PV_ReadAIFFAndDecompressIMA(XFILE fileReference, long sourceLength,
 // When disposing make sure and dispose of both the GM_Waveform structure and the
 // theWaveform inside of that structure with XDisposePtr
 static GM_Waveform * PV_ReadIntoMemoryAIFFFile(XFILE file, XBOOL decodeData,
-                                                long *pFormat, unsigned long *pBlockSize,
+                                                int32_t *pFormat, uint32_t *pBlockSize,
                                                 OPErr *pError)
 {
 GM_Waveform         *wave;
@@ -2383,7 +2384,7 @@ X_IFF               *pIFF;
         wave = (GM_Waveform*)XNewPtr(sizeof(GM_Waveform));
         if (wave)
         {
-        long                type;
+        int32_t                type;
 
             type = IFF_FileType(pIFF);
             pIFF->headerType = type;
@@ -2396,8 +2397,8 @@ X_IFF               *pIFF;
             else
             {
             XAIFFExtenedHeader  aiffHeader;
-            long                size;
-            long                sourceLength;
+            int32_t                size;
+            int32_t                sourceLength;
 
                 XSetMemory(&aiffHeader, sizeof(XAIFFExtenedHeader), 0);
 
@@ -2434,7 +2435,7 @@ X_IFF               *pIFF;
                     wave->waveSize = size;
                     wave->waveFrames = wave->waveSize / (wave->channels * (wave->bitSize / 8));
 
-                    XFileSetPositionRelative(pIFF->fileReference, sizeof(long) * 2L);
+                    XFileSetPositionRelative(pIFF->fileReference, sizeof(int32_t) * 2L);
                     // now the file is positioned right at the data block
 
                     if (pBlockSize)
@@ -2442,7 +2443,7 @@ X_IFF               *pIFF;
                         wave->currentFilePosition = XFileGetPosition(pIFF->fileReference);
                         BAE_ASSERT(pFormat);
                         *pFormat = aiffHeader.compressionType;
-                        *pBlockSize = sizeof(long) * 2; //MOE: Isn't this too small for efficient streaming?
+                        *pBlockSize = sizeof(int32_t) * 2; //MOE: Isn't this too small for efficient streaming?
                         // don't read/decode data, other streaming code will do it
                     }
                     else
@@ -2458,7 +2459,7 @@ X_IFF               *pIFF;
 #if X_WORD_ORDER != FALSE   // intel?
                                     if (wave->bitSize == 16)
                                     {
-                                        XSwapShorts((short*)wave->theWaveform,
+                                        XSwapShorts((int16_t*)wave->theWaveform,
                                                     wave->waveFrames * wave->channels);
                                     }
 #endif
@@ -2480,7 +2481,7 @@ X_IFF               *pIFF;
                                 wave->theWaveform = (SBYTE*)XNewPtr(size);
                                 if (wave->theWaveform)
                                 {
-                                short       predictorCache[2];
+                                int16_t       predictorCache[2];
                                 
                                     predictorCache[0] = 0;
                                     predictorCache[1] = 0;
@@ -2529,7 +2530,7 @@ X_IFF               *pIFF;
                             break;
                         }
 
-                        if ((pIFF->lastError == NO_ERR) && ((long)wave->waveSize == size))
+                        if ((pIFF->lastError == NO_ERR) && ((int32_t)wave->waveSize == size))
                         {
                             // now, if the file is 8 bit sample, change the sample phase
                             if (wave->bitSize == 8)
@@ -2567,7 +2568,7 @@ X_IFF               *pIFF;
 // When disposing make sure and dispose of both the GM_Waveform structure and the
 // theWaveform inside of that structure with XDisposePtr
 static GM_Waveform * PV_ReadIntoMemorySunAUFile(XFILE file, XBOOL decodeData,
-                                                long *pFormat, unsigned long *pBlockSize,
+                                                int32_t *pFormat, uint32_t *pBlockSize,
                                                 OPErr *pError)
 {
 GM_Waveform*        wave;
@@ -2580,14 +2581,14 @@ SunAudioFileHeader  sunHeader;
     wave = NULL;
     err = NO_ERR;
 
-    if (XFileRead(file, &sunHeader, (long)sizeof(SunAudioFileHeader)) == 0)
+    if (XFileRead(file, &sunHeader, (int32_t)sizeof(SunAudioFileHeader)) == 0)
     {
-    long                size;
-    long                filePos;
-    long                originalLength;
+    int32_t                size;
+    int32_t                filePos;
+    int32_t                originalLength;
     
         // now skip past any info string
-        size = XGetLong(&sunHeader.hdr_size) - (long)sizeof(SunAudioFileHeader);
+        size = XGetLong(&sunHeader.hdr_size) - (int32_t)sizeof(SunAudioFileHeader);
         filePos = XFileGetPosition(file) + size;
         originalLength = XFileGetLength(file) - size + sizeof(SunAudioFileHeader);
 
@@ -2595,9 +2596,9 @@ SunAudioFileHeader  sunHeader;
         // Make sure we've got a legitimate audio file
         if (XGetLong(&sunHeader.magic) == SUN_AUDIO_FILE_MAGIC_NUMBER)
         {
-        long                const encoding = XGetLong(&sunHeader.encoding);
-        long                waveLength = 0;
-        short int           bits = 0;
+        int32_t                const encoding = XGetLong(&sunHeader.encoding);
+        int32_t                waveLength = 0;
+        int16_t           bits = 0;
         
             switch (encoding)
             {
@@ -2718,7 +2719,7 @@ SunAudioFileHeader  sunHeader;
 #if USE_MPEG_DECODER != 0
 static
 GM_Waveform* PV_ReadIntoMemoryMPEGFile(XFILE file, XBOOL decodeData,
-                                        long *pFormat, void **ppBlockPtr, unsigned long *pBlockSize,
+                                        int32_t *pFormat, void **ppBlockPtr, uint32_t *pBlockSize,
                                         OPErr *pError)
 {
 GM_Waveform*        wave;
@@ -2941,7 +2942,7 @@ GM_Waveform     *waveform;
 }
 
 // Read into memory a file
-GM_Waveform* GM_ReadFileIntoMemoryFromMemory(void *pFileBlock, unsigned long fileBlockSize,
+GM_Waveform* GM_ReadFileIntoMemoryFromMemory(void *pFileBlock, uint32_t fileBlockSize,
                                                 AudioFileType fileType, XBOOL decodeData,
                                                 OPErr *pErr)
 {
@@ -2991,8 +2992,8 @@ GM_Waveform     *waveform;
 // Read file information from file, which is a fileType file. If pFormat is not NULL, then
 // store format specific format type
 GM_Waveform * GM_ReadFileInformation(XFILENAME *filename, AudioFileType fileType, 
-                                            long *pFormat, 
-                                            void **ppBlockPtr, unsigned long *pBlockSize, 
+                                            int32_t *pFormat, 
+                                            void **ppBlockPtr, uint32_t *pBlockSize, 
                                             OPErr *pErr)
 {
 XFILE           file;
@@ -3044,17 +3045,17 @@ GM_Waveform*    pWave = NULL;
 
 // given an open file, format types, and a sample position in frames, reseek the file
 OPErr GM_RepositionFileStream(XFILE fileReference,
-                                        AudioFileType fileType, long format,
-                                        XPTR pBlockBuffer, unsigned long blockSize,
-                                        short int channels, short int bitSize,
-                                        unsigned long newSampleFramePosition,
-                                        unsigned long firstSampleInFileOffsetInBytes,
-                                        unsigned long *pOuputNewPlaybackPositionInBytes)
+                                        AudioFileType fileType, int32_t format,
+                                        XPTR pBlockBuffer, uint32_t blockSize,
+                                        int16_t channels, int16_t bitSize,
+                                        uint32_t newSampleFramePosition,
+                                        uint32_t firstSampleInFileOffsetInBytes,
+                                        uint32_t *pOuputNewPlaybackPositionInBytes)
 {
     OPErr           fileError;
     XBOOL           reSeek;
-    short int       frameBlockSize, decodeBlockSize;
-    unsigned long   filePos;
+    int16_t       frameBlockSize, decodeBlockSize;
+    uint32_t   filePos;
 
     reSeek = FALSE;
     fileError = NO_ERR;
@@ -3158,7 +3159,7 @@ OPErr GM_RepositionFileStream(XFILE fileReference,
     }
     if (reSeek)
     {
-        unsigned long   pos;
+        uint32_t   pos;
 
         pos = newSampleFramePosition * frameBlockSize;
         filePos = firstSampleInFileOffsetInBytes + (pos / decodeBlockSize);
@@ -3175,18 +3176,18 @@ OPErr GM_RepositionFileStream(XFILE fileReference,
 // Read a block of data, based apon file type and format, decode and store into a buffer.
 // Return length of buffer stored or 0 if error.
 OPErr GM_ReadAndDecodeFileStream(XFILE fileReference, 
-                                        AudioFileType fileType, long format, 
-                                        XPTR pBlockBuffer, unsigned long blockSize,
-                                        XPTR pBuffer, unsigned long bufferFrames,
-                                        short int channels, short int bitSize,
-                                        unsigned long *pStoredBufferLength,
-                                        unsigned long *pReadBufferLength)
+                                        AudioFileType fileType, int32_t format, 
+                                        XPTR pBlockBuffer, uint32_t blockSize,
+                                        XPTR pBuffer, uint32_t bufferFrames,
+                                        int16_t channels, int16_t bitSize,
+                                        uint32_t *pStoredBufferLength,
+                                        uint32_t *pReadBufferLength)
 {
-    unsigned long           returnedLength, writeLength, bufferSize;
+    uint32_t           returnedLength, writeLength, bufferSize;
     OPErr                   fileError;
-    long                    filePosition;
+    int32_t                    filePosition;
 #if USE_MPEG_DECODER != 0
-    long                    count, frames;
+    int32_t                    count, frames;
 #endif
     XBOOL                   calculateFileSize;
 
@@ -3269,7 +3270,7 @@ OPErr GM_ReadAndDecodeFileStream(XFILE fileReference,
                         // now, if the file is 16 bit sample on a intel ordered system, swap the bytes
                         else if (bitSize == 16)
                         {
-                            XSwapShorts((short*)pBuffer, bufferFrames * channels);
+                            XSwapShorts((int16_t*)pBuffer, bufferFrames * channels);
                         }
                         #endif
                         break;
@@ -3282,8 +3283,8 @@ OPErr GM_ReadAndDecodeFileStream(XFILE fileReference,
                                                         bufferSize,
                                                         (char)bitSize,
                                                         (char)channels,
-                                                        (unsigned long *)&writeLength,
-                                                        (short*)pBlockBuffer);
+                                                        (uint32_t *)&writeLength,
+                                                        (int16_t*)pBlockBuffer);
 
                             returnedLength = bufferSize / 4;
                         }
@@ -3315,7 +3316,7 @@ OPErr GM_ReadAndDecodeFileStream(XFILE fileReference,
                         // now, if the file is 16 bit sample on a intel ordered system, swap the bytes
                         if (bitSize == 16)
                         {
-                            XSwapShorts((short int *)pBuffer, bufferFrames * channels);
+                            XSwapShorts((int16_t *)pBuffer, bufferFrames * channels);
                         }
                         #endif
                         break;
@@ -3347,7 +3348,7 @@ OPErr GM_ReadAndDecodeFileStream(XFILE fileReference,
                                                     (char)channels,
                                                     pBlockBuffer,
                                                     blockSize,
-                                                    (unsigned long *)&writeLength);
+                                                    (uint32_t *)&writeLength);
                             returnedLength = bufferSize / 4;
                             // since we decode the samples at runtime, we don't have
                             // to byte swap the words.
@@ -3436,9 +3437,9 @@ OPErr GM_WriteFileFromMemory(XFILENAME *file, GM_Waveform const* pAudioData, Aud
 OPErr GM_FinalizeFileHeader(XFILE file, AudioFileType fileType)
 {
     OPErr err;
-    unsigned long chunk;
-    unsigned long fileSize;
-    unsigned long tmp;
+    uint32_t chunk;
+    uint32_t fileSize;
+    uint32_t tmp;
     XERR xerr;
 
     err = NO_ERR;
@@ -3495,11 +3496,11 @@ OPErr GM_FinalizeFileHeader(XFILE file, AudioFileType fileType)
             
             case FILE_AIFF_TYPE:
             {
-                unsigned long size;
-                unsigned short channels;
-                unsigned long pos;
-                unsigned short bits;
-                unsigned long frames;
+                uint32_t size;
+                uint16_t channels;
+                uint32_t pos;
+                uint16_t bits;
+                uint32_t frames;
 
                 fileSize = XFileGetLength(file);
                 
@@ -3575,7 +3576,7 @@ OPErr GM_FinalizeFileHeader(XFILE file, AudioFileType fileType)
 
             case FILE_AU_TYPE:
             {
-                unsigned long headerSize;
+                uint32_t headerSize;
 
                 fileSize = XFileGetLength(file);
                 
@@ -3620,16 +3621,16 @@ OPErr GM_FinalizeFileHeader(XFILE file, AudioFileType fileType)
 // for 16 bit data. samples are from -32767 to 32768 and 0 is silent
 // for 8 bit data. samples are from -127 to 128 and 0 is silent. This is oppsite for BAE
 GM_Waveform * GM_ReadRawAudioIntoMemoryFromMemory(void * sampleData,                // pointer to audio data
-                                        unsigned long frames,           // number of frames of audio
-                                        unsigned short int bitSize,     // bits per sample 8 or 16
-                                        unsigned short int channels,    // mono or stereo 1 or 2
+                                        uint32_t frames,           // number of frames of audio
+                                        uint16_t bitSize,     // bits per sample 8 or 16
+                                        uint16_t channels,    // mono or stereo 1 or 2
                                         XFIXED rate,                    // 16.16 fixed sample rate
-                                        unsigned long loopStart,        // loop start in frames
-                                        unsigned long loopEnd,          // loop end in frames
+                                        uint32_t loopStart,        // loop start in frames
+                                        uint32_t loopEnd,          // loop end in frames
                                         OPErr *pErr)
 {
     GM_Waveform     *pWave = NULL;
-    long            size;
+    int32_t            size;
     OPErr           err;
     void            *copySampleData;
 
@@ -3682,7 +3683,7 @@ GM_Waveform * GM_ReadRawAudioIntoMemoryFromMemory(void * sampleData,            
 
 #if USE_HIGHLEVEL_FILE_API == TRUE
 #if USE_CREATION_API == TRUE
-OPErr GM_WriteAudioBufferToFile(XFILE file, AudioFileType type, void *buffer, long size, long channels, long sampleSize)
+OPErr GM_WriteAudioBufferToFile(XFILE file, AudioFileType type, void *buffer, int32_t size, int32_t channels, int32_t sampleSize)
 {
     OPErr theErr;
 
@@ -3695,7 +3696,7 @@ OPErr GM_WriteAudioBufferToFile(XFILE file, AudioFileType type, void *buffer, lo
 #if X_WORD_ORDER == FALSE // motorola
                 if (sampleSize == 2) // if 16-bit data, we need to flip to little endian
                 {
-                    XSwapShorts((short *)buffer, (long)(size / sampleSize));
+                    XSwapShorts((int16_t *)buffer, (int32_t)(size / sampleSize));
                 }
 #endif
                 if (XFileWrite(file, buffer, size) == -1)
@@ -3710,7 +3711,7 @@ OPErr GM_WriteAudioBufferToFile(XFILE file, AudioFileType type, void *buffer, lo
                 if (sampleSize == 2) // if 16-bit data, we need to flip to big endian
                 {
                     // swap to motorola format
-                    XSwapShorts((short *)buffer, (long)(size / sampleSize));
+                    XSwapShorts((int16_t *)buffer, (int32_t)(size / sampleSize));
                 }
 #endif
                 if (sampleSize == 1) // 8-bit data

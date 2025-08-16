@@ -102,7 +102,7 @@
 
 #include "X_API.h"
 #include "X_Formats.h"
-
+#include <stdint.h>
 
 ///////////////////////////////////////////////// DOCUMENTATION:
 
@@ -160,7 +160,7 @@ static char             const imaIndexIncrementTable[16] =
     -1,-1,-1,-1, 2, 4, 6, 8,
     -1,-1,-1,-1, 2, 4, 6, 8
 };
-static unsigned short   const imaStepTable[89] =
+static uint16_t   const imaStepTable[89] =
 {   
     7,   8,   9,   10,  11,  12,  13, 14,
     16,  17,  19,  21,  23,  25,  28,
@@ -191,12 +191,12 @@ INT32           nextSample;                                 \
     if ((nybble) & 0x4) nextSample += step;                 \
     if ((nybble) & 0x8) nextSample = -nextSample;           \
     nextSample += sample;                                   \
-    if ((INT32)(short)nextSample != nextSample)             \
+    if ((INT32)(int16_t)nextSample != nextSample)             \
     {   /* cute way to test for 16-bit overflow */          \
         if (nextSample > 32767) nextSample = 32767;         \
         else nextSample = -32768;                           \
     }                                                       \
-    sample = (short)nextSample;                             \
+    sample = (int16_t)nextSample;                             \
                                                             \
     index += imaIndexIncrementTable[nybble];                \
     if (index < 0) index = 0;                               \
@@ -208,18 +208,18 @@ INT32           nextSample;                                 \
 
 static void PV_CompressImaBlock(XBYTE const* src8, INT16 const* src16, XBYTE* dst,
                                 XDWORD sampleCount, XDWORD channelCount,
-                                short* predictorCache, short* indexCache);
+                                int16_t* predictorCache, int16_t* indexCache);
 
 static void PV_ExpandAiffIma(XBYTE const* src, XDWORD srcBytesPerBlock,
                                 void *dst, XDWORD dstBytesPerSample,
                                 XDWORD frameCount, XDWORD channelCount, 
-                                short predictorCache[2]);
+                                int16_t predictorCache[2]);
 static void PV_ExpandIma8(XBYTE const* src, XBYTE* dst8,
                             XDWORD sampleCount, XDWORD channelCount,
-                            short* predictorCache, short index);
+                            int16_t* predictorCache, int16_t index);
 static void PV_ExpandIma16(XBYTE const* src, INT16* dst16,
                             XDWORD sampleCount, XDWORD channelCount,
-                            short* predictorCache, short index);
+                            int16_t* predictorCache, int16_t index);
 
 static XDWORD PV_ExpandWavImaStereo8(XBYTE const* src, XBYTE* dst8, XDWORD sampleCount);
 static XDWORD PV_ExpandWavImaStereo16(XBYTE const* src, INT16* dst16, XDWORD sampleCount);
@@ -250,8 +250,8 @@ void XCompressAiffIma(void const* src, XDWORD srcBitsPerSample,
                         XBYTE* dst, XDWORD frameCount, XDWORD channelCount)
 {
 int             const srcIncrement = (AIFF_IMA_BLOCK_FRAMES - 1) * channelCount;
-short           predictorCache[2];  // to allow for compression of more than 2
-short           indexCache[2];      // channels, increase these array sizes
+int16_t           predictorCache[2];  // to allow for compression of more than 2
+int16_t           indexCache[2];      // channels, increase these array sizes
 XBYTE const*    src8;
 INT16 const*    src16;
 
@@ -279,7 +279,7 @@ INT16 const*    src16;
         channel = 0;
         do
         {
-            XPutShort(dst, (unsigned short)((predictorCache[channel] & 0xFF80) | indexCache[channel]));
+            XPutShort(dst, (uint16_t)((predictorCache[channel] & 0xFF80) | indexCache[channel]));
             dst += AIFF_IMA_HEADER_BYTES;
 
             PV_CompressImaBlock(src8, src16, dst,
@@ -312,10 +312,10 @@ INT16 const*    src16;
 
 void PV_CompressImaBlock(XBYTE const* src8, INT16 const* src16, XBYTE* dst,
                                 XDWORD sampleCount, XDWORD channelCount,
-                                short* predictorCache, short* indexCache)
+                                int16_t* predictorCache, int16_t* indexCache)
 {
 INT32       sample;
-short       index;
+int16_t       index;
 XDWORD      sampleIndex;
 
     sample = *predictorCache;
@@ -371,7 +371,7 @@ XDWORD      sampleIndex;
         }
         
         sample += sampleOffset;
-        if ((INT32)(short)sample != sample) // cute way to test for 16-bit overflow
+        if ((INT32)(int16_t)sample != sample) // cute way to test for 16-bit overflow
         {
             if (sample > 32767) sample = 32767;
             else sample = -32768;
@@ -393,7 +393,7 @@ XDWORD      sampleIndex;
         sampleIndex++;
     }
 
-    *predictorCache = (short)sample;
+    *predictorCache = (int16_t)sample;
     *indexCache = index;
 }
 
@@ -409,7 +409,7 @@ void XExpandAiffIma(XBYTE const* src, XDWORD srcBytesPerBlock,
                     void* dst, XDWORD dstBitsPerSample,
                     XDWORD frameCount, XDWORD channelCount)
 {
-short       predictorCache[2];
+int16_t       predictorCache[2];
 
     predictorCache[0] = 0;
     predictorCache[1] = 0;
@@ -424,7 +424,7 @@ short       predictorCache[2];
 void PV_ExpandAiffIma(XBYTE const* src, XDWORD srcBytesPerBlock,
                         void *dst, XDWORD dstBytesPerSample,
                         XDWORD frameCount, XDWORD channelCount, 
-                        short predictorCache[2])
+                        int16_t predictorCache[2])
 {
 XDWORD      const framesPerBlock =
                     (srcBytesPerBlock - AIFF_IMA_HEADER_BYTES) * 2;
@@ -447,10 +447,10 @@ XDWORD      const dstIncrement = (framesPerBlock - 1) * channelCount;
             channel = 0;
             do
             {
-            unsigned short  index;
+            uint16_t  index;
 
                 index = XGetShort(src) & 0x7F;  // discard predictor bits
-                if ((unsigned short)index > 88)
+                if ((uint16_t)index > 88)
                 {
                     //??STEVE:  I want to return an error code here but your code above won't support it
                     index = 88;
@@ -486,10 +486,10 @@ XDWORD      const dstIncrement = (framesPerBlock - 1) * channelCount;
             channel = 0;
             do
             {
-            unsigned short  index;
+            uint16_t  index;
 
                 index = XGetShort(src) & 0x7F;  // discard predictor bits
-                if ((unsigned short)index > 88)
+                if ((uint16_t)index > 88)
                 {
                     //??STEVE:  I want to return an error code here but your code above won't support it
                     index = 88;
@@ -512,9 +512,9 @@ XDWORD      const dstIncrement = (framesPerBlock - 1) * channelCount;
 
 void PV_ExpandIma8(XBYTE const* src, XBYTE* dst8,
                     XDWORD sampleCount, XDWORD channelCount,
-                    short* predictorCache, short index)
+                    int16_t* predictorCache, int16_t index)
 {
-short           sample;
+int16_t           sample;
 
     sample = *predictorCache;
 
@@ -543,9 +543,9 @@ short           sample;
         sampleCount -= 8;
     }
 #else   // X_WORD_ORDER == TRUE
-    while ((long)(sampleCount -= 2) >= 0)
+    while ((int32_t)(sampleCount -= 2) >= 0)
     {
-    unsigned short  nybbles;
+    uint16_t  nybbles;
 
         nybbles = *src++;
         nybbles |= 0x1000;  // loop flag, shifted right to zero
@@ -563,9 +563,9 @@ short           sample;
 }
 void PV_ExpandIma16(XBYTE const* src, INT16* dst16,
                     XDWORD sampleCount, XDWORD channelCount,
-                    short* predictorCache, short index)
+                    int16_t* predictorCache, int16_t index)
 {
-short           sample;
+int16_t           sample;
 
     sample = *predictorCache;
 
@@ -594,9 +594,9 @@ short           sample;
         sampleCount -= 8;
     }
 #else   // X_WORD_ORDER == TRUE
-    while ((long)(sampleCount -= 2) >= 0)
+    while ((int32_t)(sampleCount -= 2) >= 0)
     {
-    unsigned short  nybbles;
+    uint16_t  nybbles;
 
         nybbles = *src++;
         nybbles |= 0x1000;  // loop flag, shifted right to zero
@@ -621,7 +621,7 @@ short           sample;
 XDWORD XExpandAiffImaStream(XBYTE const* src, XDWORD srcBytesPerBlock,
                             void *dst, XDWORD dstBitsPerSample,
                             XDWORD srcBytes, XDWORD channelCount,
-                            short predictorCache[2])
+                            int16_t predictorCache[2])
 {
 XDWORD      const framesPerBlock =
                 (srcBytesPerBlock - AIFF_IMA_HEADER_BYTES) * 2;
@@ -714,12 +714,12 @@ XDWORD      dstBytes;
 #else
             XDWORD          const blockFrameCount = framesPerBlock;
 #endif
-            short           predictor;
-            unsigned short  index;
+            int16_t           predictor;
+            uint16_t  index;
         
                 predictor = XGetShortIntel(src);
-                index  = (unsigned short)src[sizeof(short)];
-                if ((unsigned short)index > 88)
+                index  = (uint16_t)src[sizeof(int16_t)];
+                if ((uint16_t)index > 88)
                 {
                     return 0;   // invalid data
                 }
@@ -747,12 +747,12 @@ XDWORD      dstBytes;
 #else
             XDWORD          const blockFrameCount = framesPerBlock;
 #endif
-            short           predictor;
-            unsigned short  index;
+            int16_t           predictor;
+            uint16_t  index;
         
                 predictor = XGetShortIntel(src);
-                index  = (unsigned short)src[sizeof(short)];
-                if ((unsigned short)index > 88)
+                index  = (uint16_t)src[sizeof(int16_t)];
+                if ((uint16_t)index > 88)
                 {
                     return 0;   // invalid data
                 }
@@ -836,12 +836,12 @@ XDWORD      dstBytes;
 
 XDWORD PV_ExpandWavImaStereo8(XBYTE const* src, XBYTE* dst8, XDWORD sampleCount)
 {
-short       sample;
-short       index;
+int16_t       sample;
+int16_t       index;
 
     sample = XGetShortIntel(src);
-    index  = src[sizeof(short)];
-    if ((unsigned short)index > 88)
+    index  = src[sizeof(int16_t)];
+    if ((uint16_t)index > 88)
     {
         return 0;   // invalid data
     }
@@ -851,7 +851,7 @@ short       index;
     dst8 += 2;  // skip other channel's first sample
     sampleCount--;
     
-    while ((long)(sampleCount -= 8) >= 0)
+    while ((int32_t)(sampleCount -= 8) >= 0)
     {
     XDWORD      nybbles;
     int         nybbleCount;
@@ -872,12 +872,12 @@ short       index;
 }
 XDWORD PV_ExpandWavImaStereo16(XBYTE const* src, INT16* dst16, XDWORD sampleCount)
 {
-short       sample;
-short       index;
+int16_t       sample;
+int16_t       index;
 
     sample = XGetShortIntel(src);
-    index  = src[sizeof(short)];
-    if ((unsigned short)index > 88)
+    index  = src[sizeof(int16_t)];
+    if ((uint16_t)index > 88)
     {
         return 0;   // invalid data
     }
@@ -887,7 +887,7 @@ short       index;
     dst16 += 2; // skip other channel's first sample
     sampleCount--;
 
-    while ((long)(sampleCount -= 8) >= 0)
+    while ((int32_t)(sampleCount -= 8) >= 0)
     {
     XDWORD      nybbles;
     int         nybbleCount;
@@ -927,13 +927,13 @@ void XExpandAiffIma(XBYTE const* src, XDWORD srcBytesPerBlock,
 {
 char const*     pSourceL;
 char const*     pSourceR;
-short int       *pDest16;
+int16_t       *pDest16;
 char            *pDest8;
-long            stepL, indexL;
-long            diffL, predsampleL;
+int32_t            stepL, indexL;
+int32_t            diffL, predsampleL;
 char            codebufL, codeL;
-long            stepR, indexR;
-long            diffR, predsampleR;
+int32_t            stepR, indexR;
+int32_t            diffR, predsampleR;
 char            codebufR, codeR;
 XDWORD          count;
 char            macBlockOffset;
@@ -945,7 +945,7 @@ char            macBlockOffset;
         predsampleL = 0;
         indexL = 0;
         codebufL = 0;
-        pDest16 = (short int *)dst;
+        pDest16 = (int16_t *)dst;
         pDest8 = (char *)dst;
         if (channelCount == 1)
         {
@@ -989,7 +989,7 @@ char            macBlockOffset;
                 /* store estimate to output buffer */
                 if (dstBitsPerSample == 16)
                 {
-                    *pDest16++ = (short int)predsampleL;        
+                    *pDest16++ = (int16_t)predsampleL;        
                 }
                 else
                 {
@@ -1072,8 +1072,8 @@ char            macBlockOffset;
                 /* store estimate to output buffer */
                 if (dstBitsPerSample == 16)
                 {
-                    *pDest16++ = (short int)predsampleL;
-                    *pDest16++ = (short int)predsampleR;
+                    *pDest16++ = (int16_t)predsampleL;
+                    *pDest16++ = (int16_t)predsampleR;
                 }
                 else
                 {
@@ -1102,7 +1102,7 @@ char            macBlockOffset;
 XDWORD XExpandAiffImaStream(XBYTE const* src, XDWORD srcBytesPerBlock,
                             void *dst, XDWORD dstBitsPerSample,
                             XDWORD srcBytes, XDWORD channelCount,
-                            short predictorCache[2])
+                            int16_t predictorCache[2])
 {
     XBYTE const*    pSourceL;
     XBYTE const*    pSourceR;
@@ -1112,16 +1112,16 @@ XDWORD XExpandAiffImaStream(XBYTE const* src, XDWORD srcBytesPerBlock,
     INT32           predsampleL;
     char            codebufL, codeL;
     int             stepR, indexR;
-    long            diffL;
-    long            diffR;
+    int32_t            diffL;
+    int32_t            diffR;
     INT32           predsampleR;
     char            codebufR, codeR;
-    unsigned long   count, srcIndex;
+    uint32_t   count, srcIndex;
 
     predsampleL = predictorCache[0];
     predsampleR = predictorCache[1];
 
-    pDest16 = (short int *)dst;
+    pDest16 = (int16_t *)dst;
     pDest8 = (char *)dst;
     if ( (dstBitsPerSample == 8) || (dstBitsPerSample == 16) )
     {
@@ -1173,7 +1173,7 @@ XDWORD XExpandAiffImaStream(XBYTE const* src, XDWORD srcBytesPerBlock,
                     // store estimate to output buffer
                     if (dstBitsPerSample == 16)
                     {
-                        *pDest16++ = (short)predsampleL;        
+                        *pDest16++ = (int16_t)predsampleL;        
                     }
                     else
                     {
@@ -1263,8 +1263,8 @@ XDWORD XExpandAiffImaStream(XBYTE const* src, XDWORD srcBytesPerBlock,
                     /* store estimate to output buffer */
                     if (dstBitsPerSample == 16)
                     {
-                        *pDest16++ = (short)predsampleL;
-                        *pDest16++ = (short)predsampleR;
+                        *pDest16++ = (int16_t)predsampleL;
+                        *pDest16++ = (int16_t)predsampleR;
                     }
                     else
                     {
@@ -1327,8 +1327,8 @@ static INLINE int imaadpcmSampleDecode
     int              nStepSize
 )
 {
-    long            lDifference;
-    long            lNewSample;
+    int32_t            lDifference;
+    int32_t            lNewSample;
 
     //
     //  calculate difference:
@@ -1363,7 +1363,7 @@ static INLINE int imaadpcmSampleDecode
     //  Note that this is optimized for the most common case, when we
     //  don't have to clamp.
     //
-    if( (long)(short)lNewSample == lNewSample )
+    if( (int32_t)(int16_t)lNewSample == lNewSample )
     {
         return (int)lNewSample;
     }
@@ -1522,7 +1522,7 @@ static INLINE XDWORD imaadpcmDecode4Bit_M08
             dwHeader = XSwapLong(dwHeader);
         #endif
         pbSrc   += sizeof(XDWORD);
-        nPredSample = (int)(short)XLOWORD(dwHeader);
+        nPredSample = (int)(int16_t)XLOWORD(dwHeader);
         nStepIndex  = (int)(XBYTE)XHIWORD(dwHeader);
 
         if( !imaadpcmValidStepIndex(nStepIndex) ) {
@@ -1635,7 +1635,7 @@ static INLINE XDWORD imaadpcmDecode4Bit_M16
             dwHeader = XSwapLong(dwHeader);
         #endif
         pbSrc   += sizeof(XDWORD);
-        nPredSample = (int)(short)XLOWORD(dwHeader);
+        nPredSample = (int)(int16_t)XLOWORD(dwHeader);
         nStepIndex  = (int)(XBYTE)XHIWORD(dwHeader);
 
         if( !imaadpcmValidStepIndex(nStepIndex) ) {
@@ -1652,8 +1652,8 @@ static INLINE XDWORD imaadpcmDecode4Bit_M16
         //
         //  write out first sample
         //
-        *(short *)pbDst = (short)nPredSample;
-        pbDst += sizeof(short);
+        *(int16_t *)pbDst = (int16_t)nPredSample;
+        pbDst += sizeof(int16_t);
 
 
         //
@@ -1674,8 +1674,8 @@ static INLINE XDWORD imaadpcmDecode4Bit_M16
             //
             //  write out sample
             //
-            *(short *)pbDst = (short)nPredSample;
-            pbDst += sizeof(short);
+            *(int16_t *)pbDst = (int16_t)nPredSample;
+            pbDst += sizeof(int16_t);
 
             //
             //  sample 2
@@ -1688,8 +1688,8 @@ static INLINE XDWORD imaadpcmDecode4Bit_M16
             //
             //  write out sample
             //
-            *(short *)pbDst = (short)nPredSample;
-            pbDst += sizeof(short);
+            *(int16_t *)pbDst = (int16_t)nPredSample;
+            pbDst += sizeof(int16_t);
         }
     }
 
@@ -1760,7 +1760,7 @@ static INLINE XDWORD imaadpcmDecode4Bit_S08
             dwHeader = XSwapLong(dwHeader);
         #endif
         pbSrc   += sizeof(XDWORD);
-        nPredSampleL = (int)(short)XLOWORD(dwHeader);
+        nPredSampleL = (int)(int16_t)XLOWORD(dwHeader);
         nStepIndexL  = (int)(XBYTE)XHIWORD(dwHeader);
 
         if( !imaadpcmValidStepIndex(nStepIndexL) ) {
@@ -1781,7 +1781,7 @@ static INLINE XDWORD imaadpcmDecode4Bit_S08
             dwHeader = XSwapLong(dwHeader);
         #endif
         pbSrc   += sizeof(XDWORD);
-        nPredSampleR = (int)(short)XLOWORD(dwHeader);
+        nPredSampleR = (int)(int16_t)XLOWORD(dwHeader);
         nStepIndexR  = (int)(XBYTE)XHIWORD(dwHeader);
 
         if( !imaadpcmValidStepIndex(nStepIndexR) ) {
@@ -1920,7 +1920,7 @@ static INLINE XDWORD imaadpcmDecode4Bit_S16
             dwHeader = XSwapLong(dwHeader);
         #endif
         pbSrc   += sizeof(XDWORD);
-        nPredSampleL = (int)(short)XLOWORD(dwHeader);
+        nPredSampleL = (int)(int16_t)XLOWORD(dwHeader);
         nStepIndexL  = (int)(XBYTE)XHIWORD(dwHeader);
 
         if( !imaadpcmValidStepIndex(nStepIndexL) ) {
@@ -1941,7 +1941,7 @@ static INLINE XDWORD imaadpcmDecode4Bit_S16
             dwHeader = XSwapLong(dwHeader);
         #endif
         pbSrc   += sizeof(XDWORD);
-        nPredSampleR = (int)(short)XLOWORD(dwHeader);
+        nPredSampleR = (int)(int16_t)XLOWORD(dwHeader);
         nStepIndexR  = (int)(XBYTE)XHIWORD(dwHeader);
 
         if( !imaadpcmValidStepIndex(nStepIndexR) ) {

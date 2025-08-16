@@ -34,7 +34,7 @@
 **
 **  This implements multi source audio streaming code.
 **
-**  © Copyright 1993-2001 Beatnik, Inc, All Rights Reserved.
+**  ï¿½ Copyright 1993-2001 Beatnik, Inc, All Rights Reserved.
 **  Written by Steve Hales
 **
 **  Beatnik products contain certain trade secrets and confidential and
@@ -230,7 +230,7 @@
 #include "BAE_API.h"
 #include "X_Assert.h"
 
-/* THINGS TO DO ¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥
+/* THINGS TO DO ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 
 */
 
@@ -300,9 +300,9 @@ struct GM_AudioStreamFileInfo
 {
     XFILENAME               playbackFile;
     XFILE                   fileOpenRef;
-    unsigned long           fileStartPosition;      // units are in bytes but as a complete decoded sample
-    unsigned long           filePlaybackPosition;   // for example: fileEndPosition for a MP3 file might be 40 MB.
-    unsigned long           fileEndPosition;        // these variables are used for positioning and control.
+    uint32_t           fileStartPosition;      // units are in bytes but as a complete decoded sample
+    uint32_t           filePlaybackPosition;   // for example: fileEndPosition for a MP3 file might be 40 MB.
+    uint32_t           fileEndPosition;        // these variables are used for positioning and control.
     XBOOL                   loopFile;
 
     GM_SoundDoneCallbackPtr doneCallback;
@@ -310,10 +310,10 @@ struct GM_AudioStreamFileInfo
 #if USE_HIGHLEVEL_FILE_API != FALSE
     AudioFileType           fileType;
 #endif
-    long                    formatType;             // typed file compression mode
+    int32_t                    formatType;             // typed file compression mode
 
     XPTR                    pBlockBuffer;           // used for decompression
-    unsigned long           blockSize;              // used for decompression
+    uint32_t           blockSize;              // used for decompression
 };
 typedef struct GM_AudioStreamFileInfo GM_AudioStreamFileInfo;
 
@@ -341,53 +341,53 @@ typedef enum
 struct GM_PlaybackEvent
 {
     GM_EventStatus status;
-    unsigned long framePosition;    
+    uint32_t framePosition;    
 };
 typedef struct GM_PlaybackEvent GM_PlaybackEvent;
 // $$kk: 09.23.98: end changes <-
 
-#define STREAM_OFFSET_UNSET     (unsigned long)0xFFFFFFFFL
+#define STREAM_OFFSET_UNSET     (uint32_t)0xFFFFFFFFL
 
 // this structure, once allocated, becomes a STREAM_REFERENCE
 struct GM_AudioStream
 {
-    long                    userReference;
-    long                    streamID;
+    void *                  userReference;      // changed to pointer for 64-bit safety
+    int32_t                    streamID;
     VOICE_REFERENCE         playbackReference;  // voice reference to live mixer voice. It
                                                 // will be DEAD_VOICE if not active
 
     OPErr                   startupStatus;      // error return before startup
-    short int               startupBufferFullCount;
+    int16_t               startupBufferFullCount;
 
     GM_StreamObjectProc     streamCallback;
     GM_StreamData           streamData;
     void                    *pStreamBuffer;
-    unsigned long           streamBufferLength;
+    uint32_t           streamBufferLength;
 
-    unsigned long           streamPreRollBufferSize;    // size in frames of how many sample frames
+    uint32_t           streamPreRollBufferSize;    // size in frames of how many sample frames
                                                         // are prerolled prior to playback. This is
                                                         // set after stream is created. Its used as
                                                         // an offset to streamPlaybackPosition
-    unsigned long           streamOrgLength1;
-    unsigned long           streamOrgLength2;
+    uint32_t           streamOrgLength1;
+    uint32_t           streamOrgLength2;
 
     void                    *pStreamData1;
     void                    *pStreamData2;
-    unsigned long           streamLength1;
-    unsigned long           streamLength2;
+    uint32_t           streamLength1;
+    uint32_t           streamLength2;
     XBYTE                   streamMode;                 // Stream modes
     XBYTE                   lastStreamBufferPlayed;
 
-    unsigned long           streamPlaybackResetAtPosition;  //  in samples
-    unsigned long           streamPlaybackResetToThisPosition;  // in samples
+    uint32_t           streamPlaybackResetAtPosition;  //  in samples
+    uint32_t           streamPlaybackResetToThisPosition;  // in samples
 
-    unsigned long           streamPlaybackPosition;     // in samples; samples in this stream processed by engine
-    unsigned long           streamPlaybackOffset;       // in samples; total samples processed by engine when this stream starts
-    unsigned long           samplesWritten;             // update in GM_AudioStreamService. total number of samples
-    unsigned long           samplesPlayed;              // update in GM_AudioStreamUpdateSamplesPlayed. total number of samples played
+    uint32_t           streamPlaybackPosition;     // in samples; samples in this stream processed by engine
+    uint32_t           streamPlaybackOffset;       // in samples; total samples processed by engine when this stream starts
+    uint32_t           samplesWritten;             // update in GM_AudioStreamService. total number of samples
+    uint32_t           samplesPlayed;              // update in GM_AudioStreamUpdateSamplesPlayed. total number of samples played
 
 // $$kk: 08.12.98 merge: added this field   
-    unsigned long           residualSamples;            // if we're underflowing, then get more data and reset streamPlaybackOffset
+    uint32_t           residualSamples;            // if we're underflowing, then get more data and reset streamPlaybackOffset
                                                         // before playing all samples, need to record that we can still play these
                                                         // samples before reaching the new streamPlaybackOffset.
 
@@ -406,20 +406,20 @@ struct GM_AudioStream
 
     XFIXED                  streamFadeRate;             // when non-zero fading is enabled
     XFIXED                  streamFixedVolume;          // inital volume level that will be changed by streamFadeRate
-    short int               streamFadeMaxVolume;        // max volume
-    short int               streamFadeMinVolume;        // min volume
+    int16_t               streamFadeMaxVolume;        // max volume
+    int16_t               streamFadeMinVolume;        // min volume
     XBOOL                   streamEndAtFade;
 
     // state
 #if REVERB_USED != REVERB_DISABLED
     XBOOL                   streamUseReverb;
-    short int               streamReverbAmount;
+    int16_t               streamReverbAmount;
 #endif
-    short int               streamVolume;
-    short int               streamStereoPosition;
-    short int               streamFrequencyFilter;
-    short int               streamLowPassAmountFilter;
-    short int               streamResonanceFilter;
+    int16_t               streamVolume;
+    int16_t               streamStereoPosition;
+    int16_t               streamFrequencyFilter;
+    int16_t               streamLowPassAmountFilter;
+    int16_t               streamResonanceFilter;
 
     OPErr                   streamErr;
 
@@ -534,18 +534,18 @@ static STREAM_REFERENCE PV_GetEmptyAudioStream(void)
     STREAM_REFERENCE    ref;
 
     ref = DEAD_STREAM;
-    pStream = (GM_AudioStream *)XNewPtr((long)sizeof(GM_AudioStream));
+    pStream = (GM_AudioStream *)XNewPtr((int32_t)sizeof(GM_AudioStream));
     if (pStream)
     {
-        pStream->userReference = 0;
+        pStream->userReference = NULL;
         pStream->playbackReference = DEAD_VOICE;
-        ref = (STREAM_REFERENCE)pStream;
+        ref = pStream;
     }
     return ref;
 }
 
 
-static unsigned long PV_GetSampleSizeInBytes(GM_StreamData * pAS)
+static uint32_t PV_GetSampleSizeInBytes(GM_StreamData * pAS)
 {
     return pAS->channelSize * (pAS->dataBitSize / 8);
 }
@@ -553,9 +553,9 @@ static unsigned long PV_GetSampleSizeInBytes(GM_StreamData * pAS)
 
 static void PV_FillBufferEndWithSilence(char *pDest, GM_StreamData * pAS)
 {
-    unsigned long   bufferSize, blockSize;
-    unsigned long   count;
-    short int       *pWData;
+    uint32_t   bufferSize, blockSize;
+    uint32_t   count;
+    int16_t       *pWData;
 
     if (pDest)
     {
@@ -572,7 +572,7 @@ static void PV_FillBufferEndWithSilence(char *pDest, GM_StreamData * pAS)
         }
         else
         {
-            pWData = (short int *)pDest;
+            pWData = (int16_t *)pDest;
             blockSize /= 2;
             for (count = 0; count < blockSize; count++)
             {
@@ -584,7 +584,7 @@ static void PV_FillBufferEndWithSilence(char *pDest, GM_StreamData * pAS)
 
 static void PV_CopyLastSamplesToFirst(char *pSource, char *pDest, GM_StreamData * pAS)
 {
-    unsigned long   bufferSize, blockSize;
+    uint32_t   bufferSize, blockSize;
 
     if (pAS->dataLength && pSource && pDest)
     {
@@ -1013,10 +1013,10 @@ OPErr GM_AudioStreamError(STREAM_REFERENCE reference)
 static OPErr PV_FileStreamCallback(void *context, GM_StreamMessage message, GM_StreamData *pAS)
 {
     OPErr                   error;
-    unsigned long           bufferSize, fileSize, outputBufferSize;
+    uint32_t           bufferSize, fileSize, outputBufferSize;
     GM_AudioStreamFileInfo  *pASInfo;
     GM_AudioStream          *pStream;
-    short int               blockAlign;
+    int16_t               blockAlign;
 
 #if TEST_UNDERFLOW_CODE
     static int              pv_count = 0;
@@ -1131,11 +1131,11 @@ static OPErr PV_FileStreamCallback(void *context, GM_StreamMessage message, GM_S
 
         case STREAM_SET_POSITION:
             {
-                unsigned long   samplePosition;
+                uint32_t   samplePosition;
 
                 pStream = (GM_AudioStream *)pAS->streamReference;
                 pASInfo = (GM_AudioStreamFileInfo *)pAS->userReference;
-                blockAlign = (short int)PV_GetSampleSizeInBytes(pAS);
+                blockAlign = (int16_t)PV_GetSampleSizeInBytes(pAS);
                 samplePosition = pAS->framePosition * blockAlign;   // convert from bytes to samples
                 if (samplePosition < pASInfo->fileEndPosition)
                 {
@@ -1173,7 +1173,7 @@ static OPErr PV_FileStreamCallback(void *context, GM_StreamMessage message, GM_S
             pStream = (GM_AudioStream *)pAS->streamReference;
             pASInfo = (GM_AudioStreamFileInfo *)pAS->userReference;
 
-            blockAlign = (short int)PV_GetSampleSizeInBytes(pAS);
+            blockAlign = (int16_t)PV_GetSampleSizeInBytes(pAS);
             if (pAS->pData)
             {
                 // get the desired length, and account for stereo and bit size
@@ -1222,7 +1222,7 @@ static OPErr PV_FileStreamCallback(void *context, GM_StreamMessage message, GM_S
                     error = NO_ERR;
                     if (pASInfo->loopFile)
                     {
-                        unsigned long   savePos;
+                        uint32_t   savePos;
 
                         pStream->streamPlaybackResetAtPosition = (pASInfo->filePlaybackPosition -
                                                                     pASInfo->fileStartPosition) / blockAlign;
@@ -1297,7 +1297,7 @@ void * GM_AudioStreamGetDoneCallback(STREAM_REFERENCE reference, GM_SoundDoneCal
     void                    *doneCallbackReference;
 
     doneCallback = NULL;
-    reference = -1;
+    reference = NULL;
     pStream = PV_AudioStreamGetFromReference(reference);
     if (pStream)
     {
@@ -1354,14 +1354,14 @@ XBOOL GM_AudioStreamGetLoop(STREAM_REFERENCE reference)
 // setup streaming a file and place it into pause mode. Don't start
 STREAM_REFERENCE GM_AudioStreamFileSetup(void *threadContext,
                                     XFILENAME *file, AudioFileType fileType,
-                                    unsigned long bufferSize, GM_Waveform *pFileInfo,
+                                    uint32_t bufferSize, GM_Waveform *pFileInfo,
                                     XBOOL loopFile)
 {
     STREAM_REFERENCE        reference;
     GM_Waveform             *pWaveform;
     GM_AudioStreamFileInfo  *pStream;
-    long                    format;
-    unsigned long           blockSize;
+    int32_t                    format;
+    uint32_t           blockSize;
     OPErr                   err;
     void                    *blockPtr;
 
@@ -1370,7 +1370,7 @@ STREAM_REFERENCE GM_AudioStreamFileSetup(void *threadContext,
     pWaveform = GM_ReadFileInformation(file, fileType, &format, &blockPtr, &blockSize, &err);
     if (pWaveform && (err == NO_ERR))
     {
-        pStream = (GM_AudioStreamFileInfo *)XNewPtr((long)sizeof(GM_AudioStreamFileInfo));
+        pStream = (GM_AudioStreamFileInfo *)XNewPtr((int32_t)sizeof(GM_AudioStreamFileInfo));
         if (pStream)
         {
             pStream->playbackFile = *file;
@@ -1400,7 +1400,7 @@ STREAM_REFERENCE GM_AudioStreamFileSetup(void *threadContext,
             {
                 bufferSize = (bufferSize * blockSize) / blockSize;  // round down to blockSize
             }
-            reference = GM_AudioStreamSetup(threadContext, (long)pStream, PV_FileStreamCallback,
+            reference = GM_AudioStreamSetup(threadContext, pStream, PV_FileStreamCallback,
                                                 bufferSize,
                                                 pWaveform->sampledRate,
                                                 pWaveform->bitSize,
@@ -1423,10 +1423,10 @@ STREAM_REFERENCE GM_AudioStreamFileSetup(void *threadContext,
 //              and finally STREAM_DESTROY when finished.
 //
 // OUTPUT:
-//  long            This is an audio reference number. Will be non-zero for valid stream
+//  int32_t            This is an audio reference number. Will be non-zero for valid stream
 
-STREAM_REFERENCE GM_AudioStreamSetup(void *threadContext, long userReference, GM_StreamObjectProc pProc,                        
-                            unsigned long bufferSize, 
+STREAM_REFERENCE GM_AudioStreamSetup(void *threadContext, void *userReference, GM_StreamObjectProc pProc,                        
+                            uint32_t bufferSize, 
                             XFIXED sampleRate,  // Fixed 16.16 sample rate
                             char dataBitSize,       // 8 or 16 bit data
                             char channelSize)       // 1 or 2 channels of date
@@ -1435,7 +1435,7 @@ STREAM_REFERENCE GM_AudioStreamSetup(void *threadContext, long userReference, GM
     GM_AudioStream      *pStream;
     GM_StreamData       ssData;
     OPErr               theErr;
-    unsigned long       byteLength;
+    uint32_t       byteLength;
 
     reference = DEAD_STREAM;
     theErr = NO_ERR;
@@ -1771,11 +1771,12 @@ OPErr GM_AudioStreamStart(STREAM_REFERENCE reference)
     return theErr;
 }
 
-long GM_AudioStreamGetReference(STREAM_REFERENCE reference)
+void * GM_AudioStreamGetReference(STREAM_REFERENCE reference)
 {
     GM_AudioStream      *pStream;
-    long                userReference;
+    void *              userReference;
 
+    userReference = NULL;
     pStream = PV_AudioStreamGetFromReference(reference);
     if (pStream)
     {
@@ -1808,7 +1809,7 @@ static OPErr PV_AudioStreamStopAndFreeNow(void *threadContext, STREAM_REFERENCE 
 {
     GM_AudioStream      *pStream;
     GM_StreamData       ssData;
-    short int           theErr;
+    int16_t           theErr;
     GM_StreamObjectProc pProc;
 
     pStream = PV_AudioStreamGetFromReference(reference);
@@ -1870,7 +1871,7 @@ OPErr GM_AudioStreamStop(void *threadContext, STREAM_REFERENCE reference)
         // if audio data is already dead, then
         if (GM_IsSoundDone(pStream->playbackReference))
         {   // we've already flushed the audio data, so just free it now
-            PV_AudioStreamStopAndFreeNow(threadContext, (long)pStream);
+            PV_AudioStreamStopAndFreeNow(threadContext, (int32_t)pStream);
             pStream->streamMode = STREAM_MODE_DEAD;
         }
     }
@@ -1939,11 +1940,11 @@ OPErr GM_AudioStreamStop(void *threadContext, STREAM_REFERENCE reference)
 
 // get the position of samples played in a stream. This will be as close as
 // posible to realtime. Probably off by engine latency.
-unsigned long GM_AudioStreamGetPlaybackSamplePosition(STREAM_REFERENCE reference)
+uint32_t GM_AudioStreamGetPlaybackSamplePosition(STREAM_REFERENCE reference)
 {
 #if 0
     GM_AudioStream          *pStream;
-    unsigned long           samplePosition;
+    uint32_t           samplePosition;
 
     samplePosition = 0;
     pStream = PV_AudioStreamGetFromReference(reference);
@@ -1968,7 +1969,7 @@ unsigned long GM_AudioStreamGetPlaybackSamplePosition(STREAM_REFERENCE reference
     return samplePosition;
 #else
     GM_AudioStream          *pStream;
-    unsigned long           samplePosition;
+    uint32_t           samplePosition;
 
     samplePosition = 0;
     pStream = PV_AudioStreamGetFromReference(reference);
@@ -1990,12 +1991,12 @@ unsigned long GM_AudioStreamGetPlaybackSamplePosition(STREAM_REFERENCE reference
 // Get the file position of a audio stream, in samples. This
 // value is the current file track position. This does not equal what has
 // been played. Typically it will be ahead of real time.
-unsigned long GM_AudioStreamGetFileSamplePosition(STREAM_REFERENCE reference)
+uint32_t GM_AudioStreamGetFileSamplePosition(STREAM_REFERENCE reference)
 {
     GM_AudioStreamFileInfo  *pInfo;
     GM_AudioStream          *pStream;
-    unsigned long           samplePosition;
-    short int               blockAlign;
+    uint32_t           samplePosition;
+    int16_t               blockAlign;
 
     samplePosition = 0;
     pStream = PV_AudioStreamGetFromReference(reference);
@@ -2003,7 +2004,7 @@ unsigned long GM_AudioStreamGetFileSamplePosition(STREAM_REFERENCE reference)
     {
         if (pStream->streamActive)
         {
-            blockAlign = (short int)PV_GetSampleSizeInBytes(&pStream->streamData);
+            blockAlign = (int16_t)PV_GetSampleSizeInBytes(&pStream->streamData);
             pInfo = pStream->pFileStream;
             if (pInfo)
             {
@@ -2019,7 +2020,7 @@ unsigned long GM_AudioStreamGetFileSamplePosition(STREAM_REFERENCE reference)
 }
 
 // Set the file position of a audio stream, in samples
-OPErr GM_AudioStreamSetFileSamplePosition(STREAM_REFERENCE reference, unsigned long framePos)
+OPErr GM_AudioStreamSetFileSamplePosition(STREAM_REFERENCE reference, uint32_t framePos)
 {
     GM_AudioStream          *pStream;
     GM_AudioStreamFileInfo  *pFileInfo;
@@ -2051,8 +2052,8 @@ OPErr GM_AudioStreamSetFileSamplePosition(STREAM_REFERENCE reference, unsigned l
     return err;
 }
 
-OPErr GM_AudioStreamGetData(void *threadContext, STREAM_REFERENCE reference, unsigned long startFrame, unsigned long stopFrame,
-                                    XPTR pBuffer, unsigned long bufferLength)
+OPErr GM_AudioStreamGetData(void *threadContext, STREAM_REFERENCE reference, uint32_t startFrame, uint32_t stopFrame,
+                                    XPTR pBuffer, uint32_t bufferLength)
 {
     GM_AudioStream  *pStream;
     OPErr           theErr;
@@ -2079,7 +2080,7 @@ OPErr GM_AudioStreamGetData(void *threadContext, STREAM_REFERENCE reference, uns
 
 
 // Set the stereo position of a audio stream
-void GM_AudioStreamSetStereoPosition(STREAM_REFERENCE reference, short int stereoPosition)
+void GM_AudioStreamSetStereoPosition(STREAM_REFERENCE reference, int16_t stereoPosition)
 {
     GM_AudioStream  *pStream;
 
@@ -2092,10 +2093,10 @@ void GM_AudioStreamSetStereoPosition(STREAM_REFERENCE reference, short int stere
 }
 
 // Get the stereo position of a audio stream
-short int GM_AudioStreamGetStereoPosition(STREAM_REFERENCE reference)
+int16_t GM_AudioStreamGetStereoPosition(STREAM_REFERENCE reference)
 {
     GM_AudioStream  *pStream;
-    short int       stereoPosition;
+    int16_t       stereoPosition;
 
     stereoPosition = 0;
     pStream = PV_AudioStreamGetFromReference(reference);
@@ -2109,10 +2110,10 @@ short int GM_AudioStreamGetStereoPosition(STREAM_REFERENCE reference)
 // Get the playback offset in samples for the stream.
 // This is the offset between the number of samples processed
 // by the mixer and the number of samples processed from this stream.
-unsigned long GM_AudioStreamGetSampleOffset(STREAM_REFERENCE reference)
+uint32_t GM_AudioStreamGetSampleOffset(STREAM_REFERENCE reference)
 {
     GM_AudioStream  *pStream;
-    unsigned long offset = 0;
+    uint32_t offset = 0;
 
 
     pStream = PV_AudioStreamGetFromReference(reference);
@@ -2125,10 +2126,10 @@ unsigned long GM_AudioStreamGetSampleOffset(STREAM_REFERENCE reference)
 
 // Get the engine's count of samples from this stream actually
 // played through the device.
-unsigned long GM_AudioStreamGetSamplesPlayed(STREAM_REFERENCE reference)
+uint32_t GM_AudioStreamGetSamplesPlayed(STREAM_REFERENCE reference)
 {
     GM_AudioStream  *pStream;
-    unsigned long samplesPlayed = 0;
+    uint32_t samplesPlayed = 0;
 
 
     pStream = PV_AudioStreamGetFromReference(reference);
@@ -2145,7 +2146,7 @@ unsigned long GM_AudioStreamGetSamplesPlayed(STREAM_REFERENCE reference)
 void GM_AudioStreamDrain(void *threadContext, STREAM_REFERENCE reference)
 {
     GM_AudioStream  *pStream;
-    unsigned long   samplesWritten;
+    uint32_t   samplesWritten;
 
     // get the samples written.
     // we have to drain until samples played reaches this value.
@@ -2255,7 +2256,7 @@ void GM_AudioStreamFlush(STREAM_REFERENCE reference)
 
 
 // Set the volume level of a audio stream
-void GM_AudioStreamSetVolume(STREAM_REFERENCE reference, short int newVolume, XBOOL defer)
+void GM_AudioStreamSetVolume(STREAM_REFERENCE reference, int16_t newVolume, XBOOL defer)
 {
     GM_AudioStream  *pStream;
 
@@ -2271,10 +2272,10 @@ void GM_AudioStreamSetVolume(STREAM_REFERENCE reference, short int newVolume, XB
 }
 
 // Get the volume level of a audio stream
-short int GM_AudioStreamGetVolume(STREAM_REFERENCE reference)
+int16_t GM_AudioStreamGetVolume(STREAM_REFERENCE reference)
 {
     GM_AudioStream  *pStream;
-    short int       volume;
+    int16_t       volume;
 
     volume = 0;
     pStream = PV_AudioStreamGetFromReference(reference);
@@ -2287,10 +2288,10 @@ short int GM_AudioStreamGetVolume(STREAM_REFERENCE reference)
 
 // set the volume level of all open streams. Scale is 0 to MAX_NOTE_VOLUME. If you pass
 // -1, then it will reset all volumes. This is used to grab the master volume changes.
-void GM_AudioStreamSetVolumeAll(short int newVolume)
+void GM_AudioStreamSetVolumeAll(int16_t newVolume)
 {
     GM_AudioStream  *pStream;
-    short int       thisVolume;
+    int16_t       thisVolume;
 
     pStream = theStreams;
     while (pStream)
@@ -2366,7 +2367,7 @@ XBOOL GM_AudioStreamGetReverb(STREAM_REFERENCE reference)
 #endif
 
 #if REVERB_USED != REVERB_DISABLED
-void GM_SetStreamReverbAmount(STREAM_REFERENCE reference, short int reverbAmount)
+void GM_SetStreamReverbAmount(STREAM_REFERENCE reference, int16_t reverbAmount)
 {
     GM_AudioStream  *pStream;
 
@@ -2380,10 +2381,10 @@ void GM_SetStreamReverbAmount(STREAM_REFERENCE reference, short int reverbAmount
 #endif
 
 #if REVERB_USED != REVERB_DISABLED
-short int GM_GetStreamReverbAmount(STREAM_REFERENCE reference)
+int16_t GM_GetStreamReverbAmount(STREAM_REFERENCE reference)
 {
     GM_AudioStream  *pStream;
-    short int       verbAmount;
+    int16_t       verbAmount;
 
     verbAmount = 0;
     pStream = PV_AudioStreamGetFromReference(reference);
@@ -2397,7 +2398,7 @@ short int GM_GetStreamReverbAmount(STREAM_REFERENCE reference)
 
 // Set the filter frequency of a audio stream
 // Range is 512 to 32512
-void GM_AudioStreamSetFrequencyFilter(STREAM_REFERENCE reference, short int frequency)
+void GM_AudioStreamSetFrequencyFilter(STREAM_REFERENCE reference, int16_t frequency)
 {
     GM_AudioStream  *pStream;
 
@@ -2411,10 +2412,10 @@ void GM_AudioStreamSetFrequencyFilter(STREAM_REFERENCE reference, short int freq
 
 // Get the filter frequency of a audio stream
 // Range is 512 to 32512
-short int GM_AudioStreamGetFrequencyFilter(STREAM_REFERENCE reference)
+int16_t GM_AudioStreamGetFrequencyFilter(STREAM_REFERENCE reference)
 {
     GM_AudioStream  *pStream;
-    short int       frequency;
+    int16_t       frequency;
 
     frequency = 0;
     pStream = PV_AudioStreamGetFromReference(reference);
@@ -2427,7 +2428,7 @@ short int GM_AudioStreamGetFrequencyFilter(STREAM_REFERENCE reference)
 
 // Set the filter resonance of a audio stream
 // Range is 0 to 256
-void GM_AudioStreamSetResonanceFilter(STREAM_REFERENCE reference, short int resonance)
+void GM_AudioStreamSetResonanceFilter(STREAM_REFERENCE reference, int16_t resonance)
 {
     GM_AudioStream  *pStream;
 
@@ -2441,10 +2442,10 @@ void GM_AudioStreamSetResonanceFilter(STREAM_REFERENCE reference, short int reso
 
 // Get the filter resonance of a audio stream
 // Range is 0 to 256
-short int GM_AudioStreamGetResonanceFilter(STREAM_REFERENCE reference)
+int16_t GM_AudioStreamGetResonanceFilter(STREAM_REFERENCE reference)
 {
     GM_AudioStream  *pStream;
-    short int       resonance;
+    int16_t       resonance;
 
     resonance = 0;
     pStream = PV_AudioStreamGetFromReference(reference);
@@ -2457,10 +2458,10 @@ short int GM_AudioStreamGetResonanceFilter(STREAM_REFERENCE reference)
 
 // get/set filter low pass amount of a audio stream
 // lowPassAmount range is -255 to 255
-short int GM_AudioStreamGetLowPassAmountFilter(STREAM_REFERENCE reference)
+int16_t GM_AudioStreamGetLowPassAmountFilter(STREAM_REFERENCE reference)
 {
     GM_AudioStream  *pStream;
-    short int       lowpass;
+    int16_t       lowpass;
 
     lowpass = 0;
     pStream = PV_AudioStreamGetFromReference(reference);
@@ -2472,7 +2473,7 @@ short int GM_AudioStreamGetLowPassAmountFilter(STREAM_REFERENCE reference)
 }
 
 // lowPassAmount range is -255 to 255
-void GM_AudioStreamSetLowPassAmountFilter(STREAM_REFERENCE reference, short int lowPassAmount)
+void GM_AudioStreamSetLowPassAmountFilter(STREAM_REFERENCE reference, int16_t lowPassAmount)
 {
     GM_AudioStream  *pStream;
 
@@ -2546,7 +2547,7 @@ XBOOL GM_IsAudioStreamValid(STREAM_REFERENCE reference)
 void PV_ServeStreamFades(void)
 {
     GM_AudioStream  *pStream;
-    long            value;
+    int32_t            value;
 
     pStream = theStreams;
     while (pStream)
@@ -2567,7 +2568,7 @@ void PV_ServeStreamFades(void)
                     value = pStream->streamFadeMinVolume;
                     pStream->streamFadeRate = 0;
                 }
-                pStream->streamVolume = (short)value;
+                pStream->streamVolume = (int16_t)value;
 
                 GM_ChangeSampleVolume(pStream->playbackReference, (INT16)value);
 
@@ -2685,7 +2686,7 @@ void GM_AudioStreamService(void *threadContext)
                         {
 
                             //fprintf(stderr, "GM_AudioStreamService::STREAM_MODE_FREE_STREAM %d\n", pStream);
-                            //fprintf(stderr, "pStream->samplesPlayed: %d, sample position: %d \n", pStream->samplesPlayed, GM_AudioStreamGetFileSamplePosition((long)pStream));
+                            //fprintf(stderr, "pStream->samplesPlayed: %d, sample position: %d \n", pStream->samplesPlayed, GM_AudioStreamGetFileSamplePosition((int32_t)pStream));
 
                             // figure out whether all the samples have been played out through the device
                             // before freeing the stream
@@ -2727,7 +2728,7 @@ void GM_AudioStreamService(void *threadContext)
 /*
                                 if (pStream->streamFlushed)
                                 {   // we've already flushed the audio data, so just free it now
-                                    PV_AudioStreamStopAndFreeNow(threadContext, (long)pStream);
+                                    PV_AudioStreamStopAndFreeNow(threadContext, (int32_t)pStream);
                                 }
                                 // otherwise we do nothing, because the audio callback will set the streamMode to STREAM_MODE_FREE_STREAM
                                 // when the samples are finished playing
@@ -2948,17 +2949,17 @@ void GM_AudioStreamService(void *threadContext)
 // update number of samples played for each stream
 // delta is number of samples engine advanced, in its format
 // $$kk: 08.12.98 merge: changed this method to allow streams to exist in the engine until all samples played
-void GM_AudioStreamUpdateSamplesPlayed(unsigned long delta) 
+void GM_AudioStreamUpdateSamplesPlayed(uint32_t delta) 
 {
     GM_AudioStream      *pStream, *pNext;
-    unsigned long       outputSampleRate;
+    uint32_t       outputSampleRate;
 
     //$$kk: 05.08.98: adding this variable and removing the next one
-    unsigned long       streamSampleRate;
+    uint32_t       streamSampleRate;
     //XFIXED                scaling;
 
-    unsigned long       streamDelta;    // delta in stream-format samples
-    unsigned long       samplesCommitted = 0;
+    uint32_t       streamDelta;    // delta in stream-format samples
+    uint32_t       samplesCommitted = 0;
 
     pStream = theStreams;
 
@@ -2993,7 +2994,7 @@ void GM_AudioStreamUpdateSamplesPlayed(unsigned long delta)
             (MusicGlobals->samplesPlayed > pStream->streamPlaybackOffset)) 
         {
             // we need to handle the case where the stream may just be starting up again
-            if ((unsigned long)(MusicGlobals->samplesPlayed -
+            if ((uint32_t)(MusicGlobals->samplesPlayed -
                                 pStream->streamPlaybackOffset) < streamDelta) 
             {
                 streamDelta = MusicGlobals->samplesPlayed - pStream->streamPlaybackOffset;

@@ -135,7 +135,7 @@
 **              Your friendship. - Steve Hales
 **
 **  6/30/98     Removed INT16 casting in GM_MergeExternalSong
-**              Changed GM_LoadSong/GM_CreateLiveSong to accept a long rather than a short for 
+**              Changed GM_LoadSong/GM_CreateLiveSong to accept a int32_t rather than a short for 
 **              the songID
 **  7/6/98      Added GM_IsSongInstrumentLoaded
 **              Fixed type problems with GM_LoadSong & PV_CreateSongFromMidi
@@ -207,12 +207,13 @@
 #include "GenSnd.h"
 #include "GenPriv.h"
 #include "X_Assert.h"
+#include <stdint.h>
 
 // Functions
 
 
 static GM_Song * PV_CreateSongFromMidi(XLongResourceID theID,
-                                        XPTR useThisMidiData, long midiSize,
+                                        XPTR useThisMidiData, int32_t midiSize,
                                         OPErr *pErr)
 {
     XPTR        theMidiData;
@@ -232,11 +233,12 @@ static GM_Song * PV_CreateSongFromMidi(XLongResourceID theID,
         if (theMidiData == NULL)
         {
             err = BAD_FILE;
+            BAE_STDERR("DEBUG: PV_CreateSongFromMidi: XGetMidiData failed id=%d\n", (int)theID);
         }
     }
     if (theMidiData)
     {
-        theSong = (GM_Song *)XNewPtr((long)sizeof(GM_Song));
+        theSong = (GM_Song *)XNewPtr((int32_t)sizeof(GM_Song));
         if (theSong)
         {
             theSong->sequenceData = theMidiData;
@@ -258,7 +260,7 @@ static GM_Song * PV_CreateSongFromMidi(XLongResourceID theID,
     return theSong;
 }
 
-static void PV_SetTempo(GM_Song *pSong, long masterTempo)
+static void PV_SetTempo(GM_Song *pSong, int32_t masterTempo)
 {
     if (pSong)
     {
@@ -275,9 +277,9 @@ static void PV_SetTempo(GM_Song *pSong, long masterTempo)
 
 void GM_MergeExternalSong(void *theExternalSong, XShortResourceID theSongID, GM_Song *theSong)
 {
-    short int           maps;
-    short int           count;
-    short int           number;
+    int16_t           maps;
+    int16_t           count;
+    int16_t           number;
     SongResource_SMS    *songSMS;
     SongResource_RMF    *songRMF;
     Remap               *pMap;
@@ -338,7 +340,7 @@ void GM_MergeExternalSong(void *theExternalSong, XShortResourceID theSongID, GM_
 
 static void PV_ClearSongInstruments(GM_Song *pSong)
 {
-    long    count;
+    int32_t    count;
 
     if (pSong)
     {
@@ -400,11 +402,11 @@ OPErr GM_SetSongMixer(GM_Song *pSong, GM_Mixer *pMixer)
 
 #if 0
 // This will walk through all active songs and return a max number of voices used for midi
-static short int PV_GetMaxVoicesPlayingFromAllSongs(void)
+static int16_t PV_GetMaxVoicesPlayingFromAllSongs(void)
 {
     register GM_Mixer       *pMixer;
     register GM_Song        *pSong;
-    register short int      count, max;
+    register int16_t      count, max;
 
     max = 0;
     pMixer = GM_GetCurrentMixer();
@@ -425,11 +427,11 @@ static short int PV_GetMaxVoicesPlayingFromAllSongs(void)
 
 #if 1
 // This will walk through all active songs and return a max mix level used for midi
-static short int PV_GetMixLevelPlayingFromAllSongs(void)
+static int16_t PV_GetMixLevelPlayingFromAllSongs(void)
 {
     register GM_Mixer       *pMixer;
     register GM_Song        *pSong;
-    register short int      count, mix;
+    register int16_t      count, mix;
 
     mix = 0;
     pMixer = MusicGlobals;
@@ -453,10 +455,10 @@ static short int PV_GetMixLevelPlayingFromAllSongs(void)
 
 // scan through mixer and find an empty song slot.
 // Returns -1, if failure.
-static short int PV_FindEmptySongSlot(GM_Mixer *pMixer, GM_Song *pSong)
+static int16_t PV_FindEmptySongSlot(GM_Mixer *pMixer, GM_Song *pSong)
 {
-    short int   songSlot = -1;
-    short int   count;
+    int16_t   songSlot = -1;
+    int16_t   count;
 
     if (pSong)
     {
@@ -493,7 +495,7 @@ OPErr GM_PrerollSong(GM_Song *pSong, GM_SongCallbackProcPtr theCallbackProc,
                     XBOOL useEmbeddedMixerSettings, XBOOL autoLevel)
 {
     OPErr       theErr;
-    short int   count;
+    int16_t   count;
     INT16       sMaxSong, sMixLevel, sMaxEffect;
 
     theErr = NO_ERR;
@@ -614,7 +616,7 @@ OPErr GM_BeginSong(GM_Song *pSong, GM_SongCallbackProcPtr theCallbackProc,
 {
     OPErr       theErr;
     GM_Mixer    *pMixer = GM_GetCurrentMixer();
-    short int   songSlot;
+    int16_t   songSlot;
 
     theErr = NO_ERR;
     if (pSong)
@@ -709,7 +711,7 @@ OPErr GM_SetSongPriority(GM_Song *pSong, XSWORD songPriority)
 
 OPErr GM_SetupSongRemaps(GM_Song *pSong, XBOOL checkForAliases)
 {
-    short int           count;
+    int16_t           count;
     XAliasLinkResource  *pAlias;
     XLongResourceID     newInstrumentID;
     OPErr               err;
@@ -799,11 +801,11 @@ OPErr GM_RemapInstrument(GM_Song *pSong, XLongResourceID from, XLongResourceID t
 GM_Song * GM_CreateLiveSong(void *context, XShortResourceID songID)
 {
     GM_Song             *pSong;
-    short int           count;
+    int16_t           count;
 
     pSong = NULL;
 
-    pSong = (GM_Song *)XNewPtr((long)sizeof(GM_Song));
+    pSong = (GM_Song *)XNewPtr((int32_t)sizeof(GM_Song));
     if (pSong)
     {
         pSong->context = context;
@@ -838,7 +840,7 @@ GM_Song * GM_CreateLiveSong(void *context, XShortResourceID songID)
 OPErr GM_StartLiveSong(GM_Song *pSong, XBOOL loadPatches, XBankToken bankToken)
 {
     OPErr       theErr;
-    short int   songSlot, count;
+    int16_t   songSlot, count;
 
     theErr = NO_ERR;
     if (pSong)
@@ -1017,7 +1019,7 @@ GM_Song * GM_LoadSong(struct GM_Mixer *pMixer,
                       XShortResourceID songID,
                       void *theExternalSong,
                       void *theExternalMidiData,
-                      long midiSize,
+                      int32_t midiSize,
                       XShortResourceID *pInstrumentArray,
                       XBOOL loadInstruments,
                       XBOOL ignoreBadInstruments,
@@ -1158,7 +1160,7 @@ void GM_EndSongButKeepActive(void *threadContext, GM_Song *pSong)
 // GM_Song.
 void GM_KillSongEventsFromQueue(GM_Song *pSong)
 {
-    short int   count;
+    int16_t   count;
     Q_MIDIEvent *pEvent;
 
     for (count = 0; count < MAX_QUEUE_EVENTS; count++)
@@ -1341,7 +1343,7 @@ UINT32 GM_GetSongTickLength(GM_Song *pSong, OPErr *pErr)
 
 // meta event callback that collects track names
 #if USE_CREATION_API == TRUE
-static void PV_TrackNameCallback(void *threadContext, GM_Song *pSong, char markerType, void *pMetaText, long metaTextLength, short currentTrack)
+static void PV_TrackNameCallback(void *threadContext, GM_Song *pSong, char markerType, void *pMetaText, int32_t metaTextLength, int16_t currentTrack)
 {
     XBYTE **tnArray,*str;
 
@@ -1437,7 +1439,7 @@ OPErr GM_GetSongInstrumentChanges(void *theSongResource, GM_Song **outSong, XBYT
         // second pass: get the program changes, add bank events before each one
         if (err == NO_ERR)
         {
-            GM_SetSongMetaEventCallback(theSong, PV_TrackNameCallback, (long)outTrackNames);
+            GM_SetSongMetaEventCallback(theSong, PV_TrackNameCallback, outTrackNames);
             saveScan = theSong->AnalyzeMode;
             theSong->AnalyzeMode = SCAN_FIND_PATCHES;
             saveLoop = GM_GetSongLoopFlag(theSong);
@@ -1482,7 +1484,7 @@ OPErr GM_SetSongTickPosition(GM_Song *pSong, UINT32 songTickPosition)
     GM_Song     *theSong;
     OPErr       theErr;
     XBOOL       foundPosition;
-    long        count;
+    int32_t        count;
     XBOOL       songPaused = FALSE;
 
     if (pSong->seqType != SEQ_MIDI)
@@ -1612,7 +1614,7 @@ OPErr GM_SetSongMicrosecondPosition(GM_Song *pSong, UINT32 songMicrosecondPositi
     GM_Song     *theSong;
     OPErr       theErr;
     XBOOL       foundPosition;
-    long        count;
+    int32_t        count;
     XBOOL       songPaused = FALSE;
 
     // $$kk: 02.10.98
@@ -1704,12 +1706,12 @@ OPErr GM_SetSongMicrosecondPosition(GM_Song *pSong, UINT32 songMicrosecondPositi
 #if USE_CREATION_API == TRUE
 INT32 GM_GetUsedPatchlist(void *theExternalSong,
                           void *theExternalMidiData,
-                          long midiSize,
+                          int32_t midiSize,
                           XShortResourceID *pInstrumentArray,
                           OPErr *pErr)
 {
     GM_Song             *theSong;
-    long                count;
+    int32_t                count;
     XBankToken          bankToken;
 
     *pErr = NO_ERR;

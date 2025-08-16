@@ -96,7 +96,7 @@ OPErr PV_PlaceSampleInCache(GM_Mixer * pMixer, GM_SampleCacheEntry * pCache);
 #if USE_STEREO_OUTPUT == FALSE
 static XPTR PV_ConvertToMono(XPTR pSamples, SampleDataInfo *pInfo)
 {
-    unsigned long   sizeb, count;
+    uint32_t   sizeb, count;
     XPTR            newData = NULL;
     XWORD           *src16, *dest16;
     XBYTE           *src8, *dest8;
@@ -105,8 +105,8 @@ static XPTR PV_ConvertToMono(XPTR pSamples, SampleDataInfo *pInfo)
     {
         if (pInfo->channels > 1)
         {
-            sizeb = pInfo->frames * ((pInfo->bitSize == 16) ? sizeof(short) : sizeof(char));
-            newData = XNewPtr((long)sizeb);
+            sizeb = pInfo->frames * ((pInfo->bitSize == 16) ? sizeof(int16_t) : sizeof(char));
+            newData = XNewPtr((int32_t)sizeb);
             if (newData)
             {
                 if (pInfo->bitSize == 16)
@@ -211,7 +211,6 @@ GM_SampleCacheEntry * GMCache_BuildSampleCacheEntry(GM_Mixer * pMixer,
     *pErr = NO_ERR;
     pCache = NULL;
 
-    //  First, gripe if it already exists in the cache...
     if (GMCache_IsIDInCache(pMixer, theID, bankToken) == TRUE)
     {
         *pErr = ALREADY_EXISTS;
@@ -228,25 +227,20 @@ GM_SampleCacheEntry * GMCache_BuildSampleCacheEntry(GM_Mixer * pMixer,
     }
     if (theData)
     {
-        // convert snd resource into a simple pointer of data with information
         thePreSound = XGetSamplePtrFromSnd(theData, &newSoundInfo);
 
         if (newSoundInfo.pMasterPtr != theData)
-        {   // this means that XGetSamplePtrFromSnd created a new sample
+        {
             XDisposePtr(theData);
         }
 
         #if CONFORM_SAMPLES
-        // modify samples, so that we don't waste memory.
-        // stereo to mono, if we can only play mono output
-        // 16 to 8 bit, if we are only 8 bit output
             #if USE_STEREO_OUTPUT == FALSE
                 if (newSoundInfo.channels > 1)
                 {
                     thePreSound = PV_ConvertToMono(thePreSound, &newSoundInfo);
                 }
             #endif
-
             #if USE_16_BIT_OUTPUT == FALSE
                 if (newSoundInfo.bitSize == 16)
                 {
@@ -259,18 +253,14 @@ GM_SampleCacheEntry * GMCache_BuildSampleCacheEntry(GM_Mixer * pMixer,
             pCache = (GM_SampleCacheEntry *) XNewPtr(sizeof(GM_SampleCacheEntry));
             if (pCache)
             {
-                // validate loop points
                 if ((newSoundInfo.loopStart > newSoundInfo.loopEnd) ||
                     (newSoundInfo.loopEnd > newSoundInfo.frames) ||
                     ((newSoundInfo.loopEnd - newSoundInfo.loopStart) < MIN_LOOP_SIZE) )
                 {
-                    // disable loops
                     newSoundInfo.loopStart = 0;
                     newSoundInfo.loopEnd = 0;
                 }
                 pCache->theID = theID;
-                // 2000.04.28 AER   Use a bank token to assist in uniquely
-                //                      identifying samples in the cache...
                 pCache->bankToken = bankToken;
                 pCache->referenceCount = 0;
                 pCache->waveSize = newSoundInfo.size;
@@ -281,19 +271,8 @@ GM_SampleCacheEntry * GMCache_BuildSampleCacheEntry(GM_Mixer * pMixer,
                 pCache->bitSize = (char)newSoundInfo.bitSize;
                 pCache->channels = (char)newSoundInfo.channels;
                 pCache->rate = newSoundInfo.rate;
-
-#if DISPLAY_INSTRUMENTS
-                BAE_PRINTF(
-                       "---->Getting 'snd' ID %ld rate %ld loopstart %ld loopend %ld basekey %ld\n",
-                       (long)theID,
-                       XFIXED_TO_LONG(pCache->rate),
-                       pCache->loopStart,
-                       pCache->loopEnd,
-                       (long)pCache->baseKey);
-#endif
                 pCache->pSampleData = thePreSound;
                 pCache->pMasterPtr = newSoundInfo.pMasterPtr;
-
                 PV_PlaceSampleInCache(pMixer, pCache);
             }
             else

@@ -110,9 +110,9 @@ typedef enum
 
 typedef struct
 {
-    unsigned long       m_sampleRate;
-    unsigned long       m_channels;
-    unsigned long       m_bitRate;
+    uint32_t       m_sampleRate;
+    uint32_t       m_channels;
+    uint32_t       m_bitRate;
 
     // read data stream style
     READ_STYLE          m_readMode;
@@ -126,9 +126,9 @@ typedef struct
     {
         // used when reading
         mpa_u8              m_bitBuffer[MIN_READ_BUFFER_SIZE];
-        unsigned long       m_bufferSize;
-        unsigned long       m_bufferSizeEncoded;            // size of bytes of 1 encoded mpeg frame
-        unsigned long       m_maxFrames;
+        uint32_t       m_bufferSize;
+        uint32_t       m_bufferSizeEncoded;            // size of bytes of 1 encoded mpeg frame
+        uint32_t       m_maxFrames;
 
         // used when reading from memory
         mpa_u8              *m_streamBlock;
@@ -149,9 +149,9 @@ typedef struct
     {
         mpa_s32             m_framecount;                   // MPEG frame counter
         XPTR                m_pBuffer;                      // sample data buffer
-        unsigned long       m_sampleSizeInBytesQuantized;
-        unsigned long       m_bufferSize;                   // total bytes per buffer
-        unsigned long       m_bufferPos;                    // num bytes into m_pBuffer
+        uint32_t       m_sampleSizeInBytesQuantized;
+        uint32_t       m_bufferSize;                   // total bytes per buffer
+        uint32_t       m_bufferPos;                    // num bytes into m_pBuffer
         MPEGFillBufferFn    m_Refill;
         void                *m_refillRef;
 
@@ -173,30 +173,30 @@ static MPEGStreamData * MPEGDecoder_New(void);
 static void             MPEGDecoder_Delete(MPEGStreamData *data);
 static int              MPEGDecoder_ReadBuffer(MPEGStreamData *data);
 static int              MPEGDecoder_SeekBufferRelative(MPEGStreamData *data, int amount);
-static int              MPEGDecoder_SeekBuffer(MPEGStreamData *data, unsigned long newPos);
+static int              MPEGDecoder_SeekBuffer(MPEGStreamData *data, uint32_t newPos);
 static int              MPEGDecoder_Open_XFILE(MPEGStreamData *data, XFILE file_reference);
-static int              MPEGDecoder_Open_Memory(MPEGStreamData *data, XPTR m_streamBlock, unsigned long m_streamLength);
+static int              MPEGDecoder_Open_Memory(MPEGStreamData *data, XPTR m_streamBlock, uint32_t m_streamLength);
 static int              MPEGDecoder_Open_XFILENAME(MPEGStreamData *data, XFILENAME*fileName_in);    // not used
 static int              MPEGDecoder_Open_String(MPEGStreamData *data, char*fileName_in);    // not used
 static int              MPEGDecoder_FillBuffer(MPEGStreamData *data, void *pBuffer);
 
-static unsigned long    MPEGDecoder_GetMaxFrames(MPEGStreamData *data);
-static unsigned long    MPEGDecoder_GetStreamSize(MPEGStreamData *data);
+static uint32_t    MPEGDecoder_GetMaxFrames(MPEGStreamData *data);
+static uint32_t    MPEGDecoder_GetStreamSize(MPEGStreamData *data);
 
-static unsigned long    MPEGDecoder_GetBitRate(MPEGStreamData *data);
-static unsigned long    MPEGDecoder_GetBufferSize(MPEGStreamData *data);
-static unsigned long    MPEGDecoder_GetChannels(MPEGStreamData *data);
-static unsigned long    MPEGDecoder_GetSampleRate(MPEGStreamData *data);
-static unsigned long    MPEGDecoder_GetBitSize(MPEGStreamData *data);
+static uint32_t    MPEGDecoder_GetBitRate(MPEGStreamData *data);
+static uint32_t    MPEGDecoder_GetBufferSize(MPEGStreamData *data);
+static uint32_t    MPEGDecoder_GetChannels(MPEGStreamData *data);
+static uint32_t    MPEGDecoder_GetSampleRate(MPEGStreamData *data);
+static uint32_t    MPEGDecoder_GetBitSize(MPEGStreamData *data);
 
 // MPEG Encoder class
-static MPEGStreamData * MPEGEncoder_New(unsigned long encodeRate, unsigned long sampleRate, unsigned long channels,
-                                        XPTR pSampleData16Bits, unsigned long frames);
+static MPEGStreamData * MPEGEncoder_New(uint32_t encodeRate, uint32_t sampleRate, uint32_t channels,
+                                        XPTR pSampleData16Bits, uint32_t frames);
 static void             MPEGEncoder_Delete(MPEGStreamData *data);
 static OPErr            MPEGEncoder_Process(MPEGStreamData *data);
-static unsigned long    MPEGEncoder_GetMaxFrames(MPEGStreamData *data);
-static unsigned long    MPEGEncoder_GetMaxFrameSize(MPEGStreamData *data);
-static void             MPEGEncoder_GetBits(MPEGStreamData *data, XPTR *pReturnedBuffer, unsigned long *pReturnedSize);
+static uint32_t    MPEGEncoder_GetMaxFrames(MPEGStreamData *data);
+static uint32_t    MPEGEncoder_GetMaxFrameSize(MPEGStreamData *data);
+static void             MPEGEncoder_GetBits(MPEGStreamData *data, XPTR *pReturnedBuffer, uint32_t *pReturnedSize);
 static void             MPEGEncoder_SetRefillCallback(MPEGStreamData *data, MPEGFillBufferFn callback, void *userRef);
 
 #if 0
@@ -204,9 +204,9 @@ static void             MPEGEncoder_SetRefillCallback(MPEGStreamData *data, MPEG
 #endif
 
 // returns the number of bytes used per frame in a file.
-static unsigned long PV_GetBytesPerFrame(MPA_HEADER *h, MPA_FRAME_INFO *i)
+static uint32_t PV_GetBytesPerFrame(MPA_HEADER *h, MPA_FRAME_INFO *i)
 {
-    unsigned long   size;
+    uint32_t   size;
 
     size = 0;
     if (h && i)
@@ -280,7 +280,7 @@ int MPEGDecoder_ReadBuffer(MPEGStreamData *data)
                     {
                         size = MIN_READ_BUFFER_SIZE;
                     }
-                    if (XFileRead((XFILE)data->m_streamFile, data->decode.m_bitBuffer, (long)size) == 0)
+                    if (XFileRead((XFILE)data->m_streamFile, data->decode.m_bitBuffer, (int32_t)size) == 0)
                     {
                         data->decode.m_streamOffset += size;
                     }
@@ -303,13 +303,13 @@ int MPEGDecoder_ReadBuffer(MPEGStreamData *data)
     return size;
 }
 
-int MPEGDecoder_SeekBuffer(MPEGStreamData *data, unsigned long newPos)
+int MPEGDecoder_SeekBuffer(MPEGStreamData *data, uint32_t newPos)
 {
     if (data)
     {
-        if (newPos > (unsigned long)data->decode.m_streamLength)
+        if (newPos > (uint32_t)data->decode.m_streamLength)
         {
-            newPos = (unsigned long)data->decode.m_streamLength;
+            newPos = (uint32_t)data->decode.m_streamLength;
         }
         if (newPos < 0)
         {
@@ -367,7 +367,7 @@ int MPEGDecoder_Open_XFILE(MPEGStreamData *data, XFILE file_reference)
 {
     int             ok_flag;
     mpa_int         result;
-    unsigned long   frameSizeInBytes;
+    uint32_t   frameSizeInBytes;
 
     ok_flag = -1;
     if (data && file_reference)
@@ -380,7 +380,7 @@ int MPEGDecoder_Open_XFILE(MPEGStreamData *data, XFILE file_reference)
             mpa_set_quality(data->decode.m_decoder, 0); // best quality
             mpa_set_crc(data->decode.m_decoder, 1);           /* crc on, it is default too   */
             data->m_streamFile = file_reference;
-            data->decode.m_streamLength = (unsigned long)XFileGetLength((XFILE)file_reference);
+            data->decode.m_streamLength = (uint32_t)XFileGetLength((XFILE)file_reference);
 
             data->decode.m_streamOffset = 0;
             
@@ -398,7 +398,7 @@ int MPEGDecoder_Open_XFILE(MPEGStreamData *data, XFILE file_reference)
                     data->m_sampleRate = data->decode.m_frame_info.sampling_rate;
                     data->m_channels = data->decode.m_frame_info.nchannels;
                     data->m_bitRate = data->decode.m_frame_info.bit_rate;
-                    data->decode.m_bufferSize = data->decode.m_frame_info.nsamples * sizeof(short) * data->decode.m_frame_info.nchannels;
+                    data->decode.m_bufferSize = data->decode.m_frame_info.nsamples * sizeof(int16_t) * data->decode.m_frame_info.nchannels;
 
                     frameSizeInBytes = PV_GetBytesPerFrame(&data->decode.m_header,
                                                                 &data->decode.m_frame_info);
@@ -430,11 +430,11 @@ int MPEGDecoder_Open_String(MPEGStreamData *data, char *fileName_in)
     return MPEGDecoder_Open_XFILENAME(data, &file);
 }
 
-int MPEGDecoder_Open_Memory(MPEGStreamData *data, XPTR dataBlock, unsigned long dataLength)
+int MPEGDecoder_Open_Memory(MPEGStreamData *data, XPTR dataBlock, uint32_t dataLength)
 {
     int             ok_flag;
     mpa_int         result;
-    unsigned long   frameSizeInBytes;
+    uint32_t   frameSizeInBytes;
 
     ok_flag = -1;
     if (data)
@@ -463,7 +463,7 @@ int MPEGDecoder_Open_Memory(MPEGStreamData *data, XPTR dataBlock, unsigned long 
                     data->m_channels = data->decode.m_frame_info.nchannels;
                     data->m_sampleRate = data->decode.m_frame_info.sampling_rate;
                     data->m_bitRate = data->decode.m_frame_info.bit_rate;
-                    data->decode.m_bufferSize = data->decode.m_frame_info.nsamples * sizeof(short) * data->decode.m_frame_info.nchannels;
+                    data->decode.m_bufferSize = data->decode.m_frame_info.nsamples * sizeof(int16_t) * data->decode.m_frame_info.nchannels;
                     frameSizeInBytes = PV_GetBytesPerFrame(&data->decode.m_header,
                                                                 &data->decode.m_frame_info);
                     data->decode.m_bufferSizeEncoded = frameSizeInBytes;
@@ -476,58 +476,58 @@ int MPEGDecoder_Open_Memory(MPEGStreamData *data, XPTR dataBlock, unsigned long 
     return ok_flag;
 }
 
-unsigned long MPEGDecoder_GetBitRate(MPEGStreamData *data)
+uint32_t MPEGDecoder_GetBitRate(MPEGStreamData *data)
 {
     if (data)
     {
-        return (unsigned long)data->m_bitRate;
+        return (uint32_t)data->m_bitRate;
     }
     return 0;
 }
 
-unsigned long MPEGDecoder_GetBufferSize(MPEGStreamData *data)
+uint32_t MPEGDecoder_GetBufferSize(MPEGStreamData *data)
 {
     if (data)
     {
-        return (unsigned long)data->decode.m_bufferSize;
+        return (uint32_t)data->decode.m_bufferSize;
     }
     return 0;
 }
 
-unsigned long MPEGDecoder_GetStreamSize(MPEGStreamData *data)
+uint32_t MPEGDecoder_GetStreamSize(MPEGStreamData *data)
 {
     if (data)
     {
-        return (unsigned long)data->decode.m_streamLength;
+        return (uint32_t)data->decode.m_streamLength;
     }
     return 0;
 }
 
-unsigned long MPEGDecoder_GetChannels(MPEGStreamData *data)
+uint32_t MPEGDecoder_GetChannels(MPEGStreamData *data)
 {
     if (data)
     {
-        return (unsigned long)data->m_channels;
+        return (uint32_t)data->m_channels;
     }
     return 0;
 }
 
-unsigned long MPEGDecoder_GetSampleRate(MPEGStreamData *data)
+uint32_t MPEGDecoder_GetSampleRate(MPEGStreamData *data)
 {
     if (data)
     {
-        return (unsigned long)data->m_sampleRate;
+        return (uint32_t)data->m_sampleRate;
     }
     return 0;
 }
 
-unsigned long MPEGDecoder_GetBitSize(MPEGStreamData *data)
+uint32_t MPEGDecoder_GetBitSize(MPEGStreamData *data)
 {
     data;
     return 16;
 }
 
-unsigned long MPEGDecoder_GetMaxFrames(MPEGStreamData *data)
+uint32_t MPEGDecoder_GetMaxFrames(MPEGStreamData *data)
 {
     if (data)
     {
@@ -619,7 +619,7 @@ decodeagain:
             }
             */
 
-            data->decode.m_bufferSize = data->decode.m_frame_info.nsamples * sizeof(short) * data->decode.m_frame_info.nchannels;
+            data->decode.m_bufferSize = data->decode.m_frame_info.nsamples * sizeof(int16_t) * data->decode.m_frame_info.nchannels;
 
             /* advance buffer by m_frame m_lengthgth */
             data->decode.m_bcount += data->decode.m_frame_info.header_offset;
@@ -653,11 +653,11 @@ decodeagain:
 // ----------------------------------------------------------------------------
 // 
 //
-static MPEGStreamData * MPEGEncoder_New(unsigned long encodeRate, 
-                                        unsigned long sampleRate,
-                                        unsigned long channels,
+static MPEGStreamData * MPEGEncoder_New(uint32_t encodeRate, 
+                                        uint32_t sampleRate,
+                                        uint32_t channels,
                                         XPTR pSampleData16Bits,
-                                        unsigned long frames)
+                                        uint32_t frames)
 {
     MPEGStreamData  *data;
 
@@ -695,7 +695,7 @@ static MPEGStreamData * MPEGEncoder_New(unsigned long encodeRate,
         {
             data->encode.m_sampleFramesPerMPEGFrame = data->encode.m_par.nsamples;
             data->encode.m_pBuffer = pSampleData16Bits;
-            data->encode.m_bufferSize = frames * channels * sizeof(short);
+            data->encode.m_bufferSize = frames * channels * sizeof(int16_t);
             data->encode.m_bufferPos = 0;
 
             // quantize to mpeg frame size
@@ -703,7 +703,7 @@ static MPEGStreamData * MPEGEncoder_New(unsigned long encodeRate,
             data->encode.m_sampleSizeInBytesQuantized += 1; // this is to compensate for the old decoder in which
                                                                 // it needs to have an extra buffer to pass the inital size
                                                                 // checks.
-            data->encode.m_sampleSizeInBytesQuantized *= data->encode.m_par.nsamples * channels * sizeof(short);
+            data->encode.m_sampleSizeInBytesQuantized *= data->encode.m_par.nsamples * channels * sizeof(int16_t);
 
             data->encode.m_fpar.samples[0] = data->encode.m_pcmEncodeBuffer[0];  
             data->encode.m_fpar.samples[1] = data->encode.m_pcmEncodeBuffer[1];  
@@ -746,11 +746,11 @@ static void MPEGEncoder_Delete(MPEGStreamData *data)
 // Returns number of bytes we filled in the destination (not including any 
 // padded zeros).
 //
-static unsigned long PV_ReadNextSamplesForEncode(MPEGStreamData *stream,
+static uint32_t PV_ReadNextSamplesForEncode(MPEGStreamData *stream,
                                                  void *pDestData,
-                                                 unsigned long destLength)
+                                                 uint32_t destLength)
 {
-    unsigned long bufferSize, remainingBufferSize, bytesCopied;
+    uint32_t bufferSize, remainingBufferSize, bytesCopied;
 
     bytesCopied = 0;
     bufferSize = stream->encode.m_bufferSize;
@@ -809,7 +809,7 @@ static OPErr MPEGEncoder_Process(MPEGStreamData *data)
     OPErr           err;
     mpa_s32         i = 0;
     mpa_s16         insamples[MPA_MAX_CHANNELS * MPA_SAMPLES_IN_CHANNEL];
-    unsigned long   dataSize;
+    uint32_t   dataSize;
     
     XDWORD          numChannels, numSamples, numBytes, numFrames;
     XDWORD          channel, frame, maxFrames;
@@ -820,10 +820,10 @@ static OPErr MPEGEncoder_Process(MPEGStreamData *data)
     {   
         numChannels = data->m_channels;
         maxFrames = data->encode.m_sampleFramesPerMPEGFrame;
-        dataSize = maxFrames * numChannels * sizeof(short);
+        dataSize = maxFrames * numChannels * sizeof(int16_t);
 
         numBytes = PV_ReadNextSamplesForEncode(data, insamples, dataSize);
-        numSamples = numBytes / sizeof(short);
+        numSamples = numBytes / sizeof(int16_t);
         numFrames = numSamples / numChannels;
 
         if (numBytes)
@@ -877,12 +877,12 @@ static OPErr MPEGEncoder_Process(MPEGStreamData *data)
 // ----------------------------------------------------------------------------
 // Gets pointers to the actual compressed data, and its size.
 //
-static void MPEGEncoder_GetBits(MPEGStreamData *data, XPTR *pReturnedBuffer, unsigned long *pReturnedSize)
+static void MPEGEncoder_GetBits(MPEGStreamData *data, XPTR *pReturnedBuffer, uint32_t *pReturnedSize)
 {
     if (data && pReturnedBuffer && pReturnedSize)
     {
         *pReturnedBuffer = (XPTR)data->encode.m_encodeBuffer;
-        *pReturnedSize = (unsigned long)data->encode.m_encodedBufferSize;
+        *pReturnedSize = (uint32_t)data->encode.m_encodedBufferSize;
     }
 }
 
@@ -892,14 +892,14 @@ static void MPEGEncoder_GetBits(MPEGStreamData *data, XPTR *pReturnedBuffer, uns
 // ----------------------------------------------------------------------------
 // return size of MPEG frame in bytes
 //
-static unsigned long MPEGEncoder_GetMaxFrameSize(MPEGStreamData *data)
+static uint32_t MPEGEncoder_GetMaxFrameSize(MPEGStreamData *data)
 {
-    unsigned long   frames = 0;
+    uint32_t   frames = 0;
 
     if (data)
     {
         // number of samples per frame
-        frames = data->encode.m_par.nsamples * data->m_channels * sizeof(short);
+        frames = data->encode.m_par.nsamples * data->m_channels * sizeof(int16_t);
     }
     return frames;
 }
@@ -910,9 +910,9 @@ static unsigned long MPEGEncoder_GetMaxFrameSize(MPEGStreamData *data)
 // ----------------------------------------------------------------------------
 // return number of MPEG frames
 //
-static unsigned long MPEGEncoder_GetMaxFrames(MPEGStreamData *data)
+static uint32_t MPEGEncoder_GetMaxFrames(MPEGStreamData *data)
 {
-    unsigned long   frames = 0;
+    uint32_t   frames = 0;
 
     if (data)
     {
@@ -1003,7 +1003,7 @@ void * MPG_NewStreamXFILE(XFILE file)
     return stream;
 }
 
-void * MPG_NewStreamFromMemory(void *mpeg_stream, unsigned long mpeg_stream_m_lengthgth)
+void * MPG_NewStreamFromMemory(void *mpeg_stream, uint32_t mpeg_stream_m_lengthgth)
 {
     MPEGStreamData  *stream;
 
@@ -1055,7 +1055,7 @@ int MPG_GetFrameBufferSizeInBytes(void *reference)
 }
 
 // reposition stream, start reading from newPos.
-int MPG_SeekStream(void *reference, unsigned long newPos)
+int MPG_SeekStream(void *reference, uint32_t newPos)
 {
     MPEGStreamData *stream = (MPEGStreamData *)reference;
 
@@ -1081,10 +1081,10 @@ int MPG_GetBufferSize(void *reference)
 }
 
 // return the max number of frames
-unsigned long MPG_GetMaxBuffers(void *reference)
+uint32_t MPG_GetMaxBuffers(void *reference)
 {
     MPEGStreamData      *stream = (MPEGStreamData *)reference;
-    unsigned long   frames;
+    uint32_t   frames;
 
     frames = 0;
     if (reference)
@@ -1138,9 +1138,9 @@ int MPG_GetSampleRate(void *reference)
     return 0;
 }
 
-unsigned long MPG_GetNumberOfSamples(void *reference)
+uint32_t MPG_GetNumberOfSamples(void *reference)
 {
-    unsigned long   samples;
+    uint32_t   samples;
 
     samples = 0;
     if (reference)
@@ -1154,10 +1154,10 @@ unsigned long MPG_GetNumberOfSamples(void *reference)
 //      frames too many.  When you install the new codec, please try to
 //      make this more accurate.
 // return the size in bytes of the complete uncompressed MPEG file
-unsigned long MPG_GetSizeInBytes(void *reference)
+uint32_t MPG_GetSizeInBytes(void *reference)
 {
     //MPEGStreamData        *stream = (MPEGStreamData *)reference;
-    unsigned long       bytes;
+    uint32_t       bytes;
 
     bytes = 0;
     if (reference)
@@ -1167,7 +1167,7 @@ unsigned long MPG_GetSizeInBytes(void *reference)
     return bytes;
 }
 
-SndCompressionType XGetMPEGBitrateType(unsigned long bitrate)
+SndCompressionType XGetMPEGBitrateType(uint32_t bitrate)
 {
     BAE_ASSERT(bitrate >= 16000);   // otherwise it doesn't make sense
     
@@ -1231,9 +1231,9 @@ SndCompressionType XGetMPEGBitrateType(unsigned long bitrate)
 #endif
 #if USE_MPEG_ENCODER
 // create new mpeg stream to prepare for encoding. Returns NULL if failed.
-void * MPG_EncodeNewStream(unsigned long encodeRate,
-                            unsigned long sampleRate, unsigned long channels,
-                            XPTR pSampleData16Bits, unsigned long frames)
+void * MPG_EncodeNewStream(uint32_t encodeRate,
+                            uint32_t sampleRate, uint32_t channels,
+                            XPTR pSampleData16Bits, uint32_t frames)
 {
     return MPEGEncoder_New(encodeRate, sampleRate, channels, pSampleData16Bits, frames);
 }
@@ -1241,13 +1241,13 @@ void * MPG_EncodeNewStream(unsigned long encodeRate,
 
 
 // get max mpeg frames we're going to encode
-unsigned long MPG_EncodeMaxFrames(void *stream)
+uint32_t MPG_EncodeMaxFrames(void *stream)
 {
     return MPEGEncoder_GetMaxFrames((MPEGStreamData *)stream);
 }
 
 // get max size of an mpeg frame in bytes
-unsigned long MPG_EncodeMaxFrameSize(void *stream)
+uint32_t MPG_EncodeMaxFrameSize(void *stream)
 {
     return MPEGEncoder_GetMaxFrameSize((MPEGStreamData *)stream);
 }
@@ -1263,7 +1263,7 @@ void MPG_EncodeSetRefillCallback(void *stream, MPEGFillBufferFn callback, void *
 // ----------------------------------------------------------------------------
 // compress a frame.  Returns number of samples compressed
 //
-int MPG_EncodeProcess(void *stream, XPTR *pReturnedBuffer, unsigned long *pReturnedSize, XBOOL *pLastFrame)
+int MPG_EncodeProcess(void *stream, XPTR *pReturnedBuffer, uint32_t *pReturnedSize, XBOOL *pLastFrame)
 {
     int     total;
 
@@ -1357,7 +1357,7 @@ int             i;
 XMPEGEncodeRate XGetClosestMPEGEncodeRate(unsigned int bitrate)
 {
 XMPEGEncodeRate closestRate;
-long            smallestDifference;
+int32_t            smallestDifference;
 int             i;
 
     closestRate = MPG_128;  // just in case
@@ -1365,9 +1365,9 @@ int             i;
     i = sizeof(mpegEncodeRateTable) / sizeof(MPEGEncodeRateElement);
     while (--i >= 0)
     {
-    long            difference;
+    int32_t            difference;
     
-        difference = (long)mpegEncodeRateTable[i].encodeRate - bitrate;
+        difference = (int32_t)mpegEncodeRateTable[i].encodeRate - bitrate;
         if (difference < 0) difference = -difference;
         if (difference < smallestDifference)
         {
@@ -1382,13 +1382,13 @@ int             i;
 // what the encoder can encode
 XFIXED XGetClosestMPEGSampleRate(XFIXED sourceRate, SndCompressionSubType subType)
 {
-    unsigned long   const rate = XFIXED_TO_UNSIGNED_LONG(sourceRate);
-    unsigned long   closestRate;
-    long            smallestDifference;
+    uint32_t   const rate = XFIXED_TO_UNSIGNED_LONG(sourceRate);
+    uint32_t   closestRate;
+    int32_t            smallestDifference;
     int             i;
-    unsigned long   *table;
+    uint32_t   *table;
     // source sample rates that this encoder can work encode
-    static unsigned long    mpegSample1onlyRateTable[] =
+    static uint32_t    mpegSample1onlyRateTable[] =
     {
         32000,
         44100,
@@ -1396,7 +1396,7 @@ XFIXED XGetClosestMPEGSampleRate(XFIXED sourceRate, SndCompressionSubType subTyp
     };
 
     // source sample rates that this encoder can work encode
-    static unsigned long    mpegSample1and2RateTable[] =
+    static uint32_t    mpegSample1and2RateTable[] =
     {
 //      16000,
         22050,
@@ -1411,18 +1411,18 @@ XFIXED XGetClosestMPEGSampleRate(XFIXED sourceRate, SndCompressionSubType subTyp
 
     if (subType == CS_MPEG1)
     {
-        i = sizeof(mpegSample1onlyRateTable) / sizeof(unsigned long);
+        i = sizeof(mpegSample1onlyRateTable) / sizeof(uint32_t);
         table = mpegSample1onlyRateTable;
     }
     else
     {
-        i = sizeof(mpegSample1and2RateTable) / sizeof(unsigned long);
+        i = sizeof(mpegSample1and2RateTable) / sizeof(uint32_t);
         table = mpegSample1and2RateTable;
     }
     while (--i >= 0)
     {
 #if TRUE
-    long            difference;
+    int32_t            difference;
     
         difference = table[i] - rate;
         if (difference < 0) difference = -difference;

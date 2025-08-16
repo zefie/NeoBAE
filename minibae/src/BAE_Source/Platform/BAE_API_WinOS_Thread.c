@@ -37,7 +37,7 @@
 **
 **  Overview:
 **
-**  © Copyright 1995-2000 Beatnik, Inc, All Rights Reserved.
+**  ï¿½ Copyright 1995-2000 Beatnik, Inc, All Rights Reserved.
 **  Written by Moe
 **
 **  Beatnik products contain certain trade secrets and confidential and
@@ -220,7 +220,7 @@ int BAE_DestroyFrameThread(void* threadContext)
     return -1;
 }
 // Make the frame thread sleep for the given number of milliseconds
-int BAE_SleepFrameThread(void* threadContext, long msec)
+int BAE_SleepFrameThread(void* threadContext, int32_t msec)
 {
     threadContext;
     Sleep(msec);

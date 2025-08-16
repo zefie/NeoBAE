@@ -156,6 +156,7 @@
 #include "BAE_API.h"
 #include "X_Assert.h"
 #include <limits.h>
+#include <stdint.h>
 
 #ifdef WASM
     #include <emscripten.h>
@@ -281,12 +282,12 @@ typedef struct BAEObjectListElem
 
 struct sBAEMixer 
 {
-    long                    mID;
+    int32_t                    mID;
     GM_Mixer                *pMixer;        // Don't dereference pMixer, since if you are running
                                             // the dual-CPU version of MiniBAE, this will be only a reference.
     BAE_BOOL                 audioEngaged;
     XFILE                   *pPatchFiles;
-    short                    numPatchFiles;
+    int16_t                    numPatchFiles;
 #if TRACKING
     BAEObjectListElem       *pObjects;
 #endif
@@ -303,7 +304,7 @@ struct sBAEMixer
 
 struct sBAESong 
 {
-    long                    mID;
+    int32_t                    mID;
     BAEMixer                mixer;
     GM_Song                 *pSong;         // Don't dereference pSong, since if you are running
                                             // the dual-CPU version of MiniBAE, this will be only a reference.
@@ -332,7 +333,7 @@ struct sBAESong
 
 struct sBAESound 
 {
-    long                    mID;
+    int32_t                    mID;
     BAEMixer                mixer;
     GM_Waveform             *pWave;         // Don't dereference pWave, since if you are running
                                             // the dual-CPU version of MiniBAE, this will be only a reference.
@@ -356,20 +357,20 @@ struct sBAESound
 #if USE_STREAM_API == TRUE
 struct sBAEStream
 {
-    long                        mID;
+    int32_t                        mID;
     BAEMixer                    mixer;
 
     BAE_Mutex                   mLock;
     STREAM_REFERENCE            mSoundStreamVoiceReference;
     BAE_BOOL                    mLoop:1;
     BAE_BOOL                    mPrerolled:1;
-    unsigned long               mPlaybackLength;
+    uint32_t               mPlaybackLength;
     BAE_UNSIGNED_FIXED          mVolumeState;
-    short int                   mPanState;
+    int16_t                   mPanState;
     BAESampleInfo               mStreamSampleInfo;
     BAE_UNSIGNED_FIXED          mPauseVariable;
     BAE_AudioStreamCallbackPtr  mCallback;
-    unsigned long               mCallbackReference;
+    uint32_t               mCallbackReference;
 #if !TRACKING
     BAE_BOOL                    mValid;
 #endif
@@ -394,7 +395,7 @@ BAEFileType         mWriteToFileType;
 void                *mWritingToFileReference;
 void                *mWritingEncoder;
 void                *mWritingDataBlock;
-unsigned long       mWritingDataBlockSize;
+uint32_t       mWritingDataBlockSize;
 
 // Prototypes
 // ----------------------------------------------------------------------------
@@ -454,7 +455,7 @@ extern char mAboutNames[];
 
 
 // Read a file into memory and return an allocated pointer
-static XPTR PV_GetFileAsData(XFILENAME *pFile, long *pSize)
+static XPTR PV_GetFileAsData(XFILENAME *pFile, int32_t *pSize)
 {
     XPTR    data;
 
@@ -500,7 +501,7 @@ static const BAEReverbType translateExternal[] = {
 ReverbMode BAE_TranslateFromBAEReverb(BAEReverbType igorVerb)
 {
     ReverbMode              r;
-    short int               count;
+    int16_t               count;
 
     r = REVERB_TYPE_1;
     for (count = 0; count < MAX_REVERB_TYPES; count++)
@@ -518,7 +519,7 @@ ReverbMode BAE_TranslateFromBAEReverb(BAEReverbType igorVerb)
 BAEReverbType BAE_TranslateToBAEReverb(ReverbMode r)
 {
     BAEReverbType           igorVerb;
-    short int               count;
+    int16_t               count;
 
     igorVerb = BAE_REVERB_TYPE_1;
     for (count = 0; count < MAX_REVERB_TYPES; count++)
@@ -599,7 +600,7 @@ static const OPErr translateInternalError[] = {
 BAEResult BAE_TranslateOPErr(OPErr theErr)
 {
     BAEResult       igorErr;
-    short int   count,  max;
+    int16_t   count,  max;
 
     igorErr = BAE_GENERAL_ERR;
     max = sizeof(translateExternalError) / sizeof(BAEResult);
@@ -619,7 +620,7 @@ BAEResult BAE_TranslateOPErr(OPErr theErr)
 OPErr BAE_TranslateBAErr(BAEResult theErr)
 {
     OPErr       igorErr;
-    short int   count,  max;
+    int16_t   count,  max;
 
     igorErr = GENERAL_BAD;
     max = sizeof(translateExternalError) / sizeof(BAEResult);
@@ -835,9 +836,9 @@ BAEResult BAEMixer_GetAudioTask(BAEMixer mixer, BAE_AudioTaskCallbackPtr *pResul
 // --------------------------------------
 //
 //
-BAEResult BAEMixer_GetMemoryUsed(BAEMixer mixer, unsigned long *pOutResult)
+BAEResult BAEMixer_GetMemoryUsed(BAEMixer mixer, uint32_t *pOutResult)
 {
-    unsigned long   size;
+    uint32_t   size;
 
     size = 0;
     if (mixer)
@@ -1035,7 +1036,7 @@ BAEResult BAEMixer_GetFadeRate(BAEMixer mixer, BAE_UNSIGNED_FIXED *outFadeRate)
 // ------------------------------------
 //
 //
-BAEResult BAEMixer_GetMaxDeviceCount(BAEMixer mixer, long *outMaxDeviceCount)
+BAEResult BAEMixer_GetMaxDeviceCount(BAEMixer mixer, int32_t *outMaxDeviceCount)
 {
     OPErr err;
     
@@ -1067,11 +1068,11 @@ BAEResult BAEMixer_GetMaxDeviceCount(BAEMixer mixer, long *outMaxDeviceCount)
 // ------------------------------------
 //
 //
-BAEResult BAEMixer_SetCurrentDevice(BAEMixer mixer, long deviceID, void *deviceParameter)
+BAEResult BAEMixer_SetCurrentDevice(BAEMixer mixer, int32_t deviceID, void *deviceParameter)
 {   
     OPErr       err;
     BAE_BOOL    isOpen;
-    long        deviceCount;
+    int32_t        deviceCount;
     
     err = NO_ERR;
     if (mixer)
@@ -1111,7 +1112,7 @@ BAEResult BAEMixer_SetCurrentDevice(BAEMixer mixer, long deviceID, void *deviceP
 // ------------------------------------
 //
 //
-BAEResult BAEMixer_GetCurrentDevice(BAEMixer mixer, void *deviceParameter, long *outDeviceID)
+BAEResult BAEMixer_GetCurrentDevice(BAEMixer mixer, void *deviceParameter, int32_t *outDeviceID)
 {
     OPErr err;
     
@@ -1139,7 +1140,7 @@ BAEResult BAEMixer_GetCurrentDevice(BAEMixer mixer, void *deviceParameter, long 
 // ------------------------------------
 //
 //
-BAEResult BAEMixer_GetDeviceName(BAEMixer mixer, long deviceID, char *cName, unsigned long cNameLength)
+BAEResult BAEMixer_GetDeviceName(BAEMixer mixer, int32_t deviceID, char *cName, uint32_t cNameLength)
 {
     OPErr err;
     
@@ -1322,9 +1323,9 @@ BAEResult BAEMixer_Open(BAEMixer mixer,
                         BAERate q, 
                         BAETerpMode t, 
                         BAEAudioModifiers am,
-                        short int maxSongVoices,
-                        short int maxSoundVoices,
-                        short int mixLevel,
+                        int16_t maxSongVoices,
+                        int16_t maxSoundVoices,
+                        int16_t mixLevel,
                         BAE_BOOL engageAudio)
 {
     OPErr           theErr;
@@ -1434,7 +1435,7 @@ BAEResult BAEMixer_Open(BAEMixer mixer,
             // check to see if the version numbers match the header files and
             // the built codebase
             {
-                short int major, minor, subminor;
+                int16_t major, minor, subminor;
     
                 BAEMixer_GetMixerVersion(mixer, &major, &minor, &subminor);
                 if ((major != BAE_VERSION_MAJOR) || (minor != BAE_VERSION_MINOR) || 
@@ -1531,7 +1532,7 @@ BAEResult BAEMixer_Close(BAEMixer mixer)
 // ------------------------------------
 //
 //
-BAEResult BAEMixer_GetMixerVersion(BAEMixer mixer, short int *pVersionMajor, short int *pVersionMinor, short int *pVersionSubMinor)
+BAEResult BAEMixer_GetMixerVersion(BAEMixer mixer, int16_t *pVersionMajor, int16_t *pVersionMinor, int16_t *pVersionSubMinor)
 {
     OPErr err;
     
@@ -1603,7 +1604,7 @@ static BAEResult PV_BAEMixer_AddBank(BAEMixer mixer, XFILE newPatchFile)
 // ------------------------------------
 //
 //
-BAEResult BAEMixer_AddBankFromMemory(BAEMixer mixer, void * pAudioFile, unsigned long fileSize, BAEBankToken *outToken)
+BAEResult BAEMixer_AddBankFromMemory(BAEMixer mixer, void * pAudioFile, uint32_t fileSize, BAEBankToken *outToken)
 {
     BAEResult       theErr;
     XFILE           newPatchFile;
@@ -1880,7 +1881,7 @@ static void PV_BAEMixer_SubmitBankOrder(BAEMixer mixer)
 // ------------------------------------
 // was BAEMixer_GetVersionFromAudioFile()
 //
-BAEResult BAEMixer_GetBankVersion(BAEMixer mixer, BAEBankToken token, short int *pVersionMajor, short int *pVersionMinor, short int *pVersionSubMinor)
+BAEResult BAEMixer_GetBankVersion(BAEMixer mixer, BAEBankToken token, int16_t *pVersionMajor, int16_t *pVersionMinor, int16_t *pVersionSubMinor)
 {
     OPErr       err;
     XVersion    vers;
@@ -1945,7 +1946,7 @@ BAEResult BAEMixer_GetBankVersion(BAEMixer mixer, BAEBankToken token, short int 
 // -------------------------------------------
 // was GetSongNameFromAudioFile()
 //
-BAEResult BAEMixer_GetGroovoidNameFromBank(BAEMixer mixer, long index, char *cSongName)
+BAEResult BAEMixer_GetGroovoidNameFromBank(BAEMixer mixer, int32_t index, char *cSongName)
 {
     XPTR        pData;
     OPErr       err;
@@ -2002,7 +2003,7 @@ BAEResult BAEMixer_ChangeAudioModes(BAEMixer mixer, BAERate q, BAETerpMode t, BA
         theRate = (Rate)q;
         if (theRate == BAE_RATE_INVALID)
         {
-            BAE_STDERR("BAEMixer_ChangeAudioModes:invalid rate %ld\n", (long)q);
+            BAE_STDERR("BAEMixer_ChangeAudioModes:invalid rate %ld\n", (int32_t)q);
             err = PARAM_ERR;
         }
         
@@ -2047,7 +2048,7 @@ BAEResult BAEMixer_ChangeAudioModes(BAEMixer mixer, BAERate q, BAETerpMode t, BA
         {
             err = GM_ChangeAudioModes(NULL, theRate, theTerp, theMods);
             if (err)
-                BAE_STDERR("audio:failed change %ld\n",(long)err);
+                BAE_STDERR("audio:failed change %ld\n",(int32_t)err);
         }
     }
     else
@@ -2062,7 +2063,7 @@ BAEResult BAEMixer_ChangeAudioModes(BAEMixer mixer, BAERate q, BAETerpMode t, BA
 // ------------------------------------
 //
 //
-BAEResult BAEMixer_ChangeSystemVoices(BAEMixer mixer, short int maxSongVoices, short int maxSoundVoices, short int mixLevel)
+BAEResult BAEMixer_ChangeSystemVoices(BAEMixer mixer, int16_t maxSongVoices, int16_t maxSoundVoices, int16_t mixLevel)
 {
     OPErr   err;
 
@@ -2083,7 +2084,7 @@ BAEResult BAEMixer_ChangeSystemVoices(BAEMixer mixer, short int maxSongVoices, s
 // ------------------------------------
 //
 //
-BAEResult BAEMixer_GetTick(BAEMixer mixer, unsigned long *outTick)
+BAEResult BAEMixer_GetTick(BAEMixer mixer, uint32_t *outTick)
 {
     OPErr err;
     
@@ -2104,7 +2105,7 @@ BAEResult BAEMixer_GetTick(BAEMixer mixer, unsigned long *outTick)
 // ------------------------------------
 //
 //
-BAEResult BAEMixer_SetAudioLatency(BAEMixer mixer, unsigned long requestedLatency)
+BAEResult BAEMixer_SetAudioLatency(BAEMixer mixer, uint32_t requestedLatency)
 {
     BAEResult error;
     
@@ -2114,7 +2115,7 @@ BAEResult BAEMixer_SetAudioLatency(BAEMixer mixer, unsigned long requestedLatenc
         #if (X_PLATFORM == X_WIN95) && BAE_COMPLETE 
         {
             BAEWinOSParameters  parms;
-            long                device;
+            int32_t                device;
         
             error = BAEMixer_GetCurrentDevice(mixer, (void *)&parms, &device);
             if (error == BAE_NO_ERROR)  // get current
@@ -2143,7 +2144,7 @@ BAEResult BAEMixer_SetAudioLatency(BAEMixer mixer, unsigned long requestedLatenc
 // ------------------------------------
 //
 //
-BAEResult BAEMixer_GetAudioLatency(BAEMixer mixer, unsigned long *outLatency)
+BAEResult BAEMixer_GetAudioLatency(BAEMixer mixer, uint32_t *outLatency)
 {
     OPErr err;
     
@@ -2359,7 +2360,7 @@ BAEResult BAEMixer_GetMasterSoundEffectsVolume(BAEMixer mixer, BAE_UNSIGNED_FIXE
 // ------------------------------------
 //
 //
-BAEResult BAEMixer_GetAudioSampleFrame(BAEMixer mixer, short int *pLeft, short int *pRight, short int *outFrame)
+BAEResult BAEMixer_GetAudioSampleFrame(BAEMixer mixer, int16_t *pLeft, int16_t *pRight, int16_t *outFrame)
 {
     OPErr err;
     
@@ -2390,7 +2391,7 @@ BAEResult BAEMixer_GetAudioSampleFrame(BAEMixer mixer, short int *pLeft, short i
 BAEResult BAEMixer_GetRealtimeStatus(BAEMixer mixer, BAEAudioInfo *pStatus)
 {
     GM_AudioInfo    status;
-    short int       count;
+    int16_t       count;
     BAEVoiceType    voiceType;
     OPErr           err;
 
@@ -2400,7 +2401,7 @@ BAEResult BAEMixer_GetRealtimeStatus(BAEMixer mixer, BAEAudioInfo *pStatus)
         if (pStatus)
         {
             GM_GetRealtimeAudioInformation(&status);
-            XSetMemory(pStatus, (long)sizeof(BAEAudioInfo), 0);
+            XSetMemory(pStatus, (int32_t)sizeof(BAEAudioInfo), 0);
             pStatus->voicesActive = status.voicesActive;
             for (count = 0; count < status.voicesActive; count++)
             {
@@ -2656,7 +2657,7 @@ BAEResult BAEMixer_IsAudioActive(BAEMixer mixer, BAE_BOOL *outIsActive)
 // --------------------------------------
 //
 //
-BAEResult BAEMixer_GetCPULoadInMicroseconds(BAEMixer mixer, unsigned long *outLoad)
+BAEResult BAEMixer_GetCPULoadInMicroseconds(BAEMixer mixer, uint32_t *outLoad)
 {
     OPErr err;
     
@@ -2684,7 +2685,7 @@ BAEResult BAEMixer_GetCPULoadInMicroseconds(BAEMixer mixer, unsigned long *outLo
 // --------------------------------------
 //
 //
-BAEResult BAEMixer_GetCPULoadInPercent(BAEMixer mixer, unsigned long *outLoad)
+BAEResult BAEMixer_GetCPULoadInPercent(BAEMixer mixer, uint32_t *outLoad)
 {
     OPErr err;
     
@@ -2835,7 +2836,7 @@ BAEResult BAEMixer_GetRate(BAEMixer mixer, BAERate *outRate)
 // --------------------------------------
 //
 //
-BAEResult BAEMixer_GetMidiVoices(BAEMixer mixer, short int *outNumMidiVoices)
+BAEResult BAEMixer_GetMidiVoices(BAEMixer mixer, int16_t *outNumMidiVoices)
 {
     OPErr err;
     INT16 song, mix, sound;
@@ -2872,7 +2873,7 @@ BAEResult BAEMixer_GetMidiVoices(BAEMixer mixer, short int *outNumMidiVoices)
 // --------------------------------------
 //
 //
-BAEResult BAEMixer_GetSoundVoices(BAEMixer mixer, short int *outNumSoundVoices)
+BAEResult BAEMixer_GetSoundVoices(BAEMixer mixer, int16_t *outNumSoundVoices)
 {
     OPErr err;
     INT16 song, mix, sound;
@@ -2909,7 +2910,7 @@ BAEResult BAEMixer_GetSoundVoices(BAEMixer mixer, short int *outNumSoundVoices)
 // --------------------------------------
 //
 //
-BAEResult BAEMixer_GetMixLevel(BAEMixer mixer, short int *outMixLevel)
+BAEResult BAEMixer_GetMixLevel(BAEMixer mixer, int16_t *outMixLevel)
 {
     OPErr err;
     INT16 song, mix, sound;
@@ -3174,7 +3175,7 @@ void BAEMixer_StopOutputToFile(void)
 BAEResult BAEMixer_ServiceAudioOutputToFile(BAEMixer theMixer)
 {
 #if USE_CREATION_API == TRUE
-    long                        sampleSize, channels;
+    int32_t                        sampleSize, channels;
     OPErr                       theErr;
 
 // begin block added for MiniBAE
@@ -3187,7 +3188,7 @@ BAEResult BAEMixer_ServiceAudioOutputToFile(BAEMixer theMixer)
 #ifdef WASM
     channels = ( theModifiers /*iModifiers*/ & ~BAE_USE_STEREO) ? 2 : 1;
     sampleSize = (theModifiers /*iModifiers*/ & BAE_USE_16) ? 2 : 1;
-    unsigned long numSamples = (unsigned long)(mWritingDataBlockSize / sampleSize / channels);
+    uint32_t numSamples = (uint32_t)(mWritingDataBlockSize / sampleSize / channels);
 
     BAE_BuildMixerSlice(NULL, mWritingDataBlock, mWritingDataBlockSize, numSamples);
     process_and_send_audio(mWritingDataBlock, numSamples);
@@ -3244,7 +3245,7 @@ BAEResult BAEMixer_ServiceAudioOutputToFile(BAEMixer theMixer)
                     case BAE_RAW_PCM:
                     {
                         BAE_BuildMixerSlice(NULL, mWritingDataBlock, mWritingDataBlockSize, 
-                                            (unsigned long)(mWritingDataBlockSize / sampleSize / channels));
+                                            (uint32_t)(mWritingDataBlockSize / sampleSize / channels));
                         if (XFileWrite((XFILE)mWritingToFileReference, mWritingDataBlock, mWritingDataBlockSize) == -1)
                         {
                             theErr = BAD_FILE;
@@ -3256,7 +3257,7 @@ BAEResult BAEMixer_ServiceAudioOutputToFile(BAEMixer theMixer)
                     case BAE_AU_TYPE:
                     {
                         BAE_BuildMixerSlice(NULL, mWritingDataBlock, mWritingDataBlockSize, 
-                                                (unsigned long)(mWritingDataBlockSize / sampleSize / channels));
+                                                (uint32_t)(mWritingDataBlockSize / sampleSize / channels));
                         theErr = GM_WriteAudioBufferToFile((XFILE)mWritingToFileReference, 
                                                             BAE_TranslateBAEFileType(mWriteToFileType),
                                                             mWritingDataBlock,
@@ -3382,9 +3383,9 @@ BAEResult BAESound_Delete(BAESound sound)
 // --------------------------------------
 //
 //
-BAEResult BAESound_GetMemoryUsed(BAESound sound, unsigned long *pOutResult)
+BAEResult BAESound_GetMemoryUsed(BAESound sound, uint32_t *pOutResult)
 {
-    unsigned long   size;
+    uint32_t   size;
 
     size = 0;
     if ( (sound) && (sound->mID == OBJECT_ID) )
@@ -3498,8 +3499,8 @@ BAEResult BAESound_Unload(BAESound sound)
     return BAE_TranslateOPErr(err);
 }
 
-BAEResult BAESound_SetSoundFrame(BAESound sound, unsigned long startFrameOffset,
-                                            void *sourceSamples, unsigned long sourceFrames)
+BAEResult BAESound_SetSoundFrame(BAESound sound, uint32_t startFrameOffset,
+                                            void *sourceSamples, uint32_t sourceFrames)
 {
     BAEResult   err = BAE_NO_ERROR;
 
@@ -3521,16 +3522,16 @@ BAEResult BAESound_SetSoundFrame(BAESound sound, unsigned long startFrameOffset,
 //
 //
 BAEResult BAESound_LoadEmptySample(BAESound sound,
-                            unsigned long frames,           // number of frames of audio
-                            unsigned short int bitSize,     // bits per sample 8 or 16
-                            unsigned short int channels,    // mono or stereo 1 or 2
+                            uint32_t frames,           // number of frames of audio
+                            uint16_t bitSize,     // bits per sample 8 or 16
+                            uint16_t channels,    // mono or stereo 1 or 2
                             BAE_UNSIGNED_FIXED rate,        // 16.16 fixed sample rate
-                            unsigned long loopStart,        // loop start in frames
-                            unsigned long loopEnd)          // loop end in frames
+                            uint32_t loopStart,        // loop start in frames
+                            uint32_t loopEnd)          // loop end in frames
 {
     OPErr           theErr;
     GM_Waveform     *pWave = NULL;
-    long            size;
+    int32_t            size;
     void            *sampleData;
 
     theErr = NO_ERR;
@@ -3596,12 +3597,12 @@ BAEResult BAESound_LoadEmptySample(BAESound sound,
 //
 BAEResult BAESound_LoadCustomSample(BAESound sound,
                             void * sampleData,              // pointer to audio data
-                            unsigned long frames,           // number of frames of audio
-                            unsigned short int bitSize,     // bits per sample 8 or 16
-                            unsigned short int channels,    // mono or stereo 1 or 2
+                            uint32_t frames,           // number of frames of audio
+                            uint16_t bitSize,     // bits per sample 8 or 16
+                            uint16_t channels,    // mono or stereo 1 or 2
                             BAE_UNSIGNED_FIXED rate,        // 16.16 fixed sample rate
-                            unsigned long loopStart,        // loop start in frames
-                            unsigned long loopEnd)          // loop end in frames
+                            uint32_t loopStart,        // loop start in frames
+                            uint32_t loopEnd)          // loop end in frames
 {
     OPErr           theErr;
 
@@ -3636,7 +3637,7 @@ BAEResult BAESound_LoadCustomSample(BAESound sound,
 // --------------------------------------
 //
 //
-BAEResult BAESound_LoadMemorySample(BAESound sound, void *pMemoryFile, unsigned long memoryFileSize, BAEFileType fileType)
+BAEResult BAESound_LoadMemorySample(BAESound sound, void *pMemoryFile, uint32_t memoryFileSize, BAEFileType fileType)
 {
 #if USE_HIGHLEVEL_FILE_API
     OPErr           theErr;
@@ -3829,7 +3830,7 @@ BAEResult BAESound_Resume(BAESound sound)
 //
 BAEResult BAESound_Fade(BAESound sound, BAE_FIXED sourceVolume, BAE_FIXED destVolume, BAE_FIXED timeInMiliseconds)
 {
-    short int   source, dest;
+    int16_t   source, dest;
     INT16       minVolume;
     INT16       maxVolume;
     OPErr       err;
@@ -3971,12 +3972,12 @@ BAEResult BAESound_GetCallback(BAESound sound, BAE_SoundCallbackPtr *pResult)
 //
 //
 BAEResult BAESound_Start(BAESound sound,
-                            short int priority,
+                            int16_t priority,
                             BAE_UNSIGNED_FIXED sampleVolume,        // sample volume    (1.0)
-                            unsigned long startOffsetFrame)         // starting offset in frames
+                            uint32_t startOffsetFrame)         // starting offset in frames
 {
     OPErr           theErr = NO_ERR;
-    long            volume;
+    int32_t            volume;
 
     priority = priority; // NEED TO IMPLEMENT PRIORITY FOR SOUNDS IN ENGINE.
 
@@ -4041,7 +4042,7 @@ BAEResult BAESound_Start(BAESound sound,
 
 static void PV_BAESound_Stop(BAESound sound, BAE_BOOL startFade)
 {
-    short int   sampleVolume;
+    int16_t   sampleVolume;
 
     sound->mPauseVariable = 0;
 
@@ -4139,12 +4140,12 @@ BAEResult BAESound_GetInfo(BAESound sound, BAESampleInfo *outInfo)
 }
 
 BAEResult BAESound_GetRawPCMData(BAESound sound, char *outDataPointer, 
-                                                            unsigned long outDataSize)
+                                                            uint32_t outDataSize)
 {
     BAEResult   err = BAE_NO_ERROR;
     BAESampleInfo info;
     unsigned char *sampleData;
-    unsigned long frames;
+    uint32_t frames;
 
     if ( (sound) && (sound->mID == OBJECT_ID) )
     {
@@ -4377,7 +4378,7 @@ BAEResult BAESound_GetRate(BAESound sound, BAE_UNSIGNED_FIXED *outRate)
 // --------------------------------------
 //
 //
-BAEResult BAESound_SetSamplePlaybackPosition(BAESound sound, unsigned long pos)
+BAEResult BAESound_SetSamplePlaybackPosition(BAESound sound, uint32_t pos)
 {
     OPErr err;
     
@@ -4403,7 +4404,7 @@ BAEResult BAESound_SetSamplePlaybackPosition(BAESound sound, unsigned long pos)
 // --------------------------------------
 //
 //
-BAEResult BAESound_GetSamplePlaybackPosition(BAESound sound, unsigned long *outPos)
+BAEResult BAESound_GetSamplePlaybackPosition(BAESound sound, uint32_t *outPos)
 {
     OPErr err;
     
@@ -4431,7 +4432,7 @@ BAEResult BAESound_GetSamplePlaybackPosition(BAESound sound, unsigned long *outP
     return BAE_TranslateOPErr(err);
 }
 
-void * BAESound_GetSamplePlaybackPointer(BAESound sound, unsigned long *outLength)
+void * BAESound_GetSamplePlaybackPointer(BAESound sound, uint32_t *outLength)
 {
     OPErr err;
     void    *sampleData;
@@ -4467,7 +4468,7 @@ void * BAESound_GetSamplePlaybackPointer(BAESound sound, unsigned long *outLengt
 // --------------------------------------
 //
 //
-BAEResult BAESound_SetLowPassAmountFilter(BAESound sound, short int lowPassAmount)
+BAEResult BAESound_SetLowPassAmountFilter(BAESound sound, int16_t lowPassAmount)
 {
     OPErr err;
     
@@ -4493,7 +4494,7 @@ BAEResult BAESound_SetLowPassAmountFilter(BAESound sound, short int lowPassAmoun
 // --------------------------------------
 //
 //
-BAEResult BAESound_GetLowPassAmountFilter(BAESound sound, short int *outLowPassAmount)
+BAEResult BAESound_GetLowPassAmountFilter(BAESound sound, int16_t *outLowPassAmount)
 {
     OPErr err;
     
@@ -4526,7 +4527,7 @@ BAEResult BAESound_GetLowPassAmountFilter(BAESound sound, short int *outLowPassA
 // --------------------------------------
 //
 //
-BAEResult BAESound_SetResonanceAmountFilter(BAESound sound, short int resonanceAmount)
+BAEResult BAESound_SetResonanceAmountFilter(BAESound sound, int16_t resonanceAmount)
 {
     OPErr err;
     
@@ -4552,7 +4553,7 @@ BAEResult BAESound_SetResonanceAmountFilter(BAESound sound, short int resonanceA
 // --------------------------------------
 //
 //
-BAEResult BAESound_GetResonanceAmountFilter(BAESound sound, short int *outResonanceAmount)
+BAEResult BAESound_GetResonanceAmountFilter(BAESound sound, int16_t *outResonanceAmount)
 {
     OPErr err;
     
@@ -4585,7 +4586,7 @@ BAEResult BAESound_GetResonanceAmountFilter(BAESound sound, short int *outResona
 // --------------------------------------
 //
 //
-BAEResult BAESound_SetFrequencyAmountFilter(BAESound sound, short int frequencyAmount)
+BAEResult BAESound_SetFrequencyAmountFilter(BAESound sound, int16_t frequencyAmount)
 {
     OPErr err;
     
@@ -4611,7 +4612,7 @@ BAEResult BAESound_SetFrequencyAmountFilter(BAESound sound, short int frequencyA
 // --------------------------------------
 //
 //
-BAEResult BAESound_GetFrequencyAmountFilter(BAESound sound, short int *outFrequencyAmount)
+BAEResult BAESound_GetFrequencyAmountFilter(BAESound sound, int16_t *outFrequencyAmount)
 {
     OPErr err;
     
@@ -4644,7 +4645,7 @@ BAEResult BAESound_GetFrequencyAmountFilter(BAESound sound, short int *outFreque
 // --------------------------------------
 //
 //
-BAEResult BAESound_SetSampleLoopPoints(BAESound sound, unsigned long start, unsigned long end)
+BAEResult BAESound_SetSampleLoopPoints(BAESound sound, uint32_t start, uint32_t end)
 {
     OPErr   err;
 
@@ -4681,7 +4682,7 @@ BAEResult BAESound_SetSampleLoopPoints(BAESound sound, unsigned long start, unsi
 // --------------------------------------
 //
 //
-BAEResult BAESound_GetSampleLoopPoints(BAESound sound, unsigned long *outStart, unsigned long *outEnd)
+BAEResult BAESound_GetSampleLoopPoints(BAESound sound, uint32_t *outStart, uint32_t *outEnd)
 {
     OPErr err;
     
@@ -4832,9 +4833,9 @@ BAEResult BAEStream_Unload(BAEStream stream)
 // --------------------------------------
 // Returns total number of bytes used by this object.
 //
-BAEResult           BAEStream_GetMemoryUsed(BAEStream stream, unsigned long *pOutResult)
+BAEResult           BAEStream_GetMemoryUsed(BAEStream stream, uint32_t *pOutResult)
 {
-    unsigned long   size;
+    uint32_t   size;
 
     size = 0;
     if (stream)
@@ -5061,7 +5062,7 @@ static void PV_DefaultStreamFileDoneCallback(void *reference)
     }
 }
 
-BAEResult BAEStream_SetCallback(BAEStream stream, BAE_AudioStreamCallbackPtr callback, unsigned long reference)
+BAEResult BAEStream_SetCallback(BAEStream stream, BAE_AudioStreamCallbackPtr callback, uint32_t reference)
 {
     if (stream)
     {
@@ -5080,7 +5081,7 @@ BAEResult BAEStream_SetCallback(BAEStream stream, BAE_AudioStreamCallbackPtr cal
 // prepare to play a formatted file as a stream.
 BAEResult           BAEStream_SetupFile(BAEStream stream, BAEPathName cFileName, 
                             BAEFileType fileType,
-                            unsigned long bufferSize,       // temp buffer to read file
+                            uint32_t bufferSize,       // temp buffer to read file
                             BAE_BOOL loopFile)              // TRUE will loop file
 {
     XFILENAME       theFile;
@@ -5222,7 +5223,7 @@ BAEResult           BAEStream_Stop(BAEStream stream,
                             BAE_BOOL startFade)
 {
     BAEResult           err;
-    short int           streamVolume;
+    int16_t           streamVolume;
     BAE_BOOL            paused;
 
     err = BAE_NO_ERROR;
@@ -5489,7 +5490,7 @@ BAEResult           BAEStream_GetRate(BAEStream stream,
 // BAEStream object.
 //
 BAEResult           BAEStream_SetLowPassAmountFilter(BAEStream stream,
-                            short int lowPassAmount)
+                            int16_t lowPassAmount)
 {
     BAEResult   err;
 
@@ -5516,12 +5517,12 @@ BAEResult           BAEStream_SetLowPassAmountFilter(BAEStream stream,
 
 // BAEStream_GetLowPassAmountFilter()
 // --------------------------------------
-// Upon return, the short int pointed to by parameter outLowPassAmount will hold a
+// Upon return, the int16_t pointed to by parameter outLowPassAmount will hold a
 // copy of the indicated BAEStream object's current lowpass filter effect's depth
 // setting.
 //
 BAEResult           BAEStream_GetLowPassAmountFilter(BAEStream stream,
-                            short int *outLowPassAmount)
+                            int16_t *outLowPassAmount)
 {
     BAEResult   err;
 
@@ -5559,7 +5560,7 @@ BAEResult           BAEStream_GetLowPassAmountFilter(BAEStream stream,
 // object.
 //
 BAEResult           BAEStream_SetResonanceAmountFilter(BAEStream stream,
-                            short int resonanceAmount)
+                            int16_t resonanceAmount)
 {
     BAEResult   err;
 
@@ -5586,12 +5587,12 @@ BAEResult           BAEStream_SetResonanceAmountFilter(BAEStream stream,
 
 // BAEStream_GetResonanceAmountFilter()
 // ------------------------------------
-// Upon return, the short int pointed to by parameter outResonanceAmount will hold
+// Upon return, the int16_t pointed to by parameter outResonanceAmount will hold
 // a copy of the indicated BAEStream object's current lowpass filter effect's
 // resonance setting.
 //
 BAEResult           BAEStream_GetResonanceAmountFilter(BAEStream stream,
-                            short int *outResonanceAmount)
+                            int16_t *outResonanceAmount)
 {
     BAEResult   err;
 
@@ -5629,7 +5630,7 @@ BAEResult           BAEStream_GetResonanceAmountFilter(BAEStream stream,
 // object.
 //
 BAEResult           BAEStream_SetFrequencyAmountFilter(BAEStream stream,
-                            short int frequencyAmount)
+                            int16_t frequencyAmount)
 {
     BAEResult   err;
 
@@ -5656,12 +5657,12 @@ BAEResult           BAEStream_SetFrequencyAmountFilter(BAEStream stream,
 
 // BAEStream_GetFrequencyAmountFilter()
 // --------------------------------------
-// Upon return, the short int pointed to by parameter outFrequencyAmount will hold
+// Upon return, the int16_t pointed to by parameter outFrequencyAmount will hold
 // a copy of the indicated BAEStream object's current lowpass filter effect's
 // frequency setting.
 //
 BAEResult           BAEStream_GetFrequencyAmountFilter(BAEStream stream,
-                            short int *outFrequencyAmount)
+                            int16_t *outFrequencyAmount)
 {
     BAEResult   err;
 
@@ -5847,10 +5848,10 @@ void BAESong_DisplayInfo(BAESong song)
 // --------------------------------------
 //
 //
-BAEResult BAESong_GetMemoryUsed(BAESong song, unsigned long *pOutResult)
+BAEResult BAESong_GetMemoryUsed(BAESong song, uint32_t *pOutResult)
 {
-    unsigned long   size;
-    short int       count, splitCount;
+    uint32_t   size;
+    int16_t       count, splitCount;
     GM_Instrument   *pI, *pSI;
 
     size = 0;
@@ -5897,7 +5898,7 @@ BAEResult BAESong_GetMemoryUsed(BAESong song, unsigned long *pOutResult)
 static BAEResult PV_BAESong_InitLiveSong(BAESong song, BAE_BOOL addToMixer)
 {
     OPErr err;
-    short int maxSongVoices, maxEffectVoices, mixLevel;
+    int16_t maxSongVoices, maxEffectVoices, mixLevel;
 
     err = NO_ERR;
     if (song)
@@ -6094,7 +6095,7 @@ BAEResult BAESong_GetTitle(BAESong song, char *cName, int maxSize)
 BAEResult BAESong_LoadGroovoid(BAESong song, char *cName, BAE_BOOL ignoreBadInstruments) // was LoadFromBank
 {
     SongResource        *pXSong;
-    long                size;
+    int32_t                size;
     OPErr               theErr;
     XShortResourceID    theID;
     GM_Song             *pSong;
@@ -6171,7 +6172,7 @@ BAEResult BAESong_LoadGroovoid(BAESong song, char *cName, BAE_BOOL ignoreBadInst
 // --------------------------------------
 //
 //  pMidiData is copied in this function and can be disposed of upon return.
-BAEResult BAESong_LoadMidiFromMemory(BAESong song, void const* pMidiData, unsigned long midiSize, BAE_BOOL ignoreBadInstruments)
+BAEResult BAESong_LoadMidiFromMemory(BAESong song, void const* pMidiData, uint32_t midiSize, BAE_BOOL ignoreBadInstruments)
 {
     SongResource        *pXSong;
     OPErr               theErr;
@@ -6209,7 +6210,7 @@ BAEResult BAESong_LoadMidiFromMemory(BAESong song, void const* pMidiData, unsign
                                         theID,
                                         (void *) pXSong,
                                         (void *) pMidiData,
-                                        (long) midiSize,
+                                        (int32_t) midiSize,
                                         NULL,       // no callback
                                         TRUE,       // load instruments
                                         ignoreBadInstruments,
@@ -6275,11 +6276,11 @@ BAEResult BAESong_LoadMidiFromFile(BAESong song, BAEPathName filePath, BAE_BOOL 
     XFILENAME           name;
     XPTR                pMidiData;
     SongResource        *pXSong;
-    long                midiSize;
+    int32_t                midiSize;
     OPErr               theErr;
     XShortResourceID    theID;
     GM_Song             *pSong;
-    short               soundVoices, midiVoices, mixLevel;
+    int16_t               soundVoices, midiVoices, mixLevel;
 
     theErr = NO_ERR;
     if ( (song) && (song->mID == OBJECT_ID) )
@@ -6363,7 +6364,7 @@ BAEResult BAESong_LoadMidiFromFile(BAESong song, BAEPathName filePath, BAE_BOOL 
 // --------------------------------------
 // was BAERmfSong::LoadFromMemory()
 //
-BAEResult BAESong_LoadRmfFromMemory(BAESong song, void *pRMFData, unsigned long rmfSize, short int songIndex, BAE_BOOL ignoreBadInstruments)
+BAEResult BAESong_LoadRmfFromMemory(BAESong song, void *pRMFData, uint32_t rmfSize, int16_t songIndex, BAE_BOOL ignoreBadInstruments)
 {
 #if USE_FULL_RMF_SUPPORT == TRUE
     XFILE               fileRef;
@@ -6371,7 +6372,7 @@ BAEResult BAESong_LoadRmfFromMemory(BAESong song, void *pRMFData, unsigned long 
     GM_Song             *pSong;
     OPErr               theErr;
     XLongResourceID     theID;
-    long                size;
+    int32_t                size;
 
     theErr = NO_ERR;
     if ( (song) && (song->mID == OBJECT_ID) )
@@ -6452,7 +6453,7 @@ BAEResult BAESong_LoadRmfFromMemory(BAESong song, void *pRMFData, unsigned long 
 // --------------------------------------
 //
 //
-BAEResult BAESong_LoadRmfFromFile(BAESong song, BAEPathName filePath, short int songIndex, BAE_BOOL ignoreBadInstruments)
+BAEResult BAESong_LoadRmfFromFile(BAESong song, BAEPathName filePath, int16_t songIndex, BAE_BOOL ignoreBadInstruments)
 {
 #if USE_FULL_RMF_SUPPORT == TRUE
     XFILE               fileRef;
@@ -6461,7 +6462,7 @@ BAEResult BAESong_LoadRmfFromFile(BAESong song, BAEPathName filePath, short int 
     GM_Song             *pSong;
     OPErr               theErr;
     XLongResourceID     theID;
-    long                size;
+    int32_t                size;
 
     theErr = NO_ERR;
     if ( (song) && (song->mID == OBJECT_ID) )
@@ -6609,7 +6610,7 @@ BAEResult BAESong_GetVolume(BAESong song, BAE_UNSIGNED_FIXED *outVolume)
 // --------------------------------------
 //
 //
-BAEResult BAESong_SetTranspose(BAESong song, long semitones)
+BAEResult BAESong_SetTranspose(BAESong song, int32_t semitones)
 {
     OPErr err;
 
@@ -6636,7 +6637,7 @@ BAEResult BAESong_SetTranspose(BAESong song, long semitones)
 // --------------------------------------
 //
 //
-BAEResult BAESong_GetTranspose(BAESong song, long *outSemitones)
+BAEResult BAESong_GetTranspose(BAESong song, int32_t *outSemitones)
 {
     OPErr err;
 
@@ -6666,7 +6667,7 @@ BAEResult BAESong_GetTranspose(BAESong song, long *outSemitones)
 // --------------------------------------
 //
 //
-BAEResult BAESong_AllowChannelTranspose(BAESong song, unsigned short int channel, BAE_BOOL allowTranspose)
+BAEResult BAESong_AllowChannelTranspose(BAESong song, uint16_t channel, BAE_BOOL allowTranspose)
 {
     OPErr err;
     
@@ -6689,7 +6690,7 @@ BAEResult BAESong_AllowChannelTranspose(BAESong song, unsigned short int channel
 // --------------------------------------
 //
 //
-BAEResult BAESong_DoesChannelAllowTranspose(BAESong song, unsigned short int channel, BAE_BOOL *outAllowTranspose)
+BAEResult BAESong_DoesChannelAllowTranspose(BAESong song, uint16_t channel, BAE_BOOL *outAllowTranspose)
 {
     OPErr err;
     
@@ -6719,7 +6720,7 @@ BAEResult BAESong_DoesChannelAllowTranspose(BAESong song, unsigned short int cha
 // --------------------------------------
 //
 //
-BAEResult BAESong_MuteChannel(BAESong song, unsigned short int channel)
+BAEResult BAESong_MuteChannel(BAESong song, uint16_t channel)
 {
     OPErr err;
     
@@ -6742,7 +6743,7 @@ BAEResult BAESong_MuteChannel(BAESong song, unsigned short int channel)
 // --------------------------------------
 //
 //
-BAEResult BAESong_UnmuteChannel(BAESong song, unsigned short int channel)
+BAEResult BAESong_UnmuteChannel(BAESong song, uint16_t channel)
 {
     OPErr err;
     
@@ -6795,7 +6796,7 @@ BAEResult BAESong_GetChannelMuteStatus(BAESong song, BAE_BOOL *outChannels)
 // --------------------------------------
 //
 //
-BAEResult BAESong_SoloChannel(BAESong song, unsigned short int channel)
+BAEResult BAESong_SoloChannel(BAESong song, uint16_t channel)
 {
     OPErr err;
     
@@ -6818,7 +6819,7 @@ BAEResult BAESong_SoloChannel(BAESong song, unsigned short int channel)
 // --------------------------------------
 //
 //
-BAEResult BAESong_UnSoloChannel(BAESong song, unsigned short int channel)
+BAEResult BAESong_UnSoloChannel(BAESong song, uint16_t channel)
 {
     OPErr err;
     
@@ -7097,7 +7098,7 @@ BAEResult BAESong_NoteOff(BAESong song,
                             unsigned char channel, 
                             unsigned char note, 
                             unsigned char velocity,
-                            unsigned long time)
+                            uint32_t time)
 {
     OPErr err;
     
@@ -7129,14 +7130,14 @@ BAEResult BAESong_NoteOnWithLoad(BAESong song,
                             unsigned char channel, 
                             unsigned char note, 
                             unsigned char velocity,
-                            unsigned long time)
+                            uint32_t time)
 {
     BAE_INSTRUMENT  inst;
     unsigned char   program, bank;
     BAEMixer        mixer;
     OPErr           err;
     BAE_BOOL        isLoaded;
-    unsigned long   latency;
+    uint32_t   latency;
     
     err = NO_ERR;
     if ( (song) && (song->mID == OBJECT_ID) )
@@ -7187,7 +7188,7 @@ BAEResult BAESong_NoteOn(BAESong song,
                     unsigned char channel, 
                     unsigned char note, 
                     unsigned char velocity,
-                    unsigned long time)
+                    uint32_t time)
 {
     OPErr err;
     
@@ -7219,7 +7220,7 @@ BAEResult BAESong_KeyPressure(BAESong song,
                         unsigned char channel, 
                         unsigned char note, 
                         unsigned char pressure,
-                        unsigned long time)
+                        uint32_t time)
 {
     song = song;
     time = time;
@@ -7239,7 +7240,7 @@ BAEResult BAESong_ControlChange(BAESong song,
                             unsigned char channel, 
                             unsigned char controlNumber,
                             unsigned char controlValue, 
-                            unsigned long time)
+                            uint32_t time)
 {
     OPErr err;
 
@@ -7271,7 +7272,7 @@ BAEResult BAESong_ProgramBankChange(BAESong song,
                                 unsigned char channel,
                                 unsigned char programNumber,
                                 unsigned char bankNumber,
-                                unsigned long time)
+                                uint32_t time)
 {
     OPErr err;
     
@@ -7303,7 +7304,7 @@ BAEResult BAESong_ProgramBankChange(BAESong song,
 BAEResult BAESong_ProgramChange(BAESong song, 
                             unsigned char channel, 
                             unsigned char programNumber,
-                            unsigned long time)
+                            uint32_t time)
 {
     OPErr err;
     
@@ -7334,7 +7335,7 @@ BAEResult BAESong_ProgramChange(BAESong song,
 BAEResult BAESong_ChannelPressure(BAESong song, 
                                 unsigned char channel,  
                                 unsigned char pressure, 
-                                unsigned long time)
+                                uint32_t time)
 {
     song = song;
     time = time;
@@ -7352,7 +7353,7 @@ BAEResult BAESong_PitchBend(BAESong song,
                         unsigned char channel, 
                         unsigned char lsb, 
                         unsigned char msb,
-                        unsigned long time)
+                        uint32_t time)
 {
     OPErr err;
     
@@ -7380,7 +7381,7 @@ BAEResult BAESong_PitchBend(BAESong song,
 // --------------------------------------
 //
 //
-BAEResult BAESong_AllNotesOff(BAESong song, unsigned long time)
+BAEResult BAESong_AllNotesOff(BAESong song, uint32_t time)
 {
     OPErr err;
     
@@ -7410,7 +7411,7 @@ BAEResult BAESong_AllNotesOff(BAESong song, unsigned long time)
 //
 BAEResult BAESong_ParseMidiData(BAESong song, unsigned char commandByte, unsigned char data1Byte, 
                     unsigned char data2Byte, unsigned char data3Byte,
-                    unsigned long time)
+                    uint32_t time)
 {
     BAEResult theErr;
     unsigned char   channel;
@@ -7523,11 +7524,11 @@ static void PV_DefaultSongDoneCallback(void *threadContext, GM_Song *pSong, void
 
 
 // song callbacks
-static void PV_BAESong_SetMetaEventCallback(BAESong song, GM_SongMetaCallbackProcPtr pCallback, unsigned long callbackReference) {
+static void PV_BAESong_SetMetaEventCallback(BAESong song, GM_SongMetaCallbackProcPtr pCallback, void *callbackReference) {
 	GM_SetSongMetaEventCallback(song->pSong, pCallback, callbackReference);
 }
 
-BAEResult BAESong_SetMetaEventCallback(BAESong song, GM_SongMetaCallbackProcPtr pCallback, unsigned long callbackReference)
+BAEResult BAESong_SetMetaEventCallback(BAESong song, GM_SongMetaCallbackProcPtr pCallback, void *callbackReference)
 {
     OPErr       err;
 
@@ -7588,7 +7589,7 @@ BAEResult BAESong_GetCallback(BAESong song, BAE_SongCallbackPtr *pResult)
     return BAE_TranslateOPErr(err);
 }
 
-static void PV_DefaultSongControllerCallback(void *threadContext, struct GM_Song *pSong, void * reference, short int channel, short int track, short int controler, short int value)
+static void PV_DefaultSongControllerCallback(void *threadContext, struct GM_Song *pSong, void * reference, int16_t channel, int16_t track, int16_t controler, int16_t value)
 {
     BAESong             song;
     BAE_SongControllerCallbackPtr   
@@ -7638,7 +7639,7 @@ static void PV_BAESong_SetControllerCallback(BAESong song, BAE_SongControllerCal
 }
 
 // song callbacks
-BAEResult BAESong_SetControllerCallback(BAESong song, BAE_SongControllerCallbackPtr pCallback, void *callbackReference, short int controller)
+BAEResult BAESong_SetControllerCallback(BAESong song, BAE_SongControllerCallbackPtr pCallback, void *callbackReference, int16_t controller)
 {
     OPErr       err;
     
@@ -7683,7 +7684,7 @@ BAEResult BAESong_GetControllerCallback(BAESong song, BAE_SongControllerCallback
 // --------------------------------------
 //
 //
-BAEResult BAESong_Start(BAESong song, short int priority)
+BAEResult BAESong_Start(BAESong song, int16_t priority)
 {
     OPErr err;
 
@@ -7803,7 +7804,7 @@ static BAE_FIXED PV_CalculateTimeDeltaForFade(BAE_FIXED sourceVolume, BAE_FIXED 
 //
 BAEResult BAESong_Fade(BAESong song, BAE_FIXED sourceVolume, BAE_FIXED destVolume, BAE_FIXED timeInMiliseconds)
 {
-    short int   source, dest;
+    int16_t   source, dest;
     INT16       minVolume;
     INT16       maxVolume;
     OPErr       err;
@@ -7926,7 +7927,7 @@ BAEResult BAESong_IsPaused(BAESong song, BAE_BOOL *outIsPaused)
 // --------------------------------------
 //
 //
-BAEResult BAESong_SetLoops(BAESong song, short numLoops)
+BAEResult BAESong_SetLoops(BAESong song, int16_t numLoops)
 {
     OPErr err;
 
@@ -7957,7 +7958,7 @@ BAEResult BAESong_SetLoops(BAESong song, short numLoops)
 // --------------------------------------
 //
 //
-BAEResult BAESong_GetLoops(BAESong song, short *outNumLoops)
+BAEResult BAESong_GetLoops(BAESong song, int16_t *outNumLoops)
 {
     OPErr err;
 
@@ -7987,7 +7988,7 @@ BAEResult BAESong_GetLoops(BAESong song, short *outNumLoops)
 // --------------------------------------
 //
 //
-BAEResult BAESong_GetMicrosecondLength(BAESong song, unsigned long *outLength)
+BAEResult BAESong_GetMicrosecondLength(BAESong song, uint32_t *outLength)
 {
     OPErr err;
     
@@ -8017,7 +8018,7 @@ BAEResult BAESong_GetMicrosecondLength(BAESong song, unsigned long *outLength)
 // --------------------------------------
 //
 //
-BAEResult BAESong_SetMicrosecondPosition(BAESong song, unsigned long ticks)
+BAEResult BAESong_SetMicrosecondPosition(BAESong song, uint32_t ticks)
 {
     OPErr   err;
 
@@ -8043,7 +8044,7 @@ BAEResult BAESong_SetMicrosecondPosition(BAESong song, unsigned long ticks)
 // --------------------------------------
 //
 //
-BAEResult BAESong_GetMicrosecondPosition(BAESong song, unsigned long *outTicks)
+BAEResult BAESong_GetMicrosecondPosition(BAESong song, uint32_t *outTicks)
 {
     OPErr err;
     
@@ -8196,7 +8197,7 @@ BAEResult BAESong_GetMasterTempo(BAESong song, BAE_UNSIGNED_FIXED *outTempoFacto
 // --------------------------------------
 //
 //
-BAEResult BAESong_MuteTrack(BAESong song, unsigned short int track)
+BAEResult BAESong_MuteTrack(BAESong song, uint16_t track)
 {
     OPErr err;
     
@@ -8219,7 +8220,7 @@ BAEResult BAESong_MuteTrack(BAESong song, unsigned short int track)
 // --------------------------------------
 //
 //
-BAEResult BAESong_UnmuteTrack(BAESong song, unsigned short int track)
+BAEResult BAESong_UnmuteTrack(BAESong song, uint16_t track)
 {
     OPErr err;
     
@@ -8272,7 +8273,7 @@ BAEResult BAESong_GetTrackMuteStatus(BAESong song, BAE_BOOL *outTracks)
 // --------------------------------------
 //
 //
-BAEResult BAESong_SoloTrack(BAESong song, unsigned short int track)
+BAEResult BAESong_SoloTrack(BAESong song, uint16_t track)
 {
     OPErr err;
     
@@ -8295,7 +8296,7 @@ BAEResult BAESong_SoloTrack(BAESong song, unsigned short int track)
 // --------------------------------------
 //
 //
-BAEResult BAESong_UnSoloTrack(BAESong song, unsigned short int track)
+BAEResult BAESong_UnSoloTrack(BAESong song, uint16_t track)
 {
     OPErr err;
     
@@ -8425,10 +8426,10 @@ static SongInfo PV_TranslateInfoType(BAEInfoType infoType)
 // --------------------------------------
 //
 //
-BAE_INSTRUMENT TranslateBankProgramToInstrument(unsigned short bank, 
-                                    unsigned short program, 
-                                    unsigned short channel,
-                                    unsigned short note)
+BAE_INSTRUMENT TranslateBankProgramToInstrument(uint16_t bank, 
+                                    uint16_t program, 
+                                    uint16_t channel,
+                                    uint16_t note)
 {
     BAE_INSTRUMENT  instrument;
 
@@ -8457,8 +8458,8 @@ BAE_INSTRUMENT TranslateBankProgramToInstrument(unsigned short bank,
 //
 //
 #if USE_FULL_RMF_SUPPORT == TRUE
-static OPErr PV_GetRmfSongResource(void *pRMFData, unsigned long rmfSize, short index, 
-                        SongResource **ppOutResource, long *pOutResourceSize)
+static OPErr PV_GetRmfSongResource(void *pRMFData, uint32_t rmfSize, int16_t index, 
+                        SongResource **ppOutResource, int32_t *pOutResourceSize)
 {
     XFILE               fileRef;
     XLongResourceID     theID;
@@ -8503,15 +8504,15 @@ static OPErr PV_GetRmfSongResource(void *pRMFData, unsigned long rmfSize, short 
 // Returns: Text info field size in bytes
 //
 BAEResult BAEUtil_GetInfoSizeFromFile(BAEPathName filePath, 
-                                          short songIndex, 
+                                          int16_t songIndex, 
                                           BAEInfoType infoType, 
-                                          unsigned long *pOutResourceSize)
+                                          uint32_t *pOutResourceSize)
 {
 #if USE_FULL_RMF_SUPPORT == TRUE
     SongInfo        info;
     BAEResult       theErr;
     SongResource    *pSongRes;
-    long            songResSize = 0;
+    int32_t            songResSize = 0;
     
     theErr = BAE_NO_ERROR;
     info = PV_TranslateInfoType(infoType);
@@ -8555,14 +8556,14 @@ BAEResult BAEUtil_GetInfoSizeFromFile(BAEPathName filePath,
 // --------------------------------------
 //
 //
-BAEResult BAEUtil_GetRmfSongInfoFromFile(BAEPathName filePath, short songIndex,
-                                 BAEInfoType infoType, char* targetBuffer, unsigned long bufferBytes)
+BAEResult BAEUtil_GetRmfSongInfoFromFile(BAEPathName filePath, int16_t songIndex,
+                                 BAEInfoType infoType, char* targetBuffer, uint32_t bufferBytes)
 {
 #if USE_FULL_RMF_SUPPORT == TRUE
     SongInfo        info;
     BAEResult       theErr;
     SongResource    *pSongRes;
-    long            songResSize;
+    int32_t            songResSize;
     
     theErr = BAE_NO_ERROR;
     targetBuffer[0] = 0;
@@ -8615,14 +8616,14 @@ BAEResult BAEUtil_GetRmfSongInfoFromFile(BAEPathName filePath, short songIndex,
 // --------------------------------------
 //
 //
-BAEResult BAEUtil_GetRmfSongInfo(void *pRMFData, unsigned long rmfSize, short songIndex,
-                             BAEInfoType infoType, char* targetBuffer, unsigned long bufferBytes)
+BAEResult BAEUtil_GetRmfSongInfo(void *pRMFData, uint32_t rmfSize, int16_t songIndex,
+                             BAEInfoType infoType, char* targetBuffer, uint32_t bufferBytes)
 {
 #if USE_FULL_RMF_SUPPORT == TRUE
     SongInfo        info;
     BAEResult       theErr;
     SongResource    *pSongRes;
-    long            songResSize;
+    int32_t            songResSize;
 
     theErr = BAE_NO_ERROR;
     targetBuffer[0] = 0;
@@ -8662,13 +8663,13 @@ BAEResult BAEUtil_GetRmfSongInfo(void *pRMFData, unsigned long rmfSize, short so
 // --------------------------------------
 //
 //
-unsigned long BAEUtil_GetInfoSize(void *pRMFData, unsigned long rmfSize, short songIndex, BAEInfoType infoType)
+uint32_t BAEUtil_GetInfoSize(void *pRMFData, uint32_t rmfSize, int16_t songIndex, BAEInfoType infoType)
 {
 #if USE_FULL_RMF_SUPPORT == TRUE
     SongInfo        info;
-    unsigned long   size;
+    uint32_t   size;
     SongResource    *pSongRes;
-    long            songResSize;
+    int32_t            songResSize;
 
     size = 0;
     info = PV_TranslateInfoType(infoType);
@@ -8693,10 +8694,10 @@ unsigned long BAEUtil_GetInfoSize(void *pRMFData, unsigned long rmfSize, short s
 // --------------------------------------
 //
 //
-BAE_BOOL BAEUtil_IsRmfSongEncrypted(void *pRMFData, unsigned long rmfSize, short songIndex)
+BAE_BOOL BAEUtil_IsRmfSongEncrypted(void *pRMFData, uint32_t rmfSize, int16_t songIndex)
 {
     SongResource    *pSongRes;
-    long            songResSize;
+    int32_t            songResSize;
     BAE_BOOL        locked;
     
     pSongRes = NULL;
@@ -8716,10 +8717,10 @@ BAE_BOOL BAEUtil_IsRmfSongEncrypted(void *pRMFData, unsigned long rmfSize, short
 // --------------------------------------
 //
 //
-BAE_BOOL BAEUtil_IsRmfSongCompressed(void *pRMFData, unsigned long rmfSize, short songIndex)
+BAE_BOOL BAEUtil_IsRmfSongCompressed(void *pRMFData, uint32_t rmfSize, int16_t songIndex)
 {
     SongResource    *pSongRes;
-    long            songResSize;
+    int32_t            songResSize;
     BAE_BOOL        compressed;
     
     pSongRes = NULL;
@@ -8740,8 +8741,8 @@ BAE_BOOL BAEUtil_IsRmfSongCompressed(void *pRMFData, unsigned long rmfSize, shor
 // --------------------------------------
 //
 //
-BAEResult BAEUtil_GetRmfVersion(void *pRMFData, unsigned long rmfSize, 
-                                short int *pVersionMajor, short int *pVersionMinor, short int *pVersionSubMinor)
+BAEResult BAEUtil_GetRmfVersion(void *pRMFData, uint32_t rmfSize, 
+                                int16_t *pVersionMajor, int16_t *pVersionMinor, int16_t *pVersionSubMinor)
 {
     XFILE               fileRef;
     OPErr               err;

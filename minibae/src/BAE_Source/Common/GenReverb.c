@@ -108,6 +108,7 @@
 /*****************************************************************************/
 #include "GenSnd.h"
 #include "GenPriv.h"
+#include <stdint.h>
 
 #if REVERB_USED != REVERB_DISABLED
 
@@ -118,7 +119,7 @@ static void PV_RunMonoFixedReverb(ReverbMode which)
     register INT32      *sourceLR, *sourceReverb;
     register INT32      *reverbBuf;
     register LOOPCOUNT  a;
-    register long       reverbPtr1, reverbPtr2, reverbPtr3, reverbPtr4;
+    register int32_t       reverbPtr1, reverbPtr2, reverbPtr3, reverbPtr4;
 
     reverbBuf = &MusicGlobals->reverbBuffer[0];
     if (reverbBuf)
@@ -407,7 +408,7 @@ static void PV_RunStereoFixedReverb(ReverbMode which)
     register INT32      *sourceLR;
     register INT32      *reverbBuf;
     register LOOPCOUNT  a;
-    register long       reverbPtr1, reverbPtr2, reverbPtr3, reverbPtr4;
+    register int32_t       reverbPtr1, reverbPtr2, reverbPtr3, reverbPtr4;
 
     reverbBuf = &MusicGlobals->reverbBuffer[0];
     if (reverbBuf)
@@ -752,7 +753,7 @@ static GM_ReverbConfigure verbTypes[MAX_REVERB_TYPES] =
         REVERB_TYPE_2,
         REVERB_CONTROLER_THRESHOLD,
         TRUE,                           // fixed
-        REVERB_BUFFER_SIZE * 2L * sizeof(long),
+        REVERB_BUFFER_SIZE * 2L * sizeof(int32_t),
         PV_RunMonoFixedReverb,
         PV_RunStereoFixedReverb
     },
@@ -760,7 +761,7 @@ static GM_ReverbConfigure verbTypes[MAX_REVERB_TYPES] =
         REVERB_TYPE_3,
         REVERB_CONTROLER_THRESHOLD,
         TRUE,                           // fixed
-        REVERB_BUFFER_SIZE * 2L * sizeof(long),
+        REVERB_BUFFER_SIZE * 2L * sizeof(int32_t),
         PV_RunMonoFixedReverb,
         PV_RunStereoFixedReverb
     },
@@ -768,7 +769,7 @@ static GM_ReverbConfigure verbTypes[MAX_REVERB_TYPES] =
         REVERB_TYPE_4,
         REVERB_CONTROLER_THRESHOLD,
         TRUE,                           // fixed
-        REVERB_BUFFER_SIZE * 2L * sizeof(long),
+        REVERB_BUFFER_SIZE * 2L * sizeof(int32_t),
         PV_RunMonoFixedReverb,
         PV_RunStereoFixedReverb
     },
@@ -776,7 +777,7 @@ static GM_ReverbConfigure verbTypes[MAX_REVERB_TYPES] =
         REVERB_TYPE_5,
         REVERB_CONTROLER_THRESHOLD,
         TRUE,                           // fixed
-        REVERB_BUFFER_SIZE * 2L * sizeof(long),
+        REVERB_BUFFER_SIZE * 2L * sizeof(int32_t),
         PV_RunMonoFixedReverb,
         PV_RunStereoFixedReverb
     },
@@ -784,7 +785,7 @@ static GM_ReverbConfigure verbTypes[MAX_REVERB_TYPES] =
         REVERB_TYPE_6,
         REVERB_CONTROLER_THRESHOLD,
         TRUE,                           // fixed
-        REVERB_BUFFER_SIZE * 2L * sizeof(long),
+        REVERB_BUFFER_SIZE * 2L * sizeof(int32_t),
         PV_RunMonoFixedReverb,
         PV_RunStereoFixedReverb
     },
@@ -792,7 +793,7 @@ static GM_ReverbConfigure verbTypes[MAX_REVERB_TYPES] =
         REVERB_TYPE_7,
         REVERB_CONTROLER_THRESHOLD,
         TRUE,                           // fixed
-        REVERB_BUFFER_SIZE_SMALL * 2L * sizeof(long),
+        REVERB_BUFFER_SIZE_SMALL * 2L * sizeof(int32_t),
         PV_RunMonoFixedReverb,
         PV_RunStereoFixedReverb
     },
@@ -844,7 +845,7 @@ static GM_ReverbConfigure verbTypes[MAX_REVERB_TYPES] =
         REVERB_TYPE_2,
         REVERB_CONTROLER_THRESHOLD,
         TRUE,                           // fixed
-        REVERB_BUFFER_SIZE * 2L * sizeof(long),
+        REVERB_BUFFER_SIZE * 2L * sizeof(int32_t),
         PV_RunMonoFixedReverb,
         PV_RunStereoFixedReverb
     },
@@ -852,7 +853,7 @@ static GM_ReverbConfigure verbTypes[MAX_REVERB_TYPES] =
         REVERB_TYPE_3,
         REVERB_CONTROLER_THRESHOLD,
         TRUE,                           // fixed
-        REVERB_BUFFER_SIZE * 2L * sizeof(long),
+        REVERB_BUFFER_SIZE * 2L * sizeof(int32_t),
         PV_RunMonoFixedReverb,
         PV_RunStereoFixedReverb
     },
@@ -860,7 +861,7 @@ static GM_ReverbConfigure verbTypes[MAX_REVERB_TYPES] =
         REVERB_TYPE_4,
         REVERB_CONTROLER_THRESHOLD,
         TRUE,                           // fixed
-        REVERB_BUFFER_SIZE * 2L * sizeof(long),
+        REVERB_BUFFER_SIZE * 2L * sizeof(int32_t),
         PV_RunMonoFixedReverb,
         PV_RunStereoFixedReverb
     },
@@ -868,20 +869,20 @@ static GM_ReverbConfigure verbTypes[MAX_REVERB_TYPES] =
         REVERB_TYPE_5,
         REVERB_CONTROLER_THRESHOLD,
         TRUE,                           // fixed
-        REVERB_BUFFER_SIZE * 2L * sizeof(long),
+        REVERB_BUFFER_SIZE * 2L * sizeof(int32_t),
         PV_RunMonoFixedReverb,
         PV_RunStereoFixedReverb
     },
 #endif
 };
 
-#define MAX_VERB_CONFIG_ENTRIES     (long)(sizeof (verbTypes) / sizeof(GM_ReverbConfigure))
+#define MAX_VERB_CONFIG_ENTRIES     (int32_t)(sizeof (verbTypes) / sizeof(GM_ReverbConfigure))
 
 // private function to allocate and setup the fixed verb types
 static XBOOL PV_SetupFixedReverb(void)
 {
     GM_Mixer    *pMixer;
-    long        size;
+    int32_t        size;
 
     pMixer = MusicGlobals;
 
@@ -891,12 +892,12 @@ static XBOOL PV_SetupFixedReverb(void)
     pMixer->LPfilterLz = 0;
     pMixer->LPfilterRz = 0;
 
-    size = REVERB_BUFFER_SIZE * 2L * sizeof(long);
+    size = REVERB_BUFFER_SIZE * 2L * sizeof(int32_t);
     pMixer->reverbBuffer = (INT32 *)XNewPtr(size);
     if (pMixer->reverbBuffer == NULL)
     {
         // if this failed, try to allocate the smaller verb entry
-        size = REVERB_BUFFER_SIZE_SMALL * 2L * sizeof(long);
+        size = REVERB_BUFFER_SIZE_SMALL * 2L * sizeof(int32_t);
         pMixer->reverbBuffer = (INT32 *)XNewPtr(size);
         if (pMixer->reverbBuffer == NULL)
         {

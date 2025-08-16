@@ -87,6 +87,7 @@
 #include "GenPriv.h"
 #include "BAE_API.h"
 #include "X_API.h"
+#include <stdint.h>
 
 #if USE_NEW_EFFECTS     // conditionally compile this file
 
@@ -183,7 +184,7 @@ XBOOL InitNewReverb()
     // actually allocate our own buffers for the 6 comb filters and the early reflections
     // buffer which happen to perfectly fit into the old buffer ;-)
 #if 0
-    long kMaxBytes = sizeof(INT32) * kCombBufferFrameSize;
+    int32_t kMaxBytes = sizeof(INT32) * kCombBufferFrameSize;
     
     // allocate the comb filter delay line memory
     for(i = 0; i < kNumberOfCombFilters; i++)
@@ -533,7 +534,7 @@ void GenerateFeedbackValues()
     
     for(i = 0; i < kNumberOfCombFilters; i++)
     {
-        long frames = params->mDelayFrames[i];
+        int32_t frames = params->mDelayFrames[i];
         
         
         float D = (float)(params->mDelayFrames[i]) / 44100.0;
@@ -551,7 +552,7 @@ void GenerateFeedbackValues()
 
     for(i = 0; i < kNumberOfCombFilters; i++)
     {
-        long frames = (params->mDelayFrames[i] * Get44100_SRRatio() ) >> 16;
+        int32_t frames = (params->mDelayFrames[i] * Get44100_SRRatio() ) >> 16;
         INT32 fakeRatio = (frames << COMB_FILTER_SHIFT) / params->mRoomSize;
         int k;
         INT32 g, kOneHalf;
@@ -611,7 +612,7 @@ void GenerateFeedbackValues()
 #endif
 }
 
-static long delay6tapList[6][6] =
+static int32_t delay6tapList[6][6] =
 {
     {
         1259,
@@ -670,7 +671,7 @@ static long delay6tapList[6][6] =
 void GenerateDelayTimes()
 {
     int i;
-    long    *delayFrameList;
+    int32_t    *delayFrameList;
     NewReverbParams* params = GetNewReverbParams();
     int index = params->mRoomChoice;
     
@@ -709,7 +710,7 @@ void SetupDiffusion()
     
     for(i = 0; i < kNumberOfDiffusionStages; i++)
     {
-        long delayFrames = (diffusionFrameList[i] * GetSR_44100Ratio() ) >> 16;
+        int32_t delayFrames = (diffusionFrameList[i] * GetSR_44100Ratio() ) >> 16;
         
         params->mDiffReadIndex[i] = kDiffusionBufferFrameSize - delayFrames;
         params->mDiffWriteIndex[i] = 0;
@@ -724,7 +725,7 @@ void SetupDiffusion()
 void SetupStereoizer()
 {
     NewReverbParams* params = GetNewReverbParams();
-    long delayFrames;
+    int32_t delayFrames;
     
     // generated lopass filter coeffs for different sample rates
     static INT32 lopassKList[] = {63467, 60227, 46883, 44824, 30573, 28693};

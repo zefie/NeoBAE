@@ -231,12 +231,14 @@
     */
 #endif
 
+#include <stdint.h>
+
 // Create a new song resource.
 SongResource * XNewSongPtr( SongType songType,
                             XShortResourceID midiID,
-                            short int maxSongVoices, 
-                            short int mixLevel, 
-                            short int maxEffectVoices,
+                            int16_t maxSongVoices, 
+                            int16_t mixLevel, 
+                            int16_t maxEffectVoices,
                             ReverbMode reverbType)
 {
     SongResource            *song;
@@ -248,14 +250,14 @@ SongResource * XNewSongPtr( SongType songType,
     switch (songType)
     {
         case SONG_TYPE_SMS:
-            songSMS = (SongResource_SMS *)XNewPtr((long)sizeof(SongResource_SMS));
+            songSMS = (SongResource_SMS *)XNewPtr((int32_t)sizeof(SongResource_SMS));
             if (songSMS)
             {
                 songSMS->songType = SONG_TYPE_SMS;
-                XPutShort(&songSMS->midiResourceID, (unsigned short)midiID);
+                XPutShort(&songSMS->midiResourceID, (uint16_t)midiID);
                 songSMS->noteDecay = 5;
                 songSMS->maxNotes = (char)maxSongVoices;
-                XPutShort(&songSMS->mixLevel, (unsigned short)mixLevel);
+                XPutShort(&songSMS->mixLevel, (uint16_t)mixLevel);
                 songSMS->maxEffects = (char)maxEffectVoices;
                 songSMS->reverbType = (char)reverbType;
                 songSMS->flags1 = XBF_enableMIDIProgram;
@@ -266,14 +268,14 @@ SongResource * XNewSongPtr( SongType songType,
             song = (SongResource *)songSMS;
             break;
         case SONG_TYPE_RMF:
-            songRMF = (SongResource_RMF *)XNewPtr((long)sizeof(SongResource_RMF) - sizeof(short));
+            songRMF = (SongResource_RMF *)XNewPtr((int32_t)sizeof(SongResource_RMF) - sizeof(int16_t));
             if (songRMF)
             {
                 songRMF->songType = SONG_TYPE_RMF;
-                XPutShort(&songRMF->rmfResourceID, (unsigned short)midiID);
-                XPutShort(&songRMF->maxNotes, (unsigned short)maxSongVoices);
-                XPutShort(&songRMF->mixLevel, (unsigned short)mixLevel);
-                XPutShort(&songRMF->maxEffects, (unsigned short)maxEffectVoices);
+                XPutShort(&songRMF->rmfResourceID, (uint16_t)midiID);
+                XPutShort(&songRMF->maxNotes, (uint16_t)maxSongVoices);
+                XPutShort(&songRMF->mixLevel, (uint16_t)mixLevel);
+                XPutShort(&songRMF->maxEffects, (uint16_t)maxEffectVoices);
 
                 songRMF->reverbType = (char)reverbType;
 //              XPutShort(&songRMF->resourceCount, 0);      // no resources
@@ -281,14 +283,14 @@ SongResource * XNewSongPtr( SongType songType,
             song = (SongResource *)songRMF;
             break;
         case SONG_TYPE_RMF_LINEAR:
-            songRMF2 = (SongResource_RMF_Linear *)XNewPtr((long)sizeof(SongResource_RMF_Linear) - sizeof(short));
+            songRMF2 = (SongResource_RMF_Linear *)XNewPtr((int32_t)sizeof(SongResource_RMF_Linear) - sizeof(int16_t));
             if (songRMF2)
             {
                 songRMF2->songType = SONG_TYPE_RMF_LINEAR;
-                XPutShort(&songRMF2->audioResourceID, (unsigned short)midiID);
-                XPutShort(&songRMF2->maxNotes, (unsigned short)maxSongVoices);
-                XPutShort(&songRMF2->mixLevel, (unsigned short)mixLevel);
-                XPutShort(&songRMF2->maxEffects, (unsigned short)maxEffectVoices);
+                XPutShort(&songRMF2->audioResourceID, (uint16_t)midiID);
+                XPutShort(&songRMF2->maxNotes, (uint16_t)maxSongVoices);
+                XPutShort(&songRMF2->mixLevel, (uint16_t)mixLevel);
+                XPutShort(&songRMF2->maxEffects, (uint16_t)maxEffectVoices);
 
                 songRMF2->reverbType = (char)reverbType;
 //              XPutShort(&songRMF2->resourceCount, 0);     // no resources
@@ -309,23 +311,23 @@ void XDisposeSongPtr(SongResource *theSong)
 
 
 // Get a keysplit entry. The result will be ordered for the native CPU
-void XGetKeySplitFromPtr(InstrumentResource *theX, short int entry, KeySplit *keysplit)
+void XGetKeySplitFromPtr(InstrumentResource *theX, int16_t entry, KeySplit *keysplit)
 {
     KeySplit    *pSplits;
-    short int   count;
+    int16_t   count;
 
-    count = (short)XGetShort(&theX->keySplitCount);
+    count = (int16_t)XGetShort(&theX->keySplitCount);
     if ( (count) && (entry < count) )
     {
-        pSplits = (KeySplit *) ( ((unsigned char *)&theX->keySplitCount) + sizeof(short int));
+        pSplits = (KeySplit *) ( ((unsigned char *)&theX->keySplitCount) + sizeof(int16_t));
         *keysplit = pSplits[entry];
         keysplit->sndResourceID = (XShortResourceID)XGetShort(&keysplit->sndResourceID);
-        keysplit->miscParameter1 = (short)XGetShort(&keysplit->miscParameter1);
-        keysplit->miscParameter2 = (short)XGetShort(&keysplit->miscParameter2);
+        keysplit->miscParameter1 = (int16_t)XGetShort(&keysplit->miscParameter1);
+        keysplit->miscParameter2 = (int16_t)XGetShort(&keysplit->miscParameter2);
     }
     else
     {
-        XSetMemory((void *)keysplit, (long)sizeof(KeySplit), 0);
+        XSetMemory((void *)keysplit, (int32_t)sizeof(KeySplit), 0);
     }
 }
 
@@ -334,19 +336,19 @@ void XGetKeySplitFromPtr(InstrumentResource *theX, short int entry, KeySplit *ke
 // Find a resource type and return a pointer to its memory block. If type is R_LAST_RESOURCE, then return
 // a pointer to the very last memory block
 #if USE_FULL_RMF_SUPPORT == TRUE
-static void * PV_FindSongResourceTypePointer(SongResource_RMF *songRMF, SongResourceType findType, long *pResourceLength)
+static void * PV_FindSongResourceTypePointer(SongResource_RMF *songRMF, SongResourceType findType, int32_t *pResourceLength)
 {
     char                *pUnit;
-    short int           count, subCount;
+    int16_t           count, subCount;
     SongResourceType    type;
-    unsigned long       length;
-    short int           resourceCount;
+    uint32_t       length;
+    int16_t           resourceCount;
     void                *pEnd;
 
     pEnd = NULL;
     if (songRMF)
     {
-        resourceCount = (short)XGetShort(&songRMF->resourceCount);
+        resourceCount = (int16_t)XGetShort(&songRMF->resourceCount);
         pUnit = (char *)&songRMF->resourceData;
         for (count = 0; count < resourceCount; count++)
         {
@@ -385,16 +387,16 @@ static void * PV_FindSongResourceTypePointer(SongResource_RMF *songRMF, SongReso
                     // this is a zero terminated string, always
                     if (songRMF->locked == FALSE)
                     {
-                        length = (unsigned long)XStrLen(pUnit) + 1;
+                        length = (uint32_t)XStrLen(pUnit) + 1;
                     }
                     else
                     {
-                        length = (unsigned long)XEncryptedStrLen(pUnit) + 1;
+                        length = (uint32_t)XEncryptedStrLen(pUnit) + 1;
                     }
                     pUnit += length;
                     if (pResourceLength)
                     {
-                        *pResourceLength = (long)length;
+                        *pResourceLength = (int32_t)length;
                     }
                     break;
                 case R_VELOCITY_CURVE:
@@ -405,14 +407,14 @@ static void * PV_FindSongResourceTypePointer(SongResource_RMF *songRMF, SongReso
                     }
                     break;
                 case R_INSTRUMENT_REMAP:
-                    subCount = (short)XGetShort(pUnit);
+                    subCount = (int16_t)XGetShort(pUnit);
                     pUnit += 2;
                     // format is word count followed by x number of (word, word)
-                    length = sizeof(short) * subCount;
+                    length = sizeof(int16_t) * subCount;
                     pUnit += length;
                     if (pResourceLength)
                     {
-                        *pResourceLength = (long)length;
+                        *pResourceLength = (int32_t)length;
                     }
                     break;
             }
@@ -436,16 +438,16 @@ static void * PV_FindSongResourceTypePointer(SongResource_RMF *songRMF, SongReso
 //
 // dataTarget or lengthTarget can be NULL. If not NULL, then data will be placed there
 // if both are non-NULL, *lengthTarget is assumed to be the length in bytes of the block at dataTarget
-static void PV_FillSongResource(SongResourceType resourceType, short int resourceCount, XBOOL encrypted, 
-                                void* pResourceData, unsigned long resourceDataLength, 
-                                void* dataTarget, unsigned long* lengthTarget)
+static void PV_FillSongResource(SongResourceType resourceType, int16_t resourceCount, XBOOL encrypted, 
+                                void* pResourceData, uint32_t resourceDataLength, 
+                                void* dataTarget, uint32_t* lengthTarget)
 {
     char                *pUnit;
-    short int           count, subCount;
+    int16_t           count, subCount;
     SongResourceType    type;
     XBOOL               fill;
-    unsigned long       length;
-    unsigned long       textBytes;
+    uint32_t       length;
+    uint32_t       textBytes;
 
     if (pResourceData && resourceCount && resourceDataLength)
     {
@@ -489,11 +491,11 @@ static void PV_FillSongResource(SongResourceType resourceType, short int resourc
                     // this is a zero terminated string, always
                     if (encrypted == FALSE)
                     {
-                        length = (unsigned long)XStrLen(pUnit) + 1;
+                        length = (uint32_t)XStrLen(pUnit) + 1;
                     }
                     else
                     {
-                        length = (unsigned long)XEncryptedStrLen(pUnit) + 1;
+                        length = (uint32_t)XEncryptedStrLen(pUnit) + 1;
                     }
                     if (fill)
                     {
@@ -529,10 +531,10 @@ static void PV_FillSongResource(SongResourceType resourceType, short int resourc
                     pUnit += 256;
                     break;
                 case R_INSTRUMENT_REMAP:
-                    subCount = (short)XGetShort(pUnit);
+                    subCount = (int16_t)XGetShort(pUnit);
                     pUnit += 2;
                     // format is word count followed by x number of (word, word)
-                    pUnit += sizeof(short) * subCount;
+                    pUnit += sizeof(int16_t) * subCount;
                     break;
             }
             if (fill)
@@ -612,10 +614,10 @@ static XBOOL PV_ValidResourceForSongType(SongResourceType resourceType, SongType
 #endif  //USE_CREATION_API == TRUE
 
 #if USE_CREATION_API == TRUE
-static SongResource_RMF * PV_AddRMFSongResource(SongResource *theSong, SongResourceType resourceType, void *pResource, long resourceLength)
+static SongResource_RMF * PV_AddRMFSongResource(SongResource *theSong, SongResourceType resourceType, void *pResource, int32_t resourceLength)
 {
     SongResource_RMF    *newSong;
-    long                size;
+    int32_t                size;
     char                *pBlock;
 
     newSong = NULL;
@@ -624,7 +626,7 @@ static SongResource_RMF * PV_AddRMFSongResource(SongResource *theSong, SongResou
         if (PV_ValidResourceForSongType(resourceType, SONG_TYPE_RMF))
         {
             size = XGetPtrSize(theSong);
-            newSong = (SongResource_RMF *)XNewPtr((long)(size + sizeof(SongResourceType) + resourceLength));
+            newSong = (SongResource_RMF *)XNewPtr((int32_t)(size + sizeof(SongResourceType) + resourceLength));
             if (newSong)
             {
                 XBlockMove(theSong, newSong, size);
@@ -632,8 +634,8 @@ static SongResource_RMF * PV_AddRMFSongResource(SongResource *theSong, SongResou
                 if (pBlock)
                 {
                     size = XGetShort(&newSong->resourceCount) + 1;
-                    XPutShort(&newSong->resourceCount, (unsigned short)size);
-                    XPutLong(pBlock, (unsigned long)resourceType);
+                    XPutShort(&newSong->resourceCount, (uint16_t)size);
+                    XPutLong(pBlock, (uint32_t)resourceType);
                     pBlock += 4;
                     XBlockMove(pResource, pBlock, resourceLength);
                 }
@@ -652,7 +654,7 @@ static SongResource_RMF * PV_AddRMFSongResource(SongResource *theSong, SongResou
 static SongResource_RMF * PV_DeleteRMFSongResource(SongResource *theSong, SongResourceType resourceType)
 {
     SongResource_RMF    *newSong;
-    long                size, resourceLength, offsetStart, offsetEnd;
+    int32_t                size, resourceLength, offsetStart, offsetEnd;
     char                *pBlock;
 
     newSong = NULL;
@@ -663,7 +665,7 @@ static SongResource_RMF * PV_DeleteRMFSongResource(SongResource *theSong, SongRe
             pBlock = (char *)PV_FindSongResourceTypePointer((SongResource_RMF *)theSong, resourceType, &resourceLength);
             if (pBlock)
             {
-                size = (long)(XGetPtrSize(theSong) - sizeof(SongResourceType) - resourceLength);
+                size = (int32_t)(XGetPtrSize(theSong) - sizeof(SongResourceType) - resourceLength);
                 if (size > 0)
                 {
                     newSong = (SongResource_RMF *)XNewPtr(size);
@@ -674,8 +676,8 @@ static SongResource_RMF * PV_DeleteRMFSongResource(SongResource *theSong, SongRe
                         XBlockMove(theSong, newSong, offsetStart);
                         XBlockMove(((char *)theSong) + offsetEnd, ((char *)newSong) + offsetStart, size - offsetEnd);
 
-                        size = (long)XGetShort(&newSong->resourceCount) - 1;
-                        XPutShort(&newSong->resourceCount, (unsigned short)size);
+                        size = (int32_t)XGetShort(&newSong->resourceCount) - 1;
+                        XPutShort(&newSong->resourceCount, (uint16_t)size);
                     }
                 }
             }
@@ -688,7 +690,7 @@ static SongResource_RMF * PV_DeleteRMFSongResource(SongResource *theSong, SongRe
 // Given a SongResource and a new type, data and length, this will create a new SongResource
 // with the modified resource and return it.
 // The newly returned SongResource is allocated, and the old one passed in is not deallocated.
-SongResource * XChangeSongResource(SongResource *theSong, long songSize, SongResourceType resourceType, void *pResource, long resourceLength)
+SongResource * XChangeSongResource(SongResource *theSong, int32_t songSize, SongResourceType resourceType, void *pResource, int32_t resourceLength)
 {
     SongResource_SMS    *songSMS;
     SongResource_RMF    *songRMF;
@@ -726,6 +728,7 @@ SongResource * XChangeSongResource(SongResource *theSong, long songSize, SongRes
                             goto changeSMSresource;
                         case R_PUBLISHER_CONTACT:
                             XBlockMove(pResource, name4, resourceLength);
+                            goto changeSMSresource;
             changeSMSresource:
                             newSong = (SongResource *)XNewPtr(songSize + resourceLength);
                             songSMS = (SongResource_SMS *)newSong;
@@ -795,7 +798,7 @@ static const SongResourceType r_types[] =   {
 // Given a SongInfo type, return the equivalent SongResourceType
 static SongResourceType PV_TranslateSongInfoIntoSongResourceType(SongInfo type)
 {
-    short int   count, max;
+    int16_t   count, max;
 
     max = sizeof(i_types) / sizeof(SongInfo);
     for (count = 0; count < max; count++)
@@ -811,7 +814,7 @@ static SongResourceType PV_TranslateSongInfoIntoSongResourceType(SongInfo type)
 // Given a SongResourceType type, return the equivalent SongInfo
 static SongInfo PV_TranslateSongResourceTypeIntoSongInfo(SongResourceType type)
 {
-    short int   count, max;
+    int16_t   count, max;
 
     max = sizeof(r_types) / sizeof(SongResourceType);
     for (count = 0; count < max; count++)
@@ -825,15 +828,15 @@ static SongInfo PV_TranslateSongResourceTypeIntoSongInfo(SongResourceType type)
 }
 
 
-unsigned long XGetSongInformationSize(SongResource *theSong, long songSize, SongInfo type)
+uint32_t XGetSongInformationSize(SongResource *theSong, int32_t songSize, SongInfo type)
 {
     char                *pData, *pName;
-    long                length, offset;
-    unsigned long       temp;
+    int32_t                length, offset;
+    uint32_t       temp;
     SongResourceType    r_temp; 
     SongResource_SMS    *songSMS;
     SongResource_RMF    *songRMF;
-    unsigned long       size;
+    uint32_t       size;
 
     size = 0;
     if (theSong && songSize)
@@ -934,8 +937,24 @@ unsigned long XGetSongInformationSize(SongResource *theSong, long songSize, Song
                             }
                         }
                         break;
-		    default:
-			break;
+                    case I_GENRE:
+                    case I_SUB_GENRE:
+                    case I_TEMPO:
+                    case I_ORIGINAL_SOURCE:
+                    case I_MANUFACTURER:
+                    case I_MISC1:
+                    case I_MISC2:
+                    case I_MISC3:
+                    case I_MISC4:
+                    case I_MISC5:
+                    case I_MISC6:
+                    case I_MISC7:
+                    case I_MISC8:
+                        // these are just straight copies
+                        size = songSize;
+                        break;
+                    default:
+                        break;
                 }
                 break;
 
@@ -963,12 +982,12 @@ unsigned long XGetSongInformationSize(SongResource *theSong, long songSize, Song
 #endif  // USE_FULL_RMF_SUPPORT == TRUE
 
 #if USE_FULL_RMF_SUPPORT == TRUE
-void XGetSongInformation(SongResource *theSong, long songSize, SongInfo type,
-                            char* targetBuffer, unsigned long bufferBytes)
+void XGetSongInformation(SongResource *theSong, int32_t songSize, SongInfo type,
+                            char* targetBuffer, uint32_t bufferBytes)
 {
     char                *pData, *pName;
-    long                length, offset;
-    unsigned long       temp;
+    int32_t                length, offset;
+    uint32_t       temp;
     SongResourceType    r_temp; 
     SongResource_SMS    *songSMS;
     SongResource_RMF    *songRMF;
@@ -998,8 +1017,8 @@ void XGetSongInformation(SongResource *theSong, long songSize, SongInfo type,
                             pData = (char *)songSMS;
                             offset += temp;
                             pName = (char *)pData + offset;
-                            XBlockMove(pName + 1, targetBuffer, (long)pName[0]);
-                            targetBuffer[(short)pName[0]] = 0;
+                            XBlockMove(pName + 1, targetBuffer, (int32_t)pName[0]);
+                            targetBuffer[(int16_t)pName[0]] = 0;
                         }
                         break;
                     case I_COPYRIGHT:
@@ -1015,8 +1034,8 @@ void XGetSongInformation(SongResource *theSong, long songSize, SongInfo type,
                         {
                             pData = (char *)songSMS;
                             pName = (char *)pData + offset;
-                            XBlockMove(pName + 1, targetBuffer, (long)pName[0]);
-                            targetBuffer[(short)pName[0]] = 0;
+                            XBlockMove(pName + 1, targetBuffer, (int32_t)pName[0]);
+                            targetBuffer[(int16_t)pName[0]] = 0;
                         }
                         break;
                     case I_TITLE:
@@ -1041,8 +1060,8 @@ void XGetSongInformation(SongResource *theSong, long songSize, SongInfo type,
                             if (offset < length)
                             {
                                 pName = (char *)pData + offset;
-                                XBlockMove(pName + 1, targetBuffer, (long)pName[0]);
-                                targetBuffer[(short)pName[0]] = 0;
+                                XBlockMove(pName + 1, targetBuffer, (int32_t)pName[0]);
+                                targetBuffer[(int16_t)pName[0]] = 0;
                             }
                         }
                         break;
@@ -1072,8 +1091,8 @@ void XGetSongInformation(SongResource *theSong, long songSize, SongInfo type,
                             if (offset < length)
                             {
                                 pName = (char *)pData + offset;
-                                XBlockMove(pName + 1, targetBuffer, (long)pName[0]);
-                                targetBuffer[(short)pName[0]] = 0;
+                                XBlockMove(pName + 1, targetBuffer, (int32_t)pName[0]);
+                                targetBuffer[(int16_t)pName[0]] = 0;
                             }
                         }
                         break;
@@ -1091,7 +1110,7 @@ void XGetSongInformation(SongResource *theSong, long songSize, SongInfo type,
                 {
                     pData = (char *)&songRMF->resourceData;
                     length = pData - (char *)songRMF;
-                    PV_FillSongResource(r_temp, (short)offset, songRMF->locked,
+                    PV_FillSongResource(r_temp, (int16_t)offset, songRMF->locked,
                                             pData, length, targetBuffer, &bufferBytes);
                 }
                 break;
@@ -1162,16 +1181,16 @@ void XSetSongResourceObjectID(SongResource *pSong, XShortResourceID id)
         {
             case SONG_TYPE_SMS:
                 songSMS = (SongResource_SMS *)pSong;
-                XPutShort(&songSMS->midiResourceID, (unsigned short)id);
+                XPutShort(&songSMS->midiResourceID, (uint16_t)id);
                 break;
 
             case SONG_TYPE_RMF:
                 songRMF = (SongResource_RMF *)pSong;
-                XPutShort(&songRMF->rmfResourceID, (unsigned short)id);
+                XPutShort(&songRMF->rmfResourceID, (uint16_t)id);
                 break;
             case SONG_TYPE_RMF_LINEAR:
                 songRMF2 = (SongResource_RMF_Linear *)pSong;
-                XPutShort(&songRMF2->audioResourceID, (unsigned short)id);
+                XPutShort(&songRMF2->audioResourceID, (uint16_t)id);
                 break;
         }
     }
@@ -1183,7 +1202,7 @@ XBOOL XIsSongCompressed(SongResource *pSong)
 {
     XShortResourceID    id;
     XPTR                data;
-    long                type;
+    int32_t                type;
     XBOOL               compressed;
 
     compressed = FALSE;
@@ -1254,9 +1273,9 @@ void XSetSongLocked(SongResource *pSong, XBOOL locked)
     SongResource_RMF        *songRMF;
     SongResource_RMF_Linear *songRMF2;
     char                    *pData;
-    unsigned long           length;
+    uint32_t           length;
     char                    *pUnit;
-    short int               count, resourceCount;
+    int16_t               count, resourceCount;
     SongResourceType        type;
 
 
@@ -1271,7 +1290,7 @@ void XSetSongLocked(SongResource *pSong, XBOOL locked)
 
             case SONG_TYPE_RMF_LINEAR:
                 songRMF2 = (SongResource_RMF_Linear *)pSong;
-                resourceCount = (short)XGetShort(&songRMF2->resourceCount);
+                resourceCount = (int16_t)XGetShort(&songRMF2->resourceCount);
                 if (resourceCount)
                 {
                 }
@@ -1280,11 +1299,11 @@ void XSetSongLocked(SongResource *pSong, XBOOL locked)
             case SONG_TYPE_RMF:
                 songRMF = (SongResource_RMF *)pSong;
                 
-                resourceCount = (short)XGetShort(&songRMF->resourceCount);
+                resourceCount = (int16_t)XGetShort(&songRMF->resourceCount);
                 if (resourceCount)
                 {
                     pData = (char *)&songRMF->resourceData;
-                    length = (unsigned long)(pData - (char *)songRMF);
+                    length = (uint32_t)(pData - (char *)songRMF);
                     pUnit = pData;
                     for (count = 0; count < resourceCount; count++)
                     {
@@ -1324,21 +1343,21 @@ void XSetSongLocked(SongResource *pSong, XBOOL locked)
                                 // this is a zero terminated string, always
                                 if ( (songRMF->locked == FALSE) && locked)
                                 {
-                                    length = (unsigned long)XStrLen(pUnit) + 1;
+                                    length = (uint32_t)XStrLen(pUnit) + 1;
                                     XEncryptData(pUnit, length);
                                 }
                                 if (songRMF->locked && (locked == FALSE))
                                 {
-                                    length = (unsigned long)XEncryptedStrLen(pUnit) + 1;
+                                    length = (uint32_t)XEncryptedStrLen(pUnit) + 1;
                                     XDecryptData(pUnit, length);
                                 }
                                 if (songRMF->locked && (locked))
                                 {
-                                    length = (unsigned long)XEncryptedStrLen(pUnit) + 1;
+                                    length = (uint32_t)XEncryptedStrLen(pUnit) + 1;
                                 }
                                 if ((songRMF->locked == FALSE) && (locked == FALSE))
                                 {
-                                    length = (unsigned long)XStrLen(pUnit) + 1;
+                                    length = (uint32_t)XStrLen(pUnit) + 1;
                                 }
                                 pUnit += length;
                                 break;
@@ -1349,7 +1368,7 @@ void XSetSongLocked(SongResource *pSong, XBOOL locked)
                                 length = XGetShort(pUnit);
                                 pUnit += 2;
                                 // format is word count followed by x number of (word, word)
-                                pUnit += sizeof(short) * length;
+                                pUnit += sizeof(int16_t) * length;
                                 break;
                         }
                     }
@@ -1427,7 +1446,7 @@ SongResource * XConvertToSongType(SongResource *pSong, SongType newSongType)
 {
     SongResource_SMS    *songSMS;
     SongResource_RMF    *songRMF;
-    short int           id;
+    int16_t           id;
     SongResource        *newSong;
 
     newSong = NULL;
@@ -1687,21 +1706,21 @@ static const SongResourceType   rmf_processTypes[] =
             R_MANUFACTURER, R_MISC1, R_MISC2, R_MISC3, R_MISC4, R_MISC5, R_MISC6, R_MISC7, R_MISC8 
             };
 
-SongResource_Info * XGetSongResourceInfo(SongResource *pSong, long songSize)
+SongResource_Info * XGetSongResourceInfo(SongResource *pSong, int32_t songSize)
 {
     SongResource_Info       *pInfo;
     char                    *text;
     SongResource_SMS        *songSMS;
     SongResource_RMF        *songRMF;
     SongResource_RMF_Linear *songRMF2;
-    short int               count, max;
+    int16_t               count, max;
     SongInfo                type;
 
     pInfo = NULL;
     text = (char *)XNewPtr(8192L);
     if (pSong && songSize && text)
     {
-        pInfo = (SongResource_Info *)XNewPtr((long)sizeof(SongResource_Info));
+        pInfo = (SongResource_Info *)XNewPtr((int32_t)sizeof(SongResource_Info));
         if (pInfo)
         {
             // fields common to all types
@@ -1716,32 +1735,32 @@ SongResource_Info * XGetSongResourceInfo(SongResource *pSong, long songSize)
                     songSMS = (SongResource_SMS *)pSong;
                     pInfo->maxMidiNotes = songSMS->maxNotes;
                     pInfo->maxEffects = songSMS->maxEffects;
-                    pInfo->mixLevel = (short)XGetShort(&songSMS->mixLevel);
+                    pInfo->mixLevel = (int16_t)XGetShort(&songSMS->mixLevel);
                     pInfo->reverbType = songSMS->reverbType;
                     pInfo->objectResourceID = (XShortResourceID)XGetShort(&songSMS->midiResourceID);
-                    pInfo->songTempo = (unsigned short)XGetShort(&songSMS->songTempo);
+                    pInfo->songTempo = (uint16_t)XGetShort(&songSMS->songTempo);
                     pInfo->songPitchShift = songSMS->songPitchShift;
                     break;
 
                 case SONG_TYPE_RMF:
                     songRMF = (SongResource_RMF *)pSong;
-                    pInfo->maxMidiNotes = (short)XGetShort(&songRMF->maxNotes);
-                    pInfo->maxEffects = (short)XGetShort(&songRMF->maxEffects);
-                    pInfo->mixLevel = (short)XGetShort(&songRMF->mixLevel);
+                    pInfo->maxMidiNotes = (int16_t)XGetShort(&songRMF->maxNotes);
+                    pInfo->maxEffects = (int16_t)XGetShort(&songRMF->maxEffects);
+                    pInfo->mixLevel = (int16_t)XGetShort(&songRMF->mixLevel);
                     pInfo->reverbType = songRMF->reverbType;
                     pInfo->objectResourceID = (XShortResourceID)XGetShort(&songRMF->rmfResourceID);
-                    pInfo->songTempo = (unsigned short)XGetShort(&songRMF->songTempo);
-                    pInfo->songPitchShift = (short)XGetShort(&songRMF->songPitchShift);
+                    pInfo->songTempo = (uint16_t)XGetShort(&songRMF->songTempo);
+                    pInfo->songPitchShift = (int16_t)XGetShort(&songRMF->songPitchShift);
                     break;
 
                 case SONG_TYPE_RMF_LINEAR:
                     songRMF2 = (SongResource_RMF_Linear *)pSong;
-                    pInfo->maxMidiNotes = (short)XGetShort(&songRMF2->maxNotes);
-                    pInfo->maxEffects = (short)XGetShort(&songRMF2->maxEffects);
-                    pInfo->mixLevel = (short)XGetShort(&songRMF2->mixLevel);
+                    pInfo->maxMidiNotes = (int16_t)XGetShort(&songRMF2->maxNotes);
+                    pInfo->maxEffects = (int16_t)XGetShort(&songRMF2->maxEffects);
+                    pInfo->mixLevel = (int16_t)XGetShort(&songRMF2->mixLevel);
                     pInfo->reverbType = songRMF2->reverbType;
                     pInfo->objectResourceID = (XShortResourceID)XGetShort(&songRMF2->audioResourceID);
-                    pInfo->songTempo = (unsigned short)XGetShort(&songRMF2->songTempo);
+                    pInfo->songTempo = (uint16_t)XGetShort(&songRMF2->songTempo);
                     break;
 
 		default:
@@ -1774,11 +1793,11 @@ SongResource * XNewSongFromSongResourceInfo(SongResource_Info *pSongInfo)
     SongResource                    *newSong, *otherNew;
     SongResource_SMS                *songSMS;
     SongResource_RMF                *songRMF;
-    short int                       count, max;
+    int16_t                       count, max;
     char                            *resourceName;
     SongResourceType                type;
     SongResourceType const          *pProcess;
-    long                            resourceLength;
+    int32_t                            resourceLength;
 
     newSong = NULL;
     max = 0;
@@ -1799,13 +1818,13 @@ SongResource * XNewSongFromSongResourceInfo(SongResource_Info *pSongInfo)
                     pProcess = sms_processTypes;
                     max = sizeof(sms_processTypes) / sizeof(SongResourceType);
                     songSMS = (SongResource_SMS *)newSong;
-                    XPutShort(&songSMS->songTempo, (unsigned short)pSongInfo->songTempo);
+                    XPutShort(&songSMS->songTempo, (uint16_t)pSongInfo->songTempo);
                     songSMS->songPitchShift = (char)pSongInfo->songPitchShift;
                     break;
                 case SONG_TYPE_RMF:
                     songRMF = (SongResource_RMF *)newSong;
-                    XPutShort(&songRMF->songTempo, (unsigned short)pSongInfo->songTempo);
-                    XPutShort(&songRMF->songPitchShift, (unsigned short)pSongInfo->songPitchShift);
+                    XPutShort(&songRMF->songTempo, (uint16_t)pSongInfo->songTempo);
+                    XPutShort(&songRMF->songPitchShift, (uint16_t)pSongInfo->songPitchShift);
                     pProcess = rmf_processTypes;
                     max = sizeof(rmf_processTypes) / sizeof(SongResourceType);
                     XSetSongVolume(newSong, pSongInfo->songVolume);
@@ -1901,10 +1920,10 @@ void XDisposeSongResourceInfo(SongResource_Info *pSongInfo)
 //
 // if pType is not NULL, then store the type
 // if pReturnedSize is not NULL, then store size
-XPTR XGetMidiData(XLongResourceID theID, long *pReturnedSize, XResourceType *pType)
+XPTR XGetMidiData(XLongResourceID theID, int32_t *pReturnedSize, XResourceType *pType)
 {
     XPTR            theData, pData;
-    long            midiSize;
+    int32_t            midiSize;
     XResourceType   type;
 
     type = ID_NULL;
@@ -1917,13 +1936,13 @@ XPTR XGetMidiData(XLongResourceID theID, long *pReturnedSize, XResourceType *pTy
         if (pData)
         {
             XBlockMove(theData, pData, midiSize);
-            XDecryptData(pData, (unsigned long)midiSize);               // decrypt first
+            XDecryptData(pData, (uint32_t)midiSize);               // decrypt first
         }
         XDisposePtr(theData);
         theData = pData;
         if (theData)
         {
-            pData = XDecompressPtr(theData, (unsigned long)midiSize, TRUE);     // uncompress second
+            pData = XDecompressPtr(theData, (uint32_t)midiSize, TRUE);     // uncompress second
             if (pData)
             {
                 midiSize = XGetPtrSize(pData);  // get new size
@@ -1948,7 +1967,7 @@ XPTR XGetMidiData(XLongResourceID theID, long *pReturnedSize, XResourceType *pTy
             if (pData)
             {
                 XBlockMove(theData, pData, midiSize);
-                XDecryptData(pData, (unsigned long)midiSize);               // decrypt first
+                XDecryptData(pData, (uint32_t)midiSize);               // decrypt first
                 type = ID_EMID;
             }
             XDisposePtr(theData);
@@ -1962,7 +1981,7 @@ XPTR XGetMidiData(XLongResourceID theID, long *pReturnedSize, XResourceType *pTy
         theData = XGetAndDetachResource(ID_CMID, theID, &midiSize);
         if (theData)
         {
-            pData = XDecompressPtr(theData, (unsigned long)midiSize, TRUE);
+            pData = XDecompressPtr(theData, (uint32_t)midiSize, TRUE);
             if (pData)
             {
                 XDisposePtr(theData);
@@ -1979,6 +1998,9 @@ XPTR XGetMidiData(XLongResourceID theID, long *pReturnedSize, XResourceType *pTy
         if (theData == NULL)
         {
             theData = XGetAndDetachResource(ID_MIDI_OLD, theID, &midiSize);
+            if (!theData) {
+                BAE_STDERR("DEBUG: XGetMidiData: no MIDI resource found for id=%d (tried ECMI/EMID/CMID/MIDI/MIDI_OLD)\n", (int)theID);
+            }
         }
         if (theData)
         {
@@ -1998,10 +2020,10 @@ XPTR XGetMidiData(XLongResourceID theID, long *pReturnedSize, XResourceType *pTy
 
 
 // Get sound resource and detach from resource manager but don't decompress.
-XPTR XGetRawSoundResourceByID(XLongResourceID theID, XResourceType *pReturnedType, long *pReturnedSize)
+XPTR XGetRawSoundResourceByID(XLongResourceID theID, XResourceType *pReturnedType, int32_t *pReturnedSize)
 {
     XPTR            theData;
-    long            size;
+    int32_t            size;
     XResourceType   type;
 
     size = 0;
@@ -2034,32 +2056,27 @@ XPTR XGetRawSoundResourceByID(XLongResourceID theID, XResourceType *pReturnedTyp
 
 // Get sound resource and detach from resource manager or decompress
 // This function can be replaced for a custom sound retriver
-XPTR XGetSoundResourceByID(XLongResourceID theID, long *pReturnedSize)
+XPTR XGetSoundResourceByID(XLongResourceID theID, int32_t *pReturnedSize)
 {
     XPTR    thePreSound, theData;
-    unsigned long   size;
+    uint32_t   size;
 
-    // look for compressed version first
     theData = XGetAndDetachResource(ID_CSND, theID, pReturnedSize);
     if (theData == NULL)
     {
-        // look for encrypted version
         theData = XGetAndDetachResource(ID_ESND, theID, pReturnedSize);
         if (theData)
         {
-            size = (unsigned long)*pReturnedSize;
-
-            // since this is encrypted, make a new copy and decrypt
+            size = (uint32_t)*pReturnedSize;
             thePreSound = theData;
-            theData = XNewPtr((long)size);
+            theData = XNewPtr((int32_t)size);
             if (theData)
             {
-                XBlockMove(thePreSound, theData, (long)size);
+                XBlockMove(thePreSound, theData, (int32_t)size);
                 XDecryptData(theData, size);
             }
             XDisposePtr(thePreSound);
         }
-        // look for standard version
         if (theData == NULL)
         {
             theData = XGetAndDetachResource(ID_SND, theID, pReturnedSize);
@@ -2068,9 +2085,12 @@ XPTR XGetSoundResourceByID(XLongResourceID theID, long *pReturnedSize)
     else
     {
         thePreSound = theData;
-        theData = XDecompressPtr(thePreSound, (unsigned long)*pReturnedSize, FALSE);
+        theData = XDecompressPtr(thePreSound, (uint32_t)*pReturnedSize, FALSE);
         XDisposePtr(thePreSound);
-        *pReturnedSize = XGetPtrSize(theData);
+        if (theData)
+        {
+            *pReturnedSize = XGetPtrSize(theData);
+        }
     }
     return theData;
 }
@@ -2078,7 +2098,7 @@ XPTR XGetSoundResourceByID(XLongResourceID theID, long *pReturnedSize)
 #if X_PLATFORM != X_WEBTV
 // Get sound resource and detach from resource manager or decompress
 // This function can be replaced for a custom sound retriver
-XPTR XGetSoundResourceByName(void *cName, long *pReturnedSize)
+XPTR XGetSoundResourceByName(void *cName, int32_t *pReturnedSize)
 {
     XPTR    thePreSound, theData;
 
@@ -2101,7 +2121,7 @@ XPTR XGetSoundResourceByName(void *cName, long *pReturnedSize)
                 if (theData)
                 {
                     XBlockMove(thePreSound, theData, *pReturnedSize);
-                    XDecryptData(theData, (unsigned long)*pReturnedSize);
+                    XDecryptData(theData, (uint32_t)*pReturnedSize);
                 }
                 XDisposePtr(thePreSound);
             }
@@ -2110,7 +2130,7 @@ XPTR XGetSoundResourceByName(void *cName, long *pReturnedSize)
     else
     {
         thePreSound = theData;
-        theData = XDecompressPtr(thePreSound, (unsigned long)*pReturnedSize, FALSE);
+        theData = XDecompressPtr(thePreSound, (uint32_t)*pReturnedSize, FALSE);
         XDisposePtr(thePreSound);
         *pReturnedSize = XGetPtrSize(theData);
     }
@@ -2120,8 +2140,8 @@ XPTR XGetSoundResourceByName(void *cName, long *pReturnedSize)
 
 
 #if USE_CREATION_API == TRUE
-void XSetSongPerformanceSettings(SongResource *pSong, short int maxMidiVoices, short int maxEffectsVoices,
-                                        short int mixLevel)
+void XSetSongPerformanceSettings(SongResource *pSong, int16_t maxMidiVoices, int16_t maxEffectsVoices,
+                                        int16_t mixLevel)
 {
     SongResource_SMS    *songSMS;
     SongResource_RMF    *songRMF;
@@ -2133,14 +2153,14 @@ void XSetSongPerformanceSettings(SongResource *pSong, short int maxMidiVoices, s
             case SONG_TYPE_SMS:
                 songSMS = (SongResource_SMS *)pSong;
                 songSMS->maxNotes = (char)maxMidiVoices;
-                XPutShort(&songSMS->mixLevel, (unsigned short)mixLevel);
+                XPutShort(&songSMS->mixLevel, (uint16_t)mixLevel);
                 songSMS->maxEffects = (char)maxEffectsVoices;
                 break;
             case SONG_TYPE_RMF:
                 songRMF = (SongResource_RMF *)pSong;
-                XPutShort(&songRMF->maxNotes, (unsigned short)maxMidiVoices);
-                XPutShort(&songRMF->mixLevel, (unsigned short)mixLevel);
-                XPutShort(&songRMF->maxEffects, (unsigned short)maxEffectsVoices);
+                XPutShort(&songRMF->maxNotes, (uint16_t)maxMidiVoices);
+                XPutShort(&songRMF->mixLevel, (uint16_t)mixLevel);
+                XPutShort(&songRMF->maxEffects, (uint16_t)maxEffectsVoices);
                 break;
         }
     }
@@ -2149,7 +2169,7 @@ void XSetSongPerformanceSettings(SongResource *pSong, short int maxMidiVoices, s
 
 
 #if USE_CREATION_API == TRUE
-void XGetSongPerformanceSettings(SongResource * pSong, short int *maxMidiVoices, short int *maxEffectsVoices, short int *mixLevel)
+void XGetSongPerformanceSettings(SongResource * pSong, int16_t *maxMidiVoices, int16_t *maxEffectsVoices, int16_t *mixLevel)
 {
     SongResource_SMS    *songSMS;
     SongResource_RMF    *songRMF;
@@ -2161,14 +2181,14 @@ void XGetSongPerformanceSettings(SongResource * pSong, short int *maxMidiVoices,
             case SONG_TYPE_SMS:
                 songSMS = (SongResource_SMS *)pSong;
                 *maxMidiVoices = songSMS->maxNotes;
-                *mixLevel = (short)XGetShort(&songSMS->mixLevel);
+                *mixLevel = (int16_t)XGetShort(&songSMS->mixLevel);
                 *maxEffectsVoices = songSMS->maxEffects;
                 break;
             case SONG_TYPE_RMF:
                 songRMF = (SongResource_RMF *)pSong;
-                *maxMidiVoices = (short)XGetShort(&songRMF->maxNotes);
-                *mixLevel = (short)XGetShort(&songRMF->mixLevel);
-                *maxEffectsVoices = (short)XGetShort(&songRMF->maxEffects);
+                *maxMidiVoices = (int16_t)XGetShort(&songRMF->maxNotes);
+                *mixLevel = (int16_t)XGetShort(&songRMF->mixLevel);
+                *maxEffectsVoices = (int16_t)XGetShort(&songRMF->maxEffects);
                 break;
         }
     }
@@ -2177,9 +2197,9 @@ void XGetSongPerformanceSettings(SongResource * pSong, short int *maxMidiVoices,
 
 
 
-short int XGetSongVolume(SongResource *pSong)
+int16_t XGetSongVolume(SongResource *pSong)
 {
-    short int   volume;
+    int16_t   volume;
 
     volume = MAX_SONG_VOLUME;
     if (pSong)
@@ -2187,7 +2207,7 @@ short int XGetSongVolume(SongResource *pSong)
         switch (((SongResource_SMS *)pSong)->songType)
         {
             case SONG_TYPE_RMF:
-                volume = (short)XGetShort(&((SongResource_RMF *)pSong)->songVolume);
+                volume = (int16_t)XGetShort(&((SongResource_RMF *)pSong)->songVolume);
                 if (volume == 0)
                 {
                     volume = MAX_SONG_VOLUME;
@@ -2198,14 +2218,14 @@ short int XGetSongVolume(SongResource *pSong)
     return volume;
 }
 
-void XSetSongVolume(SongResource *pSong, short int volume)
+void XSetSongVolume(SongResource *pSong, int16_t volume)
 {
     if (pSong)
     {
         switch (((SongResource_SMS *)pSong)->songType)
         {
             case SONG_TYPE_RMF:
-                XPutShort(&((SongResource_RMF *)pSong)->songVolume, (unsigned short)volume);
+                XPutShort(&((SongResource_RMF *)pSong)->songVolume, (uint16_t)volume);
                 break;
         }
     }
@@ -2213,9 +2233,9 @@ void XSetSongVolume(SongResource *pSong, short int volume)
 
 
 #if X_PLATFORM != X_WEBTV
-short int XGetSongReverbType(SongResource *pSong)
+int16_t XGetSongReverbType(SongResource *pSong)
 {
-    short int       reverbType;
+    int16_t       reverbType;
 
     reverbType = 0;
     if (pSong)
@@ -2236,7 +2256,7 @@ short int XGetSongReverbType(SongResource *pSong)
 
 
 #if USE_CREATION_API == TRUE
-void XSetSongReverbType(SongResource *pSong, short int reverbType)
+void XSetSongReverbType(SongResource *pSong, int16_t reverbType)
 {
     if (pSong)
     {
@@ -2258,21 +2278,21 @@ void XSetSongReverbType(SongResource *pSong, short int reverbType)
 XPTR XCreateBankStatus(BankStatus *pStatus)
 {
     char            *pBank, *pData;
-    long            size;
+    int32_t            size;
 
     pBank = NULL;
     if (pStatus)
     {
         size = XStrLen(pStatus->bankURL) + 1;
         size += XStrLen(pStatus->bankName) + 1;
-        size += sizeof(long);
+        size += sizeof(int32_t);
         pBank = (char *)XNewPtr(size);
         if (pBank)
         {
             pData = pBank;
 
             XPutLong(pData, pStatus->version);
-            pData += sizeof(long);
+            pData += sizeof(int32_t);
             size = XStrLen(pStatus->bankURL) + 1;
             if (size > 1)
             {
@@ -2290,11 +2310,11 @@ XPTR XCreateBankStatus(BankStatus *pStatus)
 }
 
 // Create version resource that is ready to be stored
-XPTR XCreateVersion(short int major, short int minor, short int subMinor)
+XPTR XCreateVersion(int16_t major, int16_t minor, int16_t subMinor)
 {
     XVersion    *pVers;
 
-    pVers = (XVersion *)XNewPtr((long)sizeof(XVersion));
+    pVers = (XVersion *)XNewPtr((int32_t)sizeof(XVersion));
     if (pVers)
     {
         XPutShort(&pVers->versionMajor, major);
@@ -2309,17 +2329,17 @@ XPTR XCreateVersion(short int major, short int minor, short int subMinor)
 void XGetBankStatus(BankStatus *pStatus)
 {
     char            *pBank;
-    long            size;
+    int32_t            size;
 
     if (pStatus)
     {
-        XSetMemory((XPTR)pStatus, (long)sizeof(BankStatus), 0);
+        XSetMemory((XPTR)pStatus, (int32_t)sizeof(BankStatus), 0);
         pBank = (char *)XGetAndDetachResource(ID_BANK, DEFAULT_RESOURCE_BANK_ID, &size);
         if (pBank)
         {
             pStatus->version = XGetLong(pBank);     // get version
 
-            pBank += sizeof(long);                  // get bank URL
+            pBank += sizeof(int32_t);                  // get bank URL
             size = XStrLen(pBank) + 1;
             if (size > BANK_NAME_MAX_SIZE-1)
             {
@@ -2350,7 +2370,7 @@ XAliasLinkResource * XGetAliasLink(void)
 XERR XLookupAlias(XAliasLinkResource *pLink, XLongResourceID sourceID, XLongResourceID *pDestID)
 {
     XERR                err;
-    unsigned long       count, max;
+    uint32_t       count, max;
 
     err = -1;
     if (pDestID && pLink)
@@ -2398,16 +2418,16 @@ XAliasLinkResource * XGetAliasLinkFromFile(XFILE thisFile)
 void XGetVersionNumber(XVersion *pVersionNumber)
 {
     XVersion    *pData;
-    long        size;
+    int32_t        size;
 
     if (pVersionNumber)
     {
         pData = (XVersion *)XGetAndDetachResource(ID_VERS, DEFAULT_RESOURCE_VERS_ID, &size);
         if (pData)
         {
-            pVersionNumber->versionMajor = (short)XGetShort(&pData->versionMajor);
-            pVersionNumber->versionMinor = (short)XGetShort(&pData->versionMinor);
-            pVersionNumber->versionSubMinor = (short)XGetShort(&pData->versionSubMinor);
+            pVersionNumber->versionMajor = (int16_t)XGetShort(&pData->versionMajor);
+            pVersionNumber->versionMinor = (int16_t)XGetShort(&pData->versionMinor);
+            pVersionNumber->versionSubMinor = (int16_t)XGetShort(&pData->versionSubMinor);
             XDisposePtr(pData);
         }
         else

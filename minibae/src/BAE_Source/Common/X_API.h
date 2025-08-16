@@ -192,7 +192,7 @@
 **              added a missing include file
 **  6/19/98     Added USE_CAPTURE_API
 **  7/1/98      Changed various API to use the new XResourceType and XLongResourceID
-**  7/6/98      Changed _XPutShort to pass a unsigned short rather than an unsigned long
+**  7/6/98      Changed _XPutShort to pass a uint16_t rather than an unsigned long
 **  7/10/98     Added XGetUniqueFileResourceID & XGetUniqueResourceID & XAddResource
 **              Added XDeleteResource
 **              Added XCountResourcesOfType
@@ -210,7 +210,7 @@
 **  2/11/99     Removed MOD support when HAE_PLUGIN is defined
 **  2/12/99     Added types USE_MPEG_ENCODER & USE_MPEG_DECODER
 **  2/21/99     Added XStripStr & XFileCreateResourceCache
-**  2/24/99     Added XGetShortCompressionName
+**  2/24/99     Added XGetint16_tCompressionName
 **  2/28/99     Changed some default BeOS settings
 **  3/16/99     MOE:  Changed parameters of XCompressPtr() and LZSSCompress..()
 **              Moved XCompressStatusProc from X_Formats.h
@@ -230,7 +230,7 @@
 **  8/10/99     Changed XFileSetPositionRelative & XFileSetLength to return an XERR
 **  8/11/99     MOE: Added XCtoPascalString()
 **  8/11/99     MOE:  Added XLongToStr()
-**   9/8/99     MOE: Added XSwapShorts()
+**   9/8/99     MOE: Added XSwapShort_ts()
 **   9/8/99     MOE: Added XLongToStr()
 **   9/8/99     MOE:  Changed XGetResourceNameOnly() last parameter to make
 **              it clear what it does
@@ -284,6 +284,7 @@
     #define NULL    0L
 #endif
 
+#include <stdint.h>
 
 
 #if 0
@@ -505,27 +506,21 @@
 typedef void *          XPTR;
 typedef void const*     XPTRC;
 typedef void *          XRESOURCE;
-typedef long            XERR;
+typedef int32_t            XERR;
 typedef unsigned char   XBOOL;
-typedef unsigned short  XBOOL16;
-typedef long            LOOPCOUNT;
+typedef uint16_t  XBOOL16;
+typedef int32_t            LOOPCOUNT;
 
 typedef char            XSBYTE;         // 8 bit signed
 typedef unsigned char   XBYTE;          // 8 bit unsigned
-typedef short           XSWORD;         // 16 bit signed
-typedef unsigned short  XWORD;          // 16 bit unsigned
+typedef int16_t           XSWORD;         // 16 bit signed
+typedef uint16_t  XWORD;          // 16 bit unsigned
 // NOTE: on 64-bit platforms, this needs to be redefined because a long is 64 bits!
-typedef long            XSDWORD;        // 32 bit signed
-typedef unsigned long   XDWORD;         // 32 bit unsigned
+typedef int32_t            XSDWORD;        // 32 bit signed
+typedef uint32_t   XDWORD;         // 32 bit unsigned
 typedef XDWORD          XTOKEN;         // base typedef for all toekn types
 
-struct XBankToken
-{
-    XTOKEN              xFile;
-    XTOKEN              fileLen;
-};
-typedef struct XBankToken XBankToken;
-
+// (XBankToken definition moved to after XFILE typedef for proper ordering)
 
 // these macros need to be removed soon. Conflicts are coming
 #define UBYTE           XBYTE
@@ -541,13 +536,13 @@ typedef struct XBankToken XBankToken;
 
 // This is used to solve the 4 character constant problem on some compilers
 #define FOUR_CHAR(ch1,ch2,ch3,ch4) \
-            ((((unsigned long)(ch1)&0x0FFL)<<24L) + (((ch2)&0x0FFL)<<16L) + (((ch3)&0x0FFL)<<8L) + ((ch4)&0x0FFL))
+            ((uint32_t)((((uint32_t)(ch1)&0xFFU)<<24U) | (((uint32_t)(ch2)&0xFFU)<<16U) | (((uint32_t)(ch3)&0xFFU)<<8U) | ((uint32_t)(ch4)&0xFFU)))
 
 
 #undef ABS
 #define ABS(x)              (((x) < 0) ? -(x) : (x))
 
-#define XMAKELONG(a, b)     ((long)(((XWORD)(a)) | ((XDWORD)((XWORD)(b))) << 16L))
+#define XMAKELONG(a, b)     ((int32_t)(((XWORD)(a)) | ((XDWORD)((XWORD)(b))) << 16L))
 #define XLOWORD(l)          ((XWORD)(l))
 #define XHIWORD(l)          ((XWORD)(((XDWORD)(l) >> 16L) & 0xFFFFL))
 
@@ -557,7 +552,7 @@ typedef struct XBankToken XBankToken;
 
 
 
-typedef unsigned long               XFIXED;
+typedef uint32_t               XFIXED;
 // The type XFIXED is an unsigned value, but the the calculations allow for negative numbers. If you changes this
 // from long to unsigned, then all the fade API's will fail. If you need the extra bit for an unsigned value
 // use the unsigned macros
@@ -567,14 +562,14 @@ typedef unsigned long               XFIXED;
 #define XFIXED_ONEHALF              0x00008000L
 #define XFIXED_180_OVER_PI          0x00394BB7L
 
-#define LONG_TO_XFIXED(x)           (XFIXED)((((long)(x)) * XFIXED_1))
-#define UNSIGNED_LONG_TO_XFIXED(x)  (XFIXED)((((unsigned long)(x)) * XFIXED_1))
+#define LONG_TO_XFIXED(x)           (XFIXED)((((int32_t)(x)) * XFIXED_1))
+#define UNSIGNED_LONG_TO_XFIXED(x)  (XFIXED)((((uint32_t)(x)) * XFIXED_1))
 #define RATIO_TO_XFIXED(a,b)        (LONG_TO_XFIXED(a) / (b))
-#define XFIXED_TO_LONG(x)           (long)(((long)(x)) / XFIXED_1)
-#define XFIXED_TO_UNSIGNED_LONG(x)  (unsigned long)(((unsigned long)(x)) / XFIXED_1)
-#define XFIXED_TO_SHORT(x)          ((short)((x) / XFIXED_1))
+#define XFIXED_TO_LONG(x)           (int32_t)(((int32_t)(x)) / XFIXED_1)
+#define XFIXED_TO_UNSIGNED_LONG(x)  (uint32_t)(((uint32_t)(x)) / XFIXED_1)
+#define XFIXED_TO_int16_t(x)          ((int16_t)((x) / XFIXED_1))
 #define XFIXED_TO_LONG_ROUNDED(x)   XFIXED_TO_LONG((x) + XFIXED_1 / 2)
-#define XFIXED_TO_SHORT_ROUNDED(x)  XFIXED_TO_SHORT((x) + XFIXED_1 / 2)
+#define XFIXED_TO_int16_t_ROUNDED(x)  XFIXED_TO_int16_t((x) + XFIXED_1 / 2)
 
 #define FLOAT_TO_XFIXED(x)      ((XFIXED)((float)(x) * XFIXED_1))
 #define XFIXED_TO_FLOAT(x)      ((float)(x) / XFIXED_1)
@@ -604,11 +599,11 @@ typedef unsigned long               XFIXED;
 // passed to the user.
 struct XPI_Memblock
 {
-    long    blockID_one;        // ID that this is our block. part 1
-    long    blockSize;          // block size
-    long    blockID_two;        // ID that this is our block. part 2
+    int32_t    blockID_one;        // ID that this is our block. part 1
+    int32_t    blockSize;          // block size
+    int32_t    blockID_two;        // ID that this is our block. part 2
 #if (X_PLATFORM == X_SOLARIS)
-    long    alignment8;         // used for alignment to 8 byte boundries
+    int32_t    alignment8;         // used for alignment to 8 byte boundries
 #endif
 };
 typedef struct XPI_Memblock XPI_Memblock;
@@ -623,45 +618,45 @@ typedef struct XPI_Memblock XPI_Memblock;
 // reference, which will be the real memory allocated with the host allocate memory function.
 XPI_Memblock * XIsOurMemoryPtr(XPTR data);
 
-XPTR    XNewPtr(long size);
+XPTR    XNewPtr(int32_t size);
 void    XDisposePtr(XPTR data);
-long    XGetPtrSize(XPTR data);
+int32_t    XGetPtrSize(XPTR data);
 // This function re-allocates a memory block
 // ptr may be NULL, in which case the functionality is the same as XNewPtr()
 // If allocation fails, ptr is unaffected (It's still allocated.)
 // Like with XNewPtr(), any newly allocated memory is zeroed.
-XPTR    XResizePtr(XPTR ptr, long size);
+XPTR    XResizePtr(XPTR ptr, int32_t size);
 
-void    XBlockMove(XPTRC source, XPTR dest, long size);
-void    XSetMemory(void *pAdr, long len, char value);
-void    XBubbleSortArray(short int *theArray, short int theCount);
-void    XSetBit(void *pBitArray, unsigned long whichbit);
-void    XClearBit(void *pBitArray, unsigned long whichbit);
-XBOOL   XTestBit(void *pBitArray, unsigned long whichbit);
+void    XBlockMove(XPTRC source, XPTR dest, int32_t size);
+void    XSetMemory(void *pAdr, int32_t len, char value);
+void    XBubbleSortArray(int16_t *theArray, int16_t theCount);
+void    XSetBit(void *pBitArray, uint32_t whichbit);
+void    XClearBit(void *pBitArray, uint32_t whichbit);
+XBOOL   XTestBit(void *pBitArray, uint32_t whichbit);
 
-unsigned long XMicroseconds(void);
-void XWaitMicroseocnds(unsigned long waitAmount);
+uint32_t XMicroseconds(void);
+void XWaitMicroseocnds(uint32_t waitAmount);
 
 
 // Resource Manager
 
-typedef long            XResourceType;
-typedef long            XLongResourceID;
-typedef short           XShortResourceID;
+typedef int32_t            XResourceType;
+typedef int32_t            XLongResourceID;
+typedef int16_t            XShortResourceID;
 
 struct XFILE_CACHED_ITEM
 {
     XResourceType   resourceType;       // resource type
     XLongResourceID resourceID;         // resource ID
-    long            resourceLength;     // resource ID
-    long            fileOffsetName;     // file offset from 0 to resource name
-    long            fileOffsetData;     // file offset from 0 to resource data
+    int32_t            resourceLength;     // resource ID
+    int32_t            fileOffsetName;     // file offset from 0 to resource name
+    int32_t            fileOffsetData;     // file offset from 0 to resource data
 };
 typedef struct XFILE_CACHED_ITEM        XFILE_CACHED_ITEM;
 
 struct XFILERESOURCECACHE
 {
-    long                totalResources;
+    int32_t                totalResources;
     XFILE_CACHED_ITEM   cached[1];
 };
 typedef struct XFILERESOURCECACHE       XFILERESOURCECACHE;
@@ -669,9 +664,9 @@ typedef struct XFILERESOURCECACHE       XFILERESOURCECACHE;
 
 struct XFILENAME
 {
-    long                fileValidID;
+    int32_t                fileValidID;
 // public platform specific
-    long                fileReference;
+    intptr_t               fileReference; // platform file handle (pointer-sized)
 #if X_PLATFORM == X_MACINTOSH_9
     FSSpec              theFile;
 #else
@@ -682,8 +677,8 @@ struct XFILENAME
     XBOOL               resourceFile;
 
     XPTR                pResourceData;  // if file is memory based
-    long                resMemLength;   // length of memory resource file
-    long                resMemOffset;   // current offset of memory resource file
+    int32_t                resMemLength;   // length of memory resource file
+    int32_t                resMemOffset;   // current offset of memory resource file
     XBOOL               readOnly;       // TRUE then file is read only
     XBOOL               allowMemCopy;   // if TRUE, when a memory based resource is
                                         // read, a copy will be created otherwise
@@ -693,7 +688,17 @@ struct XFILENAME
     XFILERESOURCECACHE  *pCache;        // if file has been cached this will point to it
 };
 typedef struct XFILENAME    XFILENAME;
-typedef long                XFILE;          // this is used as a pointer, it needs to be changed for 64 bit CPUs.
+// XFILE was historically a 32-bit integer used to hold a pointer. This broke on 64-bit builds.
+// Make it an opaque pointer to the underlying XFILENAME so we avoid truncation and casts.
+typedef struct XFILENAME * XFILE;
+
+// Bank token now stores actual XFILE pointer and cached file length
+struct XBankToken
+{
+    XFILE               xFile;      // open resource file reference (opaque pointer)
+    int32_t             fileLen;    // length of that file (cached)
+};
+typedef struct XBankToken XBankToken;
 
 #define XFILERESOURCE_ID    FOUR_CHAR('I','R','E','Z')  // IREZ
 #define XFILECACHE_ID       FOUR_CHAR('C','A','C','H')  // CACH
@@ -701,18 +706,18 @@ typedef long                XFILE;          // this is used as a pointer, it nee
 
 struct XFILERESOURCEMAP
 {
-    long        mapID;
-    long        version;
-    long        totalResources;
+    int32_t        mapID;
+    int32_t        version;
+    int32_t        totalResources;
 };
 typedef struct XFILERESOURCEMAP     XFILERESOURCEMAP;
 
 // Resource Entry
-//  long    nextentry
-//  long    resourceType
-//  long    resourceID
+//  int32_t    nextentry
+//  int32_t    resourceType
+//  int32_t    resourceID
 //  pascal  string resourceName
-//  long    resourceLength
+//  int32_t    resourceLength
 //  data block
 
 // Resource file works as follows:
@@ -739,11 +744,11 @@ XFILE   XFileOpenResource(XFILENAME *file, XBOOL readOnly);
 // is an exact copy of the resource file format. Don't dispose of pResource until you
 // have closed the file. If allowCopy is TRUE, then when resources are read new copies
 // will be created, otherwise just a pointer into the mapped resource file
-XFILE   XFileOpenResourceFromMemory(XPTR pResource, unsigned long resourceLength, XBOOL allowCopy);
+XFILE   XFileOpenResourceFromMemory(XPTR pResource, uint32_t resourceLength, XBOOL allowCopy);
 
 // Open file as a read only file from a memory pointer. Don't dispose of pMemoryBlock until you
 // have closed the file.
-XFILE XFileOpenForReadFromMemory(XPTR pMemoryBlock, unsigned long memoryBlockSize);
+XFILE XFileOpenForReadFromMemory(XPTR pMemoryBlock, uint32_t memoryBlockSize);
 
 // open file for reading and writing. Direct access.
 XFILE   XFileOpenForRead(XFILENAME *file);
@@ -762,7 +767,7 @@ XERR XFileDelete(XFILENAME *file);
 // Read a file into memory and return an allocated pointer.
 // 0 is ok, -1 failed to open, -2 failed to read, -3 failed memory
 // if 0, then *pData is valid
-XERR XGetFileAsData(XFILENAME *pResourceName, XPTR *pData, long *pSize);
+XERR XGetFileAsData(XFILENAME *pResourceName, XPTR *pData, int32_t *pSize);
 
 void XConvertNativeFileToXFILENAME(void *file, XFILENAME *xfile);
 void XConvertPathToXFILENAME(void *path, XFILENAME *xfile);
@@ -779,10 +784,10 @@ void XFileFreeResourceCache(XFILE fileRef);
 // search through open resource files
 XBOOL   XExistsResource(XResourceType resourceType, XLongResourceID resourceID);
 XBOOL   XGetResourceName(XResourceType resourceType, XLongResourceID resourceID, char *cName);
-XPTR    XGetNamedResource(XResourceType resourceType, void *cName, long *pReturnedResourceSize);
-XPTR    XGetAndDetachResource(XResourceType resourceType, XLongResourceID resourceID, long *pReturnedResourceSize);
-XPTR    XGetIndexedResource(XResourceType resourceType, XLongResourceID *pReturnedID, long resourceIndex, 
-                                void *pResourceName, long *pReturnedResourceSize);
+XPTR    XGetNamedResource(XResourceType resourceType, void *cName, int32_t *pReturnedResourceSize);
+XPTR    XGetAndDetachResource(XResourceType resourceType, XLongResourceID resourceID, int32_t *pReturnedResourceSize);
+XPTR    XGetIndexedResource(XResourceType resourceType, XLongResourceID *pReturnedID, int32_t resourceIndex, 
+                                void *pResourceName, int32_t *pReturnedResourceSize);
 
 // get a unique ID for a particular file to be used as a resource ID
 XERR    XGetUniqueFileResourceID(XFILE fileRef, XResourceType resourceType, XLongResourceID *pReturnedID);
@@ -801,7 +806,7 @@ XERR    XMakeUniqueFileResourceID(XFILE fileRef, XResourceType resourceType,
 //      pResourceName is a pascal string
 //      pData is the data block to add
 //      length is the length of the data block
-XERR    XAddResource(XResourceType resourceType, XLongResourceID resourceID, void *pResourceName, void *pData, long length);
+XERR    XAddResource(XResourceType resourceType, XLongResourceID resourceID, void *pResourceName, void *pData, int32_t length);
 
 // Delete a resource from the most recently open resource file.
 //      resourceType is a type
@@ -810,7 +815,7 @@ XERR    XAddResource(XResourceType resourceType, XLongResourceID resourceID, voi
 XBOOL   XDeleteResource(XResourceType theType, XLongResourceID resourceID, XBOOL collectTrash );
 
 // return the number of resources of a particular type.
-long    XCountResourcesOfType(XResourceType resourceType);
+int32_t    XCountResourcesOfType(XResourceType resourceType);
 
 // Force a clean/update of the most recently opened resource file
 XBOOL   XCleanResource(void);
@@ -822,7 +827,7 @@ XBOOL   XCleanResource(void);
 //      pResourceName is a pascal string
 //      pData is the data block to add
 //      length is the length of the data block
-XERR    XAddFileResource(XFILE fileRef, XResourceType resourceType, XLongResourceID resourceID, void const*pResourceName, void *pData, long length);
+XERR    XAddFileResource(XFILE fileRef, XResourceType resourceType, XLongResourceID resourceID, void const*pResourceName, void *pData, int32_t length);
 
 XBOOL   XExistsFileResource(XFILE fileRef, XResourceType resourceType, XLongResourceID resourceID);
 
@@ -834,17 +839,17 @@ XBOOL   XExistsFileResource(XFILE fileRef, XResourceType resourceType, XLongReso
 //      Returns TRUE if found, otherwise FALSE
 XBOOL   XGetFileResourceName(XFILE fileRef, XResourceType resourceType, XLongResourceID resourceID, char *cName);
 
-XPTR    XGetFileResource(XFILE fileRef, XResourceType resourceType, XLongResourceID resourceID, void *pResourceName, long *pReturnedResourceSize);
-XPTR    XGetIndexedFileResource(XFILE fileRef, XResourceType resourceType, XLongResourceID *pReturnedID, long resourceIndex, 
-                                    void *pResourceName, long *pReturnedResourceSize);
+XPTR    XGetFileResource(XFILE fileRef, XResourceType resourceType, XLongResourceID resourceID, void *pResourceName, int32_t *pReturnedResourceSize);
+XPTR    XGetIndexedFileResource(XFILE fileRef, XResourceType resourceType, XLongResourceID *pReturnedID, int32_t resourceIndex, 
+                                    void *pResourceName, int32_t *pReturnedResourceSize);
 
 XERR XReadPartialFileResource(XFILE fileRef, XResourceType resourceType, XLongResourceID resourceID,
                                 char *pReturnedResourceName,
-                                XPTR *pReturnedBuffer, long bytesToReadAndAllocate);
+                                XPTR *pReturnedBuffer, int32_t bytesToReadAndAllocate);
 
-XResourceType XGetIndexedType(XFILE fileRef, long resourceIndex);
-long    XCountTypes(XFILE fileRef);
-long    XCountFileResourcesOfType(XFILE fileRef, XResourceType theType);
+XResourceType XGetIndexedType(XFILE fileRef, int32_t resourceIndex);
+int32_t    XCountTypes(XFILE fileRef);
+int32_t    XCountFileResourcesOfType(XFILE fileRef, XResourceType theType);
 
 // Get just the name of a resource only
 //      fileRef is the open file
@@ -863,46 +868,46 @@ XBOOL   XDeleteFileResource(XFILE fileRef, XResourceType theType, XLongResourceI
 XBOOL   XCleanResourceFile( XFILE fileRef );
 
 // File Manager
-XERR    XFileRead(XFILE fileRef, XPTR buffer, long bufferLength);
-XERR    XFileWrite(XFILE fileRef, XPTRC buffer, long bufferLength);
-XERR    XFileSetPosition(XFILE fileRef, long filePosition);
-long    XFileGetPosition(XFILE fileRef);
-XERR    XFileSetPositionRelative(XFILE fileRef, long relativeOffset);
-long    XFileGetLength(XFILE fileRef);
-XERR    XFileSetLength(XFILE refRef, unsigned long newSize);
+XERR    XFileRead(XFILE fileRef, XPTR buffer, int32_t bufferLength);
+XERR    XFileWrite(XFILE fileRef, XPTRC buffer, int32_t bufferLength);
+XERR    XFileSetPosition(XFILE fileRef, int32_t filePosition);
+int32_t    XFileGetPosition(XFILE fileRef);
+XERR    XFileSetPositionRelative(XFILE fileRef, int32_t relativeOffset);
+int32_t    XFileGetLength(XFILE fileRef);
+XERR    XFileSetLength(XFILE refRef, uint32_t newSize);
 
 XBOOL AreBankTokensIdentical(XBankToken tok1, XBankToken tok2);
 XBankToken CreateBankToken(void);
 XBankToken CreateBankTokenFromInputs(XTOKEN tok1, XTOKEN tok2);
 
 // standard string functions
-short int   XStrCmp(char const* string1, char const* string2);
-short int   XStrnCmp(char const* string1, char const* string2, long n);
+int16_t   XStrCmp(char const* string1, char const* string2);
+int16_t   XStrnCmp(char const* string1, char const* string2, int32_t n);
 char*       XStrCpy(char* dest, char const* src);
 char*       XStrStr(char* source, char const* pattern);
-long        XStrLen(char const* src);
+int32_t        XStrLen(char const* src);
 char*       XStrCat(char* dest, char const* source);
 char*       XStrCatChar(char *dest, char c);
 
-short int   XLowerCase(short int c);
-XBOOL       XIsDigit(short int c);
+int16_t   XLowerCase(int16_t c);
+XBOOL       XIsDigit(int16_t c);
 
 // standard string functions, but ignore case
-short int   XLStrCmp(const char* string1, const char* string2);
-short int   XLStrnCmp(const char* string1, const char* string2, long n);
+int16_t   XLStrCmp(const char* string1, const char* string2);
+int16_t   XLStrnCmp(const char* string1, const char* string2, int32_t n);
 char*       XLStrStr(char* source, char const* pattern);
 
 XPTR        XDuplicateMemory(XPTRC src, XDWORD len);
 
-short int   XMemCmp(void const* src1, void const* src2, long n);
+int16_t   XMemCmp(void const* src1, void const* src2, int32_t n);
 char*       XDuplicateStr(char const* src);
 // Duplicate and string characters below 32
 char*       XDuplicateAndStripStr(char const* src);
 void        XStripStr(char* pString);
 // Converts a long value to a base 10 string, returns pointer to the end
-char*       XLongToStr(char* dest, long value);
+char*       XLongToStr(char* dest, int32_t value);
 // This will convert a string to a base 10 long value
-long        XStrnToLong(char const* pData, long length);
+int32_t        XStrnToLong(char const* pData, int32_t length);
 
 enum
 {
@@ -910,8 +915,8 @@ enum
     X_SOURCE_DEST_ENCRYPTED             // source and destination encrypted 
 };
 // standard strcpy, but with crypto controls
-char        *XEncryptedStrCpy(char* dest, char const* src, short int copy);
-long        XEncryptedStrLen(char const* src);
+char        *XEncryptedStrCpy(char* dest, char const* src, int16_t copy);
+int32_t        XEncryptedStrLen(char const* src);
 char        *XDecryptAndDuplicateStr(char const* src);
 
 
@@ -930,7 +935,7 @@ XFIXED  XFixedMultiply(XFIXED prodA, XFIXED prodB);
 XFIXED  XFixedCos(int angle);
 XFIXED  XFixedSin(int angle);
 // given a fixed point value, do a floor and return the closest integer
-unsigned long   XFixedFloor(XFIXED value);
+uint32_t   XFixedFloor(XFIXED value);
 
 // if TRUE, then motorola; if FALSE then intel
 XBOOL               XDetermineByteOrder(void);
@@ -939,17 +944,17 @@ XBOOL               XDetermineByteOrder(void);
 //  !!!!    These can't be turned into macros because the code accesses bytes
 //          that are not byte aligned. We need to get them byte by byte to prevent
 //          CPU's from failing.
-unsigned short      XGetShortIntel(void const* address);
-unsigned long       XGetLongIntel(void const* address);
-unsigned short      XGetShort(void const* address);
-unsigned long       XGetLong(void const* address);
-void                XPutShort(void *address, unsigned short value);
-void                XPutLong(void *address, unsigned long value);
+uint16_t      XGetShortIntel(void const* address);
+uint32_t       XGetLongIntel(void const* address);
+uint16_t      XGetShort(void const* address);
+uint32_t       XGetLong(void const* address);
+void                XPutShort(void *address, uint16_t value);
+void                XPutLong(void *address, uint32_t value);
 
 // These will swap bytes no matter the byte order
-unsigned short      XSwapShort(unsigned short value);
-unsigned long       XSwapLong(unsigned long value);
-unsigned long       XSwapShortInLong(unsigned long value);
+uint16_t      XSwapShort(uint16_t value);
+uint32_t       XSwapLong(uint32_t value);
+uint32_t       XSwapShortInLong(uint32_t value);
 
 
 // Type 0 - Delta encoded LZSS
@@ -964,23 +969,23 @@ typedef enum
 
 // First byte is a compression type.
 // Next 3 bytes is uncompressed length.
-void*   XDecompressPtr(void * pData, unsigned long dataSize, XBOOL ignoreType);
+void*   XDecompressPtr(void * pData, uint32_t dataSize, XBOOL ignoreType);
 
-void    LZSSUncompress(unsigned char* src, unsigned long srcBytes,
-                        unsigned char* dst, unsigned long dstBytes);
-void    LZSSUncompressDeltaMono8(unsigned char* src, unsigned long srcBytes,
-                                    unsigned char* dst, unsigned long dstBytes);
-void    LZSSUncompressDeltaStereo8(unsigned char* src, unsigned long srcBytes,
-                                    unsigned char* dst, unsigned long dstBytes);
-void    LZSSUncompressDeltaMono16(unsigned char* src, unsigned long srcBytes,
-                                    short* dst, unsigned long dstBytes);
-void    LZSSUncompressDeltaStereo16(unsigned char* src, unsigned long srcBytes,
-                                    short* dst, unsigned long dstBytes);
+void    LZSSUncompress(unsigned char* src, uint32_t srcBytes,
+                        unsigned char* dst, uint32_t dstBytes);
+void    LZSSUncompressDeltaMono8(unsigned char* src, uint32_t srcBytes,
+                                    unsigned char* dst, uint32_t dstBytes);
+void    LZSSUncompressDeltaStereo8(unsigned char* src, uint32_t srcBytes,
+                                    unsigned char* dst, uint32_t dstBytes);
+void    LZSSUncompressDeltaMono16(unsigned char* src, uint32_t srcBytes,
+                                    int16_t* dst, uint32_t dstBytes);
+void    LZSSUncompressDeltaStereo16(unsigned char* src, uint32_t srcBytes,
+                                    int16_t* dst, uint32_t dstBytes);
 
 // return TRUE to stop
 typedef XBOOL   (*XCompressStatusProc)(void* data,
-                                        unsigned long currentBuffer,
-                                        unsigned long maxBuffer);
+                                        uint32_t currentBuffer,
+                                        uint32_t maxBuffer);
 
 #if USE_CREATION_API != FALSE
 // Given a block of data and a size, this will compress it into a newly-allocated.
@@ -992,25 +997,25 @@ typedef XBOOL   (*XCompressStatusProc)(void* data,
 // The length of the compressed data is returned if compression succeeds
 //  If -1 is returned, the compression failed
 //  If 0 is returned, compression was aborted by proc.
-long    XCompressPtr(XPTR* compressedDataTarget,
-                        XPTR pData, unsigned long dataSize,
+int32_t    XCompressPtr(XPTR* compressedDataTarget,
+                        XPTR pData, uint32_t dataSize,
                         XCOMPRESSION_TYPE type,
                         XCompressStatusProc proc, void* procData);
 
-long    LZSSCompress(XBYTE* src, unsigned long srcBytes, XBYTE* dst,
+int32_t    LZSSCompress(XBYTE* src, uint32_t srcBytes, XBYTE* dst,
                         XCompressStatusProc proc, void* procData);
-long    LZSSCompressDeltaMono8(XBYTE* src, unsigned long srcBytes, XBYTE* dst,
+int32_t    LZSSCompressDeltaMono8(XBYTE* src, uint32_t srcBytes, XBYTE* dst,
                                 XCompressStatusProc proc, void* procData);
-long    LZSSCompressDeltaStereo8(XBYTE* src, unsigned long srcBytes, XBYTE* dst,
+int32_t    LZSSCompressDeltaStereo8(XBYTE* src, uint32_t srcBytes, XBYTE* dst,
                                     XCompressStatusProc proc, void* procData);
-long    LZSSCompressDeltaMono16(short* src, unsigned long srcBytes, XBYTE* dst,
+int32_t    LZSSCompressDeltaMono16(int16_t* src, uint32_t srcBytes, XBYTE* dst,
                                 XCompressStatusProc proc, void* procData);
-long    LZSSCompressDeltaStereo16(short* src, unsigned long srcBytes, XBYTE* dst,
+int32_t    LZSSCompressDeltaStereo16(int16_t* src, uint32_t srcBytes, XBYTE* dst,
                                     XCompressStatusProc proc, void* procData);
 #endif
 
-void    XSwapShorts(short* shortArray, long count);
-void    XPhase8BitWaveform(unsigned char * pByte, long size);
+void    XSwapShorts(int16_t* int16_tArray, int32_t count);
+void    XPhase8BitWaveform(unsigned char * pByte, int32_t size);
 
 // Sound Support
 XBOOL   XIs8BitSupported(void);
@@ -1019,8 +1024,8 @@ XBOOL   XIsStereoSupported(void);
 
 #define X_FULL_VOLUME   256     // full volume (1.0)
 
-void        XGetCompressionName(long compressionType, void *cName);
-void        XGetShortCompressionName(long compressionType, void *cName);
+void        XGetCompressionName(int32_t compressionType, void *cName);
+void        XGetint16_tCompressionName(int32_t compressionType, void *cName);
 
 // Mac ADPCM compression (IMA 4 to 1)
 XPTR        XAllocateCompressedAiffIma(void const* src, XDWORD srcBitsPerSample,
@@ -1035,7 +1040,7 @@ void        XExpandAiffIma(XBYTE const* src, XDWORD srcBytesPerBlock,
 XDWORD      XExpandAiffImaStream(XBYTE const* src, XDWORD srcBytesPerBlock,
                                     void *dst, XDWORD dstBitsPerSample,
                                     XDWORD srcBytes, XDWORD channelCount,
-                                    short predictorCache[2]);
+                                    int16_t predictorCache[2]);
 
 // This is used for WAVE files
 XDWORD      XExpandWavIma(XBYTE const* src, XDWORD srcBytesPerBlock,
@@ -1043,28 +1048,28 @@ XDWORD      XExpandWavIma(XBYTE const* src, XDWORD srcBytesPerBlock,
                             XDWORD srcBytes, XDWORD channelCount);
 
 // u law decompression
-void        XExpandULawto16BitLinear(unsigned char *pSource, short int *pDest, long frames, long channels);
+void        XExpandULawto16BitLinear(unsigned char *pSource, int16_t *pDest, int32_t frames, int32_t channels);
 
 // a law decompression
-void        XExpandALawto16BitLinear(unsigned char *pSource, short int *pDest, long frames, long channels);
+void        XExpandALawto16BitLinear(unsigned char *pSource, int16_t *pDest, int32_t frames, int32_t channels);
 
 // MACE decompression
-void        XExpandMace1to6(void *inBuffer, void *outBuffer, unsigned long cnt, 
+void        XExpandMace1to6(void *inBuffer, void *outBuffer, uint32_t cnt, 
                     void * inState, void * outState, 
-                    unsigned long numChannels, unsigned long whichChannel);
-void        XExpandMace1to3(void *inBuffer, void *outBuffer, unsigned long cnt, 
+                    uint32_t numChannels, uint32_t whichChannel);
+void        XExpandMace1to3(void *inBuffer, void *outBuffer, uint32_t cnt, 
                     void * inState, void * outState, 
-                    unsigned long numChannels, unsigned long whichChannel);
+                    uint32_t numChannels, uint32_t whichChannel);
 
 // Decrypt a block of data. This should be U.S. munitions safe. ie below 40 bit
-void        XDecryptData(void *pData, unsigned long size);
+void        XDecryptData(void *pData, uint32_t size);
 // Encrypt a block of data. This should be U.S. munitions safe. ie below 40 bit
-void        XEncryptData(void *pData, unsigned long size);
+void        XEncryptData(void *pData, uint32_t size);
 
 // Random numbers
-short int   XRandom(void);                  // return pseudo-random from 0 to 32767
-void        XSeedRandom(unsigned long n);   // set pseudo-random generator
-short int   XRandomRange(short int max);    // return pseudo-random from 0 to max - 1
+int16_t   XRandom(void);                  // return pseudo-random from 0 to 32767
+void        XSeedRandom(uint32_t n);   // set pseudo-random generator
+int16_t   XRandomRange(int16_t max);    // return pseudo-random from 0 to max - 1
 
 // Character translation functions
 

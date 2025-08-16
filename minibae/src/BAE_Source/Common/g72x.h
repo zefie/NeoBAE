@@ -41,24 +41,24 @@
  * included in this Recommendation.
  */
 struct g72x_state {
-    long yl;    /* Locked or steady state step size multiplier. */
-    short yu;   /* Unlocked or non-steady state step size multiplier. */
-    short dms;  /* Short term energy estimate. */
-    short dml;  /* Long term energy estimate. */
-    short ap;   /* Linear weighting coefficient of 'yl' and 'yu'. */
+    int32_t yl;    /* Locked or steady state step size multiplier. */
+    int16_t yu;   /* Unlocked or non-steady state step size multiplier. */
+    int16_t dms;  /* Short term energy estimate. */
+    int16_t dml;  /* Long term energy estimate. */
+    int16_t ap;   /* Linear weighting coefficient of 'yl' and 'yu'. */
 
-    short a[2]; /* Coefficients of pole portion of prediction filter. */
-    short b[6]; /* Coefficients of zero portion of prediction filter. */
-    short pk[2];    /*
+    int16_t a[2]; /* Coefficients of pole portion of prediction filter. */
+    int16_t b[6]; /* Coefficients of zero portion of prediction filter. */
+    int16_t pk[2];    /*
              * Signs of previous two samples of a partially
              * reconstructed signal.
              */
-    short dq[6];    /*
+    int16_t dq[6];    /*
              * Previous 6 samples of the quantized difference
              * signal represented in an internal floating point
              * format.
              */
-    short sr[2];    /*
+    int16_t sr[2];    /*
              * Previous 2 samples of the quantized difference
              * signal represented in an internal floating point
              * format.
@@ -110,7 +110,7 @@ extern int
 quantize(
     int     d,  /* Raw difference signal sample */
     int     y,  /* Step size multiplier */
-    short       *table, /* quantization table */
+    int16_t       *table, /* quantization table */
     int     size);  /* table size of short integers */
 
 extern int
@@ -137,7 +137,7 @@ tandem_adjust_alaw(
     int     y,  /* quantizer step size */
     int     i,  /* decoder input code */
     int     sign,
-    short       *qtab);
+    int16_t       *qtab);
 
 int
 tandem_adjust_ulaw(
@@ -146,7 +146,7 @@ tandem_adjust_ulaw(
     int     y,  /* quantizer step size */
     int     i,  /* decoder input code */
     int     sign,
-    short       *qtab);
+    int16_t       *qtab);
     
 #define abs(x)          (((x)<0) ? -(x) : (x))
 

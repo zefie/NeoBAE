@@ -42,6 +42,11 @@
 #include <GenSnd.h>
 #include <signal.h>
 #include <stdarg.h>
+#include <stdint.h>
+
+#ifdef main
+   #undef main
+#endif
 
 #ifdef _BUILT_IN_PATCHES
 	#include <BAEPatches.h>
@@ -51,8 +56,8 @@ static volatile int interruptPlayBack = FALSE;
 static volatile int verboseMode = FALSE;
 static volatile int silentMode = FALSE;
 static volatile int fadeOut = TRUE;
-static short positionDisplayMultiplier = 10; // 100 = 1 second
-static short positionDisplayMultiplierCounter = 0;
+static int16_t positionDisplayMultiplier = 10; // 100 = 1 second
+static int16_t positionDisplayMultiplierCounter = 0;
 
 #ifdef _WIN32
     #define stricmp _stricmp
@@ -62,6 +67,46 @@ static short positionDisplayMultiplierCounter = 0;
 
 void intHandler(int dummy) {
     interruptPlayBack = TRUE;
+}
+
+const char* BAE_GetErrorString(BAEResult err) {
+    switch(err) {
+        case BAE_NO_ERROR: return "No error";
+        case BAE_PARAM_ERR: return "Parameter error";
+        case BAE_MEMORY_ERR: return "Memory error";
+        case BAE_BAD_INSTRUMENT: return "Bad instrument";
+        case BAE_BAD_MIDI_DATA: return "Bad MIDI data";
+        case BAE_ALREADY_PAUSED: return "Already paused";
+        case BAE_ALREADY_RESUMED: return "Already resumed";
+        case BAE_DEVICE_UNAVAILABLE: return "Device unavailable";
+        case BAE_NO_SONG_PLAYING: return "No song playing";
+        case BAE_STILL_PLAYING: return "Still playing";
+        case BAE_TOO_MANY_SONGS_PLAYING: return "Too many songs playing";
+        case BAE_NO_VOLUME: return "No volume";
+        case BAE_GENERAL_ERR: return "General error";
+        case BAE_NOT_SETUP: return "Not setup";
+        case BAE_NO_FREE_VOICES: return "No free voices";
+        case BAE_STREAM_STOP_PLAY: return "Stream stop play";
+        case BAE_BAD_FILE_TYPE: return "Bad file type";
+        case BAE_GENERAL_BAD: return "General bad";
+        case BAE_BAD_FILE: return "Bad file";
+        case BAE_NOT_REENTERANT: return "Not reentrant";
+        case BAE_BAD_SAMPLE: return "Bad sample";
+        case BAE_BUFFER_TOO_SMALL: return "Buffer too small";
+        case BAE_BAD_BANK: return "Bad bank";
+        case BAE_BAD_SAMPLE_RATE: return "Bad sample rate";
+        case BAE_TOO_MANY_SAMPLES: return "Too many samples";
+        case BAE_UNSUPPORTED_FORMAT: return "Unsupported format";
+        case BAE_FILE_IO_ERROR: return "File I/O error";
+        case BAE_SAMPLE_TOO_LARGE: return "Sample too large";
+        case BAE_UNSUPPORTED_HARDWARE: return "Unsupported hardware";
+        case BAE_ABORTED: return "Aborted";
+        case BAE_FILE_NOT_FOUND: return "File not found";
+        case BAE_RESOURCE_NOT_FOUND: return "Resource not found";
+        case BAE_NULL_OBJECT: return "Null object";
+        case BAE_ALREADY_EXISTS: return "Already exists";
+        default: return "Unknown error";
+    }
 }
 
 void playbae_dprintf(const char *fmt, ...) {
@@ -150,10 +195,10 @@ static void PV_Task(void *reference)
    }
 }
 
-static void PV_Idle(BAEMixer theMixer, unsigned long time)
+static void PV_Idle(BAEMixer theMixer, uint32_t time)
 {
-   unsigned long count;
-   unsigned long max;
+   uint32_t count;
+   uint32_t max;
 
    if (gWriteToFile)
    {
@@ -174,7 +219,7 @@ static void PV_Idle(BAEMixer theMixer, unsigned long time)
 }
 
 #if _DEBUG
-static void PV_StreamCallback(BAEStream stream, unsigned long reference)
+static void PV_StreamCallback(BAEStream stream, uint32_t reference)
 {
    playbae_dprintf("Stream %p reference %lx done\n", stream, reference);
 }
@@ -184,7 +229,7 @@ static void PV_SongCallback(BAESong song, void *reference)
    playbae_dprintf("Song %p reference %lx done\n", song, reference);
 }
 
-static void PV_SongMetaCallback(BAESong song, void *reference, char markerType, void *pText, long textLength, short currentTrack)
+static void PV_SongMetaCallback(BAESong song, void *reference, char markerType, void *pText, int32_t textLength, int16_t currentTrack)
 {
    playbae_dprintf("Song meta: reference %lx, markerType: %lx, txtlen: %lx, trk: %d, txt: %s\n", reference, markerType, textLength, currentTrack, (char *)pText);
 }
@@ -241,7 +286,7 @@ static BAEResult MuteCommaSeperatedChannels(BAESong theSong, char* channelsToMut
 }
 
 
-static void displayCurrentPosition(unsigned long currentPosition) {
+static void displayCurrentPosition(uint32_t currentPosition) {
 	int m, s, ms = 0;
 	positionDisplayMultiplierCounter = positionDisplayMultiplierCounter + 1;
 	if (positionDisplayMultiplierCounter == positionDisplayMultiplier) {
@@ -267,7 +312,7 @@ static BAEResult PlayPCM(BAEMixer theMixer, char *fileName, BAEFileType type, BA
    BAEResult err;
    BAESound  sound = BAESound_New(theMixer);
    BAESampleInfo songInfo;
-   unsigned long currentPosition;
+   uint32_t currentPosition;
    int m, s, rate;
    BAE_BOOL  done;
 
@@ -402,7 +447,7 @@ static BAEResult PlayMidi(BAEMixer theMixer, char *fileName, BAE_UNSIGNED_FIXED 
 {
    BAEResult err;
    BAESong   theSong = BAESong_New(theMixer);
-   unsigned long currentPosition;
+   uint32_t currentPosition;
    BAE_BOOL  done;
    if (theSong)
    {
@@ -494,7 +539,7 @@ static BAEResult PlayRMF(BAEMixer theMixer, char *fileName, BAE_UNSIGNED_FIXED v
 {
    BAEResult err;
    BAESong   theSong = BAESong_New(theMixer);
-   unsigned long currentPosition;
+   uint32_t currentPosition;
    BAE_BOOL  done;
 
    if (theSong)
@@ -592,9 +637,9 @@ static int PV_IsLikelyMP3Header(const unsigned char header[4]) {
 BAEResult playFile(BAEMixer theMixer, char *parmFile, BAE_UNSIGNED_FIXED volume, unsigned int timeLimit, unsigned int loopCount, BAEReverbType reverbType, char *midiMuteChannels) {
 	BAEResult err = BAE_NO_ERROR;
 	char fileHeader[5] = {0}; // 4 char + 1 null byte
-	long filePtr;
+	intptr_t filePtr;
 	filePtr = BAE_FileOpenForRead(parmFile);
-	if (filePtr > 0) {
+	if (filePtr != (intptr_t)-1 && filePtr != 0) {  // Check for valid file handle
 		BAE_ReadFile(filePtr, &fileHeader, 4);
 		BAE_FileClose(filePtr);
 		if (strcmp(fileHeader,X_FILETYPE_MIDI) == 0) {
@@ -617,7 +662,7 @@ BAEResult playFile(BAEMixer theMixer, char *parmFile, BAE_UNSIGNED_FIXED volume,
 		    err = (BAEResult)10069;
 		}
 	} else {
-		err = (BAEResult)filePtr;
+		err = BAE_FILE_NOT_FOUND;  // Use proper error code
 	}
 	return err;
 }
@@ -626,9 +671,10 @@ BAEResult playFile(BAEMixer theMixer, char *parmFile, BAE_UNSIGNED_FIXED volume,
 // ---------------------------------------------------------------------
 int main(int argc, char *argv[])
 {
-   BAEResult    err;
+   // Initialize err so we don't report garbage if early allocation fails
+   BAEResult    err = BAE_NO_ERROR;
    BAEMixer     theMixer;
-   short int    rmf, pcm, level;
+   int16_t    rmf, pcm, level;
    unsigned int loopCount = 0;
    unsigned int timeLimit = 0;
    int fileSpecified = FALSE;
@@ -749,6 +795,7 @@ int main(int argc, char *argv[])
              rmf, pcm,
              rate);
 
+      playbae_dprintf("About to call BAEMixer_Open...\n");
       err = BAEMixer_Open(theMixer,
                           rate,
                           interpol,
@@ -757,6 +804,7 @@ int main(int argc, char *argv[])
                           pcm,                                          // pcm voices
                           level,
                           TRUE);
+      playbae_dprintf("BAEMixer_Open returned error code: %d (%s)\n", err, BAE_GetErrorString(err));
       if (err == BAE_NO_ERROR)
       {
          BAEMixer_SetAudioTask(theMixer, PV_Task, (void *)theMixer);
@@ -765,7 +813,7 @@ int main(int argc, char *argv[])
          if (PV_ParseCommands(argc, argv, "-rv", TRUE, parmFile))
          {
 	    // user selected reverb
-            reverbType = (short)atoi(parmFile);
+            reverbType = (int16_t)atoi(parmFile);
 	    if (reverbType > 11) {
 		playbae_printf("Invalid reverbType %d, expected 1-11. Ignored.\n", reverbType);
 		reverbType = 8;
@@ -880,16 +928,17 @@ int main(int argc, char *argv[])
       }
       else
       {
-         playbae_printf("playbae:  Couldn't open mixer (BAE Error #%d)\n", err);
+         playbae_printf("playbae:  Couldn't open mixer (BAE Error #%d: %s)\n", err, BAE_GetErrorString(err));
       }
    }
    else
    {
       playbae_printf("playbae:  Memory error.\n");
+      err = BAE_MEMORY_ERR; // ensure err is a defined code
    }
 
    if (err > 0) {
-        playbae_printf("playbae:  BAE Error #%d\n", err);
+        playbae_printf("playbae:  BAE Error #%d: %s\n", err, BAE_GetErrorString(err));
 	return(1);
    }
 

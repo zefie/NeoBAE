@@ -86,7 +86,7 @@
 **  7/3/96      Added packing pragmas
 **              Removed usage of Machine.h. Now merged into X_API.h
 **  7/14/96     Fixed structure alignment issue for PowerPC
-**  7/23/96     Changed PV_GetExternalTimeSync to unsigned long
+**  7/23/96     Changed PV_GetExternalTimeSync to uint32_t
 **  7/24/96     Changed Midi Queue system to use a head/tail
 **  7/25/96     Moved Mac audio variables to GenMacTools.c
 **              Changed PV_GetExternalTimeSync to GM_GetSyncTimeStampQuantizedAhead
@@ -102,7 +102,7 @@
 **              Added in NoteRecord NoteFadeRate
 **  1/30/97     Changed SYMPHONY_SIZE to MAX_VOICES
 **  3/17/97     Changed the API to PV_GetInstrument. Enlarged CacheSampleInfo member
-**              theID to a long
+**              theID to a int32_t
 **  4/9/97      Added sampleExpansion factor
 **  4/20/97     Changed PV_MusicIRQ to PV_ProcessMidiSequencerSlice
 **  6/4/97      Renamed InitSoundManager to GM_StartHardwareSoundManager, and
@@ -339,7 +339,7 @@
 
 #if LOOPS_USED == U3232_LOOPS
 
-typedef unsigned long   U32;
+typedef uint32_t   U32;
 typedef struct U3232
 {
     U32     i;
@@ -462,7 +462,7 @@ typedef struct U3232
 #endif
 
 typedef unsigned char           OUTSAMPLE8;
-typedef short int               OUTSAMPLE16;        // 16 bit output sample
+typedef int16_t               OUTSAMPLE16;        // 16 bit output sample
 
 enum
 {
@@ -615,14 +615,14 @@ struct GM_SampleCacheEntry
     XSampleID       theID;          // sample ID
     XBankToken      bankToken;      // The unique bank token to supplement theID
     XFIXED          rate;           // sample rate
-    unsigned long   waveSize;       // size in bytes
-    unsigned long   waveFrames;     // number of frames
-    unsigned long   loopStart;      // loop start frame
-    unsigned long   loopEnd;        // loop end frame
+    uint32_t   waveSize;       // size in bytes
+    uint32_t   waveFrames;     // number of frames
+    uint32_t   loopStart;      // loop start frame
+    uint32_t   loopEnd;        // loop end frame
     char            bitSize;        // sample bit size; 8 or 16
     char            channels;       // mono or stereo; 1 or 2
-    short int       baseKey;        // base sample key
-    long            referenceCount; // how many references to this sample block
+    int16_t       baseKey;        // base sample key
+    int32_t            referenceCount; // how many references to this sample block
     void            *pSampleData;   // pointer to sample data. This may be an offset into the pMasterPtr
     void            *pMasterPtr;    // master pointer that contains the snd format information
 };
@@ -630,7 +630,7 @@ typedef struct GM_SampleCacheEntry GM_SampleCacheEntry;
 
 #define MAX_QUEUE_EVENTS                1024
 
-#define REVERB_BUFFER_SIZE_SMALL        4096        // * sizeof(long)
+#define REVERB_BUFFER_SIZE_SMALL        4096        // * sizeof(int32_t)
 #define REVERB_BUFFER_MASK_SMALL        4095
 
 #if REVERB_USED == SMALL_MEMORY_REVERB
@@ -823,8 +823,8 @@ struct NewReverbParams
     int                 mReadIndex[kNumberOfCombFilters];
     int                 mWriteIndex[kNumberOfCombFilters];
     
-    long                mUnscaledDelayFrames[kNumberOfCombFilters];
-    long                mDelayFrames[kNumberOfCombFilters];
+    int32_t                mUnscaledDelayFrames[kNumberOfCombFilters];
+    int32_t                mDelayFrames[kNumberOfCombFilters];
     
     XSDWORD                 mFeedbackList[kNumberOfCombFilters];
     
@@ -899,7 +899,7 @@ typedef struct ChorusParams ChorusParams;
 ChorusParams* GetChorusParams();
 void InitChorus();
 void ShutdownChorus();
-XSDWORD GetChorusReadIncrement(XSDWORD readIndex, long writeIndex, long nSampleFrames, XSDWORD phase);
+XSDWORD GetChorusReadIncrement(XSDWORD readIndex, int32_t writeIndex, int32_t nSampleFrames, XSDWORD phase);
 void SetupChorusDelay();
 void RunChorus(XSDWORD *sourceP, XSDWORD *destP, int nSampleFrames);
 
@@ -1044,7 +1044,7 @@ void PV_Generate8outputMono(OUTSAMPLE8 * dest8);
 void PV_Generate16outputStereo(OUTSAMPLE16 * dest16);
 void PV_Generate16outputMono(OUTSAMPLE16 * dest16);
 
-long PV_DoubleBufferCallbackAndSwap(GM_DoubleBufferCallbackPtr doubleBufferCallback, 
+int32_t PV_DoubleBufferCallbackAndSwap(GM_DoubleBufferCallbackPtr doubleBufferCallback, 
                                         GM_Voice *this_voice);
 void PV_CalculateStereoVolume(GM_Voice *this_voice, XSDWORD *pLeft, XSDWORD *pRight);
 void PV_CalculateMonoVolume(GM_Voice *pVoice, XSDWORD *pVolume);
@@ -1221,7 +1221,7 @@ GM_Instrument * PV_GetInstrument(GM_Mixer *pMixer, GM_Song *pSong,
                                     XLongResourceID theID,
                                      XBankToken bankToken,
                                      void *theExternalX,
-                                     long patchSize,
+                                     int32_t patchSize,
                                      OPErr *pErr);
 
 // unload an instrument and remove all of its memory and optionally the samples
@@ -1249,8 +1249,8 @@ U3232 PV_GetWavePitchU3232(XFIXED notePitch);
 #endif
 
 // get voice sample position from active voice
-unsigned long PV_GetPositionFromVoice(GM_Voice *pVoice);
-void PV_SetPositionFromVoice(GM_Voice *pVoice, unsigned long pos);
+uint32_t PV_GetPositionFromVoice(GM_Voice *pVoice);
+void PV_SetPositionFromVoice(GM_Voice *pVoice, uint32_t pos);
 
 // GenModFiles.c
 void PV_WriteModOutput(Rate q, XBOOL stereo);
@@ -1260,12 +1260,12 @@ void PV_ServeStreamFades(void);
 
 // GenSeq.c
 void PV_FreePatchInfo(GM_Song *pSong);
-void PV_InsertBankSelect(GM_Song *pSong, short channel, short currentTrack);
+void PV_InsertBankSelect(GM_Song *pSong, int16_t channel, int16_t currentTrack);
 // process end song callback
 void PV_CallSongCallback(void *threadContext, GM_Song *theSong, XBOOL clearCallback);
 
 // GenSynth.c
-long PV_ModifyVelocityFromCurve(GM_Song *pSong, long volume);
+int32_t PV_ModifyVelocityFromCurve(GM_Song *pSong, int32_t volume);
 
 // GenSample.c
 GM_Voice * PV_GetVoiceFromSoundReference(VOICE_REFERENCE reference);

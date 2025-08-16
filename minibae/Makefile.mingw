@@ -12,15 +12,30 @@ DEBUG			:= 0
 
 include inc/Makefile.common
 
-ARCH		:= -m32 -static
-CC		:= i686-w64-mingw32-gcc-win32
-CXX		:= i686-w64-mingw32-g++-win32
-LD		:= $(CC)
-AR      	:= i686-w64-mingw32-gcc-ar-win32
-STRIP      	:= i686-w64-mingw32-strip
-DLLTOOL		:= i686-w64-mingw32-dlltool
-OPTI            := -O2 
-CFLAGS  	:= $(ARCH) $(OPTI) $(INC_PATH) -D_THREAD_SAFE -Wno-unused-value 
+ifeq ($(BITS),32)
+    ARCH		:= -m32 -static
+    CC		:= i686-w64-mingw32-gcc-win32
+    CXX		:= i686-w64-mingw32-g++-win32
+    LD		:= $(CC)
+    AR      	:= i686-w64-mingw32-gcc-ar-win32
+    STRIP      	:= i686-w64-mingw32-strip
+    DLLTOOL		:= i686-w64-mingw32-dlltool
+    OPTI            := -O2 
+    CFLAGS  	:= $(ARCH) $(OPTI) $(INC_PATH) -D_THREAD_SAFE -Wno-unused-value 
+    TARGET_NAME := playbae_dsound_x32.exe
+else
+    ARCH		:= -m64 -static
+    CC		:= x86_64-w64-mingw32-gcc-win32
+    CXX		:= x86_64-w64-mingw32-g++-win32
+    LD		:= $(CC)
+    AR      	:= x86_64-w64-mingw32-gcc-ar-win32
+    STRIP      	:= x86_64-w64-mingw32-strip
+    DLLTOOL		:= x86_64-w64-mingw32-dlltool
+    OPTI            := -O2 
+    CFLAGS  	:= $(ARCH) $(OPTI) $(INC_PATH) -D_THREAD_SAFE -Wno-unused-value 
+    TARGET_NAME := playbae_dsound_x64.exe
+endif
+
 
 ifneq ($(BAE_FLAGS),)
 	CFLAGS	+= $(BAE_FLAGS)
@@ -30,7 +45,7 @@ include inc/Makefile.versioning
 CFLAGS		+= -D_VERSION=\""$(VERSION)"\"
 
 CXXFLAGS 	:= $(CFLAGS)
-LDFLAGS		:= $(ARCH) $(OPTI) -s 
+LDFLAGS		:= $(ARCH) $(OPTI) -s -mconsole 
 
 
 LIBS   = \
@@ -49,11 +64,18 @@ LIBS   = \
                 -lodbccp32
 
 ifneq ($(USE_SDL),)
-    CFLAGS  += -I../SDL2-2.32.8/i686-w64-mingw32/include/SDL2
-    LDFLAGS += -L../SDL2-2.32.8/i686-w64-mingw32/lib
+    ifeq ($(BITS),32)
+        CFLAGS  += -I../SDL2-2.32.8/i686-w64-mingw32/include/SDL2
+        LDFLAGS += -L../SDL2-2.32.8/i686-w64-mingw32/lib
+        TARGET_NAME := playbae_sdl_x32.exe
+    else
+        CFLAGS  += -I../SDL2-2.32.8/x86_64-w64-mingw32/include/SDL2
+        LDFLAGS += -L../SDL2-2.32.8/x86_64-w64-mingw32/lib
+        TARGET_NAME := playbae_sdl_x64.exe
+    endif
     # Override LIBS completely for SDL build to enforce correct ordering
     LIBS = \
-                -lmingw32 \
+                -lSDL2main \
                 -lSDL2 \
                 -lsetupapi \
                 -lcfgmgr32 \
@@ -91,14 +113,14 @@ $(TARGET_LIB).dll: ${OBJ}
 	@cat $(OBJ_DIR)$(TARGET_LIB).def2 | grep "BAE" >> $(OBJ_DIR)$(TARGET_LIB).def
 	@rm -f $(OBJ_DIR)$(TARGET_LIB).def2 $(OBJ_DIR)exports.o
 	@$(DLLTOOL) -e $(OBJ_DIR)exports.o -d $(OBJ_DIR)$(TARGET_LIB).def -l $(TARGET_OUT)$(TARGET_LIB).lib $(OBJ)
-	${CC} -shared $(LDFLAGS) ${OBJ} $(OBJ_DIR)exports.o -Wl,--subsystem,windows -o $(TARGET_OUT)${TARGET_LIB}.dll ${LIBS}
+	${CC} -shared $(LDFLAGS) ${OBJ} $(OBJ_DIR)exports.o -o $(TARGET_OUT)${TARGET_LIB}.dll ${LIBS}
 
 $(TARGET_BIN): ${OBJ_BIN}
 	@mkdir -p $(TARGET_OUT)
 	${LD} -o $(TARGET_OUT)${TARGET_BIN} ${LDFLAGS} ${OBJ_BIN} ${LIBS}
 
 pack: ${TARGET_BIN}
-	cat $(TARGET_OUT)${TARGET_BIN} | gzip -9c > $(TARGET_OUT)playbae.exe.gz
+	cat $(TARGET_OUT)${TARGET_BIN} | gzip -9c > $(TARGET_OUT)${TARGET_NAME}
 
 
 # Rules for compiling source files to object files
@@ -113,10 +135,10 @@ $(OBJ_DIR)%.o : %.c
 	@${CC} -c ${CFLAGS} $< -o $@
 
 clean:
-	@rm -rdf $(TARGET_OUT)
-	@rm -rdf $(OBJ_DIR)
-	@rm -rdf $(BUILD_DIR)
-	@rm -rdf $(TEST_OUT_DIR)
+	@rm -rf $(TARGET_OUT)
+	@rm -rf $(OBJ_DIR)
+	@rm -rf $(BUILD_DIR)
+	@rm -rf $(TEST_OUT_DIR)
 	@echo Cleaned!
 
 include inc/Makefile.tests

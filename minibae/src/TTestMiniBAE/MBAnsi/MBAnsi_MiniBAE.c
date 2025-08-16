@@ -4,7 +4,7 @@
 **
 **	Generalized Audio Synthesis package presented in an oop fashion
 **
-**	© Copyright 1999-2000 Beatnik, Inc, All Rights Reserved.
+**	ï¿½ Copyright 1999-2000 Beatnik, Inc, All Rights Reserved.
 **	Written by Mark Deggeller and Steve Hales
 **
 **	Beatnik products contain certain trade secrets and confidential and
@@ -263,7 +263,7 @@ static void PV_MacCleanupGNEFilter(void)
 
 
 // Read a file into memory and return an allocated pointer
-static XPTR PV_GetFileAsData(XFILENAME *pFile, long *pSize)
+static XPTR PV_GetFileAsData(XFILENAME *pFile, int32_t *pSize)
 {
 	XPTR	data;
 
@@ -275,16 +275,16 @@ static XPTR PV_GetFileAsData(XFILENAME *pFile, long *pSize)
 }
 
 /*
-static INLINE XFILE PV_GetIndexedFile(XFILE *fileList, unsigned long fileIndex)
+static INLINE XFILE PV_GetIndexedFile(XFILE *fileList, uint32_t fileIndex)
 {
 	if (fileList)
 	{
 		return fileList[fileIndex];
 	}
-	return (XFILE)NULL;
+	return NULL;
 }
 
-static INLINE void PV_SetIndexedFile(XFILE *fileList, unsigned long fileIndex, XFILE file)
+static INLINE void PV_SetIndexedFile(XFILE *fileList, uint32_t fileIndex, XFILE file)
 {
 	if (fileList)
 	{
@@ -294,11 +294,11 @@ static INLINE void PV_SetIndexedFile(XFILE *fileList, unsigned long fileIndex, X
 
 // given an list of xfiles, a count of xfiles, and a file path; open the file, expand the list
 // and store the file index. Returns NULL if file fails to open, or memory allocation failure
-static XFILE * PV_OpenToFileList(XFILE * files, unsigned long fileCount, BAEPathName pAudioPathName)
+static XFILE * PV_OpenToFileList(XFILE * files, uint32_t fileCount, BAEPathName pAudioPathName)
 {
 	XFILENAME		theFile;
 	XFILE			*newFileList;
-	unsigned long	size;
+	uint32_t	size;
 	XFILE			file;
 
 	newFileList = NULL;
@@ -326,9 +326,9 @@ static XFILE * PV_OpenToFileList(XFILE * files, unsigned long fileCount, BAEPath
 
 // given a list of xfiles, a count of xfiles, and a xfile index to delete. shrink the list, close the file and remove
 // from list
-static XFILE * PV_CloseFromFileList(XFILE * files, unsigned long fileCount, unsigned long thisFileIndex)
+static XFILE * PV_CloseFromFileList(XFILE * files, uint32_t fileCount, uint32_t thisFileIndex)
 {
-	unsigned long	size, count, count2;
+	uint32_t	size, count, count2;
 	XFILE			*newFileList;
 	XFILE			xfile, file;
 
@@ -367,9 +367,9 @@ static XFILE * PV_CloseFromFileList(XFILE * files, unsigned long fileCount, unsi
 }
 
 // close all files in file list, and delete memory
-static void PV_CloseAllFromFileList(XFILE * files, unsigned long fileCount)
+static void PV_CloseAllFromFileList(XFILE * files, uint32_t fileCount)
 {
-	unsigned long	count;
+	uint32_t	count;
 	XFILE			file;
 
 	if (fileCount > 0)
@@ -874,11 +874,11 @@ BAEResult BAEMixer_GetMaxDeviceCount(BAEMixer mixer, long *outMaxDeviceCount)
 // ------------------------------------
 //
 //
-BAEResult BAEMixer_SetCurrentDevice(BAEMixer mixer, long deviceID, void *deviceParameter)
+BAEResult BAEMixer_SetCurrentDevice(BAEMixer mixer, int32_t deviceID, void *deviceParameter)
 {	
 	OPErr 		err;
 	BAE_BOOL 	isOpen;
-	long		deviceCount;
+	int32_t		deviceCount;
 	
 	err = NO_ERR;
 	if (mixer)

@@ -333,7 +333,7 @@ typedef struct {
     BAEMixer mixer;
     BAESong  song;
     BAESound sound; // For audio files (WAV, MP3, etc.)
-    unsigned long song_length_us; // cached length
+    uint32_t song_length_us; // cached length
     bool song_loaded;
     bool is_audio_file; // true if loaded file is audio (not MIDI/RMF)
     bool paused; // track pause state
@@ -341,7 +341,7 @@ typedef struct {
     bool was_playing_before_export; // for export state restoration
     bool loop_enabled_gui; // current GUI loop toggle state
     bool loop_was_enabled_before_export; // store loop state for export restore
-    unsigned long position_us_before_export; // to restore playback position
+    uint32_t position_us_before_export; // to restore playback position
     bool audio_engaged_before_export; // track hardware engagement
     char loaded_path[1024];
     // Patch bank info
@@ -357,13 +357,13 @@ static BAEGUI g_bae = {0};
 static bool g_reverbDropdownOpen = false;
 
 // Audio file playback tracking
-static unsigned long audio_total_frames = 0;
-static unsigned long audio_current_position = 0;
+static uint32_t audio_total_frames = 0;
+static uint32_t audio_current_position = 0;
 
 // WAV export state
 static bool g_exporting = false;
 static int g_export_progress = 0;
-static unsigned long g_export_last_pos = 0; // track advancement
+static uint32_t g_export_last_pos = 0; // track advancement
 static int g_export_stall_iters = 0;        // stall detection
 
 static void set_status_message(const char *msg) {
@@ -631,7 +631,7 @@ static bool bae_start_wav_export(const char* output_file) {
     }
     
     // Save current state so we can restore after export
-    unsigned long curPosUs = 0;
+    uint32_t curPosUs = 0;
     BAESong_GetMicrosecondPosition(g_bae.song, &curPosUs);
     g_bae.position_us_before_export = curPosUs;
     g_bae.was_playing_before_export = g_bae.is_playing;
@@ -745,7 +745,7 @@ static void bae_service_wav_export() {
         
         // Check if song is done
         BAE_BOOL is_done = FALSE;
-        unsigned long current_pos = 0;
+        uint32_t current_pos = 0;
         BAESong_GetMicrosecondPosition(g_bae.song, &current_pos);
         BAESong_IsDone(g_bae.song, &is_done);
         
@@ -838,7 +838,7 @@ static bool load_bank(const char *path, bool current_playing_state, int transpos
 #ifdef _BUILT_IN_PATCHES
     if(strcmp(path,"__builtin__")==0){
         extern unsigned char BAE_PATCHES[]; extern unsigned int BAE_PATCHES_size; BAEBankToken t; 
-        BAEResult br = BAEMixer_AddBankFromMemory(g_bae.mixer, BAE_PATCHES, (unsigned long)BAE_PATCHES_size, &t);
+        BAEResult br = BAEMixer_AddBankFromMemory(g_bae.mixer, BAE_PATCHES, (uint32_t)BAE_PATCHES_size, &t);
         if(br==BAE_NO_ERROR){ 
             g_bae.bank_token=t; 
             strncpy(g_bae.bank_name,"(built-in)",sizeof(g_bae.bank_name)-1); 
@@ -1070,7 +1070,7 @@ static void bae_seek_ms(int ms){
             if (BAESound_GetInfo(g_bae.sound, &info) == BAE_NO_ERROR) {
                 double sampleRate = (double)(info.sampledRate >> 16) + (double)(info.sampledRate & 0xFFFF) / 65536.0;
                 if (sampleRate > 0) {
-                    unsigned long frame_position = (unsigned long)((double)ms * sampleRate / 1000.0);
+                    uint32_t frame_position = (uint32_t)((double)ms * sampleRate / 1000.0);
                     if (frame_position < audio_total_frames) {
                         BAESound_SetSamplePlaybackPosition(g_bae.sound, frame_position);
                         audio_current_position = frame_position;
@@ -1081,7 +1081,7 @@ static void bae_seek_ms(int ms){
         return;
     }
     if(!g_bae.song) return; 
-    unsigned long us=(unsigned long)ms*1000UL; 
+    uint32_t us=(uint32_t)ms*1000UL; 
     BAESong_SetMicrosecondPosition(g_bae.song, us); 
 }
 static int  bae_get_pos_ms(){ 
@@ -1100,7 +1100,7 @@ static int  bae_get_pos_ms(){
         return 0;
     }
     if(!g_bae.song) return 0; 
-    unsigned long us=0; 
+    uint32_t us=0; 
     BAESong_GetMicrosecondPosition(g_bae.song,&us); 
     return (int)(us/1000UL); 
 }
@@ -1129,8 +1129,8 @@ static void bae_set_reverb(int idx){ if(g_bae.mixer){ if(idx<0) idx=0; if(idx>=B
 static void bae_update_channel_mutes(bool ch_enable[16]){ 
     if(g_bae.is_audio_file || !g_bae.song) return; // Only works with MIDI/RMF
     for(int i=0;i<16;i++){ 
-        if(ch_enable[i]) BAESong_UnmuteChannel(g_bae.song,(unsigned short)i); 
-        else BAESong_MuteChannel(g_bae.song,(unsigned short)i);
+        if(ch_enable[i]) BAESong_UnmuteChannel(g_bae.song,(uint16_t)i); 
+        else BAESong_MuteChannel(g_bae.song,(uint16_t)i);
     } 
 }
 
@@ -1151,7 +1151,13 @@ static bool bae_play(bool *playing){
     if(g_bae.is_audio_file && g_bae.sound) {
         // Handle audio files (WAV, MP3, etc.)
         if(!*playing) {
-            BAESound_Start(g_bae.sound, 0, FLOAT_TO_UNSIGNED_FIXED(1.0), 0);
+            write_to_log("Attempting BAESound_Start on '%s'\n", g_bae.loaded_path);
+            BAEResult sr = BAESound_Start(g_bae.sound, 0, FLOAT_TO_UNSIGNED_FIXED(1.0), 0);
+            if(sr != BAE_NO_ERROR){
+                write_to_log("BAESound_Start failed (%d) for '%s'\n", sr, g_bae.loaded_path);
+                return false;
+            }
+            write_to_log("BAESound_Start ok for '%s'\n", g_bae.loaded_path);
             *playing = true;
             return true;
         } else {
@@ -1164,8 +1170,31 @@ static bool bae_play(bool *playing){
         if(!*playing){
             // if paused resume else start
             BAE_BOOL isPaused=FALSE; BAESong_IsPaused(g_bae.song,&isPaused);
-            if(isPaused){ BAESong_Resume(g_bae.song); }
-            else { BAESong_Start(g_bae.song,0); }
+            if(isPaused){
+                write_to_log("Resuming paused song '%s'\n", g_bae.loaded_path);
+                BAEResult rr = BAESong_Resume(g_bae.song);
+                if(rr != BAE_NO_ERROR){ write_to_log("BAESong_Resume returned %d\n", rr); }
+            } else {
+                write_to_log("Attempting BAESong_Start on '%s'\n", g_bae.loaded_path);
+                BAEResult sr = BAESong_Start(g_bae.song,0);
+                if(sr != BAE_NO_ERROR){
+                    write_to_log("BAESong_Start failed (%d) for '%s' (will try preroll+restart)\n", sr, g_bae.loaded_path);
+                    // Try a safety preroll + rewind then attempt once more
+                    BAESong_SetMicrosecondPosition(g_bae.song,0);
+                    BAESong_Preroll(g_bae.song);
+                    sr = BAESong_Start(g_bae.song,0);
+                    if(sr != BAE_NO_ERROR){
+                        write_to_log("Second BAESong_Start attempt failed (%d) for '%s'\n", sr, g_bae.loaded_path);
+                        return false;
+                    } else {
+                        write_to_log("Second BAESong_Start attempt succeeded for '%s'\n", g_bae.loaded_path);
+                    }
+                } else {
+                    write_to_log("BAESong_Start ok for '%s'\n", g_bae.loaded_path);
+                }
+            }
+            // Give mixer a few idle cycles to prime buffers (helps avoid initial stall)
+            if(g_bae.mixer){ for(int i=0;i<3;i++){ BAEMixer_Idle(g_bae.mixer); } }
             *playing=true; 
             g_bae.is_playing = true;
             return true;
@@ -1552,8 +1581,16 @@ int main(int argc, char *argv[]){
             if(sel){ 
                 if(bae_load_song_with_settings(sel, transpose, tempo, volume, loopPlay, reverbType, ch_enable)){ 
                     duration = bae_get_len_ms(); progress=0; 
-                    playing = false; // Ensure we start from stopped state
-                    bae_play(&playing); // Auto-start playback
+                    // Robust auto-start sequence: ensure at position 0, preroll again (defensive), then start
+                    if(!g_bae.is_audio_file && g_bae.song){
+                        BAESong_SetMicrosecondPosition(g_bae.song,0);
+                        BAESong_Preroll(g_bae.song);
+                    }
+                    playing = false; // force toggle logic
+                    if(!bae_play(&playing)){
+                        write_to_log("Autoplay after Open failed for '%s'\n", sel);
+                    }
+                    if(playing && g_bae.mixer){ for(int i=0;i<3;i++){ BAEMixer_Idle(g_bae.mixer); } }
                 } 
                 free(sel); 
             }

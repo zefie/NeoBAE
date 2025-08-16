@@ -44,7 +44,7 @@
 **      that has been written and when it falls below a buffer or two, more
 **      are built in that thread.
 **
-**  © Copyright 1995-2000 Beatnik, Inc, All Rights Reserved.
+**  ï¿½ Copyright 1995-2000 Beatnik, Inc, All Rights Reserved.
 **  Written by Steve Hales
 **
 **  Beatnik products contain certain trade secrets and confidential and
@@ -177,6 +177,7 @@
 **                      function, PV_IsDX5OrHigher().
 */
 /*****************************************************************************/
+#include <stdint.h>
 
 #define USE_PREFS   1
 
@@ -239,7 +240,7 @@ enum
     BAE_DIRECTSOUND_PRIMARY_BUFFER,
     BAE_DIRECTSOUND_SECONDARY_BUFFER
 };
-typedef long BAEDeviceID;
+typedef int32_t BAEDeviceID;
 
 #define BAE_DIRECTSOUND_DEFAULT     BAE_DIRECTSOUND_SECONDARY_BUFFER
 //#define   BAE_DIRECTSOUND_DEFAULT     BAE_DIRECTSOUND_PRIMARY_BUFFER
@@ -257,24 +258,24 @@ static int                  g_maxDeviceCount = BAE_WAVEOUT + 1;
 static BAEDeviceID          g_currentDeviceID = BAE_WAVEOUT;
 #endif
 
-static unsigned long        g_memory_buoy = 0;          // amount of memory allocated at this moment
-static unsigned long        g_memory_buoy_max = 0;
+static uint32_t        g_memory_buoy = 0;          // amount of memory allocated at this moment
+static uint32_t        g_memory_buoy_max = 0;
 
-static short int            g_balance = 0;              // balance scale -256 to 256 (left to right)
-static short int            g_unscaled_volume = 256;    // hardware volume in BAE scale
+static int16_t            g_balance = 0;              // balance scale -256 to 256 (left to right)
+static int16_t            g_unscaled_volume = 256;    // hardware volume in BAE scale
 
 #define BAE_WAVEOUT_FRAMES_PER_BLOCK    6               // how much ms latancy can we handle (in ms)
 #define BAE_WAVEOUT_SOUND_PERIOD        11              // sleep period between position checks (in ms)
 
 static void                 **g_audioBufferBlock;
-static long                 g_audioByteBufferSize;          // size of audio buffers in bytes
+static int32_t                 g_audioByteBufferSize;          // size of audio buffers in bytes
 
 static HWAVEOUT             g_waveDevice = 0;
-static long                 g_shutDownDoubleBuffer;
-static long                 g_activeDoubleBuffer;
+static int32_t                 g_shutDownDoubleBuffer;
+static int32_t                 g_activeDoubleBuffer;
 
 // $$kk: 05.06.98: made lastPos a global variable
-static long                 g_lastPos;
+static int32_t                 g_lastPos;
 
 // Format of output buffer
 static WAVEFORMATEX         g_waveFormat;
@@ -288,7 +289,7 @@ static WAVEFORMATEX         g_waveFormat;
 #define BAE_DIRECTSOUND_SOUND_PERIOD_NT     9
 
  // number of samples per audio frame to generate
-long                        g_audioFramesToGenerate;
+int32_t                        g_audioFramesToGenerate;
 
 // How many audio frames to generate at one time 
 static unsigned int         g_synthFramesPerBlock;  // setup upon runtime
@@ -311,13 +312,13 @@ static  BOOL                g_comInitialized = FALSE;
 // Structure to describe output sound buffer topology
 struct DXSOUNDPOSDATA
 {
-    unsigned long   uiBufferSize;           // Size of DX sound play buffer
-    unsigned long   uiBufferBlocks;         // Number of sub blocks in play buffer
-    unsigned long   uiWriteBlock;           // Current block to fill with audio samples
-    unsigned long   uiDestPos;              // current destination buffer offset
-    unsigned long   uiBlockSize;            // size of data block to copy
-    unsigned long   uiSynthFrameBytes;      // How many bytes per audio frame
-    unsigned long   uiSynthFramesPerBlock;  // How many frames to audio process at once
+    uint32_t   uiBufferSize;           // Size of DX sound play buffer
+    uint32_t   uiBufferBlocks;         // Number of sub blocks in play buffer
+    uint32_t   uiWriteBlock;           // Current block to fill with audio samples
+    uint32_t   uiDestPos;              // current destination buffer offset
+    uint32_t   uiBlockSize;            // size of data block to copy
+    uint32_t   uiSynthFrameBytes;      // How many bytes per audio frame
+    uint32_t   uiSynthFramesPerBlock;  // How many frames to audio process at once
     BOOL            bWaveEnd;               // Signal to stop processing audio
     BOOL            bDone;                  // Has last generated frame been played
 };
@@ -326,8 +327,8 @@ typedef struct DXSOUNDPOSDATA   DXSOUNDPOSDATA;
 // Output buffer sub block info
 struct SOUNDPOSBLOCK
 {
-    unsigned long   dwStart;                // Offset of block start
-    unsigned long   dwEnd;                  // Offset to block end
+    uint32_t   dwStart;                // Offset of block start
+    uint32_t   dwEnd;                  // Offset to block end
     BOOL            bEndingBlock;           // Does this block contain final samples?
 };
 typedef struct SOUNDPOSBLOCK    SOUNDPOSBLOCK;
@@ -342,7 +343,7 @@ static HANDLE               g_hthreadSoundMon = NULL;
 // Window handle of Client application
 static HWND                 g_directSoundWindow = NULL;
 // How is the output buffer divided for purposes of monitoring the play position
-static long                 g_nBufferSegments = 2;
+static int32_t                 g_nBufferSegments = 2;
 
  // Output sound buffer record
 static DXSOUNDPOSDATA       g_SPD;
@@ -528,7 +529,7 @@ int BAE_Cleanup(void)
 
 // **** Memory management
 // allocate a block of locked, zeroed memory. Return a pointer
-void * BAE_Allocate(unsigned long size)
+void * BAE_Allocate(uint32_t size)
 {
     void    *data;
 
@@ -560,13 +561,13 @@ void BAE_Deallocate(void * memoryBlock)
 }
 
 // return memory used
-unsigned long BAE_GetSizeOfMemoryUsed(void)
+uint32_t BAE_GetSizeOfMemoryUsed(void)
 {
     return g_memory_buoy;
 }
 
 // return max memory used
-unsigned long BAE_GetMaxSizeOfMemoryUsed(void)
+uint32_t BAE_GetMaxSizeOfMemoryUsed(void)
 {
     return g_memory_buoy_max;
 };
@@ -577,16 +578,16 @@ unsigned long BAE_GetMaxSizeOfMemoryUsed(void)
 // causing a memory protection
 // fault.
 // return 0 for valid, or 1 for bad pointer, or 2 for not supported. 
-int BAE_IsBadReadPointer(void *memoryBlock, unsigned long size)
+int BAE_IsBadReadPointer(void *memoryBlock, uint32_t size)
 {
     return (IsBadReadPtr(memoryBlock, size)) ? 1 : 0;
 }
 
 // this will return the size of the memory pointer allocated with BAE_Allocate. Return
 // 0 if you don't support this feature
-unsigned long BAE_SizeOfPointer(void * memoryBlock)
+uint32_t BAE_SizeOfPointer(void * memoryBlock)
 {
-    unsigned long   size;
+    uint32_t   size;
     HANDLE          hData;
             
     size = 0;
@@ -605,7 +606,7 @@ unsigned long BAE_SizeOfPointer(void * memoryBlock)
 // special block move speed ups, various hardware has available.
 // NOTE:    Must use a function like memmove that insures a valid copy in the case
 //          of overlapping memory blocks.
-void BAE_BlockMove(void * source, void * dest, unsigned long size)
+void BAE_BlockMove(void * source, void * dest, uint32_t size)
 {
     if (source && dest && size)
     {
@@ -715,14 +716,14 @@ int BAE_Is8BitSupported(void)
 
 // returned balance is in the range of -256 to 256. Left to right. If you're hardware doesn't support this
 // range, just scale it.
-short int BAE_GetHardwareBalance(void)
+int16_t BAE_GetHardwareBalance(void)
 {
     return g_balance;
 }
 
 // 'balance' is in the range of -256 to 256. Left to right. If you're hardware doesn't support this
 // range, just scale it.
-void BAE_SetHardwareBalance(short int balance)
+void BAE_SetHardwareBalance(int16_t balance)
 {
     // pin balance to box
     if (balance > 256)
@@ -738,7 +739,7 @@ void BAE_SetHardwareBalance(short int balance)
 }
 
 // returned volume is in the range of 0 to 256
-short int BAE_GetHardwareVolume(void)
+int16_t BAE_GetHardwareVolume(void)
 {
 // Note this might be an implementation issue. One way (A), just returns the passed in volume the
 // BAE user has set, the other way (B) always looks at the hardware to adjust for outside changes.
@@ -758,16 +759,16 @@ short int BAE_GetHardwareVolume(void)
         volume = (volume & 0xFFFF) / 256;   // scale down to 0 to 256
     }
     g_unscaled_volume = volume;
-    return (short int)volume;
+    return (int16_t)volume;
 #endif
 }
 
 // newVolume is in the range of 0 to 256
-void BAE_SetHardwareVolume(short int newVolume)
+void BAE_SetHardwareVolume(int16_t newVolume)
 {
     MMRESULT        theErr;
-    unsigned long   volume;
-    unsigned long   lbm, rbm;
+    uint32_t   volume;
+    uint32_t   lbm, rbm;
 
     // pin volume
     if (newVolume > 256)
@@ -791,8 +792,8 @@ void BAE_SetHardwareVolume(short int newVolume)
         lbm = 256;
         rbm = 256 + g_balance;
     }
-    rbm = (((unsigned long)newVolume * rbm) * 65535) / 65536;   // scale down to 0 to 65535
-    lbm = (((unsigned long)newVolume * lbm) * 65535) / 65536;   // scale down to 0 to 65535
+    rbm = (((uint32_t)newVolume * rbm) * 65535) / 65536;   // scale down to 0 to 65535
+    lbm = (((uint32_t)newVolume * lbm) * 65535) / 65536;   // scale down to 0 to 65535
 
     volume = (rbm << 16L) | lbm;
     theErr = waveOutSetVolume((HWAVEOUT)WAVE_MAPPER, volume);
@@ -800,13 +801,13 @@ void BAE_SetHardwareVolume(short int newVolume)
 
 // **** Timing services
 // return microseconds
-unsigned long BAE_Microseconds(void)
+uint32_t BAE_Microseconds(void)
 {
-    static unsigned long    starttick = 0;
+    static uint32_t    starttick = 0;
     static char             firstTime = TRUE;
     static char             QPClockSupport = FALSE;
-    static unsigned long    clockpusu = 0;  // clocks per microsecond
-    unsigned long           time;
+    static uint32_t    clockpusu = 0;  // clocks per microsecond
+    uint32_t           time;
     LARGE_INTEGER           p;
 
     if (firstTime)
@@ -814,14 +815,14 @@ unsigned long BAE_Microseconds(void)
         if (QueryPerformanceFrequency(&p))
         {
             QPClockSupport = TRUE;
-            clockpusu = (unsigned long)(p.QuadPart / 1000000L);
+            clockpusu = (uint32_t)(p.QuadPart / 1000000L);
         }
         firstTime = FALSE;
     }
     if (QPClockSupport)
     {
         QueryPerformanceCounter(&p);
-        time = (unsigned long)(p.QuadPart / clockpusu);
+        time = (uint32_t)(p.QuadPart / clockpusu);
     }
     else
     {
@@ -838,9 +839,9 @@ unsigned long BAE_Microseconds(void)
 // wait or sleep this thread for this many microseconds
 // CLS??: If this function is called from within the frame thread and
 // JAVA_THREAD is non-zero, we'll probably crash.
-void BAE_WaitMicroseconds(unsigned long waitAmount)
+void BAE_WaitMicroseconds(uint32_t waitAmount)
 {
-    unsigned long   ticks;
+    uint32_t   ticks;
 
     ticks = BAE_Microseconds() + waitAmount;
     while (BAE_Microseconds() < ticks) 
@@ -886,7 +887,7 @@ void BAE_CopyFileNameNative(void *fileNameSource, void *fileNameDest)
     }
 }
 
-long BAE_FileCreate(void *fileName)
+int32_t BAE_FileCreate(void *fileName)
 {
 #if USE_WIN32_FILE_IO == 0
     int     file;
@@ -914,7 +915,7 @@ long BAE_FileCreate(void *fileName)
 #endif
 }
 
-long BAE_FileDelete(void *fileName)
+int32_t BAE_FileDelete(void *fileName)
 {
     if (fileName)
     {
@@ -929,7 +930,7 @@ long BAE_FileDelete(void *fileName)
 
 // Open a file
 // Return -1 if error, otherwise file handle
-long BAE_FileOpenForRead(void *fileName)
+intptr_t BAE_FileOpenForRead(void *fileName)
 {
     if (fileName)
     {
@@ -950,13 +951,13 @@ long BAE_FileOpenForRead(void *fileName)
             DWORD   lastErr = GetLastError();
             return -1;
         }
-        return (long)file;
+        return (int32_t)file;
 #endif
     }
     return -1;
 }
 
-long BAE_FileOpenForWrite(void *fileName)
+intptr_t BAE_FileOpenForWrite(void *fileName)
 {
     if (fileName)
     {
@@ -973,14 +974,14 @@ long BAE_FileOpenForWrite(void *fileName)
             DWORD   lastErr = GetLastError();
             return -1;
         }
-        return (long)file;
+        return (int32_t)file;
 
 #endif
     }
     return -1;
 }
 
-long BAE_FileOpenForReadWrite(void *fileName)
+intptr_t BAE_FileOpenForReadWrite(void *fileName)
 {
     if (fileName)
     {
@@ -998,7 +999,7 @@ long BAE_FileOpenForReadWrite(void *fileName)
             DWORD   lastErr = GetLastError();
             return -1;
         }
-        return (long)file;
+        return (int32_t)file;
 
 #endif
     }
@@ -1006,7 +1007,7 @@ long BAE_FileOpenForReadWrite(void *fileName)
 }
 
 // Close a file
-void BAE_FileClose(long fileReference)
+void BAE_FileClose(intptr_t fileReference)
 {
 #if USE_WIN32_FILE_IO == 0
     _close(fileReference);
@@ -1017,7 +1018,7 @@ void BAE_FileClose(long fileReference)
 
 // Read a block of memory from a file.
 // Return -1 if error, otherwise length of data read.
-long BAE_ReadFile(long fileReference, void *pBuffer, long bufferLength)
+int32_t BAE_ReadFile(intptr_t fileReference, void *pBuffer, int32_t bufferLength)
 {
     if (pBuffer && bufferLength)
     {
@@ -1028,7 +1029,7 @@ long BAE_ReadFile(long fileReference, void *pBuffer, long bufferLength)
             DWORD   readFromBuffer;
             return ReadFile((HANDLE)fileReference, (LPVOID)pBuffer, 
                                         bufferLength, &readFromBuffer,
-                                        NULL) ? (long)readFromBuffer : -1;
+                                        NULL) ? (int32_t)readFromBuffer : -1;
         }
 #endif
     }
@@ -1037,7 +1038,7 @@ long BAE_ReadFile(long fileReference, void *pBuffer, long bufferLength)
 
 // Write a block of memory from a file
 // Return -1 if error, otherwise length of data written.
-long BAE_WriteFile(long fileReference, void *pBuffer, long bufferLength)
+int32_t BAE_WriteFile(intptr_t fileReference, void *pBuffer, int32_t bufferLength)
 {
     if (pBuffer && bufferLength)
     {
@@ -1048,7 +1049,7 @@ long BAE_WriteFile(long fileReference, void *pBuffer, long bufferLength)
             DWORD   writtenFromBuffer;
             return WriteFile((HANDLE)fileReference, (LPVOID)pBuffer, 
                                         bufferLength, &writtenFromBuffer,
-                                        NULL) ? (long)writtenFromBuffer : -1;
+                                        NULL) ? (int32_t)writtenFromBuffer : -1;
         }
 #endif
     }
@@ -1057,7 +1058,7 @@ long BAE_WriteFile(long fileReference, void *pBuffer, long bufferLength)
 
 // set file position in absolute file byte position
 // Return -1 if error, otherwise 0.
-long BAE_SetFilePosition(long fileReference, unsigned long filePosition)
+int32_t BAE_SetFilePosition(intptr_t fileReference, uint32_t filePosition)
 {
 #if USE_WIN32_FILE_IO == 0
     return (_lseek(fileReference, filePosition, SEEK_SET) == -1) ? -1 : 0;
@@ -1069,7 +1070,7 @@ long BAE_SetFilePosition(long fileReference, unsigned long filePosition)
 }
 
 // get file position in absolute file bytes
-unsigned long BAE_GetFilePosition(long fileReference)
+uint32_t BAE_GetFilePosition(intptr_t fileReference)
 {
 #if USE_WIN32_FILE_IO == 0
     return _lseek(fileReference, 0, SEEK_CUR);
@@ -1079,9 +1080,9 @@ unsigned long BAE_GetFilePosition(long fileReference)
 }
 
 // get length of file
-unsigned long BAE_GetFileLength(long fileReference)
+uint32_t BAE_GetFileLength(intptr_t fileReference)
 {
-    unsigned long pos;
+    uint32_t pos;
 
 #if USE_WIN32_FILE_IO == 0
     pos = _lseek(fileReference, 0, SEEK_END);
@@ -1097,7 +1098,7 @@ unsigned long BAE_GetFileLength(long fileReference)
 }
 
 // set the length of a file. Return 0, if ok, or -1 for error
-int BAE_SetFileLength(long fileReference, unsigned long newSize)
+int BAE_SetFileLength(intptr_t fileReference, uint32_t newSize)
 {
 #if USE_WIN32_FILE_IO == 0
     return _chsize(fileReference, newSize);
@@ -1134,7 +1135,7 @@ static int PV_IsNT(void)
 #if USE_DIRECTSOUND
 static HWND PV_GetMostActiveWindow(void)
 {
-    short int   count;
+    int16_t   count;
     HWND        theWindow;
 
     theWindow = NULL;
@@ -1164,7 +1165,7 @@ static HWND PV_GetMostActiveWindow(void)
 static void PV_AudioWaveOutFrameThread(void* threadContext)
 {
     WAVEHDR         *waveHeader;
-    long            waveHeaderCount;
+    int32_t            waveHeaderCount;
     MMTIME          audioStatus;
 
     // $$kk: 08.12.98 merge: changed g_lastPos to global variable
@@ -1172,7 +1173,7 @@ static void PV_AudioWaveOutFrameThread(void* threadContext)
     // which the jdk samples sometimes do not get audio.  depending
     // on the order of events when the audio device is opened and
     // closed, the frame thread may get stuck in the wait().
-    long            count, currentPos, error;
+    int32_t            count, currentPos, error;
 
     char            *pFillBuffer;
 
@@ -1181,27 +1182,27 @@ static void PV_AudioWaveOutFrameThread(void* threadContext)
     {
         waveOutReset(g_waveDevice);     // stop all audio before preparing headers
 
-        memset(&audioStatus, 0, (long)sizeof(MMTIME));
+        memset(&audioStatus, 0, (int32_t)sizeof(MMTIME));
         audioStatus.wType = TIME_BYTES; // get byte position
 
         error = waveOutGetPosition(g_waveDevice, &audioStatus, sizeof(MMTIME));
         g_lastPos = audioStatus.u.cb - (g_audioByteBufferSize * g_synthFramesPerBlock * 2);
 
         // now write out all of the data built
-        for (count = 0; count < (long)g_synthFramesPerBlock; count++)
+        for (count = 0; count < (int32_t)g_synthFramesPerBlock; count++)
         {
             waveHeader[count].lpData = (char *)g_audioBufferBlock[count];
             waveHeader[count].dwBufferLength = g_audioByteBufferSize * g_synthFramesPerBlock;
             waveHeader[count].dwFlags       = 0;
             waveHeader[count].dwLoops       = 0;
-            error = waveOutPrepareHeader(g_waveDevice, &waveHeader[count], (long)sizeof(WAVEHDR));
+            error = waveOutPrepareHeader(g_waveDevice, &waveHeader[count], (int32_t)sizeof(WAVEHDR));
         }
 
         waveHeaderCount = 0;
         while ( (g_activeDoubleBuffer) && (g_shutDownDoubleBuffer == FALSE) )
         {
             pFillBuffer = (char *)g_audioBufferBlock[waveHeaderCount];
-            for (count = 0; count < (long)g_synthFramesPerBlock; count++)
+            for (count = 0; count < (int32_t)g_synthFramesPerBlock; count++)
             {
                 // Generate one frame audio
                 BAE_BuildMixerSlice(threadContext, pFillBuffer, g_audioByteBufferSize,
@@ -1220,14 +1221,14 @@ static void PV_AudioWaveOutFrameThread(void* threadContext)
                 {
                     waveHeader[waveHeaderCount].dwFlags &= WHDR_DONE;   // must do, or buffers stop on Win95
                 }
-                error = waveOutWrite(g_waveDevice, &waveHeader[waveHeaderCount], (long)sizeof(WAVEHDR));
+                error = waveOutWrite(g_waveDevice, &waveHeader[waveHeaderCount], (int32_t)sizeof(WAVEHDR));
 
                 // I am incrementing g_lastPos right after the write operation
                 // to lessen the chance of a device open/close messing us up in the wait loop.
                 g_lastPos += (g_audioByteBufferSize * g_synthFramesPerBlock);
 
                 waveHeaderCount++;
-                if (waveHeaderCount == (long)g_synthFramesPerBlock)
+                if (waveHeaderCount == (int32_t)g_synthFramesPerBlock)
                 {
                     waveHeaderCount = 0;
                 }
@@ -1244,9 +1245,9 @@ static void PV_AudioWaveOutFrameThread(void* threadContext)
         }
         waveOutReset(g_waveDevice);     // stop all audio before unpreparing headers
 
-        for (count = 0; count < (long)g_synthFramesPerBlock; count++)
+        for (count = 0; count < (int32_t)g_synthFramesPerBlock; count++)
         {
-            error = waveOutUnprepareHeader(g_waveDevice, &waveHeader[count], (long)sizeof(WAVEHDR));
+            error = waveOutUnprepareHeader(g_waveDevice, &waveHeader[count], (int32_t)sizeof(WAVEHDR));
         }
         BAE_Deallocate((void *)waveHeader);
     }
@@ -1261,7 +1262,7 @@ int BAE_GetAudioBufferCount(void)
 }
 
 // Return the number of bytes used for audio buffer for output to card
-long BAE_GetAudioByteBufferSize(void)
+int32_t BAE_GetAudioByteBufferSize(void)
 {
     return g_audioByteBufferSize;
 }
@@ -1274,7 +1275,7 @@ static void PV_ConvertDSErrorCodeToSomethingReal(HRESULT hr, char *cString)
     switch (hr)
     {
         default:
-            sprintf(cString, "general problem (%lx)", (long)hr);
+            sprintf(cString, "general problem (%lx)", (int32_t)hr);
             break;
         case DS_OK:
             break;
@@ -1829,7 +1830,7 @@ static int PV_SetupDirectSound(void* threadContext, int sampleRate,
 
 static void PV_CleanupDirectSound(void)
 {
-    long        status;
+    int32_t        status;
 
     // Did we create the SoundMon thread?
     if (g_hthreadSoundMon)
@@ -1916,9 +1917,9 @@ static void PV_CleanupDirectSound(void)
 
 static BOOL PV_ReadFromPrefs(BAEDeviceID *pDeviceID, unsigned int *pSynthFramesPerBlock, unsigned int *pAudioPeriodSleepTime)
 {
-    long            ref;
+    int32_t            ref;
     char            data[2048];
-    unsigned long   frames, sleep, device;
+    uint32_t   frames, sleep, device;
     int             ret;
     char            fileName[MAX_PATH];
     BOOL            found;
@@ -1951,7 +1952,7 @@ static BOOL PV_ReadFromPrefs(BAEDeviceID *pDeviceID, unsigned int *pSynthFramesP
             }
             if (pDeviceID)
             {
-                if ((device >= 0) && (device < (unsigned long)BAE_MaxDevices()))
+                if ((device >= 0) && (device < (uint32_t)BAE_MaxDevices()))
                 {
                     *pDeviceID = (BAEDeviceID)device;
                 }
@@ -2001,12 +2002,12 @@ static void PV_SetTimingDefaults(int reset)
 // **** Audio card support
 // Aquire and enabled audio card
 // return 0 if ok, -1 if failed
-int BAE_AquireAudioCard(void *threadContext, unsigned long sampleRate, unsigned long channels, unsigned long bits)
+int BAE_AquireAudioCard(void *threadContext, uint32_t sampleRate, uint32_t channels, uint32_t bits)
 {
     int             flag;
-    short int       count;
-    long            bufferSize;
-    long            error;
+    int16_t       count;
+    int32_t            bufferSize;
+    int32_t            error;
     WAVEFORMATEX    waveFormat;
     #if USE_PREFS
     BOOL            validPrefs;
@@ -2055,8 +2056,8 @@ int BAE_AquireAudioCard(void *threadContext, unsigned long sampleRate, unsigned 
         waveFormat.wFormatTag = WAVE_FORMAT_PCM;
 
         waveFormat.nSamplesPerSec = sampleRate;
-        waveFormat.nChannels = (unsigned short)channels;
-        waveFormat.wBitsPerSample = (unsigned short)bits;
+        waveFormat.nChannels = (uint16_t)channels;
+        waveFormat.wBitsPerSample = (uint16_t)bits;
 
         // Calculate size in bytes of an audio sample
         waveFormat.nBlockAlign =  waveFormat.nChannels * waveFormat.wBitsPerSample / 8;
@@ -2070,7 +2071,7 @@ int BAE_AquireAudioCard(void *threadContext, unsigned long sampleRate, unsigned 
         }
         else
         {
-            bufferSize = (sizeof(short int) * g_audioFramesToGenerate);
+            bufferSize = (sizeof(int16_t) * g_audioFramesToGenerate);
         }
         bufferSize *= waveFormat.nChannels;
         g_audioByteBufferSize = bufferSize;
@@ -2079,7 +2080,7 @@ int BAE_AquireAudioCard(void *threadContext, unsigned long sampleRate, unsigned 
         // allocate buffer blocks
         flag = TRUE;
         g_audioBufferBlock = BAE_Allocate(sizeof(void *) * g_synthFramesPerBlock);
-        for (count = 0; count < (long)g_synthFramesPerBlock; count++)
+        for (count = 0; count < (int32_t)g_synthFramesPerBlock; count++)
         {
             g_audioBufferBlock[count] = BAE_Allocate(g_audioByteBufferSize * g_synthFramesPerBlock);
             if (g_audioBufferBlock[count] == NULL)
@@ -2111,7 +2112,7 @@ int BAE_AquireAudioCard(void *threadContext, unsigned long sampleRate, unsigned 
                 // up to the right sample position.
                 {
                     MMTIME          audioStatus;
-                    memset(&audioStatus, 0, (long)sizeof(MMTIME));
+                    memset(&audioStatus, 0, (int32_t)sizeof(MMTIME));
                     audioStatus.wType = TIME_BYTES; // get byte position
 
                     error = waveOutGetPosition(g_waveDevice, &audioStatus, sizeof(MMTIME));
@@ -2186,7 +2187,7 @@ int BAE_AquireAudioCard(void *threadContext, unsigned long sampleRate, unsigned 
 // return 0 if ok, -1 if failed.
 int BAE_ReleaseAudioCard(void *threadContext)
 {
-    long        count;
+    int32_t        count;
 
     g_shutDownDoubleBuffer = TRUE;  // signal the frame thread to stop
 #if USE_DIRECTSOUND
@@ -2216,7 +2217,7 @@ int BAE_ReleaseAudioCard(void *threadContext)
         }
         if (g_audioBufferBlock)
         {
-            for (count = 0; count < (long)g_synthFramesPerBlock; count++)
+            for (count = 0; count < (int32_t)g_synthFramesPerBlock; count++)
             {
                 BAE_Deallocate(g_audioBufferBlock[count]);
                 g_audioBufferBlock[count] = NULL;
@@ -2231,11 +2232,11 @@ int BAE_ReleaseAudioCard(void *threadContext)
 }
 
 // return device position in samples since the device was opened
-unsigned long BAE_GetDeviceSamplesPlayedPosition(void)
+uint32_t BAE_GetDeviceSamplesPlayedPosition(void)
 {
     int             error, frameSize;
     MMTIME          audioStatus;
-    unsigned long   pos;
+    uint32_t   pos;
 
     pos = 0;
     frameSize = g_waveFormat.nChannels * g_waveFormat.wBitsPerSample / 8;
@@ -2258,7 +2259,7 @@ unsigned long BAE_GetDeviceSamplesPlayedPosition(void)
     {   // waveOut
         if (g_pDirectSoundBuffer)
         {
-            memset(&audioStatus, 0, (long)sizeof(MMTIME));
+            memset(&audioStatus, 0, (int32_t)sizeof(MMTIME));
             audioStatus.wType = TIME_BYTES; // get byte position
     
             error = waveOutGetPosition(g_waveDevice, &audioStatus, sizeof(MMTIME));
@@ -2272,7 +2273,7 @@ unsigned long BAE_GetDeviceSamplesPlayedPosition(void)
 // number of devices. ie different versions of the BAE connection. DirectSound and waveOut
 // return number of devices. ie 1 is one device, 2 is two devices.
 // NOTE: This function needs to function before any other calls may have happened.
-long BAE_MaxDevices(void)
+int32_t BAE_MaxDevices(void)
 {
 #if USE_DIRECTSOUND
     PV_DirectSoundCreate();
@@ -2286,7 +2287,7 @@ long BAE_MaxDevices(void)
 // NOTE:    This function needs to function before any other calls may have happened.
 //          Also you will need to call BAE_ReleaseAudioCard then BAE_AquireAudioCard
 //          in order for the change to take place.
-void BAE_SetDeviceID(long deviceID, void *deviceParameter)
+void BAE_SetDeviceID(int32_t deviceID, void *deviceParameter)
 {
     BAEWinOSParameters  *parms;
 
@@ -2329,7 +2330,7 @@ void BAE_SetDeviceID(long deviceID, void *deviceParameter)
 
 // return current device ID
 // NOTE: This function needs to function before any other calls may have happened.
-long BAE_GetDeviceID(void *deviceParameter)
+int32_t BAE_GetDeviceID(void *deviceParameter)
 {
     BAEWinOSParameters  *parms;
 
@@ -2370,7 +2371,7 @@ long BAE_GetDeviceID(void *deviceParameter)
 //          "WinOS,waveOut,multi threaded"
 //          "WinOS,VxD,low level hardware"
 //          "WinOS,plugin,Director"
-void BAE_GetDeviceName(long deviceID, char *cName, unsigned long cNameLength)
+void BAE_GetDeviceName(int32_t deviceID, char *cName, uint32_t cNameLength)
 {
     char        *data;
     static char *names[] =
@@ -2453,7 +2454,7 @@ int BAE_Unmute(void)
 // This function is called at render time with w route bus flag. If there's
 // no change, return currentRoute, other wise return one of audiosys.h route values.
 // This will change an active rendered's voice placement.
-void BAE_ProcessRouteBus(int currentRoute, long *pChannels, int count)
+void BAE_ProcessRouteBus(int currentRoute, int32_t *pChannels, int count)
 {
 }
 

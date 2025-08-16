@@ -79,6 +79,8 @@
 */
 /*****************************************************************************/
 #include "GenPriv.h"
+#include <stdint.h>
+
 
 #if USE_NEW_EFFECTS     // conditionally compile this file
 
@@ -130,7 +132,7 @@ void InitChorus()
     ChorusParams* params = GetChorusParams();
     
     // allocate the delay line memory
-    long kMaxBytes = 2 * sizeof(INT32) * kChorusBufferFrameSize;
+    int32_t kMaxBytes = 2 * sizeof(INT32) * kChorusBufferFrameSize;
     params->mChorusBufferL = (INT32*)XNewPtr(kMaxBytes );
     params->mChorusBufferR = (INT32*)XNewPtr(kMaxBytes );
 
@@ -252,16 +254,16 @@ static INT32 expTable[] =   /* kModulationTableLength entries fixed point 16.16 
 //  GetChorusReadIncrement()
 //
 //++------------------------------------------------------------------------------
-INT32 GetChorusReadIncrement(INT32 readIndex, long writeIndex, long nSampleFrames, INT32 phase)
+INT32 GetChorusReadIncrement(INT32 readIndex, int32_t writeIndex, int32_t nSampleFrames, INT32 phase)
 {
     ChorusParams* params = GetChorusParams();
 
     INT32   phi = params->mPhi;
     //float depth = params->mDepth;
-    long    sampleFramesDelay = params->mSampleFramesDelay;
+    int32_t    sampleFramesDelay = params->mSampleFramesDelay;
 
-    long    currentDelayFrame;
-    long    desiredDelayFrame;
+    int32_t    currentDelayFrame;
+    int32_t    desiredDelayFrame;
 
     INT32   ratio;
 #if 0
@@ -311,7 +313,7 @@ INT32 GetChorusReadIncrement(INT32 readIndex, long writeIndex, long nSampleFrame
 #endif  
     
     
-    currentDelayFrame = ((long)(kChorusBufferFrameSize + writeIndex - (readIndex >> READINDEXSHIFT) )) % kChorusBufferFrameSize;
+    currentDelayFrame = ((int32_t)(kChorusBufferFrameSize + writeIndex - (readIndex >> READINDEXSHIFT) )) % kChorusBufferFrameSize;
     
     
     desiredDelayFrame = sampleFramesDelay + /*depth * */ (offsetFrame );
@@ -346,7 +348,7 @@ void RunChorus(INT32 *sourceP, INT32 *destP, int nSampleFrames)
     INT32   phi = params->mPhi;
     INT32   rate = params->mRate;
     INT32   feedbackGain = -params->mFeedbackGain;  // avoid "limit points"
-    long    writeIndex = params->mWriteIndex;
+    int32_t    writeIndex = params->mWriteIndex;
     
     INT32   readIndexL = params->mReadIndexL;
     INT32   readIndexR = params->mReadIndexR;

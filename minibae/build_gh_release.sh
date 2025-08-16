@@ -29,29 +29,40 @@ rm -f "${ODIR}/"*
 rmdir "${ODIR}" 2>/dev/null
 mkdir "${ODIR}"
 
-#echo "Building Linux 32bit..."
-#runcmd make -f Makefile clean pack
-#install_file "${BDIR}/playbae_linux32_static.gz" "${ODIR}/playbae_linux32_static.gz"
-#runcmd make -f Makefile clean
-
-#echo "Building Linux 32bit clang..."
-#runcmd make -f Makefile.clang clean pack
-#install_file "${BDIR}/playbae_linux32_clang_static.gz" "${ODIR}/playbae_linux32_clang_static.gz"
-#runcmd make -f Makefile.clang clean
-
-echo "Building MingW32 DirectSound..."
-runcmd make -f Makefile.mingw clean all pack
+echo "Building MingW32 DirectSound x86..."
+runcmd make -f Makefile.mingw BITS=32 clean all pack
 install_file "${BDIR}/playbae.exe.gz" "${ODIR}/playbae_dsound.exe.gz"
-runcmd cd "${BDIR}" && runcmd zip -u "${ODIR}/libMiniBAE_win_dsound.zip" *.dll *.lib
+runcmd cd "${BDIR}" && runcmd zip -u "${ODIR}/libMiniBAE_win_dsound_x86.zip" *.dll *.lib
 runcmd cd "${RDIR}"
 runcmd make -f Makefile.mingw clean
 
-echo "Building MingW32 SDL2..."
-runcmd make -f Makefile.mingw clean all pack
-install_file "${BDIR}/playbae.exe.gz" "${ODIR}/playbae_sdl2.exe.gz"
-runcmd cd "${BDIR}" && runcmd zip -u "${ODIR}/libMiniBAE_win_sdl2.zip" *.dll *.lib
+echo "Building MingW32 SDL2 x86..."
+runcmd make -f Makefile.mingw USE_SDL=1 BITS=32 clean all pack
+install_file "${BDIR}/playbae.exe.gz" "${ODIR}/playbae_sdl2_x86.exe.gz"
+runcmd cd "${BDIR}" && runcmd zip -u "${ODIR}/libMiniBAE_win_sdl2_x86.zip" *.dll *.lib
+
 runcmd cd "${RDIR}"
-runcmd make -f Makefile.mingw USE_SDL=1 clean
+runcmd make -f Makefile.mingw clean
+
+echo "Building MingW32 DirectSound x64..."
+runcmd make -f Makefile.mingw BITS=64 clean all pack
+install_file "${BDIR}/playbae.exe.gz" "${ODIR}/playbae_dsound_x64.exe.gz"
+runcmd cd "${BDIR}" && runcmd zip -u "${ODIR}/libMiniBAE_win_dsound_x64.zip" *.dll *.lib
+runcmd cd "${RDIR}"
+runcmd make -f Makefile.mingw clean
+
+echo "Building MingW32 SDL2 x64..."
+runcmd make -f Makefile.mingw USE_SDL=1 BITS=64 clean all pack
+install_file "${BDIR}/playbae.exe.gz" "${ODIR}/playbae_sdl2_x64.exe.gz"
+runcmd cd "${BDIR}" && runcmd zip -u "${ODIR}/libMiniBAE_win_sdl2_x64.zip" *.dll *.lib
+runcmd cd "${RDIR}"
+runcmd make -f Makefile.mingw clean
+
+echo "Building MingW32 SDL2 GUI x64..."
+runcmd make -f Makefile.gui-mingw clean all pack
+install_file "${BDIR}/minibae_gui.exe.gz" "${ODIR}/minibae_gui_sdl2_x64.exe.gz"
+runcmd cd "${RDIR}"
+runcmd make -f Makefile.gui-mingw clean
 
 echo "Building Enscripten WASM32..."
 runcmd make -f Makefile.emcc clean pack

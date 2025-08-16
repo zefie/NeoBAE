@@ -60,8 +60,6 @@
 #include <SDL.h>
 #include <stdlib.h>
 #include <stdio.h>
-#include <io.h>
-#include <fcntl.h>
 
 
 // Non-overwritable Flags
@@ -75,7 +73,11 @@
 #define USE_MONO_OUTPUT                 TRUE
 #define USE_STEREO_OUTPUT               TRUE
 #define USE_TERP2                       TRUE
-#define FILE_NAME_LENGTH                _MAX_PATH
+#ifdef _WIN32
+    #define FILE_NAME_LENGTH                _MAX_PATH
+#else
+    #define FILE_NAME_LENGTH                1024
+#endif
 #define USE_DEVICE_ENUM_SUPPORT         TRUE
 #define USE_CALLBACKS                   TRUE
 #define USE_CREATION_API                TRUE
@@ -147,7 +149,15 @@
 
 // INLINE
 // ----------------------------------------------
-#define INLINE                          _inline
+#ifdef _WIN32
+    #define INLINE                          _inline
+#else
+    #ifndef __MOTO__
+        #define INLINE                          inline
+    #else
+        #define INLINE
+    #endif
+#endif
 
 
 // DEBUG_STR

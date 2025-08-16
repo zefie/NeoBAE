@@ -223,7 +223,7 @@
 #include "GenCache.h"
 #include "BAE_API.h"
 #include "X_Assert.h"
-
+#include <stdint.h>
 
 // Add rates here, to allow use
 static XBOOL PV_ValidateRate(Rate theRate)
@@ -239,9 +239,9 @@ static XBOOL PV_ValidateRate(Rate theRate)
 
 
 // convert GenSynth Rate to actual sample rate used
-unsigned long GM_ConvertFromOutputRateToRate(Rate rate)
+uint32_t GM_ConvertFromOutputRateToRate(Rate rate)
 {
-    unsigned long sampleRate;
+    uint32_t sampleRate;
 
     sampleRate = 0;
     if (PV_ValidateRate(rate))
@@ -249,7 +249,7 @@ unsigned long GM_ConvertFromOutputRateToRate(Rate rate)
         switch (rate)
         {
             default:
-                sampleRate = (unsigned long)rate;
+                sampleRate = (uint32_t)rate;
                 break;
             case Q_RATE_22K_TERP_44K:
                 sampleRate = 44100;
@@ -403,7 +403,7 @@ void GM_SetMasterVolume(INT32 theVolume)
         GM_AudioStreamSetVolumeAll(-1); // recalculate stream volumes
 #endif
         {
-            short int   count;
+            int16_t   count;
             GM_Song     *pSong;
 
             // reset volumes for sound effects
@@ -437,7 +437,7 @@ INT32 GM_GetMasterVolume(void)
 
 // Return the number of microseconds of real time that will be generated when calling
 // BAE_BuildMixerSlice.
-unsigned long BAE_GetSliceTimeInMicroseconds(void)
+uint32_t BAE_GetSliceTimeInMicroseconds(void)
 {
     return MusicGlobals->bufferTime;
 }
@@ -460,8 +460,8 @@ unsigned long BAE_GetSliceTimeInMicroseconds(void)
 // This assumes that the pMixer and theRate are valid, no exceptions.
 static void PV_SetSampleSliceSize(GM_Mixer *pMixer, Rate theRate)
 {
-    unsigned long maxChunkSize;
-    unsigned long rate;
+    uint32_t maxChunkSize;
+    uint32_t rate;
 
     pMixer->maxChunkSize = MAX_CHUNK_SIZE;
     pMixer->One_Slice = MAX_CHUNK_SIZE;
@@ -483,7 +483,7 @@ static void PV_SetSampleSliceSize(GM_Mixer *pMixer, Rate theRate)
     pMixer->lfoBufferTime = XFixedMultiply(BUFFER_SLICE_TIME, pMixer->bufferTime);
     pMixer->lfoBufferTime = XFixedDivide(pMixer->lfoBufferTime, FIXED_BUFFER_SLICE_TIME) - 610;
 
-    pMixer->maxChunkSize = (short)maxChunkSize;
+    pMixer->maxChunkSize = (int16_t)maxChunkSize;
     pMixer->One_Slice = pMixer->maxChunkSize;
 
     if (theRate == Q_RATE_22K_TERP_44K || theRate == Q_RATE_11K_TERP_22K)
@@ -573,7 +573,7 @@ OPErr GM_InitGeneralSound(void *threadContext, Rate theRate, TerpMode theTerp, A
     if (theErr == NO_ERR)
     {
 // Allocate MusicGlobals
-        MusicGlobals = (GM_Mixer *)XNewPtr( (long)sizeof(GM_Mixer) );
+        MusicGlobals = (GM_Mixer *)XNewPtr( (int32_t)sizeof(GM_Mixer) );
         pMixer = MusicGlobals;
         if (pMixer)
         {
@@ -927,7 +927,7 @@ static const UBYTE stereoPanRamp[] =
 
 #if USE_GS_RAMP
 // new GS ramp * 32. Divide by 32 after using this factor
-static const short newStereoPanRamp[] = 
+static const int16_t newStereoPanRamp[] = 
 {
 0, 0, 32, 63, 95, 135, 167, 198, 230, 270, 302, 341, 373, 413, 445, 484, 516, 
 556, 595, 635, 667, 706, 746, 786, 825, 857, 897, 937, 976, 1016, 1056, 1095, 
@@ -1007,15 +1007,15 @@ static void PV_RemapMidiPan(INT32 stereoPosition, UINT32 *pLeft, UINT32 *pRight)
 void PV_CalculateMonoVolume(GM_Voice *pVoice, INT32 *pVolume)
 {
     UINT32  noteVolume;
-    long    channels[2];
+    int32_t    channels[2];
 
     // scale new volume based up channel volume, song volume, and current note volume
 //  noteVolume = PV_ScaleVolumeFromChannelAndSong(pVoice->pSong, pVoice->NoteChannel, pVoice->NoteVolume);
     noteVolume = pVoice->NoteVolume;
     noteVolume = (noteVolume * (UINT32)pVoice->NoteVolumeEnvelope) >> VOLUME_PRECISION_SCALAR;
 
-    channels[0] = (long)noteVolume;
-    channels[1] = (long)noteVolume;
+    channels[0] = (int32_t)noteVolume;
+    channels[1] = (int32_t)noteVolume;
 
     // with the voice route bus, modify the left and right channel volume
     BAE_ProcessRouteBus(pVoice->routeBus, channels, 2);
@@ -1029,7 +1029,7 @@ void PV_CalculateStereoVolume(GM_Voice *pVoice, INT32 *pLeft, INT32 *pRight)
     INT32   stereoPosition;
     UINT32  left, right;
     UINT32  noteVolume;
-    long    channels[2];
+    int32_t    channels[2];
 
     stereoPosition = pVoice->stereoPosition + pVoice->stereoPanBend;
 
@@ -1096,8 +1096,8 @@ void PV_CalculateStereoVolume(GM_Voice *pVoice, INT32 *pLeft, INT32 *pRight)
         right = 0;
     }
     
-    channels[0] = (long)left;
-    channels[1] = (long)right;
+    channels[0] = (int32_t)left;
+    channels[1] = (int32_t)right;
 
     // with the voice route bus, modify the left and right channel volume
     BAE_ProcessRouteBus(pVoice->routeBus, channels, 2);
@@ -1250,7 +1250,7 @@ INT16 SetChannelPitchBend(GM_Song *pSong, INT16 the_channel, UBYTE bendRange, UB
 {
     register LOOPCOUNT      count;
     register GM_Mixer       *pMixer;
-    register long           bendAmount, the_pitch_bend;
+    register int32_t           bendAmount, the_pitch_bend;
     register GM_Voice       *pNote;
 
     pMixer = MusicGlobals;
@@ -1338,12 +1338,12 @@ GM_AudioOutputCallbackPtr GM_GetAudioOutput(void)
 #ifdef BAE_COMPLETE
 XBOOL GM_StartHardwareSoundManager(void *threadContext)
 {
-    long    sampleRate;
+    int32_t    sampleRate;
     int     ok;
 
     if (MusicGlobals)
     {
-        sampleRate = (long)GM_ConvertFromOutputRateToRate(MusicGlobals->outputRate);
+        sampleRate = (int32_t)GM_ConvertFromOutputRateToRate(MusicGlobals->outputRate);
 
         ok = BAE_AquireAudioCard(threadContext, sampleRate,
                                     (MusicGlobals->generateStereoOutput) ? 2 : 1,
@@ -1406,9 +1406,9 @@ UINT32 GM_GetDeviceTimeStamp(void)
 // given the sample frame size from the mixer variables
 // $$kk: 08.12.98 merge: changed this function
 // $$kk: no, we're getting the currentPos in SAMPLES, not bytes, from BAE_GetDeviceSamplesPlayedPosition().
-void GM_UpdateSamplesPlayed(unsigned long currentPos)
+void GM_UpdateSamplesPlayed(uint32_t currentPos)
 {
-    unsigned long delta;
+    uint32_t delta;
 
     if (currentPos >= MusicGlobals->lastSamplePosition)
     {
@@ -1432,7 +1432,7 @@ void GM_UpdateSamplesPlayed(unsigned long currentPos)
 // number of devices. ie different versions of the BAE connection. DirectSound and waveOut
 // return number of devices. ie 1 is one device, 2 is two devices.
 // NOTE: This function needs to function before any other calls may have happened.
-long GM_MaxDevices(void)
+int32_t GM_MaxDevices(void)
 {
     return BAE_MaxDevices();
 }
@@ -1441,14 +1441,14 @@ long GM_MaxDevices(void)
 // NOTE:    This function needs to function before any other calls may have happened.
 //          Also you will need to call BAE_ReleaseAudioCard then BAE_AquireAudioCard
 //          in order for the change to take place.
-void GM_SetDeviceID(long deviceID, void *deviceParameter)
+void GM_SetDeviceID(int32_t deviceID, void *deviceParameter)
 {
     BAE_SetDeviceID(deviceID, deviceParameter);
 }
 
 // return current device ID
 // NOTE: This function needs to function before any other calls may have happened.
-long GM_GetDeviceID(void *deviceParameter)
+int32_t GM_GetDeviceID(void *deviceParameter)
 {
     return BAE_GetDeviceID(deviceParameter);
 }
@@ -1462,7 +1462,7 @@ long GM_GetDeviceID(void *deviceParameter)
 //          "WinOS,waveOut,multi threaded"
 //          "WinOS,VxD,low level hardware"
 //          "WinOS,plugin,Director"
-void GM_GetDeviceName(long deviceID, char *cName, unsigned long cNameLength)
+void GM_GetDeviceName(int32_t deviceID, char *cName, uint32_t cNameLength)
 {
     BAE_GetDeviceName(deviceID, cName, cNameLength);
 }
@@ -1480,7 +1480,7 @@ UINT32 GM_GetSyncTimeStamp(void)
     return ticks;
 }
 
-long GM_GetAudioBufferOutputSize(void)
+int32_t GM_GetAudioBufferOutputSize(void)
 {
     return BAE_GetAudioByteBufferSize();
 }

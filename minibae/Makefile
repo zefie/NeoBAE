@@ -3,7 +3,7 @@ BAE_API			:= SDL2
 DEBUG			:= 0
 include inc/Makefile.common
 
-ARCH		:= -m32 -static
+ARCH		:= -static
 CC		:= gcc
 CXX		:= g++
 LD		:= $(CC)
@@ -86,10 +86,10 @@ $(OBJ_DIR)%.o : %.c
 	@${CC} -c ${CFLAGS} $< -o $@
 
 clean:
-	@rm -rdf $(TARGET_OUT)
-	@rm -rdf $(OBJ_DIR)
-	@rm -rdf $(BUILD_DIR)
-	@rm -rdf $(TEST_OUT_DIR)
+	@rm -rf $(TARGET_OUT)
+	@rm -rf $(OBJ_DIR)
+	@rm -rf $(BUILD_DIR)
+	@rm -rf $(TEST_OUT_DIR)
 	@echo Cleaned!
 
 include inc/Makefile.tests

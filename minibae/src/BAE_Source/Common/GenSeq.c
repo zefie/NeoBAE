@@ -117,7 +117,7 @@
 **  7/6/96      Added GM_GetSyncTimeStamp
 **  7/7/96      Changed PV_ProcessMetaEvents to not use an extra 256 bytes of stack space
 **  7/10/96     Fixed reverb unit to be able to be turned off.
-**  7/23/96     Changed QGM_ functions to use an unsigned long for time stamp
+**  7/23/96     Changed QGM_ functions to use an uint32_t for time stamp
 **  7/24/96     Changed external midi queue to use a head/tail
 **  7/25/96     Moved GM_GetSyncTimeStamp to Gen(XXX)Tools.c
 **  8/12/96     Changed PV_ResetControlers to support semi-complete reset
@@ -189,7 +189,7 @@
 **              to compensate for real time midi time stamping
 **  7/21/97     Put mins and maxs on GM_SetSongTempInBeatsPerMinute. 0 and 500
 **              Changed GM_SetSongTempInBeatsPerMinute & GM_GetSongTempoInBeatsPerMinute
-**              GM_SetSongTempo & GM_GetSongTempo & GM_SetMasterSongTempo to all be unsigned longs
+**              GM_SetSongTempo & GM_GetSongTempo & GM_SetMasterSongTempo to all be uint32_ts
 **              Changed key calculations to floating point to test for persicion loss.
 **  7/22/97     Changed SYNC_BUFFER_TIME to BUFFER_SLICE_TIME
 **              Removed some & 0xFFFF from various calculations of song tempo
@@ -517,7 +517,7 @@ void GM_ResetTempoToDefault(GM_Song *pSong)
 
 void PV_ConfigureInstruments(GM_Song *theSong)
 {
-    register short int  count;
+    register int16_t  count;
 
     theSong->omniModeOn = TRUE;
     PV_ResetControlers(theSong, -1, TRUE);
@@ -582,13 +582,13 @@ OPErr PV_ConfigureMusic(GM_Song *pSong)
     {
         safe = FALSE;
         // don't walk past the midi file length
-        size = (lengthToMidiEnd < 3000 - sizeof(long)) ? lengthToMidiEnd : 
-                                                            3000 - sizeof(long);
-        for (count = 0; count < size; count++)
+        size = (lengthToMidiEnd < 3000 - sizeof(int32_t)) ? lengthToMidiEnd : 
+                                                            3000 - sizeof(int32_t);
+    for (count = 0; count < size; count++)
         {
             if (XGetLong(pMidiStream) == ID_MTHD)
             {
-                safe = TRUE;
+                safe = TRUE;        
                 break;
             }
             pMidiStream++;
@@ -601,18 +601,18 @@ OPErr PV_ConfigureMusic(GM_Song *pSong)
                 realtracks = XGetShort(&pMidiStream[10]);   // get real tracks and compare with tracks found to determine if corrupt
                 count = XGetShort(&pMidiStream[12]);        // get ticks per quarter note
                 pSong->UnscaledMIDIDivision = (UFLOAT)count;
-                PV_ScaleDivision(pSong, pSong->UnscaledMIDIDivision);
+                PV_ScaleDivision(pSong, pSong->UnscaledMIDIDivision);        
                 // search for first midi track
                 safe = FALSE;
                 // don't walk past the midi file length
-                size = (lengthToMidiEnd < 3000 - sizeof(long)) ? lengthToMidiEnd : 
-                                                                    3000 - sizeof(long);
+                size = (lengthToMidiEnd < 3000 - sizeof(int32_t)) ? lengthToMidiEnd : 
+                                                                    3000 - sizeof(int32_t);
                 // find first Midi track
-                for (count = 0; count < size; count++)
+        for (count = 0; count < size; count++)
                 {
                     if (XGetLong(pMidiStream) == ID_MTRK)
                     {
-                        safe = TRUE;
+                        safe = TRUE;            
                         break;
                     }
                     pMidiStream++;
@@ -627,10 +627,10 @@ OPErr PV_ConfigureMusic(GM_Song *pSong)
                     {
                         // calculate length of this track.
                         pMidiStream += 4;
-                        trackLength = *pMidiStream++;
-                        trackLength = (trackLength << 8) + *pMidiStream++;
-                        trackLength = (trackLength << 8) + *pMidiStream++;
-                        trackLength = (trackLength << 8) + *pMidiStream++;
+                        trackLength = (uint32_t)*pMidiStream++;
+                        trackLength = (trackLength << 8) | (uint32_t)*pMidiStream++;
+                        trackLength = (trackLength << 8) | (uint32_t)*pMidiStream++;
+                        trackLength = (trackLength << 8) | (uint32_t)*pMidiStream++;            
                 
                         pSong->ptrack[numtracks] = pMidiStream;
                         pSong->trackstart[numtracks] = pMidiStream;
@@ -677,7 +677,7 @@ OPErr PV_ConfigureMusic(GM_Song *pSong)
 // Process any fading song voices
 static void PV_ServeSongFade(void *threadContext, GM_Song *pSong)
 {
-    long    value;
+    int32_t    value;
 
     if (pSong)
     {
@@ -759,11 +759,11 @@ void GM_ResumeSequencer(void)
                 pSong = pMixer->pSongsToPlay[count];
                 if (pSong)
                 {
-//                  printf("pre MIDITempo %ld pre MIDIDivision %ld\n", (long)pSong->MIDITempo, (long)pSong->MIDIDivision);
+//                  printf("pre MIDITempo %ld pre MIDIDivision %ld\n", (int32_t)pSong->MIDITempo, (int32_t)pSong->MIDIDivision);
                     // recalucate tempo values in case timebase changed
                     pSong->MIDITempo = (pSong->UnscaledMIDITempo / (UFLOAT)BAE_GetSliceTimeInMicroseconds());
                     PV_ScaleDivision(pSong, pSong->UnscaledMIDIDivision);
-//                  printf("post MIDITempo %ld pre MIDIDivision %ld\n", (long)pSong->MIDITempo, (long)pSong->MIDIDivision);
+//                  printf("post MIDITempo %ld pre MIDIDivision %ld\n", (int32_t)pSong->MIDITempo, (int32_t)pSong->MIDIDivision);
                 }
             }
             pMixer->sequencerPaused = FALSE;
@@ -830,7 +830,7 @@ XBOOL GM_IsSongPaused(GM_Song *pSong)
 
 XBOOL GM_IsSongDone(GM_Song *pSong)
 {
-    register long   count;
+    register int32_t   count;
     XBOOL           songDone;
 
     songDone = FALSE;
@@ -879,7 +879,7 @@ void GM_SetSongCallback(GM_Song *theSong, GM_SongCallbackProcPtr theCallback, vo
     }
 }
 
-void GM_SetSongTimeCallback(GM_Song *theSong, GM_SongTimeCallbackProcPtr theCallback, long reference)
+void GM_SetSongTimeCallback(GM_Song *theSong, GM_SongTimeCallbackProcPtr theCallback, int32_t reference)
 {
     if (theSong)
     {
@@ -890,7 +890,7 @@ void GM_SetSongTimeCallback(GM_Song *theSong, GM_SongTimeCallbackProcPtr theCall
 
 
 // Call meta event callback if there
-static void PV_CallSongMetaEventCallback(void *threadContext, GM_Song *pSong, char markerType, void *pText, long textLength, short currentTrack)
+static void PV_CallSongMetaEventCallback(void *threadContext, GM_Song *pSong, char markerType, void *pText, int32_t textLength, int16_t currentTrack)
 {
     GM_SongMetaCallbackProcPtr theCallback;
 
@@ -904,7 +904,7 @@ static void PV_CallSongMetaEventCallback(void *threadContext, GM_Song *pSong, ch
     }
 }
 
-void GM_SetSongMetaEventCallback(GM_Song *theSong, GM_SongMetaCallbackProcPtr theCallback, long reference)
+void GM_SetSongMetaEventCallback(GM_Song *theSong, GM_SongMetaCallbackProcPtr theCallback, void *reference)
 {
     if (theSong)
     {
@@ -956,13 +956,13 @@ void GM_GetRealtimeAudioInformation(GM_AudioInfo *pInfo)
     }
     else
     {
-        XSetMemory((void *)pInfo, (long)sizeof(GM_AudioInfo), 0);
+        XSetMemory((void *)pInfo, (int32_t)sizeof(GM_AudioInfo), 0);
     }
 }
 #endif  // X_PLATFORM != X_WEBTV
 
 
-static void PV_CallControlCallbacks(void *threadContext, GM_Song *pSong, short int channel, short int track, short int controler, unsigned short value)
+static void PV_CallControlCallbacks(void *threadContext, GM_Song *pSong, int16_t channel, int16_t track, int16_t controler, uint16_t value)
 {
     GM_ControlCallbackPtr   pControlerCallBack;
     GM_ControlerCallbackPtr callback;
@@ -982,7 +982,7 @@ static void PV_CallControlCallbacks(void *threadContext, GM_Song *pSong, short i
 }
 
 void GM_SetControllerCallback(GM_Song *theSong, void * reference, GM_ControlerCallbackPtr controllerCallback, 
-                                short int controller)
+                                int16_t controller)
 {
     GM_ControlCallbackPtr   pControlerCallBack;
 
@@ -991,7 +991,7 @@ void GM_SetControllerCallback(GM_Song *theSong, void * reference, GM_ControlerCa
         pControlerCallBack = theSong->controllerCallback;
         if (pControlerCallBack == NULL)
         {   // not allocated yet?
-            pControlerCallBack = (GM_ControlCallbackPtr)XNewPtr((long)sizeof(GM_ControlCallback));
+            pControlerCallBack = (GM_ControlCallbackPtr)XNewPtr((int32_t)sizeof(GM_ControlCallback));
             theSong->controllerCallback = pControlerCallBack;
         }
         if (pControlerCallBack)
@@ -1019,7 +1019,7 @@ XBOOL GM_GetSongLoopFlag(GM_Song *theSong)
     return FALSE;
 }
 
-void GM_SetSongLoopMax(GM_Song *theSong, short int maxLoopCount)
+void GM_SetSongLoopMax(GM_Song *theSong, int16_t maxLoopCount)
 {
     if (theSong)
     {
@@ -1027,9 +1027,9 @@ void GM_SetSongLoopMax(GM_Song *theSong, short int maxLoopCount)
     }
 }
 
-short int GM_GetSongLoopMax(GM_Song *theSong)
+int16_t GM_GetSongLoopMax(GM_Song *theSong)
 {
-    short int   maxLoopCount;
+    int16_t   maxLoopCount;
 
     maxLoopCount = 0;
     if (theSong)
@@ -1061,7 +1061,7 @@ XBOOL GM_GetSongMetaLoopFlag(GM_Song *theSong)
 
 // set volume of a channel of a current song. If updateNow is active and the song is playing
 // the voice will up updated
-void GM_SetChannelVolume(GM_Song *theSong, short int channel, short int volume, XBOOL updateNow)
+void GM_SetChannelVolume(GM_Song *theSong, int16_t channel, int16_t volume, XBOOL updateNow)
 {
     if ((volume >= 0) && (volume < MAX_NOTE_VOLUME))
     {
@@ -1080,7 +1080,7 @@ void GM_SetChannelVolume(GM_Song *theSong, short int channel, short int volume, 
 }
 
 // Given a song and a channel, this will return the current volume level
-short int GM_GetChannelVolume(GM_Song *theSong, short int channel)
+int16_t GM_GetChannelVolume(GM_Song *theSong, int16_t channel)
 {
     if ((channel >= 0) && (channel < MAX_CHANNELS))
     {
@@ -1260,7 +1260,7 @@ void GM_SetSongTempInBeatsPerMinute(GM_Song *pSong, UINT32 newTempoBPM)
 
 #if REVERB_USED != REVERB_DISABLED
 // Set channel reverb amount
-static void PV_SetChannelReverb(GM_Song *pSong, short int the_channel, UBYTE reverbAmount)
+static void PV_SetChannelReverb(GM_Song *pSong, int16_t the_channel, UBYTE reverbAmount)
 {
     register GM_Mixer       *pMixer;
     register GM_Voice       *pVoice;
@@ -1292,7 +1292,7 @@ static void PV_SetChannelReverb(GM_Song *pSong, short int the_channel, UBYTE rev
 
 // set reverb of a channel of a current song. If updateNow is active and the song is playing
 // the voice will up updated
-void GM_SetChannelReverb(GM_Song *theSong, short int channel, UBYTE reverbAmount, XBOOL updateNow)
+void GM_SetChannelReverb(GM_Song *theSong, int16_t channel, UBYTE reverbAmount, XBOOL updateNow)
 {
     if (reverbAmount < MAX_NOTE_VOLUME)
     {
@@ -1311,7 +1311,7 @@ void GM_SetChannelReverb(GM_Song *theSong, short int channel, UBYTE reverbAmount
 }
 
 // Given a song and a channel, this will return the current reverb level
-short int GM_GetChannelReverb(GM_Song *theSong, short int channel)
+int16_t GM_GetChannelReverb(GM_Song *theSong, int16_t channel)
 {
     if ((channel >= 0) && (channel < MAX_CHANNELS))
     {
@@ -1323,7 +1323,7 @@ short int GM_GetChannelReverb(GM_Song *theSong, short int channel)
 
 static INLINE XBOOL PV_IsSoloTrackActive(GM_Song *pSong)
 {
-    short int   count, size;
+    int16_t   count, size;
     XBOOL       active;
 
     active = FALSE;
@@ -1341,7 +1341,7 @@ static INLINE XBOOL PV_IsSoloTrackActive(GM_Song *pSong)
 
 static INLINE XBOOL PV_IsSoloChannelActive(GM_Song *pSong)
 {
-    short int   count, size;
+    int16_t   count, size;
     XBOOL       active;
 
     active = FALSE;
@@ -1444,11 +1444,11 @@ static void PV_AddInstrumentEntry(GM_Song *pSong, INT16 currentTrack, INT16 MIDI
 #endif  //  USE_CREATION_API
 
 #if 0 && USE_CREATION_API == TRUE
-void PV_InsertBankSelect(GM_Song *pSong, short channel, short currentTrack)
+void PV_InsertBankSelect(GM_Song *pSong, int16_t channel, int16_t currentTrack)
 {
     UBYTE   *pp;
     INT32   size, sizeToMove, trackLength;
-    short   track;
+    int16_t   track;
 
     if (pSong->pPatchInfo)
     {
@@ -1484,10 +1484,10 @@ void PV_InsertBankSelect(GM_Song *pSong, short channel, short currentTrack)
             pp = pSong->trackstart[currentTrack];
             // read the entire value, increment, and then write it back
             pp -= 4; // go back to the length part of the track header
-            trackLength = *pp;
-            trackLength = (trackLength << 8) + *(pp+1);
-            trackLength = (trackLength << 8) + *(pp+2);
-            trackLength = (trackLength << 8) + *(pp+3);
+            trackLength = (uint32_t)*pp;
+            trackLength = (trackLength << 8) | (uint32_t)*(pp+1);
+            trackLength = (trackLength << 8) | (uint32_t)*(pp+2);
+            trackLength = (trackLength << 8) | (uint32_t)*(pp+3);
             trackLength += 4;
             *pp = (trackLength >> 24) & 0xFF;   
             *(pp+1) = (trackLength >> 16) & 0xFF;   
@@ -1567,7 +1567,7 @@ static void PV_ProcessProgramChange(GM_Song *pSong, INT16 MIDIChannel, INT16 cur
                 // not caring how big the file is, we move total size - 4 up 4
                 // this will always work 
                 // plus it moves the 
-                if ((long)(pSong->pPatchInfo->instrPtrLoc - pSong->pPatchInfo->bankPtrLoc) > 3) 
+                if ((int32_t)(pSong->pPatchInfo->instrPtrLoc - pSong->pPatchInfo->bankPtrLoc) > 3) 
                 {
                     PV_InsertBankSelect(pSong,MIDIChannel,currentTrack);
                     pSong->pPatchInfo->streamIncrement = 4;
@@ -1585,7 +1585,7 @@ static void PV_ProcessProgramChange(GM_Song *pSong, INT16 MIDIChannel, INT16 cur
                 // between the pointers if the delta time was very small. Since we write dt 0
                 // between controller and pgm when modifying the file, this will at least
                 // find our handiwork
-                if ((long)(pSong->pPatchInfo->instrPtrLoc - pSong->pPatchInfo->bankPtrLoc) > 3)
+                if ((int32_t)(pSong->pPatchInfo->instrPtrLoc - pSong->pPatchInfo->bankPtrLoc) > 3)
                 {
                     pSong->pPatchInfo->instrCount++;
                 }
@@ -1700,7 +1700,7 @@ static void PV_ProcessNoteOff(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTr
     {
         if (pSong->AnalyzeMode == SCAN_NORMAL)
         {
-            if (GM_DoesChannelAllowPitchOffset(pSong, (unsigned short)MIDIChannel))
+            if (GM_DoesChannelAllowPitchOffset(pSong, (uint16_t)MIDIChannel))
             {
                 note += pSong->songPitchShift;
             }
@@ -1727,7 +1727,6 @@ static void PV_ProcessNoteOff(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTr
     }
 }
 
-
 // Process note on
 static void PV_ProcessNoteOn(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTrack, INT16 note, INT16 volume)
 {
@@ -1739,7 +1738,7 @@ static void PV_ProcessNoteOn(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTra
         {   
             if (pSong->AnalyzeMode == SCAN_NORMAL)
             {
-                if (GM_DoesChannelAllowPitchOffset(pSong, (unsigned short)MIDIChannel))
+                if (GM_DoesChannelAllowPitchOffset(pSong, (uint16_t)MIDIChannel))
                 {
                     note += pSong->songPitchShift;
                 }
@@ -1917,6 +1916,14 @@ static void PV_ProcessController(GM_Song *pSong, INT16 MIDIChannel, INT16 curren
         switch (controler)
         {
             case B_BANK_LSB:    // bank select MSB. This is GS.
+                if (value == 6) {
+                    value = 2;
+                    pSong->channelBank[MIDIChannel] = (SBYTE)value;
+                }
+                else if (value == 5) {
+                    value = 1;
+                    pSong->channelBank[MIDIChannel] = (SBYTE)value;
+                }                
                 break;
             case B_BANK_MSB:        // bank select LSB.
                 if (value > (MAX_BANKS/2))
@@ -2276,7 +2283,7 @@ void DumpMIDIQueue(GM_Mixer *pMixer)
 // Clean external midi event queue, without a mutex lock
 static void PV_CleanQueueWithoutLock(GM_Mixer *pMixer)
 {
-    long        count;
+    int32_t        count;
 
     if (pMixer)
     {
@@ -2405,7 +2412,7 @@ static Q_MIDIEvent * PV_GetNextStorableQueueEvent(UINT32 externalTimeStamp)
         pHead = pMixer->pHead;  // get current write event pointer
         #ifdef QUEUE_DEBUG
             BAE_PRINTF("minibae::PV_GetNextStorableQueueEvent head: 0x%lx tail: 0x%lx\n",
-                                  (unsigned long)pMixer->pHead, (unsigned long)pMixer->pTail);
+                                  (uint32_t)pMixer->pHead, (uint32_t)pMixer->pTail);
         #endif
         count = 0;
         do
@@ -2450,7 +2457,7 @@ static Q_MIDIEvent * PV_GetNextStorableQueueEvent(UINT32 externalTimeStamp)
     }
 #ifdef QUEUE_DEBUG
     BAE_PRINTF(pStoredEvent ? "\tput event 0x%lx on queue. Head now 0x%lx\n" : "QUEUE FULL!\n", 
-                                (long)pStoredEvent, (long)pMixer->pHead);
+                                (int32_t)pStoredEvent, (int32_t)pMixer->pHead);
 #endif
     return pStoredEvent;
 }
@@ -2493,7 +2500,7 @@ static int iqindex = 0, qindex = 0;
 XBOOL GM_AreEventsPending(GM_Song *pSong)
 {
     XBOOL       events;
-    short int   count;
+    int16_t   count;
     Q_MIDIEvent *pEvent;
     GM_Mixer    *pMixer;
 
@@ -2702,7 +2709,7 @@ void GM_PitchBend(GM_Song *pSong, INT16 channel, UBYTE valueMSB, UBYTE valueLSB)
 // return pitch bend for channel
 void GM_GetPitchBend(GM_Song *pSong, INT16 channel, unsigned char *pLSB, unsigned char *pMSB)
 {
-    register long           the_pitch_bend;
+    register int32_t           the_pitch_bend;
 
     if (pSong && pLSB && pMSB)
     {
@@ -2754,7 +2761,7 @@ static void PV_ProcessExternalMIDIQueue(GM_Song *pSong)
     //  if (qindex < 5000) sprintf(msgQueue[qindex++].s, "***** SLICE (%d) *****\n", ticks);
 #endif
 #ifdef TIMESLICE_DEBUG
-        { static prevTicks = 0;  unsigned long usecs = XMicroseconds();
+        { static prevTicks = 0;  uint32_t usecs = XMicroseconds();
           BAE_PRINTF("slice delta: %d usecs\n", usecs - prevTicks);
           prevTicks = usecs;
         }
@@ -2880,11 +2887,11 @@ DATA
 */
 #if SUPPORT_IGOR_FEATURE
 static void PV_ProcessIgorResource(GM_Song *pSong,
-                                   long command,
+                                   int32_t command,
                                    unsigned char *pMidiStream,
-                                   long theID,
+                                   int32_t theID,
                                    XBankToken bankToken,
-                                   long length)
+                                   int32_t length)
 {
     GM_Instrument   *theI;
     XPTR            theNewData;
@@ -2996,7 +3003,7 @@ static void PV_SetSampleIntoCache(GM_Song * pSong,
 
 
 // Validate command types. This is used to protect us from bad memory pointers, etc
-static XBOOL PV_ValidateType(long command)
+static XBOOL PV_ValidateType(int32_t command)
 {
     XBOOL   valid;
 
@@ -3015,7 +3022,7 @@ static XBOOL PV_ValidateType(long command)
 }
 
 // Validate command types. This is used to protect us from bad memory pointers, etc
-static XBOOL PV_ValidateTypeCommands(long command)
+static XBOOL PV_ValidateTypeCommands(int32_t command)
 {
     XBOOL   valid;
 
@@ -3036,7 +3043,7 @@ static XBOOL PV_ValidateTypeCommands(long command)
 // Process Igor Meta events given a midi stream right after the sysex ID
 static void PV_ProcessIgorMeta(GM_Song *pSong, unsigned char *pMidiStream)
 {
-    long                command,
+    int32_t                command,
                         unitCount,
                         cmdCount,
                         count,
@@ -3120,71 +3127,6 @@ static void PV_ProcessIgorMeta(GM_Song *pSong, unsigned char *pMidiStream)
 }
 #endif
 
-// Given a song pointer and a string marker command, and a string length; process that command.
-// If TRUE is returned, then the current track process is restarted at track 0
-static XBOOL PV_ProcessMetaMarkerEvents(GM_Song *pSong, char *markerText, long markerLength)
-{
-    long    count;
-    XBOOL   restartTracks;
-
-    restartTracks = FALSE;
-    // support Beatnik marker events
-
-    // markerText is a pointer to the in memory midi sequence that stays around as long
-    // as the file is playing.
-    if ((pSong->AnalyzeMode == SCAN_SAVE_PATCHES) && (markerLength >= 6))
-    {
-        if (XLStrnCmp("title=", markerText, 6) == 0)
-        {
-            pSong->titleOffset = &markerText[6] - (char *)pSong->sequenceData;
-            pSong->titleLength = markerLength - 6;
-        }
-    }
-
-    if ((pSong->AnalyzeMode == SCAN_NORMAL) && (markerLength >= 7) && (pSong->metaLoopDisabled == FALSE))
-    {
-        if (XLStrnCmp("loopstart", markerText, 9) == 0)
-        {
-            count = -1; // loop forever
-            if (pSong->loopbackSaved == FALSE)      // only allow one save
-            {
-                if (XLStrnCmp("loopstart=", markerText, 10) == 0)
-                {
-                    // check for loop counts
-                    count = XStrnToLong(&markerText[10], markerLength-10);
-                }
-                pSong->loopbackCount = (SBYTE)count;
-
-                pSong->loopbackSaved = TRUE;
-                for (count = 0; count < MAX_TRACKS; count++)
-                {
-                    pSong->pTrackPositionSave[count] = pSong->ptrack[count];
-                    pSong->trackTicksSave[count] = pSong->trackticks[count];
-                    pSong->trackStatusSave[count] = pSong->trackon[count];
-                }
-                pSong->currentMidiClockSave = pSong->CurrentMidiClock;
-                pSong->songMicrosecondsSave = pSong->songMicroseconds;
-            }
-        }
-        else if (XLStrnCmp("loopend", markerText, markerLength) == 0)
-        {
-            if (pSong->loopbackSaved)   // have we saved a position?
-            {
-                if ( (pSong->loopbackCount > 0) && (pSong->loopbackCount < 100) )
-                {
-                    pSong->loopbackCount--;
-                }
-                if (pSong->loopbackCount)
-                {
-                    // ok, reloop.
-                    restartTracks = TRUE;
-                }
-            }
-        }
-    }
-    return restartTracks;
-}
-
 // Given a pointer to a midi stream, this will read the variable length value from and update the
 // midi stream pointer
 static UINT32 PV_ReadVariableLengthMidi(UBYTE **ppMidiStream)
@@ -3217,6 +3159,122 @@ static UINT32 PV_ReadVariableLengthMidi(UBYTE **ppMidiStream)
 
     *ppMidiStream = midi_stream;
     return value;
+}
+
+// Process MIDI meta marker events (0x06) looking for Beatnik-specific loop markers.
+// Returns TRUE if the caller should reloop (i.e., restart tracks from saved loopstart), FALSE otherwise.
+// Supported markers (case-insensitive, trimmed):
+//   loopstart            - mark beginning of a loop (infinite unless a prior loopstart already active)
+//   loopstart=<count>    - mark beginning; loop <count> times (count > 0). When count expires, loop is cleared.
+//   loopend              - when encountered and a loopstart was saved, restore song state and request reloop.
+// The implementation avoids modifying the raw MIDI stream (marker text not NUL-terminated).
+static XBOOL PV_ProcessMetaMarkerEvents(GM_Song *pSong, char *markerData, XDWORD markerLen)
+{
+    if (pSong == NULL || markerData == NULL || markerLen == 0)
+    {
+        return FALSE;
+    }
+
+    // Copy marker text into a temporary, NUL-terminated, lowercase buffer for safe parsing.
+    char stackBuf[64];
+    char *buf;
+    XDWORD copyLen = (markerLen < (XDWORD)(sizeof(stackBuf) - 1)) ? markerLen : (XDWORD)(sizeof(stackBuf) - 1);
+    if (markerLen + 1 <= sizeof(stackBuf))
+    {
+        buf = stackBuf;
+    }
+    else
+    {
+        buf = (char *)XNewPtr((int32_t)markerLen + 1);
+        if (buf == NULL)
+        {
+            return FALSE; // allocation failure: ignore marker
+        }
+    }
+    XBlockMove(markerData, buf, (int32_t)copyLen);
+    buf[copyLen] = '\0';
+    // Normalize: trim leading/trailing whitespace and convert to lowercase in-place
+    char *start = buf;
+    while (*start && (unsigned char)*start <= ' ') { start++; }
+    char *end = start + XStrLen(start);
+    while (end > start && (unsigned char)*(end - 1) <= ' ') { end--; }
+    *end = '\0';
+    for (char *p = start; *p; ++p) { if (*p >= 'A' && *p <= 'Z') *p = (char)(*p + ('a' - 'A')); }
+
+    XBOOL result = FALSE;
+    // Check for loopstart
+    if (XStrnCmp(start, "loopstart", 9) == 0)
+    {
+        const char *p = start + 9;
+        int32_t loopCount = -1; // -1 means infinite
+        if (*p == '=')
+        {
+            p++;
+            // Parse decimal count
+            int32_t accum = 0;
+            int parsed = 0;
+            while (*p >= '0' && *p <= '9')
+            {
+                accum = accum * 10 + (*p - '0');
+                p++; parsed = 1;
+            }
+            if (parsed && accum > 0)
+            {
+                loopCount = accum; // perform exactly accum loops
+            }
+        }
+        // Only capture a new loopstart if one not already saved; nested loopstarts ignored.
+        if (!pSong->loopbackSaved)
+        {
+            // Save track state
+            for (int i = 0; i < MAX_TRACKS; i++)
+            {
+                pSong->pTrackPositionSave[i] = pSong->ptrack[i];
+                pSong->trackTicksSave[i] = pSong->trackticks[i];
+                pSong->trackStatusSave[i] = pSong->trackon[i];
+            }
+            pSong->currentMidiClockSave = pSong->CurrentMidiClock;
+            pSong->songMicrosecondsSave = pSong->songMicroseconds;
+            pSong->loopbackSaved = TRUE;
+            pSong->loopbackCount = (XSBYTE)((loopCount > 127) ? 127 : loopCount); // clamp to signed 8-bit range
+        }
+    }
+    else if (XStrCmp(start, "loopend") == 0)
+    {
+        if (pSong->loopbackSaved && !pSong->metaLoopDisabled)
+        {
+            // Handle counted loops. loopbackCount == -1 means infinite.
+            if (pSong->loopbackCount > 0)
+            {
+                pSong->loopbackCount--;
+            }
+            if (pSong->loopbackCount == 0)
+            {
+                // Done looping; clear state and do not request reloop.
+                pSong->loopbackSaved = FALSE;
+            }
+            else
+            {
+                // Restart: end current notes to avoid hangs, then restore saved positions.
+                GM_EndSongNotes(pSong);
+                for (int i = 0; i < MAX_TRACKS; i++)
+                {
+                    pSong->ptrack[i] = pSong->pTrackPositionSave[i];
+                    pSong->trackticks[i] = pSong->trackTicksSave[i];
+                    pSong->trackon[i] = pSong->trackStatusSave[i];
+                }
+                pSong->CurrentMidiClock = pSong->currentMidiClockSave;
+                pSong->songMicroseconds = pSong->songMicrosecondsSave;
+                result = TRUE; // signal reloop to caller
+            }
+        }
+    }
+
+    if (buf != stackBuf)
+    {
+        XDisposePtr((XPTR)buf);
+    }
+    return result;
 }
 
 // Walk through the midi stream and process midi events for one slice of time.
@@ -3287,7 +3345,7 @@ UpdateDeltaTime:
             midi_stream = temp_midi_stream;
             pSong->trackticks[currentTrack] += (IFLOAT)(value << 6);
 //          pSong->trackcumuticks[currentTrack] += value;
-//          printf("track %ld, time %ld\n", (long)currentTrack, (long)pSong->trackticks[currentTrack]);
+//          printf("track %ld, time %ld\n", (int32_t)currentTrack, (int32_t)pSong->trackticks[currentTrack]);
             goto Do_GetEvent;
         }
         goto ServeNextTrack;
@@ -3352,7 +3410,7 @@ GetMIDIevent:
                         char *allocated = NULL;
                         if (value > 0)
                         {
-                            allocated = (char *)XNewPtr((long)value + 1);
+                            allocated = (char *)XNewPtr((int32_t)value + 1);
                             if (allocated)
                             {
                                 XBlockMove(metaPtr, allocated, value);
@@ -3360,7 +3418,7 @@ GetMIDIevent:
                                 cbPtr = allocated; // pass copy
                             }
                         }
-                        PV_CallSongMetaEventCallback(threadContext, pSong, midi_byte, cbPtr, value, (short)currentTrack);
+                        PV_CallSongMetaEventCallback(threadContext, pSong, midi_byte, cbPtr, value, (int16_t)currentTrack);
                         if (allocated)
                         {
                             XDisposePtr((XPTR)allocated);
@@ -3381,7 +3439,7 @@ GetMIDIevent:
                     value = PV_ReadVariableLengthMidi(&temp_midi_stream);   // get length
                     // there might be a problem here. need to relook into this.
                     // maybe we should only do these callbacks during NORMAL_SCAN??
-                    PV_CallSongMetaEventCallback(threadContext, pSong, midi_byte, (void *)temp_midi_stream, value, (short)currentTrack);
+                    PV_CallSongMetaEventCallback(threadContext, pSong, midi_byte, (void *)temp_midi_stream, value, (int16_t)currentTrack);
 
                     if (midi_byte == 0x06)
                     {
@@ -3423,7 +3481,7 @@ GetMIDIevent:
                 // End-of-track:
                 case 0x2F:
             //      if (pSong->AnalyzeMode == SCAN_NORMAL)
-            //          printf("End of track %ld\n", (long)currentTrack);
+            //          printf("End of track %ld\n", (int32_t)currentTrack);
                     pSong->trackon[currentTrack] = TRACK_OFF;
                     goto ServeNextTrack;
             }
@@ -3564,79 +3622,48 @@ ServeNextTrack:
     
     if (pSong->AnalyzeMode == SCAN_NORMAL)  // song finished?
     {
-        if (pSong->songTimeCallbackPtr)
+        if (pSong->songFinished == FALSE)
         {
-            (*pSong->songTimeCallbackPtr)(threadContext, pSong, (UINT32)pSong->songMicroseconds,
-                                                (UINT32)pSong->CurrentMidiClock);
-        }
+            XBOOL   stopSong, loopSong;
 
-        if (reloopTracks)
-        {
-            short int   count;
+            // we have the ability to loop x number of times, or loop forever.
+            // If loopSong is TRUE, then we loop forever but loop x times within the loop
+            stopSong = TRUE;            // stop song
+            loopSong = pSong->loopSong;
 
-            // we've been told to restart at a new position. So restore the sequencer back to the original
-            // saved position, and the next sequencer slice will start processing at the new position
-            reloopTracks = FALSE;
-            for (count = 0; count < MAX_TRACKS; count++)
+            if (pSong->songMaxLoopCount)
             {
-                pSong->ptrack[count] = pSong->pTrackPositionSave[count];
-                pSong->trackticks[count] = pSong->trackTicksSave[count];
-                pSong->trackon[count] = pSong->trackStatusSave[count];
-            }
-            pSong->CurrentMidiClock = pSong->currentMidiClockSave;
-            pSong->songMicroseconds = pSong->songMicrosecondsSave;
-            pSong->CurrentMidiClock -= pSong->MIDIDivision;
+                loopSong = TRUE;
+                if (pSong->songLoopCount >= pSong->songMaxLoopCount)
 
-            // 1 000 000 / 22050 * 256
-            //  1 second / sample rate * samples
-            pSong->songMicroseconds -= (UFLOAT)BAE_GetSliceTimeInMicroseconds();
-            GM_KillSongNotes(pSong);    // go ahead and stop all notes currently playing. This will insure that
-                                        // there are no hanging notes at loop restart
-        }
-
-        if ((reloopTracks == FALSE) && (GM_IsSongDone(pSong)))
-        {
-            if (pSong->songFinished == FALSE)
-            {
-                XBOOL   stopSong, loopSong;
-
-                // we have the ability to loop x number of times, or loop forever.
-                // If loopSong is TRUE, then we loop forever but loop x times within the loop
-                stopSong = TRUE;            // stop song
-                loopSong = pSong->loopSong;
-
-                if (pSong->songMaxLoopCount)
                 {
-                    loopSong = TRUE;
-                    if (pSong->songLoopCount >= pSong->songMaxLoopCount)
+                    pSong->songLoopCount = -1;  // let increment set it to zero
+                    if (pSong->loopSong)
                     {
-                        pSong->songLoopCount = -1;  // let increment set it to zero
-                        if (pSong->loopSong)
-                        {
-                            loopSong = TRUE;
-                        }
-                        else
-                        {
-                            loopSong = FALSE;
-                            stopSong = TRUE;
-                            pSong->songMaxLoopCount = 0;    // stop loop
-                        }
+                        loopSong = TRUE;
                     }
-                    pSong->songLoopCount++;
+                    else
+                    {
+                        loopSong = FALSE;
+                        stopSong = TRUE;
+                        pSong->songMaxLoopCount = 0;    // stop loop
+                    }
                 }
 
-                if (loopSong)
-                {
-                    // reconfigure song and loop
-                    PV_ConfigureMusic(pSong);
-                    stopSong = FALSE;
-                }
-                if (stopSong)
-                {
-                    // call callback and finish
-                    PV_CallSongCallback(threadContext, pSong, TRUE);
-                    pSong->songFinished = TRUE;
-                }
+                pSong->songLoopCount++;
+            }
+
+            if (loopSong)
+            {
+                // reconfigure song and loop
+                PV_ConfigureMusic(pSong);
+                stopSong = FALSE;
+            }
+            if (stopSong)
+            {
+                // call callback and finish
+                PV_CallSongCallback(threadContext, pSong, TRUE);
+                pSong->songFinished = TRUE;
             }
         }
     }
@@ -3648,7 +3675,7 @@ ServeNextTrack:
 void PV_ProcessSequencerEvents(void *threadContext)
 {
     GM_Song     *pSong;
-    short int   count;
+    int16_t   count;
     GM_Mixer    *pMixer;
 
     pMixer = GM_GetCurrentMixer();
@@ -3658,9 +3685,9 @@ void PV_ProcessSequencerEvents(void *threadContext)
         {   // if enabled, this will fix the drift of real time with our synth time. This
             // is used only when real time midi data, that is being time stamped with
             // XMicroseconds is enabled
-            long    drift;
+            int32_t    drift;
 
-            drift = (long)XMicroseconds() - (long)pMixer->syncCount;
+            drift = (int32_t)XMicroseconds() - (int32_t)pMixer->syncCount;
             if (drift > 1000)   // if drift more than 1 ms reset
             {
                 pMixer->syncCount = XMicroseconds();
@@ -3693,9 +3720,9 @@ void PV_ProcessSequencerEvents(void *threadContext)
     }
 }
 
-static void PV_EndSongChannelNotes(GM_Song *pSong, short int channel)
+static void PV_EndSongChannelNotes(GM_Song *pSong, int16_t channel)
 {
-    register short int      count;
+    register int16_t      count;
     register GM_Mixer       *pMixer;
     register GM_Voice       *pNote;
 
@@ -3712,13 +3739,10 @@ static void PV_EndSongChannelNotes(GM_Song *pSong, short int channel)
                     if (pNote->voiceMode != VOICE_UNUSED)
                     {
                         pNote->voiceMode = VOICE_RELEASING;
-                        pNote->NoteDecay = 2;
-                        pNote->volumeADSRRecord.mode = ADSR_TERMINATE;
-                        pNote->volumeADSRRecord.currentPosition = 0;
-                        pNote->volumeADSRRecord.ADSRLevel[0] = 0;
+                        pNote->NoteDecay = 0;
                         pNote->volumeADSRRecord.ADSRTime[0] = 1;
                         pNote->volumeADSRRecord.ADSRFlags[0] = ADSR_TERMINATE;
-                        pNote->NoteVolumeEnvelopeBeforeLFO = 0;     // so these notes can be reused
+                        pNote->volumeADSRRecord.ADSRLevel[0] = 0; // just in case
                     }
                 }
             }
@@ -3726,9 +3750,9 @@ static void PV_EndSongChannelNotes(GM_Song *pSong, short int channel)
     }
 }
 
-void GM_MuteChannel(GM_Song *pSong, short int channel)
+void GM_MuteChannel(GM_Song *pSong, int16_t channel)
 {
-    short int   count;
+    int16_t   count;
     GM_Mixer    *pMixer;
 
     pMixer = GM_GetCurrentMixer();
@@ -3756,9 +3780,9 @@ void GM_MuteChannel(GM_Song *pSong, short int channel)
     }
 }
 
-void GM_UnmuteChannel(GM_Song *pSong, short int channel)
+void GM_UnmuteChannel(GM_Song *pSong, int16_t channel)
 {
-    short int   count;
+    int16_t   count;
     GM_Mixer    *pMixer;
 
     pMixer = GM_GetCurrentMixer();
@@ -3788,7 +3812,7 @@ void GM_UnmuteChannel(GM_Song *pSong, short int channel)
 // will write only 16 bytes for 16 Midi channels
 void GM_GetChannelMuteStatus(GM_Song *pSong, char *pStatus)
 {
-    short int   count, count2;
+    int16_t   count, count2;
     GM_Mixer    *pMixer;
 
     pMixer = GM_GetCurrentMixer();
@@ -3825,9 +3849,9 @@ void GM_GetChannelMuteStatus(GM_Song *pSong, char *pStatus)
     }
 }
 
-void GM_SoloChannel(GM_Song *pSong, short int channel)
+void GM_SoloChannel(GM_Song *pSong, int16_t channel)
 {
-    short int   count;
+    int16_t   count;
     GM_Mixer    *pMixer;
 
     pMixer = GM_GetCurrentMixer();
@@ -3863,11 +3887,11 @@ void GM_SoloChannel(GM_Song *pSong, short int channel)
     }
 }
 
-void GM_UnsoloChannel(GM_Song *pSong, short int channel)
+void GM_UnsoloChannel(GM_Song *pSong, int16_t channel)
 {
-    short int   count;
+    int16_t   count;
     GM_Mixer    *pMixer;
-    short int   currentSoloChannels;
+    int16_t   currentSoloChannels;
 
     pMixer = GM_GetCurrentMixer();
     if ( (channel < MAX_CHANNELS) && (channel >= 0) )
@@ -3882,16 +3906,13 @@ void GM_UnsoloChannel(GM_Song *pSong, short int channel)
                 // mute un solo'd channels
                 for (count = 0; count < MAX_CHANNELS; count++)
                 {
-                    if (count != channel)
+                    if (XTestBit(&pSong->soloChannelMuted, count) == FALSE)
                     {
-                        if (XTestBit(&pSong->soloChannelMuted, count) == FALSE)
-                        {
-                            PV_EndSongChannelNotes(pSong, count);
-                        }
-                        else
-                        {
-                            currentSoloChannels++;
-                        }
+                        PV_EndSongChannelNotes(pSong, count);
+                    }
+                    else
+                    {
+                        currentSoloChannels++;
                     }
                 }
                 // only EndSongChannelNotes on the unSolo'd channel if there 
@@ -3922,7 +3943,7 @@ void GM_UnsoloChannel(GM_Song *pSong, short int channel)
 // will write only 16 bytes for 16 Midi channels
 void GM_GetChannelSoloStatus(GM_Song *pSong, char *pStatus)
 {
-    short int   count, count2;
+    int16_t   count, count2;
     GM_Mixer    *pMixer;
 
     pMixer = GM_GetCurrentMixer();
@@ -3959,9 +3980,9 @@ void GM_GetChannelSoloStatus(GM_Song *pSong, char *pStatus)
     }
 }
 
-static void PV_EndSongTrackNotes(GM_Song *pSong, short int track)
+static void PV_EndSongTrackNotes(GM_Song *pSong, int16_t track)
 {
-    register short int      count;
+    register int16_t      count;
     register GM_Mixer       *pMixer;
     register GM_Voice       *pNote;
 
@@ -3992,9 +4013,9 @@ static void PV_EndSongTrackNotes(GM_Song *pSong, short int track)
     }
 }
 
-void GM_MuteTrack(GM_Song *pSong, short int track)
+void GM_MuteTrack(GM_Song *pSong, int16_t track)
 {
-    short int   count;
+    int16_t   count;
     GM_Mixer    *pMixer;
 
     pMixer = GM_GetCurrentMixer();
@@ -4026,9 +4047,9 @@ void GM_MuteTrack(GM_Song *pSong, short int track)
     }
 }
 
-void GM_UnmuteTrack(GM_Song *pSong, short int track)
+void GM_UnmuteTrack(GM_Song *pSong, int16_t track)
 {
-    short int   count;
+    int16_t   count;
     GM_Mixer    *pMixer;
 
     pMixer = GM_GetCurrentMixer();
@@ -4058,7 +4079,7 @@ void GM_UnmuteTrack(GM_Song *pSong, short int track)
 
 void GM_GetTrackMuteStatus(GM_Song *pSong, char *pStatus)
 {
-    short int   count, count2;
+    int16_t   count, count2;
     GM_Mixer    *pMixer;
 
     pMixer = GM_GetCurrentMixer();
@@ -4095,9 +4116,9 @@ void GM_GetTrackMuteStatus(GM_Song *pSong, char *pStatus)
     }
 }
 
-void GM_SoloTrack(GM_Song *pSong, short int track)
+void GM_SoloTrack(GM_Song *pSong, int16_t track)
 {
-    short int   count;
+    int16_t   count;
     GM_Mixer    *pMixer;
 
     pMixer = GM_GetCurrentMixer();
@@ -4137,11 +4158,11 @@ void GM_SoloTrack(GM_Song *pSong, short int track)
     }
 }
 
-void GM_UnsoloTrack(GM_Song *pSong, short int track)
+void GM_UnsoloTrack(GM_Song *pSong, int16_t track)
 {
-    short int   count;
+    int16_t   count;
     GM_Mixer    *pMixer;
-    short int   currentSoloTracks;
+    int16_t   currentSoloTracks;
 
     pMixer = GM_GetCurrentMixer();
     if ( (track < MAX_TRACKS) && (track >= 0) )
@@ -4197,7 +4218,7 @@ void GM_UnsoloTrack(GM_Song *pSong, short int track)
 // will write only MAX_TRACKS bytes for MAX_TRACKS Midi tracks
 void GM_GetTrackSoloStatus(GM_Song *pSong, char *pStatus)
 {
-    short int   count, count2;
+    int16_t   count, count2;
     GM_Mixer    *pMixer;
 
     pMixer = GM_GetCurrentMixer();
@@ -4236,7 +4257,7 @@ void GM_GetTrackSoloStatus(GM_Song *pSong, char *pStatus)
 
 // If allowPitch is FALSE, then "GM_SetSongPitchOffset" will have no effect on passed 
 // channel (0 to 15)
-void GM_AllowChannelPitchOffset(GM_Song *pSong, unsigned short int channel, XBOOL allowPitch)
+void GM_AllowChannelPitchOffset(GM_Song *pSong, uint16_t channel, XBOOL allowPitch)
 {
     if (pSong)
     {
@@ -4252,7 +4273,7 @@ void GM_AllowChannelPitchOffset(GM_Song *pSong, unsigned short int channel, XBOO
 }
 
 // Return if the passed channel will allow pitch offset
-XBOOL GM_DoesChannelAllowPitchOffset(GM_Song *pSong, unsigned short int channel)
+XBOOL GM_DoesChannelAllowPitchOffset(GM_Song *pSong, uint16_t channel)
 {
     XBOOL   flag;
 
@@ -4265,7 +4286,7 @@ XBOOL GM_DoesChannelAllowPitchOffset(GM_Song *pSong, unsigned short int channel)
 }
 
 // set note offset in semi tones    (12 is down an octave, -12 is up an octave)
-void GM_SetSongPitchOffset(GM_Song *pSong, long offset)
+void GM_SetSongPitchOffset(GM_Song *pSong, int32_t offset)
 {
     if (pSong)
     {
@@ -4274,9 +4295,9 @@ void GM_SetSongPitchOffset(GM_Song *pSong, long offset)
 }
 
 // return note offset in semi tones (12 is down an octave, -12 is up an octave)
-long GM_GetSongPitchOffset(GM_Song *pSong)
+int32_t GM_GetSongPitchOffset(GM_Song *pSong)
 {
-    long    offset;
+    int32_t    offset;
 
     offset = 0;
     if (pSong)

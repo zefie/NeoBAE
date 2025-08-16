@@ -60,7 +60,7 @@
 **  12/16/97    Modified BAE_GetDeviceID and BAE_SetDeviceID to pass a device parameter pointer
 **              that is specific for that device.
 **  1/9/98      Added BAE_FileDelete
-**  2/13/98     Changed BAE_AquireAudioCard to use unsigned longs
+**  2/13/98     Changed BAE_AquireAudioCard to use uint32_ts
 **  3/17/98     Added BAE_Is8BitSupported
 **
 **  6/5/98      Jim Nitchals RIP    1/15/62 - 6/5/98
@@ -113,12 +113,13 @@
 #define X_FILETYPE_RMF  "IREZ"
 #define X_FILETYPE_AIFF "FORM"
 #define X_FILETYPE_WAVE "RIFF"
+#include <stdint.h>
 
 // This file contains API's that need to be defined in order to get BAE (IgorAudio)
 // to link and compile.
 
 // Debug tool
-void BAE_PrintHexDump(void *address, long length);
+void BAE_PrintHexDump(void *address, int32_t length);
 
 // display memory allocated and other info.
 // detailLevel of 0 should just display size, 1 should display links and addresses
@@ -137,7 +138,7 @@ int BAE_Cleanup(void);
 
 // **** Memory management
 // allocate a block of locked, zeroed memory. Return a pointer
-void *BAE_Allocate(unsigned long size);
+void *BAE_Allocate(uint32_t size);
 
 // dispose of memory allocated with BAE_Allocate
 void BAE_Deallocate(void *memoryBlock);
@@ -146,27 +147,27 @@ void BAE_Deallocate(void *memoryBlock);
 void BAE_AllocDebug(int debug);
 
 // return total number of bytes allocate at this moment
-unsigned long BAE_GetSizeOfMemoryUsed(void);
+uint32_t BAE_GetSizeOfMemoryUsed(void);
 
 // return maximum number of bytes allocated at any time
-unsigned long BAE_GetMaxSizeOfMemoryUsed(void);
+uint32_t BAE_GetMaxSizeOfMemoryUsed(void);
 
 // Given a memory pointer and a size, validate of memory pointer is a valid memory address
 // with at least size bytes of data avaiable from the pointer.
 // This is used to determine if a memory pointer and size can be accessed without 
 // causing a memory protection fault.
 // return 0 for valid, or 1 for bad pointer, or 2 for not supported. 
-int BAE_IsBadReadPointer(void *memoryBlock, unsigned long size);
+int BAE_IsBadReadPointer(void *memoryBlock, uint32_t size);
 
 // this will return the size of the memory pointer allocated with BAE_Allocate. Return
 // 0 if you don't support this feature
-unsigned long BAE_SizeOfPointer(void *memoryBlock);
+uint32_t BAE_SizeOfPointer(void *memoryBlock);
 
 // block move memory. This is basicly memmove, but its exposed to take advantage of
 // special block move speed ups, various hardware has available.
 // NOTE:    Must use a function like memmove that insures a valid copy in the case
 //          of overlapping memory blocks.
-void BAE_BlockMove(void *source, void *dest, unsigned long size);
+void BAE_BlockMove(void *source, void *dest, uint32_t size);
 
 // **** Audio Card modifiers
 // Return 1 if stereo hardware is supported, otherwise 0.
@@ -180,27 +181,27 @@ int BAE_Is16BitSupported(void);
 
 // returned volume is in the range of 0 to 256. If you're hardware doesn't support this
 // range, just scale it.
-short int BAE_GetHardwareVolume(void);
+int16_t BAE_GetHardwareVolume(void);
 
 // theVolume is in the range of 0 to 256. If you're hardware doesn't support this
 // range, just scale it.
-void BAE_SetHardwareVolume(short int theVolume);
+void BAE_SetHardwareVolume(int16_t theVolume);
 
 // returned balance is in the range of -256 to 256. Left to right. If you're hardware doesn't support this
 // range, just scale it.
-short int BAE_GetHardwareBalance(void);
+int16_t BAE_GetHardwareBalance(void);
 
 // 'balance' is in the range of -256 to 256. Left to right. If you're hardware doesn't support this
 // range, just scale it.
-void BAE_SetHardwareBalance(short int balance);
+void BAE_SetHardwareBalance(int16_t balance);
 
 // **** Timing services
 // return microseconds, preferably quantized better than 1000 microseconds, but can live
 // with it being as bad as 11000 microseconds.
-unsigned long BAE_Microseconds(void);
+uint32_t BAE_Microseconds(void);
 
 // wait or sleep this thread for this many microseconds
-void BAE_WaitMicroseconds(unsigned long wait);
+void BAE_WaitMicroseconds(uint32_t wait);
 
 // **** File support
 // NOTE: about the fileName parameters. For "C" string path name based OS's the name
@@ -214,45 +215,45 @@ void BAE_CopyFileNameNative(void *fileNameSource, void *fileNameDest);
 
 // Create a file, delete orignal if duplicate file name.
 // Return -1 if error
-long BAE_FileCreate(void *fileName);
+int32_t BAE_FileCreate(void *fileName);
 
 // Delete a file. Returns -1 if there's an error, or 0 if ok.
-long BAE_FileDelete(void *fileName);
+int32_t BAE_FileDelete(void *fileName);
 
 // Open a file
-// Return -1 if error, otherwise file handle
-long BAE_FileOpenForRead(void *fileName);
-long BAE_FileOpenForWrite(void *fileName);
-long BAE_FileOpenForReadWrite(void *fileName);
+// Return -1 if error, otherwise file handle (pointer-sized to avoid truncation on 64-bit)
+intptr_t BAE_FileOpenForRead(void *fileName);
+intptr_t BAE_FileOpenForWrite(void *fileName);
+intptr_t BAE_FileOpenForReadWrite(void *fileName);
 
 // Close a file
-void BAE_FileClose(long fileReference);
+void BAE_FileClose(intptr_t fileReference);
 
 // Read a block of memory from a file
 // Return -1 if error, otherwise length of data read.
-long BAE_ReadFile(long fileReference, void *pBuffer, long bufferLength);
+int32_t BAE_ReadFile(intptr_t fileReference, void *pBuffer, int32_t bufferLength);
 
 // Write a block of memory from a file
 // Return -1 if error, otherwise length of data written.
-long BAE_WriteFile(long fileReference, void *pBuffer, long bufferLength);
+int32_t BAE_WriteFile(intptr_t fileReference, void *pBuffer, int32_t bufferLength);
 
 // set file position in absolute file byte position
-long BAE_SetFilePosition(long fileReference, unsigned long filePosition);
+int32_t BAE_SetFilePosition(intptr_t fileReference, uint32_t filePosition);
 
 // get file position in absolute file bytes
-unsigned long BAE_GetFilePosition(long fileReference);
+uint32_t BAE_GetFilePosition(intptr_t fileReference);
 
 // get length of file
-unsigned long BAE_GetFileLength(long fileReference);
+uint32_t BAE_GetFileLength(intptr_t fileReference);
 
 // set the length of a file. Return 0, if ok, or -1 for error
-int BAE_SetFileLength(long fileReference, unsigned long newSize);
+int BAE_SetFileLength(intptr_t fileReference, uint32_t newSize);
 
 // **** Audio card support
 // Aquire and enabled audio card. sampleRate is 44100, 22050, or 11025; channels is 1 or 2;
 // bits is 8 or 16.
 // return 0 if ok, -1 if failed
-int BAE_AquireAudioCard(void *threadContext, unsigned long sampleRate, unsigned long channels, unsigned long bits);
+int BAE_AquireAudioCard(void *threadContext, uint32_t sampleRate, uint32_t channels, uint32_t bits);
 
 // Release and free audio card.
 // return 0 if ok, -1 if failed.
@@ -270,7 +271,7 @@ int BAE_IsMuted(void);
 // If there's no change, do nothing, othewise modify the channel volumes.
 // This will change an active rendered's voice placement.
 
-void BAE_ProcessRouteBus(int currentRoute, long *pChannels, int count);
+void BAE_ProcessRouteBus(int currentRoute, int32_t *pChannels, int count);
 
 // If no thread support, this will be called during idle times. Used for host
 // rendering without threads.
@@ -284,12 +285,12 @@ void BAE_LockAudioFrameThread(void);
 // block
 void BAE_BlockAudioFrameThread(void);
 
-unsigned long BAE_GetDeviceSamplesPlayedPosition(void);
+uint32_t BAE_GetDeviceSamplesPlayedPosition(void);
 
 // number of devices. ie different versions of the BAE connection. DirectSound and waveOut
 // return number of devices. ie 1 is one device, 2 is two devices.
 // NOTE: This function needs to function before any other calls may have happened.
-long BAE_MaxDevices(void);
+int32_t BAE_MaxDevices(void);
 
 
 // NOTE:
@@ -307,11 +308,11 @@ struct BAEWinOSParameters
     void            *windowHandle;
 
     // How many audio frames to generate at one time 
-    unsigned long   synthFramesPerBlock;    // NOTE: the waveOut device ignore this parameter
+    uint32_t   synthFramesPerBlock;    // NOTE: the waveOut device ignore this parameter
     // How much time to sleep in milliseconds between buffer builds
-    unsigned long   audioPeriodSleepTime;
+    uint32_t   audioPeriodSleepTime;
 
-    unsigned long   undefined[32];          // used for future expansion
+    uint32_t   undefined[32];          // used for future expansion
 };
 typedef struct BAEWinOSParameters BAEWinOSParameters;
 
@@ -320,12 +321,12 @@ typedef struct BAEWinOSParameters BAEWinOSParameters;
 //          Also you will need to call BAE_ReleaseAudioCard then BAE_AquireAudioCard
 //          in order for the change to take place. deviceParameter is a device specific
 //          pointer. Pass NULL if you don't know what to use.
-void BAE_SetDeviceID(long deviceID, void *deviceParameter);
+void BAE_SetDeviceID(int32_t deviceID, void *deviceParameter);
 
 // return current device ID, and fills in the deviceParameter with a device specific
 // pointer. It will pass NULL if there is nothing to use.
 // NOTE: This function needs to function before any other calls may have happened.
-long BAE_GetDeviceID(void *deviceParameter);
+int32_t BAE_GetDeviceID(void *deviceParameter);
 
 // get deviceID name 
 // NOTE:    This function needs to function before any other calls may have happened.
@@ -336,11 +337,11 @@ long BAE_GetDeviceID(void *deviceParameter);
 //          "WinOS,waveOut,multi threaded"
 //          "WinOS,VxD,low level hardware"
 //          "WinOS,plugin,Director"
-void BAE_GetDeviceName(long deviceID, char *cName, unsigned long cNameLength);
+void BAE_GetDeviceName(int32_t deviceID, char *cName, uint32_t cNameLength);
 
 // Return the number of microseconds of real time that will be generated when calling
 // BAE_BuildMixerSlice.
-unsigned long BAE_GetSliceTimeInMicroseconds(void);
+uint32_t BAE_GetSliceTimeInMicroseconds(void);
 
 // Return the number of buffer blocks that are built at one time. The value returned
 // from this function and BAE_GetSliceTimeInMicroseconds will give you the amount
@@ -348,7 +349,7 @@ unsigned long BAE_GetSliceTimeInMicroseconds(void);
 int BAE_GetAudioBufferCount(void);
 
 // Return the number of bytes used for audio buffer for output to card
-long BAE_GetAudioByteBufferSize(void);
+int32_t BAE_GetAudioByteBufferSize(void);
 
 // **** Audio Engine feedback functions. These functions are used to direct or get
 //      information about the engine.
@@ -362,12 +363,12 @@ long BAE_GetAudioByteBufferSize(void);
 // at the moment. sampleFrames is how many sample frames. These two values should match
 // ie. sampleFrames = bufferByteLength / channels / bitsize / 8
 extern void BAE_BuildMixerSlice(void *threadContext, void *pAudioBuffer, 
-                    long bufferByteLength,
-                    long sampleFrames);
+                    int32_t bufferByteLength,
+                    int32_t sampleFrames);
 
 // Return the maximumn number of samples for 11 milliseconds worth of 44 khz data.
 // Typically this is 512. Use this in your calculation of audio buffers
-extern short BAE_GetMaxSamplePerSlice(void);
+extern int16_t BAE_GetMaxSamplePerSlice(void);
 
 // MUTEX
 
@@ -394,7 +395,7 @@ extern int BAE_SetFrameThreadPriority(void *threadContext, int priority);
 extern int  BAE_DestroyFrameThread(void* threadContext);
 
 // Make the frame thread sleep for the given number of milliseconds
-extern int  BAE_SleepFrameThread(void* threadContext, long msec);
+extern int  BAE_SleepFrameThread(void* threadContext, int32_t msec);
 
 // CAPTURE API
 
@@ -403,8 +404,8 @@ extern int  BAE_SleepFrameThread(void* threadContext, long msec);
 // *pCaptureHandle will contain a device dependent ID for the capture device.
 // pCaptureHandle can be NULL.
 // return 0 if ok, -1 if failed
-int BAE_AquireAudioCapture(void *threadContext, unsigned long sampleRate, unsigned long channels, unsigned long bits,
-                            unsigned long *pCaptureHandle);
+int BAE_AquireAudioCapture(void *threadContext, uint32_t sampleRate, uint32_t channels, uint32_t bits,
+                            uint32_t *pCaptureHandle);
 
 // Release and free audio capture device
 // return 0 if ok, -1 if failed.
@@ -428,7 +429,7 @@ typedef enum
 // Called when the audio buffer has been filled by the capture audio subsystem.
 //  DATA_READY_CAPTURE
 //      parmeter1 is a pointer to an char * which is the pointer to the audio block
-//      parmeter2 is a pointer to an unsigned long which is the length of buffer
+//      parmeter2 is a pointer to an uint32_t which is the length of buffer
 
 typedef void (*BAE_CaptureDone)(void *callbackContext, BAECaptureMessage message, void *parmeter1, void *parameter2);
 
@@ -436,7 +437,7 @@ typedef void (*BAE_CaptureDone)(void *callbackContext, BAECaptureMessage message
 // asynchronous. When this buffer is filled, the function done will be called.
 // $$kk: 10.09.98: changed this
 // $$kk: 10.15.98: should go back and make buffer size configurable later!
-//int BAE_StartAudioCapture(void *buffer, unsigned long bufferSize, BAE_CaptureDone done, void *callbackContext);
+//int BAE_StartAudioCapture(void *buffer, uint32_t bufferSize, BAE_CaptureDone done, void *callbackContext);
 int BAE_StartAudioCapture(BAE_CaptureDone done, void *callbackContext);
 
 // stop the capture hardware
@@ -449,19 +450,19 @@ int BAE_ResumeAudioCapture(void);
 // number of capture devices
 // return number of devices. ie 1 is one device, 2 is two devices.
 // NOTE: This function needs to function before any other calls may have happened.
-long BAE_MaxCaptureDevices(void);
+int32_t BAE_MaxCaptureDevices(void);
 
 // set the current device. device is from 0 to BAE_MaxCaptureDevices()
 // NOTE:    This function needs to function before any other calls may have happened.
 //          Also you will need to call BAE_ReleaseAudioCapture then BAE_AquireAudioCapture
 //          in order for the change to take place. deviceParameter is a device specific
 //          pointer. Pass NULL if you don't know what to use.
-void BAE_SetCaptureDeviceID(long deviceID, void *deviceParameter);
+void BAE_SetCaptureDeviceID(int32_t deviceID, void *deviceParameter);
 
 // return current device ID, and fills in the deviceParameter with a device specific
 // pointer. It will pass NULL if there is nothing to use.
 // NOTE: This function needs to function before any other calls may have happened.
-long BAE_GetCaptureDeviceID(void *deviceParameter);
+int32_t BAE_GetCaptureDeviceID(void *deviceParameter);
 
 // get deviceID name 
 // NOTE:    This function needs to function before any other calls may have happened.
@@ -472,11 +473,11 @@ long BAE_GetCaptureDeviceID(void *deviceParameter);
 //          "WinOS,waveIn,multi threaded"
 //          "WinOS,VxD,low level hardware"
 //          "WinOS,plugin,Director"
-void BAE_GetCaptureDeviceName(long deviceID, char *cName, unsigned long cNameLength);
+void BAE_GetCaptureDeviceName(int32_t deviceID, char *cName, uint32_t cNameLength);
 
 // return the number of frames in the capture buffer
 // $$kk: 10.13.98: added this
-unsigned long BAE_GetCaptureBufferSizeInFrames();
+uint32_t BAE_GetCaptureBufferSizeInFrames();
 
 // return the number of buffers used in capture.  the capture latency can be 
 // determined from this and BAE_GetCaptureBufferSizeInFrames.
@@ -485,7 +486,7 @@ int BAE_GetCaptureBufferCount();
 
 // Get the count of samples captured at the capture device
 // $$kk: 10.14.98: added this; need to implement!
-unsigned long BAE_GetDeviceSamplesCapturedPosition();
+uint32_t BAE_GetDeviceSamplesCapturedPosition();
 
 // backward compatibility
 #define HAE_WaitMicroseocnds                BAE_WaitMicroseconds

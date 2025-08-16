@@ -34,7 +34,7 @@
 **
 **  Decodes/Encodes MPEG sound files
 **
-**  © Copyright 1998-2000 Beatnik, Inc, All Rights Reserved.
+**  ï¿½ Copyright 1998-2000 Beatnik, Inc, All Rights Reserved.
 **  Written by Steve Hales
 **
 **  Beatnik products contain certain trade secrets and confidential and
@@ -165,7 +165,7 @@ static void PV_CleanupWriteFile(void)
     }
 }
 
-static void PV_WriteToFile(char *buffer, unsigned long size)
+static void PV_WriteToFile(char *buffer, uint32_t size)
 {
     if (fileOut)
     {
@@ -176,7 +176,7 @@ static void PV_WriteToFile(char *buffer, unsigned long size)
 
 #if USE_MPEG_DECODER != 0
 #if 0
-    #pragma mark ¥¥¥¥¥¥¥¥¥¥¥¥¥¥ MPEG DECODER ¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥
+    #pragma mark ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ MPEG DECODER ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 #endif
 
 XMPEGDecodedData * XOpenMPEGStreamFromXFILE(XFILE file, OPErr *pErr)
@@ -204,8 +204,8 @@ XMPEGDecodedData * XOpenMPEGStreamFromXFILE(XFILE file, OPErr *pErr)
                 pStream->lengthInBytes = MPG_GetSizeInBytes(pStream->stream);
                 pStream->lengthInSamples = MPG_GetNumberOfSamples(pStream->stream);
 
-                pStream->frameBufferSize = (unsigned long)MPG_GetBufferSize(pStream->stream);
-                pStream->maxFrameBuffers = (unsigned long)MPG_GetMaxBuffers(pStream->stream);
+                pStream->frameBufferSize = (uint32_t)MPG_GetBufferSize(pStream->stream);
+                pStream->maxFrameBuffers = (uint32_t)MPG_GetMaxBuffers(pStream->stream);
 
             }
             else
@@ -225,7 +225,7 @@ XMPEGDecodedData * XOpenMPEGStreamFromXFILE(XFILE file, OPErr *pErr)
     return pStream;
 }
 
-XMPEGDecodedData * XOpenMPEGStreamFromMemory(XPTR pBlock, unsigned long blockSize, OPErr *pErr)
+XMPEGDecodedData * XOpenMPEGStreamFromMemory(XPTR pBlock, uint32_t blockSize, OPErr *pErr)
 {
     XMPEGDecodedData    *pStream;
 
@@ -252,8 +252,8 @@ XMPEGDecodedData * XOpenMPEGStreamFromMemory(XPTR pBlock, unsigned long blockSiz
             pStream->lengthInBytes = MPG_GetSizeInBytes(pStream->stream);
             pStream->lengthInSamples = MPG_GetNumberOfSamples(pStream->stream);
 
-            pStream->frameBufferSize = (unsigned long)MPG_GetBufferSize(pStream->stream);
-            pStream->maxFrameBuffers = (unsigned long)MPG_GetMaxBuffers(pStream->stream);
+            pStream->frameBufferSize = (uint32_t)MPG_GetBufferSize(pStream->stream);
+            pStream->maxFrameBuffers = (uint32_t)MPG_GetMaxBuffers(pStream->stream);
             *pErr = NO_ERR;
         }
         else
@@ -342,7 +342,7 @@ XMPEGDecodedData*   stream;
         decodingData = XNewPtr(decodingBytes);
         if (decodingData)
         {
-        UINT32          const bytesPerFrame = dst->channels * sizeof(short);
+        UINT32          const bytesPerFrame = dst->channels * sizeof(int16_t);
         XBYTE*          data;
         UINT32          startByte;
         UINT32          count;
@@ -430,14 +430,14 @@ XMPEGDecodedData*   stream;
 
 #if USE_MPEG_ENCODER != 0
 #if 0
-    #pragma mark ¥¥¥¥¥¥¥¥¥¥¥¥¥¥ MPEG ENCODER ¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥
+    #pragma mark ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ MPEG ENCODER ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 #endif
 // scan audio data for first non-silent frame from an mpeg stream
-static unsigned long PV_ScanForAudioData(short int* data, unsigned long dataBytes,
-                                            unsigned long channelCount)
+static uint32_t PV_ScanForAudioData(int16_t* data, uint32_t dataBytes,
+                                            uint32_t channelCount)
 {
-    unsigned long       dataWords;
-    unsigned long       offset;
+    uint32_t       dataWords;
+    uint32_t       offset;
 
     dataWords = dataBytes / 2;
     offset = 0;
@@ -456,12 +456,12 @@ static unsigned long PV_ScanForAudioData(short int* data, unsigned long dataByte
 // XProcessMPEGEncoder() seems to prepend some number zero samples to the waveform.
 // Scan the first frame buffer for the first nonzero sample and
 // set *startFrame to the offset to it.
-static unsigned long PV_ScanForAudioDataFromMPEG(XPTR pMPEGStream,
-                                                    unsigned long mpegStreamSize,
-                                                    unsigned long *pFrameBufferCount,
+static uint32_t PV_ScanForAudioDataFromMPEG(XPTR pMPEGStream,
+                                                    uint32_t mpegStreamSize,
+                                                    uint32_t *pFrameBufferCount,
                                                     OPErr *pErr)
 {
-unsigned long       firstNonSilentFrame;
+uint32_t       firstNonSilentFrame;
 XMPEGDecodedData    *stream;
 OPErr               err;
 char                *tempBuffer;
@@ -483,15 +483,15 @@ XBOOL               done;
             }
         }
         
-        tempBuffer = (char *)XNewPtr(stream->frameBufferSize * sizeof(long));
+        tempBuffer = (char *)XNewPtr(stream->frameBufferSize * sizeof(int32_t));
         if (tempBuffer)
         {
             err = XFillMPEGStreamBuffer(stream, tempBuffer, &done);
             if (err == NO_ERR)
             {
-                firstNonSilentFrame = PV_ScanForAudioData((short int*)tempBuffer, 
+                firstNonSilentFrame = PV_ScanForAudioData((int16_t*)tempBuffer, 
                                                 stream->frameBufferSize, 
-                                                (unsigned long)stream->channels);
+                                                (uint32_t)stream->channels);
             }
             XDisposePtr(tempBuffer);
         }
@@ -515,8 +515,8 @@ struct MPEGEncoderPrivate
 {
     void                *encoder;
     XPTR                pCompressedAudio;
-    unsigned long       compressedAudioSizeInBytes;
-    unsigned long       compressedAudioPosition;
+    uint32_t       compressedAudioSizeInBytes;
+    uint32_t       compressedAudioPosition;
 };
 typedef struct MPEGEncoderPrivate MPEGEncoderPrivate;
 #define MPEG_ENCODE_PRIVATE(x)  ((MPEGEncoderPrivate *)(x->pPrivateData))
@@ -535,12 +535,12 @@ XMPEGEncodeData *   XOpenMPEGEncodeStreamFromMemory(GM_Waveform *pAudio,
     {
         if ((pAudio->bitSize == 16) && (pAudio->channels <= 2))
         {
-            encode = (XMPEGEncodeData *)XNewPtr((long)sizeof(XMPEGEncodeData));
+            encode = (XMPEGEncodeData *)XNewPtr((int32_t)sizeof(XMPEGEncodeData));
             if (encode)
             {
                 encode->pAudio = pAudio;
                 encode->encodeRate = encodeRate;
-                encode->pPrivateData = XNewPtr((long)sizeof(MPEGEncoderPrivate));
+                encode->pPrivateData = XNewPtr((int32_t)sizeof(MPEGEncoderPrivate));
                 if (encode->pPrivateData)
                 {
                     pPrivate = MPEG_ENCODE_PRIVATE(encode);
@@ -612,7 +612,7 @@ OPErr XProcessMPEGEncoder(XMPEGEncodeData *stream)
     OPErr               theErr;
     MPEGEncoderPrivate  *pPrivate;
     XPTR                encodedBuffer;
-    unsigned long       encodedLength;
+    uint32_t       encodedLength;
     int                 result;
     char                *resultBuffer;
     XBOOL               lastFrame;
@@ -648,7 +648,7 @@ OPErr XProcessMPEGEncoder(XMPEGEncodeData *stream)
 }
 
 
-OPErr XCloseMPEGEncodeStream(XMPEGEncodeData *stream, XPTR *pReturnedBuffer, unsigned long *pReturnedSize)
+OPErr XCloseMPEGEncodeStream(XMPEGEncodeData *stream, XPTR *pReturnedBuffer, uint32_t *pReturnedSize)
 {
     MPEGEncoderPrivate  *pPrivate;
     OPErr               err;
@@ -680,7 +680,7 @@ OPErr XCloseMPEGEncodeStream(XMPEGEncodeData *stream, XPTR *pReturnedBuffer, uns
 // Given an mpeg bit encode rate, and a sample rate, this will return TRUE if
 // this encoder can encode, or FALSE if it will not work.
 XBOOL XIsValidMPEGSampleRateAndEncodeRate(XMPEGEncodeRate encodeRate, XFIXED sampleRate, 
-        SndCompressionSubType subType, short int numChannels)
+        SndCompressionSubType subType, int16_t numChannels)
 {
     XBOOL               safe;
     int                 count;
@@ -767,10 +767,10 @@ GM_Waveform         hackedWave;
 XMPEGEncodeRate     hackedEncodeRate;
 OPErr               err;
 XMPEGEncodeData*    mpegEncode;
-unsigned long       originalOffset;
+uint32_t       originalOffset;
 
     // capture any original silence prior to encoding
-    originalOffset = PV_ScanForAudioData((short int *)wave->theWaveform,
+    originalOffset = PV_ScanForAudioData((int16_t *)wave->theWaveform,
                                         wave->waveSize,
                                         wave->channels);
 

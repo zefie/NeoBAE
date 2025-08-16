@@ -346,6 +346,7 @@
 #include "GenPriv.h"
 #include "BAE_API.h"
 #include "X_Assert.h"
+#include <stdint.h>
 
 // the only global. Our current mixer pointer.
 GM_Mixer * MusicGlobals = NULL;
@@ -475,9 +476,9 @@ static const XFIXED expDecayLookup[] =
 //   1 500 000 = 1.5 seconds
 //     150 000 = 15 microseconds
 // This is the amount of time to sustain to 96 dB or no volume.
-unsigned long GM_GetSustainDecayLevelInTime(long storedValue)
+uint32_t GM_GetSustainDecayLevelInTime(int32_t storedValue)
 {
-    unsigned long time;
+    uint32_t time;
 
     time = 0;
     if (storedValue < -50)
@@ -496,7 +497,7 @@ unsigned long GM_GetSustainDecayLevelInTime(long storedValue)
 // given a timeInMicroseconds range check between 50000 microseconds and 16 seconds, and return the storable
 // value for ADSRLevel.
 // This is the amount of time to sustain to 96 dB or no volume.
-long GM_SetSustainDecayLevelInTime(unsigned long timeInMicroseconds)
+int32_t GM_SetSustainDecayLevelInTime(uint32_t timeInMicroseconds)
 {
     timeInMicroseconds /= 8;
     if (timeInMicroseconds > ((sizeof(expDecayLookup) / sizeof(XFIXED)) * 50000L))
@@ -507,7 +508,7 @@ long GM_SetSustainDecayLevelInTime(unsigned long timeInMicroseconds)
     {
         timeInMicroseconds = 50000;
     }
-    return -1 * (long)timeInMicroseconds;
+    return -1 * (int32_t)timeInMicroseconds;
 }
 #endif  //#if USE_CREATION_API == TRUE
 
@@ -535,7 +536,7 @@ static const UBYTE defaultVlumeScale[] = {
 */
 
 /*
-static const unsigned short defaultVolumeScale[] = {
+static const uint16_t defaultVolumeScale[] = {
 // new more agressive curve
 296,286,276,267,258,249,241,233,225,217,210,202,196,189,182,176,170,164,159,
 153,148,143,138,133,129,124,120,116,112,108,104,101,97,94,90,87,84,81,78,76,
@@ -547,7 +548,7 @@ static const unsigned short defaultVolumeScale[] = {
 */
 
 /*
-static const unsigned short defaultVolumeScale[] = {
+static const uint16_t defaultVolumeScale[] = {
 // new more agressive curve
 517, 498, 480, 462, 445, 429, 413, 398, 384, 370, 356,
 343, 331, 319, 307, 296, 285, 275, 265, 256, 246, 238, 229, 221, 213,
@@ -562,7 +563,7 @@ static const unsigned short defaultVolumeScale[] = {
 */
 
 /*
-static const unsigned short defaultVolumeScale[] = {
+static const uint16_t defaultVolumeScale[] = {
 // new more agressive curve
 329, 318, 307, 297, 288, 278, 269, 260, 252, 244, 236,
 228, 221, 214, 207, 200, 194, 187, 181, 176, 170, 165, 159, 154, 149, 145,
@@ -576,7 +577,7 @@ static const unsigned short defaultVolumeScale[] = {
 */
 
 /*
-static const unsigned short defaultVolumeScale[] = {
+static const uint16_t defaultVolumeScale[] = {
 // new more agressive curve
 302, 292, 282, 273, 264, 255, 247, 239, 231, 223, 216, 208, 202, 195, 188, 
 182, 176, 170, 165, 159, 154, 149, 144, 139, 135, 130, 126, 122, 118, 114, 
@@ -590,7 +591,7 @@ static const unsigned short defaultVolumeScale[] = {
 */
 
 /*
-static const unsigned short defaultVolumeScale[] = {
+static const uint16_t defaultVolumeScale[] = {
 // 2.5 times linear curve
 318, 315, 313, 310, 308, 305, 303, 300, 298, 295, 293, 290, 288, 285,
 283, 280, 278, 275, 273, 270, 268, 265, 263, 260, 258, 255, 253, 250,
@@ -605,7 +606,7 @@ static const unsigned short defaultVolumeScale[] = {
 */
 
 /*
-static const unsigned short defaultVolumeScale[] = {
+static const uint16_t defaultVolumeScale[] = {
 // 2.2 times linear curve
 279, 277, 275, 273, 271, 268, 266, 264, 262, 260, 257, 255, 253, 251,
 249, 246, 244, 242, 240, 238, 235, 233, 231, 229, 227, 224, 222, 220,
@@ -692,11 +693,11 @@ static const UBYTE volumeScaleTwoTimesExp[] = {
 };
 
 #if 0
-static unsigned long PV_AdjustTimeFromRate(unsigned long time)
+static uint32_t PV_AdjustTimeFromRate(uint32_t time)
 {
     Rate q = MusicGlobals->outputRate;
-    unsigned long mixerRate;
-    unsigned long realMixerRate;
+    uint32_t mixerRate;
+    uint32_t realMixerRate;
 
     mixerRate = GM_ConvertFromOutputRateToPerceivedRate(q);
     realMixerRate = GM_ConvertFromOutputRateToRate(q);
@@ -711,19 +712,19 @@ static unsigned long PV_AdjustTimeFromRate(unsigned long time)
 #endif
 
 // This value returns is the clock the evelope's and LFO run on. In microseconds.
-static unsigned long PV_GetLFOAdjustedTimeInMicroseconds(void)
+static uint32_t PV_GetLFOAdjustedTimeInMicroseconds(void)
 {
 #if 1
     return MusicGlobals->lfoBufferTime;
 #else
-    unsigned long time = (FIXED_BUFFER_SLICE_TIME * MAX_CHUNK_SIZE / FIXED_MAX_CHUNK_SIZE) - 610;
+    uint32_t time = (FIXED_BUFFER_SLICE_TIME * MAX_CHUNK_SIZE / FIXED_MAX_CHUNK_SIZE) - 610;
 
     return PV_AdjustTimeFromRate(time);
 #endif
 }
 
 // given a midi volume, translate it via a table to a new value
-long PV_ModifyVelocityFromCurve(GM_Song *pSong, long volume)
+int32_t PV_ModifyVelocityFromCurve(GM_Song *pSong, int32_t volume)
 {
     volume = 127L - (volume & 0x7FL);       // restrict to 0-127 and reverse
     switch (pSong->velocityCurveType)
@@ -768,7 +769,7 @@ void PV_CleanNoteEntry(GM_Voice * the_entry)
     VoiceMode   mode;
 
     mode = the_entry->voiceMode;
-    XSetMemory((char *)the_entry, (long)sizeof(GM_Voice), 0);
+    XSetMemory((char *)the_entry, (int32_t)sizeof(GM_Voice), 0);
     the_entry->voiceMode = mode;
 }
 
@@ -785,7 +786,7 @@ void PV_CleanNoteEntry(GM_Voice * the_entry)
 
 
 #if 1
-static const short int L2Levels[] = 
+static const int16_t L2Levels[] = 
 {
   1250,    883,    721,    625,    559,    510,    472,    441,
    416,    395,    376,    360,    346,    334,    322,    312,
@@ -797,7 +798,7 @@ static const short int L2Levels[] =
    165,    164,    162,    161,    160,    158,    157,    156
 };
 
-static short int PV_L2(short maxVoice)
+static int16_t PV_L2(int16_t maxVoice)
 {
     return L2Levels[maxVoice-1];
 }
@@ -805,13 +806,13 @@ static short int PV_L2(short maxVoice)
 #define L2_ZERO_LEVEL   1250.0
 #include <math.h>
 
-static short int PV_L2(short maxVoice)
+static int16_t PV_L2(int16_t maxVoice)
 {
     double  ratio;
 
     ratio = 1.0 / sqrt((double)maxVoice);
 
-    return (short int)(ratio * L2_ZERO_LEVEL);
+    return (int16_t)(ratio * L2_ZERO_LEVEL);
 }
 #endif
 
@@ -823,7 +824,7 @@ void PV_CalcScaleBack(void)
     pMixer->scaleBackAmount = PV_L2(pMixer->mixLevel); 
 #else
     int             noteScale;
-    long            scaleSize;
+    int32_t            scaleSize;
 
     noteScale = (pMixer->MaxNotes + pMixer->MaxEffects) * UPSCALAR;
     scaleSize = noteScale * MAX_MASTER_VOLUME;
@@ -850,7 +851,7 @@ void PV_CalcScaleBack(void)
 
 #if USE_CALLBACKS
 // used by macro THE_CHECK. This mainly used by double buffered audio clips
-long PV_DoubleBufferCallbackAndSwap(GM_DoubleBufferCallbackPtr doubleBufferCallback, 
+int32_t PV_DoubleBufferCallbackAndSwap(GM_DoubleBufferCallbackPtr doubleBufferCallback, 
                                         GM_Voice *pVoice)
 {
     INT32   bufferSize;
@@ -889,10 +890,10 @@ long PV_DoubleBufferCallbackAndSwap(GM_DoubleBufferCallbackPtr doubleBufferCallb
 }
 #endif
 
-unsigned long PV_GetPositionFromVoice(GM_Voice *pVoice)
+uint32_t PV_GetPositionFromVoice(GM_Voice *pVoice)
 {
-    unsigned long   pos;
-    unsigned long   size;
+    uint32_t   pos;
+    uint32_t   size;
 
     switch (MusicGlobals->interpolationMode)
     {
@@ -921,7 +922,7 @@ unsigned long PV_GetPositionFromVoice(GM_Voice *pVoice)
     return pos;
 }
 
-void PV_SetPositionFromVoice(GM_Voice *pVoice, unsigned long pos)
+void PV_SetPositionFromVoice(GM_Voice *pVoice, uint32_t pos)
 {
     switch (MusicGlobals->interpolationMode)
     {
@@ -1169,7 +1170,7 @@ foundRelease:
             break;
     }
 #endif
-    //BAE_PRINTF("currentLevel = %ld\n", (long)a->currentLevel);
+    //BAE_PRINTF("currentLevel = %ld\n", (int32_t)a->currentLevel);
     a->currentTime = currentTime;
     a->currentPosition = index & 7; // protect against runaway indexes
 }
@@ -1365,8 +1366,8 @@ static void PV_UnlockInstrumentAndVoice(GM_Voice *pVoice)
 // Process this active voice
 static void PV_ServeThisInstrument(GM_Voice *pVoice)
 {
-    register unsigned long  start, end, loopend, size;
-    register long           n, i, value;
+    register uint32_t  start, end, loopend, size;
+    register int32_t           n, i, value;
     GM_LFO                  *rec;
     GM_Mixer                *pMixer;
 
@@ -1600,17 +1601,17 @@ static void PV_ServeThisInstrument(GM_Voice *pVoice)
     // now reduce the current volume by the sustainDecayLevel which is fixed point
     pVoice->NoteVolumeEnvelope = (INT16)XFixedMultiply(pVoice->volumeADSRRecord.currentLevel, 
                                                     pVoice->volumeADSRRecord.sustainingDecayLevel);
-    //BAE_PRINTF("cl = %ld sdl = %ld\n", (long)pVoice->volumeADSRRecord.currentLevel, 
-    //                                  (long)pVoice->volumeADSRRecord.sustainingDecayLevel);
-    //BAE_PRINTF("nve = %ld\n", (long)pVoice->NoteVolumeEnvelope);
+    //BAE_PRINTF("cl = %ld sdl = %ld\n", (int32_t)pVoice->volumeADSRRecord.currentLevel, 
+    //                                  (int32_t)pVoice->volumeADSRRecord.sustainingDecayLevel);
+    //BAE_PRINTF("nve = %ld\n", (int32_t)pVoice->NoteVolumeEnvelope);
 
     pVoice->NoteVolumeEnvelopeBeforeLFO = pVoice->NoteVolumeEnvelope;
-    //BAE_PRINTF("2;NoteVolumeEnvelopeBeforeLFO = %ld\n", (long)pVoice->NoteVolumeEnvelopeBeforeLFO);
+    //BAE_PRINTF("2;NoteVolumeEnvelopeBeforeLFO = %ld\n", (int32_t)pVoice->NoteVolumeEnvelopeBeforeLFO);
     if (pVoice->volumeLFOValue >= 0)        // don't handle volume LFO values less than zero.
     {
         pVoice->NoteVolumeEnvelope = (INT16)((pVoice->NoteVolumeEnvelope * pVoice->volumeLFOValue) >> 12L);
     }
-    //BAE_PRINTF("3;NoteVolumeEnvelope = %ld\n", (long)pVoice->NoteVolumeEnvelope);
+    //BAE_PRINTF("3;NoteVolumeEnvelope = %ld\n", (int32_t)pVoice->NoteVolumeEnvelope);
 
     // now modify the pVoice->NoteVolumeEnvelope to zero, if this voice doesn't match
     // the current audio route
@@ -1625,7 +1626,7 @@ static void PV_ServeThisInstrument(GM_Voice *pVoice)
     */
     if (pVoice->NoteLoopEnd)
     {
-        loopend = (unsigned long)pVoice->NoteLoopEnd - (unsigned long)pVoice->NotePtr;
+        loopend = (uintptr_t)pVoice->NoteLoopEnd - (uintptr_t)pVoice->NotePtr;
     }
     else
     {
@@ -2080,18 +2081,18 @@ static int          gToneFreq = 1000;
 static int          gTonePhase = 0;
 
 
-static void PV_FillTone(void *pBuffer, unsigned long toneFrames, int bitSize, int stereo)
+static void PV_FillTone(void *pBuffer, uint32_t toneFrames, int bitSize, int stereo)
 {
     char            *pAudioB;
-    short           *pAudioW;
-    unsigned long   count;
-    unsigned long   mixerRate = GM_ConvertFromOutputRateToRate(MusicGlobals->outputRate);
+    int16_t           *pAudioW;
+    uint32_t   count;
+    uint32_t   mixerRate = GM_ConvertFromOutputRateToRate(MusicGlobals->outputRate);
     XFIXED          v;
-    long            angle, ta;
-    short           value = 0;
+    int32_t            angle, ta;
+    int16_t           value = 0;
 
     pAudioB = (char *)pBuffer;
-    pAudioW = (short *)pBuffer;
+    pAudioW = (int16_t *)pBuffer;
 
     for (count = 0; count < toneFrames; count++)
     {
@@ -2102,7 +2103,7 @@ static void PV_FillTone(void *pBuffer, unsigned long toneFrames, int bitSize, in
         angle = (gToneFreq * ta) / (mixerRate/10);
         v = XFixedSin(angle);
 
-        value = (short)XFixedFloor(XFixedMultiply(v, 32766<<16L) + 0x8000);
+        value = (int16_t)XFixedFloor(XFixedMultiply(v, 32766<<16L) + 0x8000);
 
         if (bitSize == 2)   // 16 bit
         {
@@ -2148,7 +2149,7 @@ void GM_TestTone(XBOOL toneStatus)
 void BAE_BuildMCUSlice(void * threadContext, XDWORD dspTime)
 {
     GM_Mixer        *pMixer;
-    unsigned long   delta, end;
+    uint32_t   delta, end;
     OPErr           err;
 
     pMixer = GM_GetCurrentMixer();
@@ -2208,11 +2209,11 @@ void BAE_BuildMCUSlice(void * threadContext, XDWORD dspTime)
 // at the moment. sampleFrames is how many sample frames. These two values should match
 // ie. sampleFrames = bufferByteLength / channels / bitsize / 8
 #if BAE_COMPLETE
-void BAE_BuildMixerSlice(void *threadContext, void *pAudioBuffer, long bufferByteLength,
-                                                            long sampleFrames)
+void BAE_BuildMixerSlice(void *threadContext, void *pAudioBuffer, int32_t bufferByteLength,
+                                                            int32_t sampleFrames)
 {
     GM_Mixer        *pMixer;
-    unsigned long   delta, end;
+    uint32_t   delta, end;
 
     pMixer = MusicGlobals;
     if (pMixer && pAudioBuffer && bufferByteLength && sampleFrames)
@@ -2269,9 +2270,9 @@ void BAE_BuildMixerSlice(void *threadContext, void *pAudioBuffer, long bufferByt
 
 #if BAE_COMPLETE
 // Get time in microseconds between calls to BAE_BuildMixerSlice
-unsigned long GM_GetMixerUsedTime(void)
+uint32_t GM_GetMixerUsedTime(void)
 {
-    unsigned long   time;
+    uint32_t   time;
 
     time = 0;
     if (MusicGlobals)
@@ -2284,9 +2285,9 @@ unsigned long GM_GetMixerUsedTime(void)
 
 #if BAE_COMPLETE
 // Get CPU load in percent. This function is realtime and assumes the mixer has been allocated
-unsigned long GM_GetMixerUsedTimeInPercent(void)
+uint32_t GM_GetMixerUsedTimeInPercent(void)
 {
-    unsigned long load;
+    uint32_t load;
 
     load = 0;
     if (MusicGlobals)
@@ -2301,7 +2302,7 @@ unsigned long GM_GetMixerUsedTimeInPercent(void)
 // Return the maximumn number of samples for 11 milliseconds worth of whatever khz data.
 // Typically this is 512. Use this in your calculation of audio buffers. Will return
 // 0 if something is wrong.
-short int BAE_GetMaxSamplePerSlice(void)
+int16_t BAE_GetMaxSamplePerSlice(void)
 {
     if (MusicGlobals)
     {
@@ -2320,7 +2321,7 @@ static void PV_ProcessSyncronizedVoiceStart(void)
     GM_Voice        *pVoice;
     void            *syncReference;
     LOOPCOUNT       count, max;
-    unsigned long   time;
+    uint32_t   time;
 
     pMixer = GM_GetCurrentMixer();
 
@@ -3377,7 +3378,7 @@ void PV_StartMIDINote(GM_Song *pSong, INT16 the_instrument,
                         }
                         break;
                     case VOLUME_ATTACK_LEVEL:
-                        //if (1)    //(*((long *) 0x17a))
+                        //if (1)    //(*((int32_t *) 0x17a))
                         {
                             if (the_entry->volumeADSRRecord.ADSRLevel[0] >  the_entry->volumeADSRRecord.ADSRLevel[1])
                             {
@@ -3508,7 +3509,7 @@ void PV_StopMIDINote(GM_Song *pSong, XSWORD the_instrument, XSWORD the_channel, 
                     if (pNote->NoteChannel == the_channel)  // same channel
                     {
                         realNote = pNote->NoteMIDIPitch - pNote->noteOffsetStart;
-                        if (GM_DoesChannelAllowPitchOffset(pSong, (unsigned short)pNote->NoteChannel))
+                        if (GM_DoesChannelAllowPitchOffset(pSong, (uint16_t)pNote->NoteChannel))
                         {
                             compareNote = notePitch - pSong->songPitchShift;
                         }
@@ -3570,7 +3571,7 @@ void PV_StopMIDINote(GM_Song *pSong, XSWORD the_instrument, XSWORD the_channel, 
 // Set useChannel to -1 to ignore instrument, otherwise its an instrument filter.
 static void PV_EndNotes(GM_Song *pSong, XSWORD useChannel, XLongResourceID useInstrument, XBOOL kill)
 {
-    register short int      count;
+    register int16_t      count;
     register GM_Mixer       *pMixer;
     register GM_Voice       *pNote;
 
@@ -3625,7 +3626,7 @@ void GM_EndSongNotes(GM_Song *pSong)
 }
 
 // stop notes for a song and channel passed. This will put the note into release mode.
-void GM_EndSongChannelNotes(GM_Song *pSong, short int channel)
+void GM_EndSongChannelNotes(GM_Song *pSong, int16_t channel)
 {
     PV_EndNotes(pSong, channel, -1, FALSE);
 }
@@ -3797,8 +3798,8 @@ void GM_DisplayVoiceData(void)
             BAE_PRINTF("### Voice %ld\n", count);
             BAE_PRINTF("    voiceMode %d\n", pVoice->voiceMode);
             BAE_PRINTF("    voiceStartTimeStamp %ld\n", pVoice->voiceStartTimeStamp);
-            BAE_PRINTF("    pSong %lx\n", (long)pVoice->pSong);
-            BAE_PRINTF("    pInstrument %lx\n", (long)pVoice->pInstrument);
+            BAE_PRINTF("    pSong %p\n", pVoice->pSong);
+            BAE_PRINTF("    pInstrument %p\n", pVoice->pInstrument);
             BAE_PRINTF("    NoteChannel %d\n", pVoice->NoteChannel);
             BAE_PRINTF("    NoteMIDIPitch %d\n", pVoice->NoteMIDIPitch);
             BAE_PRINTF("    sustainMode %d\n", pVoice->sustainMode);

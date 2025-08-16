@@ -179,10 +179,11 @@
 #include "X_API.h"
 #include "X_Formats.h"
 #include "X_Assert.h"
+#include <stdint.h>
 
 
 // NOTE: This samples parameter is not guarenteed to be word aligned.
-void XSwapShorts(short* shortArray, long count)
+void XSwapShorts(int16_t* shortArray, int32_t count)
 {
 UBYTE*          byteArray;
 UBYTE           data;
@@ -204,7 +205,7 @@ UBYTE           data;
 #endif
 
 // This is used on 8 bit samples that are sign encoded. We want 0 to 255 not -128 to 127
-void XPhase8BitWaveform(unsigned char * pByte, long size)
+void XPhase8BitWaveform(unsigned char * pByte, int32_t size)
 {
     while (size--)
     {
@@ -213,12 +214,12 @@ void XPhase8BitWaveform(unsigned char * pByte, long size)
 }
 
 // Given a Mac snd pointer, this will return the encoding type, and a pointer to a SoundHeader structure
-static void * PV_GetSoundHeaderPtr(XPTR pRes, short int *pEncode)
+static void * PV_GetSoundHeaderPtr(XPTR pRes, int16_t  *pEncode)
 {
     XSoundHeader    *pSndBuffer;
-    short int       soundFormat;
-    short int       numSynths, numCmds;
-    long            offset;
+    int16_t        soundFormat;
+    int16_t        numSynths, numCmds;
+    int32_t            offset;
     char            *pSndFormat;
 
     numSynths = 0;
@@ -254,7 +255,7 @@ static void * PV_GetSoundHeaderPtr(XPTR pRes, short int *pEncode)
             case XThirdSoundFormat:
                 numSynths = 0;      // format 3 has none
                 numCmds = 0;
-                pSndBuffer = (XSoundHeader *) ((char *)pRes + sizeof(short));
+                pSndBuffer = (XSoundHeader *) ((char *)pRes + sizeof(int16_t));
                 *pEncode = XType3Header;
                 break;
             default:
@@ -268,13 +269,13 @@ static void * PV_GetSoundHeaderPtr(XPTR pRes, short int *pEncode)
 
 // Given a Mac sample, and loop points, this will change the data associated with it
 #if USE_CREATION_API == TRUE
-void XSetSoundLoopPoints(XPTR pRes, long loopStart, long loopEnd)
+void XSetSoundLoopPoints(XPTR pRes, int32_t loopStart, int32_t loopEnd)
 {
     register XSoundHeader       *pSndBuffer;
     register XCmpSoundHeader    *pCmpBuffer;
     register XExtSoundHeader    *pExtBuffer;
     register XSoundHeader3      *pType3Buffer;
-    short int                   encode, count;
+    int16_t                    encode, count;
 
     pSndBuffer = (XSoundHeader *)PV_GetSoundHeaderPtr(pRes, &encode);
     if (pSndBuffer) /* did we get the right format? */
@@ -316,7 +317,7 @@ void XSetSoundEmbeddedStatus(XPTR pRes, XBOOL soundEmbedded)
     register XCmpSoundHeader    *pCmpBuffer;
     register XExtSoundHeader    *pExtBuffer;
     register XSoundHeader3      *pType3Buffer;
-    short int                   encode;
+    int16_t                    encode;
 
     pSndBuffer = (XSoundHeader *)PV_GetSoundHeaderPtr(pRes, &encode);
     if (pSndBuffer) /* did we get the right format? */
@@ -350,7 +351,7 @@ XBOOL XGetSoundEmbeddedStatus(XPTR pRes)
     register XCmpSoundHeader    *pCmpBuffer;
     register XExtSoundHeader    *pExtBuffer;
     register XSoundHeader3      *pType3Buffer;
-    short int                   encode;
+    int16_t                    encode;
     XBOOL                       soundEmbedded;
 
     soundEmbedded = FALSE;
@@ -392,7 +393,7 @@ void XSetSoundSampleRate(XPTR pRes, XFIXED sampleRate)
     register XCmpSoundHeader    *pCmpBuffer;
     register XExtSoundHeader    *pExtBuffer;
     register XSoundHeader3      *pType3Buffer;
-    short int                   encode;
+    int16_t                    encode;
 
     pSndBuffer = (XSoundHeader *)PV_GetSoundHeaderPtr(pRes, &encode);
     if (pSndBuffer) /* did we get the right format? */
@@ -422,13 +423,13 @@ void XSetSoundSampleRate(XPTR pRes, XFIXED sampleRate)
 }
 
 // Given a Mac sample, and a sample rate, this will change the data associated with it
-void XSetSoundBaseKey(XPTR pRes, short int baseKey)
+void XSetSoundBaseKey(XPTR pRes, int16_t  baseKey)
 {
     register XSoundHeader       *pSndBuffer;
     register XCmpSoundHeader    *pCmpBuffer;
     register XExtSoundHeader    *pExtBuffer;
     register XSoundHeader3      *pType3Buffer;
-    short int                   encode;
+    int16_t                    encode;
 
     pSndBuffer = (XSoundHeader *)PV_GetSoundHeaderPtr(pRes, &encode);
     if (pSndBuffer) /* did we get the right format? */
@@ -457,14 +458,14 @@ void XSetSoundBaseKey(XPTR pRes, short int baseKey)
     }
 }
 
-short int XGetSoundBaseKey(XPTR pRes)
+int16_t  XGetSoundBaseKey(XPTR pRes)
 {
     register XSoundHeader       *pSndBuffer;
     register XCmpSoundHeader    *pCmpBuffer;
     register XExtSoundHeader    *pExtBuffer;
     register XSoundHeader3      *pType3Buffer;
-    short int                   encode;
-    short int                   baseKey;
+    int16_t                    encode;
+    int16_t                    baseKey;
 
     baseKey = kMiddleC;
     pSndBuffer = (XSoundHeader *)PV_GetSoundHeaderPtr(pRes, &encode);
@@ -545,12 +546,12 @@ UINT32          const decodingBytes = decodingFrames * bytesPerFrame;
             break;
         case C_ALAW :
             XExpandALawto16BitLinear((XBYTE*)src->theWaveform,
-                                        (short*)dst->theWaveform,
+                                        (int16_t*)dst->theWaveform,
                                         decodingFrames, dst->channels);
             break;
         case C_ULAW :
             XExpandULawto16BitLinear((XBYTE*)src->theWaveform,
-                                        (short*)dst->theWaveform,
+                                        (int16_t*)dst->theWaveform,
                                         decodingFrames, dst->channels);
             break;
         }
@@ -578,9 +579,9 @@ UINT32          const decodingBytes = decodingFrames * bytesPerFrame;
     case C_MACE3 :
     case C_MACE6 :
     {
-    void        (*maceFunction)(void *inBuffer, void *outBuffer, unsigned long cnt, 
+    void        (*maceFunction)(void *inBuffer, void *outBuffer, uint32_t cnt, 
                                 void * inState, void * outState, 
-                                unsigned long numChannels, unsigned long whichChannel);
+                                uint32_t numChannels, uint32_t whichChannel);
     XDWORD      maceFrames;
     
         maceFunction = (src->compressionType == C_MACE3) ? XExpandMace1to3
@@ -663,7 +664,7 @@ XERR XGetSampleInfoFromSnd(XPTR pResource, SampleDataInfo *pOutInfo)
 {
     XERR                err;
     XSoundHeader*       header;
-    short               headerType;
+    int16_t               headerType;
 
     err = -1;
     if (pOutInfo && pResource)
@@ -701,7 +702,7 @@ XERR XGetSampleInfoFromSnd(XPTR pResource, SampleDataInfo *pOutInfo)
                 XExtSoundHeader*    headerExt;
 
                     headerExt = (XExtSoundHeader*)header;
-                    pOutInfo->channels = (short)XGetLong(&headerExt->numChannels);
+                    pOutInfo->channels = (int16_t)XGetLong(&headerExt->numChannels);
                     pOutInfo->bitSize = XGetShort(&headerExt->sampleSize);
                     pOutInfo->frames = XGetLong(&headerExt->numFrames);
                     pOutInfo->loopStart = XGetLong(&headerExt->loopStart);
@@ -714,10 +715,10 @@ XERR XGetSampleInfoFromSnd(XPTR pResource, SampleDataInfo *pOutInfo)
                 case XCompressedHeader: // compressed header
                 {
                 XCmpSoundHeader*    headerCmp;
-                short               compressionID;
+                int16_t               compressionID;
 
                     headerCmp = (XCmpSoundHeader*)header;
-                    pOutInfo->channels = (short)XGetLong(&headerCmp->numChannels);
+                    pOutInfo->channels = (int16_t)XGetLong(&headerCmp->numChannels);
                     pOutInfo->bitSize = XGetShort(&headerCmp->sampleSize);
                     pOutInfo->frames = XGetLong(&headerCmp->numFrames);
                     pOutInfo->loopStart = XGetLong(&headerCmp->loopStart);
@@ -829,7 +830,7 @@ XERR XGetSampleInfoFromSnd(XPTR pResource, SampleDataInfo *pOutInfo)
             }
 
             // verify loop points
-            if (((long)pOutInfo->loopStart < 0) ||
+            if (((int32_t)pOutInfo->loopStart < 0) ||
                 (pOutInfo->loopStart > pOutInfo->loopEnd) ||
                 (pOutInfo->loopEnd > pOutInfo->frames))
             {
@@ -857,7 +858,7 @@ XPTR XGetSamplePtrFromSnd(XPTR pRes, SampleDataInfo* info)
 {
 #if TRUE
 XSoundHeader*       header;
-short               headerType;
+int16_t               headerType;
 XPTR                encodedData;
 UINT32              startFrame;
 XBYTE*              inIntelOrder;
@@ -889,7 +890,15 @@ XBYTE               order = X_WORD_ORDER;
     switch (headerType)
     {
     case XStandardHeader:   // standard header
-        encodedData = (char *)&header->sampleArea[0];
+        // samplePtr is a 32-bit on-disk value. If non-zero, treat as offset from start.
+        if (XGetLong(&header->samplePtr))
+        {
+            encodedData = (XPTR)((char*)header + (uintptr_t)XGetLong(&header->samplePtr));
+        }
+        else
+        {
+            encodedData = (char *)&header->sampleArea[0];
+        }
         info->frames = XGetLong(&header->length);
         info->loopStart = XGetLong(&header->loopStart);
         info->loopEnd = XGetLong(&header->loopEnd);
@@ -904,8 +913,14 @@ XBYTE               order = X_WORD_ORDER;
     XExtSoundHeader*    headerExt;
 
         headerExt = (XExtSoundHeader*)header;
-        encodedData = (char *)&headerExt->sampleArea[0];
-        info->channels = (short)XGetLong(&headerExt->numChannels);
+        // samplePtr is a 32-bit on-disk value. If non-zero, treat as offset from start.
+        encodedData = (XPTR)(uintptr_t)XGetLong(&headerExt->samplePtr);
+        if (encodedData)
+        {
+            encodedData = (XPTR)((char*)header + (uintptr_t)encodedData);
+        }
+        if (!encodedData) { encodedData = (char *)&headerExt->sampleArea[0]; }
+        info->channels = (int16_t)XGetLong(&headerExt->numChannels);
         info->bitSize = XGetShort(&headerExt->sampleSize);
         info->frames = XGetLong(&headerExt->numFrames);
         info->loopStart = XGetLong(&headerExt->loopStart);
@@ -919,15 +934,20 @@ XBYTE               order = X_WORD_ORDER;
     case XCompressedHeader: // compressed header
     {
     XCmpSoundHeader*    headerCmp;
-    short               compressionID;
+    int16_t               compressionID;
 
         headerCmp = (XCmpSoundHeader*)header;
-        encodedData = (XPTR)XGetLong(&headerCmp->samplePtr);
+        // samplePtr is a 32-bit on-disk value. If non-zero, treat as offset from start.
+        encodedData = (XPTR)(uintptr_t)XGetLong(&headerCmp->samplePtr);
+        if (encodedData)
+        {
+            encodedData = (XPTR)((char*)header + (uintptr_t)encodedData);
+        }
         if (!encodedData)   /* get ptr to sample data */
         {
             encodedData = headerCmp->sampleArea;
         }
-        info->channels = (short)XGetLong(&headerCmp->numChannels);
+        info->channels = (int16_t)XGetLong(&headerCmp->numChannels);
         info->bitSize = XGetShort(&headerCmp->sampleSize);
         info->frames = XGetLong(&headerCmp->numFrames);
         info->loopStart = XGetLong(&headerCmp->loopStart);
@@ -1073,7 +1093,7 @@ XBYTE               order = X_WORD_ORDER;
                 XBlockMove(encodedData, sampleData, info->size);
             }
 #endif
-            XSwapShorts((short*)sampleData, info->size / 2);
+            XSwapShorts((int16_t*)sampleData, info->size / 2);
         }
 #endif
     }
@@ -1096,7 +1116,7 @@ XBYTE               order = X_WORD_ORDER;
         sampleData = info->pMasterPtr;
     }
     
-    if (((long)info->loopStart < 0) ||
+    if (((int32_t)info->loopStart < 0) ||
         (info->loopStart > info->loopEnd) ||
         (info->loopEnd > info->frames))
     {
@@ -1113,12 +1133,12 @@ register XSoundHeader       *pSndBuffer;
 register XCmpSoundHeader    *pCmpBuffer;
 register XExtSoundHeader    *pExtBuffer;
 register XSoundHeader3      *pType3Buffer;
-long                        offset;
+int32_t                        offset;
 char                        *sampleData;
-short int                   encode;
+int16_t                    encode;
 #if X_PLATFORM == X_MACINTOSH
 XPTR                        rightData;
-long                        count;
+int32_t                        count;
 char                        *pLeft, *pRight;
 #endif
 
@@ -1186,7 +1206,7 @@ char                        *pLeft, *pRight;
                                                             // next time sample is read it will be right
                     if (pType3Buffer->isSampleIntelOrder)
                     {   // Not ROM, must be a memory file, or a local copy
-                        PV_Swap16BitSamplesIfIntel((short*)sampleData,
+                        PV_Swap16BitSamplesIfIntel((int16_t*)sampleData,
                                             info->frames * info->channels);
                     }
                     else
@@ -1198,7 +1218,7 @@ char                        *pLeft, *pRight;
                         if (decodedData)
                         {
                             XBlockMove(sampleData, decodedData, info->size);
-                            PV_Swap16BitSamplesIfIntel((short*)decodedData,
+                            PV_Swap16BitSamplesIfIntel((int16_t*)decodedData,
                                                 info->frames *info->channels);
                         }
                         sampleData = (char *)decodedData;
@@ -1251,7 +1271,7 @@ char                        *pLeft, *pRight;
     case XExtendedHeader:   // extended header
         pExtBuffer = (XExtSoundHeader *)pSndBuffer;
         sampleData = (char *)&pExtBuffer->sampleArea[0];
-        info->channels = (short)XGetLong(&pExtBuffer->numChannels);
+        info->channels = (int16_t)XGetLong(&pExtBuffer->numChannels);
         info->bitSize = XGetShort(&pExtBuffer->sampleSize);
         info->frames = XGetLong(&pExtBuffer->numFrames);
         info->size = info->frames * (info->channels) * (info->bitSize / 8);
@@ -1274,7 +1294,7 @@ char                        *pLeft, *pRight;
                                                         // next time sample is read it will be right
                 if (pExtBuffer->sampleIsIntelOrder)
                 {   // Not ROM, must be a memory file, or a local copy
-                    PV_Swap16BitSamplesIfIntel((short *)sampleData,
+                    PV_Swap16BitSamplesIfIntel((int16_t *)sampleData,
                                         info->frames * info->channels);
                 }
                 else
@@ -1286,7 +1306,7 @@ char                        *pLeft, *pRight;
                     if (decodedData)
                     {
                         XBlockMove(sampleData, decodedData, info->size);
-                        PV_Swap16BitSamplesIfIntel((short *)decodedData,
+                        PV_Swap16BitSamplesIfIntel((int16_t *)decodedData,
                                             info->frames * info->channels);
                     }
                     sampleData = (char *)decodedData;
@@ -1298,12 +1318,12 @@ char                        *pLeft, *pRight;
 
     case XCompressedHeader: // compressed header
         pCmpBuffer = (XCmpSoundHeader *)pSndBuffer;
-        sampleData = (char *)XGetLong(&pCmpBuffer->samplePtr);
+        sampleData = (char *)(uintptr_t)XGetLong(&pCmpBuffer->samplePtr);
         if (sampleData == NULL) /* get ptr to sample data */
         {
             sampleData = (char *) pCmpBuffer->sampleArea;
         }
-        info->channels = (short)XGetLong(&pCmpBuffer->numChannels);
+        info->channels = (int16_t)XGetLong(&pCmpBuffer->numChannels);
         info->bitSize = XGetShort(&pCmpBuffer->sampleSize);
         BAE_ASSERT((info->bitSize == 8) || (info->bitSize == 16));
         info->frames = XGetLong(&pCmpBuffer->numFrames);
@@ -1354,7 +1374,7 @@ char                        *pLeft, *pRight;
                 if (decodedData)
                 {
                     XExpandALawto16BitLinear((XBYTE*)sampleData,
-                                                (short int *)decodedData,
+                                                (int16_t  *)decodedData,
                                                 info->frames, info->channels);
                 }
                 break;
@@ -1365,7 +1385,7 @@ char                        *pLeft, *pRight;
                 if (decodedData)
                 {
                     XExpandULawto16BitLinear((XBYTE*)sampleData,
-                                                (short int *)decodedData,
+                                                (int16_t  *)decodedData,
                                                 info->frames, info->channels);
                 }
                 break;
@@ -1462,7 +1482,7 @@ char                        *pLeft, *pRight;
         break;
     }
 
-    if (((long)info->loopStart < 0) ||
+    if (((int32_t)info->loopStart < 0) ||
         (info->loopStart > info->loopEnd) ||
         (info->loopEnd > info->frames))
     {
@@ -1479,7 +1499,7 @@ char                        *pLeft, *pRight;
 XBOOL XGetSampleNameFromID(XLongResourceID sampleSoundID, char cName[256])
 {
     static XResourceType    sampleType[] = {ID_CSND, ID_ESND, ID_SND};
-    short int               count;
+    int16_t                count;
     XBOOL                   bad;
 
     bad = FALSE;
@@ -1506,14 +1526,14 @@ XBOOL XGetSampleNameFromID(XLongResourceID sampleSoundID, char cName[256])
 
 #if USE_CREATION_API == TRUE
 // given 8 bit data, convert this to 16 bit data
-XWORD * XConvert8BitTo16Bit(XBYTE * p8BitPCMData, unsigned long frames, unsigned long channels)
+XWORD * XConvert8BitTo16Bit(XBYTE * p8BitPCMData, uint32_t frames, uint32_t channels)
 {
     XWORD           *newData;
-    unsigned long   count, ccount;
-    short int       sample;
+    uint32_t   count, ccount;
+    int16_t        sample;
 
     ccount = frames * channels;
-    newData = (XWORD *)XNewPtr(ccount * sizeof(short));
+    newData = (XWORD *)XNewPtr(ccount * sizeof(int16_t));
     if (newData)
     {
         for (count = 0; count < ccount; count++)
@@ -1531,10 +1551,10 @@ XWORD * XConvert8BitTo16Bit(XBYTE * p8BitPCMData, unsigned long frames, unsigned
 #endif
 
 // given 16 bit data, convert this to 8 bit data
-XBYTE * XConvert16BitTo8Bit(XWORD * p16BitPCMData, unsigned long frames, unsigned long channels)
+XBYTE * XConvert16BitTo8Bit(XWORD * p16BitPCMData, uint32_t frames, uint32_t channels)
 {
     XBYTE           *newData = NULL;
-    unsigned long   count, ccount;
+    uint32_t   count, ccount;
     XBYTE           sample;
 
     if (p16BitPCMData)
@@ -1648,7 +1668,7 @@ XSoundFormat1*      header;
         XBlockMove(src.theWaveform, &snd->sndBuffer.sampleArea, src.waveSize);
         if (src.bitSize == 16)
         {
-            PV_Swap16BitSamplesIfIntel((short*)&snd->sndBuffer.sampleArea,
+            PV_Swap16BitSamplesIfIntel((int16_t*)&snd->sndBuffer.sampleArea,
                                         src.waveFrames * src.channels);
         }
 
@@ -1688,7 +1708,7 @@ XSoundFormat1*      header;
         XPutLong(&snd->sndBuffer.loopEnd, src.endLoop);
 
         snd->sndBuffer.encode = XCompressedHeader;      // compressed header
-        XPutShort(&snd->sndBuffer.compressionID, (unsigned short)fixedCompression);
+        XPutShort(&snd->sndBuffer.compressionID, (uint16_t)fixedCompression);
         XPutLong(&snd->sndBuffer.format, C_IMA4);
         snd->sndBuffer.baseFrequency = (unsigned char)src.baseMidiPitch;
 
@@ -1717,7 +1737,7 @@ XSoundFormat1*      header;
     case C_ALAW:
     {
     XDWORD          const lawBlocks = src.waveFrames / 2;
-    XDWORD          const lawBytes = lawBlocks * sizeof(short) * src.channels;
+    XDWORD          const lawBytes = lawBlocks * sizeof(int16_t) * src.channels;
     XCmpSndHeader1  *snd;
 
         if ((src.bitSize != 16) && (src.compressionType == C_NONE))
@@ -1758,7 +1778,7 @@ XSoundFormat1*      header;
         XPutLong(&snd->sndBuffer.loopEnd, src.endLoop);
 
         snd->sndBuffer.encode = XCompressedHeader;      // compressed header
-        XPutShort(&snd->sndBuffer.compressionID, (unsigned short)fixedCompression);
+        XPutShort(&snd->sndBuffer.compressionID, (uint16_t)fixedCompression);
         XPutLong(&snd->sndBuffer.format, dstCompression);
         snd->sndBuffer.baseFrequency = (unsigned char)src.baseMidiPitch;
 
@@ -1768,7 +1788,7 @@ XSoundFormat1*      header;
 
         if (src.compressionType == C_NONE)
         {
-            XCompressLaw(dstCompression, (short int*)src.theWaveform,
+            XCompressLaw(dstCompression, (int16_t *)src.theWaveform,
                             (char*)snd->sndBuffer.sampleArea,
                             src.waveFrames, src.channels);
         }
@@ -1861,7 +1881,7 @@ XSoundFormat1*      header;
                  (data[1] == 0x44) &&
                  (data[2] == 0x33))
             {
-                unsigned long tagSize;
+                uint32_t tagSize;
                 // inital tag ok. Now try to get size.
                 
                 // The ID3v2 tag size is encoded with four bytes where the most significant bit (bit 7) 
@@ -1894,7 +1914,7 @@ XSoundFormat1*      header;
                                                     // What's important is that the decodedBytes
                                                     // be less than blockCount * blockBytes.
             XCloseMPEGStream(stream);
-            decodedBytes = src.waveFrames * src.channels * sizeof(short);
+            decodedBytes = src.waveFrames * src.channels * sizeof(int16_t);
             startFrame = 0;
         }
 
@@ -1968,7 +1988,7 @@ static AudioResource *XCreateAudioObjectFromData(XPTR pPCMData, SampleDataInfo *
             XPutShort(&pNewSampleObject->baseMidiKey, pSampleInfo->baseKey);
             XPutShort(&pNewSampleObject->bitSize, pSampleInfo->channels);
             XPutShort(&pNewSampleObject->channels, pSampleInfo->bitSize);
-            XBlockMove(pPCMData, (char *)(&pNewSampleObject->firstSampleFiller) + sizeof(long),
+            XBlockMove(pPCMData, (char *)(&pNewSampleObject->firstSampleFiller) + sizeof(int32_t),
                                         pSampleInfo->size);
         }
     }
@@ -1982,7 +2002,7 @@ static AudioResource *XCreateAudioObjectFromData(XPTR pPCMData, SampleDataInfo *
 static XPTR XGetAudioObjectFromMemory(AudioResource *pAudioObject, SampleDataInfo *pInfo)
 {
     XPTR                pSampleData;
-    unsigned long       size;
+    uint32_t       size;
 
     pSampleData = NULL;
     pInfo->size = 0;        // if left alone, then wrong type of resource
@@ -2012,7 +2032,7 @@ static XPTR XGetAudioObjectFromMemory(AudioResource *pAudioObject, SampleDataInf
                         pInfo->baseKey = XGetShort(&pAudioObject->baseMidiKey);
                         pInfo->bitSize = XGetShort(&pAudioObject->bitSize);
                         pInfo->channels = XGetShort(&pAudioObject->channels);
-                        pSampleData = XGetSamplePtrFromSnd((XPTR)((char *)(&pAudioObject->firstSampleFiller) + sizeof(long)), pInfo);
+                        pSampleData = XGetSamplePtrFromSnd((XPTR)((char *)(&pAudioObject->firstSampleFiller) + sizeof(int32_t)), pInfo);
                     }
                     break;
             }
@@ -2035,7 +2055,7 @@ void XTranslateFromWaveformToSampleData(GM_Waveform const* pSource, SampleDataIn
         pDest->bitSize = pSource->bitSize;
         pDest->channels = pSource->channels;
         pDest->baseKey = pSource->baseMidiPitch;
-        pDest->theID = (short)pSource->waveformID;
+        pDest->theID = (int16_t)pSource->waveformID;
         pDest->compressionType = pSource->compressionType;
         pDest->pMasterPtr = pSource->theWaveform;
     }

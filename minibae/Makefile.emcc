@@ -20,7 +20,7 @@ AR      	:= emar
 STRIP		:= strip
 
 
-OPTI		:= -O2 -fPIC
+OPTI		:= -fPIC
 CFLAGS  	:= $(ARCH) $(OPTI) $(INC_PATH) -DWASM -D_THREAD_SAFE -Wno-pragma-pack -Wno-unused-value
 
 ifneq ($(BAE_FLAGS),)
@@ -72,9 +72,9 @@ $(OBJ_DIR)%.o : %.c
 	@${CC} -c ${CFLAGS} $< -o $@
 
 clean:
-	@rm -rdf $(TARGET_OUT)
-	@rm -rdf $(OBJ_DIR)
-	@rm -rdf $(BUILD_DIR)
-	@rm -rdf $(TEST_OUT_DIR)
+	@rm -rf $(TARGET_OUT)
+	@rm -rf $(OBJ_DIR)
+	@rm -rf $(BUILD_DIR)
+	@rm -rf $(TEST_OUT_DIR)
 	@echo Cleaned!
 

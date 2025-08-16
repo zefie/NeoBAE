@@ -4,7 +4,6 @@ DEBUG			:= 0
 
 include inc/Makefile.common
 
-ARCH		:= -m32
 CC		:= clang
 CXX		:= clang++
 LD		:= $(CC)
@@ -13,7 +12,7 @@ STRIP		:= strip
 
 OPTI		:= -O2 -fPIC
 CLANG_SANI	:= -fsanitize=integer
-CFLAGS  	:= $(ARCH) $(OPTI) $(INC_PATH) -D_THREAD_SAFE -Wno-pragma-pack -Wno-unused-value
+CFLAGS  	:= $(OPTI) $(INC_PATH) -D_THREAD_SAFE -Wno-pragma-pack -Wno-unused-value
 
 ifneq ($(BAE_FLAGS),)
 	CFLAGS	+= $(BAE_FLAGS)
@@ -62,10 +61,10 @@ $(OBJ_DIR)%.o : %.c
 	@${CC} -c ${CFLAGS} $< -o $@
 
 clean:
-	@rm -rdf $(TARGET_OUT)
-	@rm -rdf $(OBJ_DIR)
-	@rm -rdf $(BUILD_DIR)
-	@rm -rdf $(TEST_OUT_DIR)
+	@rm -rf $(TARGET_OUT)
+	@rm -rf $(OBJ_DIR)
+	@rm -rf $(BUILD_DIR)
+	@rm -rf $(TEST_OUT_DIR)
 	@echo Cleaned!
 
 include inc/Makefile.tests

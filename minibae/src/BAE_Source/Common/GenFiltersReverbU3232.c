@@ -35,7 +35,7 @@
 **
 **  Generalized Music Synthesis package. Part of SoundMusicSys.
 **
-**  © Copyright 1995-2000 Beatnik, Inc, All Rights Reserved.
+**  ï¿½ Copyright 1995-2000 Beatnik, Inc, All Rights Reserved.
 **  Written by Jim Nitchals
 **
 **  Beatnik products contain certain trade secrets and confidential and
@@ -76,6 +76,7 @@
 
 #include "GenSnd.h"
 #include "GenPriv.h"
+#include <stdint.h>
 
 #if ((REVERB_USED == VARIABLE_REVERB) && (LOOPS_USED == U3232_LOOPS))
 
@@ -572,11 +573,11 @@ void PV_ServeU3232StereoFilterFullBufferNewReverb (GM_Voice *this_voice)
     this_voice->lastAmplitudeR = (XSDWORD)(((unsigned int)amplitudeR) << 2);
 }
 
-// ¥¥¥¥¥¥¥¥¥¥¥¥¥ ¥¥¥¥¥¥¥¥¥¥¥¥¥ ¥¥¥¥¥¥¥¥¥¥¥¥¥ ¥¥¥¥¥¥¥¥¥¥¥¥¥ ¥¥¥¥¥¥¥¥¥¥¥¥¥ ¥¥¥¥¥¥¥¥¥¥¥¥¥ ¥¥¥¥¥¥¥¥¥¥
-// ¥¥¥¥¥¥¥¥¥¥¥¥¥ ¥¥¥¥¥¥¥¥¥¥¥¥¥ ¥¥¥¥¥¥¥¥¥¥¥¥¥ ¥¥¥¥¥¥¥¥¥¥¥¥¥ ¥¥¥¥¥¥¥¥¥¥¥¥¥ ¥¥¥¥¥¥¥¥¥¥¥¥¥ ¥¥¥¥¥¥¥¥¥¥
-// ¥¥¥¥¥¥¥¥¥¥¥¥¥ ¥¥¥¥¥¥¥¥¥¥¥¥¥ ¥¥¥¥¥¥¥¥¥¥¥¥¥ ¥¥¥¥¥¥¥¥¥¥¥¥¥ ¥¥¥¥¥¥¥¥¥¥¥¥¥ ¥¥¥¥¥¥¥¥¥¥¥¥¥ ¥¥¥¥¥¥¥¥¥¥
-// ¥¥¥¥¥¥¥¥¥¥¥¥¥ ¥¥¥¥¥¥¥¥¥¥¥¥¥ ¥¥¥¥¥¥¥¥¥¥¥¥¥ ¥¥¥¥¥¥¥¥¥¥¥¥¥ ¥¥¥¥¥¥¥¥¥¥¥¥¥ ¥¥¥¥¥¥¥¥¥¥¥¥¥ ¥¥¥¥¥¥¥¥¥¥
-// ¥¥¥¥¥¥¥¥¥¥¥¥¥ ¥¥¥¥¥¥¥¥¥¥¥¥¥ ¥¥¥¥¥¥¥¥¥¥¥¥¥ ¥¥¥¥¥¥¥¥¥¥¥¥¥ ¥¥¥¥¥¥¥¥¥¥¥¥¥ ¥¥¥¥¥¥¥¥¥¥¥¥¥ ¥¥¥¥¥¥¥¥¥¥
+// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 // 16 bit cases
 
 void PV_ServeU3232FilterFullBufferNewReverb16 (GM_Voice *this_voice)
@@ -615,7 +616,7 @@ void PV_ServeU3232FilterPartialBufferNewReverb16 (GM_Voice *this_voice, XBOOL lo
     destL = &MusicGlobals->songBufferDry[0];
     destReverb = &MusicGlobals->songBufferReverb[0];
     destChorus = &MusicGlobals->songBufferChorus[0];
-    source = (short *) this_voice->NotePtr;
+    source = (int16_t *) this_voice->NotePtr;
     cur_wave_i = this_voice->samplePosition.i;
     cur_wave_f = this_voice->samplePosition.f;
 
@@ -744,7 +745,7 @@ void PV_ServeU3232StereoFilterPartialBufferNewReverb16 (GM_Voice *this_voice, XB
     destL = &MusicGlobals->songBufferDry[0];
     destReverb = &MusicGlobals->songBufferReverb[0];
     destChorus = &MusicGlobals->songBufferChorus[0];
-    source = (short *) this_voice->NotePtr;
+    source = (int16_t *) this_voice->NotePtr;
     cur_wave_i = this_voice->samplePosition.i;
     cur_wave_f = this_voice->samplePosition.f;
 

@@ -117,7 +117,7 @@
 #include <pthread.h>
 #include <assert.h>
 #include <malloc/malloc.h>
-
+#include <stdint.h>
 #include <AudioUnit/AudioUnit.h>
 #include <CoreFoundation/CFURL.h>
 
@@ -135,23 +135,23 @@
 typedef struct
 {
     // hardware volume in BAE scale
-    short int                       mUnscaledVolume;
+    int16_t                       mUnscaledVolume;
     // balance scale -256 to 256 (left to right)
-    short int                       mBalance;
+    int16_t                       mBalance;
     
     // size of audio buffers in bytes
-    long                            mAudioByteBufferSize;
+    int32_t                            mAudioByteBufferSize;
     
     char                            mDataReady;
     char                            mDonePlaying;
     char                            mShutdownDoubleBuffer;
     
     // number of samples per audio frame to generate
-    long                            mAudioFramesToGenerate;
+    int32_t                            mAudioFramesToGenerate;
     
     // How many audio frames to generate at one time
     unsigned int                    mSynthFramesPerBlock;
-    unsigned long                   mSamplesPlayed;
+    uint32_t                   mSamplesPlayed;
 
     AudioUnit                       mAudioUnit;
     AudioStreamBasicDescription     mFormat;
@@ -182,7 +182,7 @@ int BAE_Cleanup(void)
 
 // **** Memory management
 // allocate a block of locked, zeroed memory. Return a pointer
-void *BAE_Allocate(unsigned long size)
+void *BAE_Allocate(uint32_t size)
 {
     assert(size > 0);
     void* data = (void*)calloc(1, size);
@@ -196,14 +196,14 @@ void BAE_Deallocate(void *memoryBlock)
 }
 
 // return memory used
-unsigned long BAE_GetSizeOfMemoryUsed(void)
+uint32_t BAE_GetSizeOfMemoryUsed(void)
 {
 //  return g_memory_buoy;
    return(0);
 }
 
 // return max memory used
-unsigned long BAE_GetMaxSizeOfMemoryUsed(void)
+uint32_t BAE_GetMaxSizeOfMemoryUsed(void)
 {
 //  return g_memory_buoy_max;
    return(0);
@@ -215,7 +215,7 @@ unsigned long BAE_GetMaxSizeOfMemoryUsed(void)
 // causing a memory protection
 // fault.
 // return 0 for valid, or 1 for bad pointer, or 2 for not supported.
-int BAE_IsBadReadPointer(void *memoryBlock, unsigned long size)
+int BAE_IsBadReadPointer(void *memoryBlock, uint32_t size)
 {
    memoryBlock = memoryBlock;
    size        = size;
@@ -225,14 +225,14 @@ int BAE_IsBadReadPointer(void *memoryBlock, unsigned long size)
 
 // this will return the size of the memory pointer allocated with BAE_Allocate. Return
 // 0 if you don't support this feature
-unsigned long BAE_SizeOfPointer(void *memoryBlock)
+uint32_t BAE_SizeOfPointer(void *memoryBlock)
 {
     return malloc_size(memoryBlock);
 }
 
 // block move memory. This is basicly memmove, but its exposed to take advantage of
 // special block move speed ups, various hardware has available.
-void BAE_BlockMove(void *source, void *dest, unsigned long size)
+void BAE_BlockMove(void *source, void *dest, uint32_t size)
 {
     assert(dest != NULL && source != NULL);
     memmove(dest, source, size);
@@ -259,7 +259,7 @@ int BAE_Is8BitSupported(void)
 
 // returned balance is in the range of -256 to 256. Left to right. If you're hardware doesn't support this
 // range, just scale it.
-short int BAE_GetHardwareBalance(void)
+int16_t BAE_GetHardwareBalance(void)
 {
     if (sHardwareChannel)
     {
@@ -270,7 +270,7 @@ short int BAE_GetHardwareBalance(void)
 
 // 'balance' is in the range of -256 to 256. Left to right. If you're hardware doesn't support this
 // range, just scale it.
-void BAE_SetHardwareBalance(short int balance)
+void BAE_SetHardwareBalance(int16_t balance)
 {
    // pin balance to box
    if (balance > 256)
@@ -289,7 +289,7 @@ void BAE_SetHardwareBalance(short int balance)
 }
 
 // returned volume is in the range of 0 to 256
-short int BAE_GetHardwareVolume(void)
+int16_t BAE_GetHardwareVolume(void)
 {
     if (sHardwareChannel)
     {
@@ -299,10 +299,10 @@ short int BAE_GetHardwareVolume(void)
 }
 
 // theVolume is in the range of 0 to 256
-void BAE_SetHardwareVolume(short int newVolume)
+void BAE_SetHardwareVolume(int16_t newVolume)
 {
-   unsigned long volume;
-   short int     lbm, rbm;
+   uint32_t volume;
+   int16_t     lbm, rbm;
 
    // pin volume
    if (newVolume > 256)
@@ -333,10 +333,10 @@ void BAE_SetHardwareVolume(short int newVolume)
 
 // **** Timing services
 // return microseconds
-unsigned long BAE_Microseconds(void)
+uint32_t BAE_Microseconds(void)
 {
    static int           firstTime = TRUE;
-   static unsigned long offset    = 0;
+   static uint32_t offset    = 0;
    struct timeval       tv;
 
    if (firstTime)
@@ -350,7 +350,7 @@ unsigned long BAE_Microseconds(void)
 }
 
 // wait or sleep this thread for this many microseconds
-void BAE_WaitMicroseconds(unsigned long usec)
+void BAE_WaitMicroseconds(uint32_t usec)
 {
    usleep(usec);
 }
@@ -425,7 +425,7 @@ void BAE_CopyFileNameNative(void *fileNameSource, void *fileNameDest)
     }
 }
 
-long BAE_FileCreate(void *fileName)
+int32_t BAE_FileCreate(void *fileName)
 {
     int file;
     
@@ -437,7 +437,7 @@ long BAE_FileCreate(void *fileName)
     return((file != -1) ? 0 : -1);  
 }
 
-long BAE_FileDelete(void *fileName)
+int32_t BAE_FileDelete(void *fileName)
 {
     if (fileName)
     {
@@ -452,7 +452,7 @@ long BAE_FileDelete(void *fileName)
 
 // Open a file
 // Return -1 if error, otherwise file handle
-long BAE_FileOpenForRead(void *fileName)
+int32_t BAE_FileOpenForRead(void *fileName)
 {
     CFURLRef dataURL;
     CFStringRef cfResourceName;
@@ -473,13 +473,13 @@ long BAE_FileOpenForRead(void *fileName)
 
         if ((ok == TRUE) && (fullPath[0]))
         {
-            return (long)open(fullPath, O_RDONLY);
+            return (int32_t)open(fullPath, O_RDONLY);
         }
     }
     return -1;
 }
 
-long BAE_FileOpenForWrite(void *fileName)
+int32_t BAE_FileOpenForWrite(void *fileName)
 {
     if (fileName)
     {
@@ -488,7 +488,7 @@ long BAE_FileOpenForWrite(void *fileName)
     return(-1);
 }
 
-long BAE_FileOpenForReadWrite(void *fileName)
+int32_t BAE_FileOpenForReadWrite(void *fileName)
 {
     if (fileName)
     {
@@ -498,14 +498,14 @@ long BAE_FileOpenForReadWrite(void *fileName)
 }
 
 // Close a file
-void BAE_FileClose(long fileReference)
+void BAE_FileClose(int32_t fileReference)
 {
     close(fileReference);
 }
 
 // Read a block of memory from a file.
 // Return -1 if error, otherwise length of data read.
-long BAE_ReadFile(long fileReference, void *pBuffer, long bufferLength)
+int32_t BAE_ReadFile(int32_t fileReference, void *pBuffer, int32_t bufferLength)
 {
     if ((pBuffer) && (bufferLength))
     {
@@ -516,7 +516,7 @@ long BAE_ReadFile(long fileReference, void *pBuffer, long bufferLength)
 
 // Write a block of memory from a file
 // Return -1 if error, otherwise length of data written.
-long BAE_WriteFile(long fileReference, void *pBuffer, long bufferLength)
+int32_t BAE_WriteFile(int32_t fileReference, void *pBuffer, int32_t bufferLength)
 {
     if ((pBuffer) && (bufferLength))
     {
@@ -527,21 +527,21 @@ long BAE_WriteFile(long fileReference, void *pBuffer, long bufferLength)
 
 // set file position in absolute file byte position
 // Return -1 if error, otherwise 0.
-long BAE_SetFilePosition(long fileReference, unsigned long filePosition)
+int32_t BAE_SetFilePosition(int32_t fileReference, uint32_t filePosition)
 {
     return((lseek(fileReference, filePosition, SEEK_SET) == -1) ? -1 : 0);
 }
 
 // get file position in absolute file bytes
-unsigned long BAE_GetFilePosition(long fileReference)
+uint32_t BAE_GetFilePosition(int32_t fileReference)
 {
     return(lseek(fileReference, 0, SEEK_CUR));
 }
 
 // get length of file
-unsigned long BAE_GetFileLength(long fileReference)
+uint32_t BAE_GetFileLength(int32_t fileReference)
 {
-    unsigned long pos;
+    uint32_t pos;
 
     pos = lseek(fileReference, 0, SEEK_END);
     lseek(fileReference, 0, SEEK_SET);
@@ -549,7 +549,7 @@ unsigned long BAE_GetFileLength(long fileReference)
 }
 
 // set the length of a file. Return 0, if ok, or -1 for error
-int BAE_SetFileLength(long fileReference, unsigned long newSize)
+int BAE_SetFileLength(int32_t fileReference, uint32_t newSize)
 {
     return -1;
 }
@@ -557,20 +557,20 @@ int BAE_SetFileLength(long fileReference, unsigned long newSize)
 // This function is called at render time with w route bus flag. If there's
 // no change, return currentRoute, other wise return one of audiosys.h route values.
 // This will change an active rendered's voice placement.
-void BAE_ProcessRouteBus(int currentRoute, long *pChannels, int count)
+void BAE_ProcessRouteBus(int currentRoute, int32_t *pChannels, int count)
 {
 }
 
-static void PV_ClearOutputBuffer(void *pBuffer, short int channels, short int bits, unsigned long frames)
+static void PV_ClearOutputBuffer(void *pBuffer, int16_t channels, int16_t bits, uint32_t frames)
 {
-    short int count;
+    int16_t count;
     char      *dest8;
-    short int *dest16;
+    int16_t *dest16;
     
     if (bits == 16)
     {
         // use 16 bit output
-        dest16 = (short int *)pBuffer;
+        dest16 = (int16_t *)pBuffer;
         for (count = 0; count < frames / 4; count++)
         {
             *dest16++ = 0;
@@ -617,7 +617,7 @@ int BAE_GetAudioBufferCount(void)
 }
 
 // Return the number of bytes used for audio buffer for output to card
-long BAE_GetAudioByteBufferSize(void)
+int32_t BAE_GetAudioByteBufferSize(void)
 {
    return(sHardwareChannel->mAudioByteBufferSize);
 }
@@ -683,10 +683,10 @@ const int kInputBus = 1;
 // **** Audio card support
 // Aquire and enabled audio card
 // return 0 if ok, -1 if failed
-int BAE_AquireAudioCard(void *threadContext, unsigned long sampleRate, unsigned long channels, unsigned long bits)
+int BAE_AquireAudioCard(void *threadContext, uint32_t sampleRate, uint32_t channels, uint32_t bits)
 {
     int           flag;
-    long          bufferSize;
+    int32_t          bufferSize;
     OSStatus      err = noErr;
 
     sHardwareChannel = BAE_Allocate(sizeof(AudioControlData));
@@ -718,7 +718,7 @@ int BAE_AquireAudioCard(void *threadContext, unsigned long sampleRate, unsigned 
     OSStatus status = 0;
     if ((sHardwareChannel->mAudioFramesToGenerate) && ((err == noErr)))
     {
-        bufferSize  = (bits == 8) ? sizeof(char) : sizeof(short int);
+        bufferSize  = (bits == 8) ? sizeof(char) : sizeof(int16_t);
         bufferSize *= channels;
 
         // Describe audio component
@@ -837,7 +837,7 @@ int BAE_ReleaseAudioCard(void *threadContext)
 }
 
 // return device position in samples
-unsigned long BAE_GetDeviceSamplesPlayedPosition(void)
+uint32_t BAE_GetDeviceSamplesPlayedPosition(void)
 {
    return(sHardwareChannel->mSamplesPlayed);
 }
@@ -846,7 +846,7 @@ unsigned long BAE_GetDeviceSamplesPlayedPosition(void)
 // number of devices. ie different versions of the BAE connection. DirectSound and waveOut
 // return number of devices. ie 1 is one device, 2 is two devices.
 // NOTE: This function needs to function before any other calls may have happened.
-long BAE_MaxDevices(void)
+int32_t BAE_MaxDevices(void)
 {
    return(1);
 }
@@ -855,7 +855,7 @@ long BAE_MaxDevices(void)
 // NOTE:    This function needs to function before any other calls may have happened.
 //          Also you will need to call BAE_ReleaseAudioCard then BAE_AquireAudioCard
 //          in order for the change to take place.
-void BAE_SetDeviceID(long deviceID, void *deviceParameter)
+void BAE_SetDeviceID(int32_t deviceID, void *deviceParameter)
 {
    deviceID;
    deviceParameter;
@@ -863,7 +863,7 @@ void BAE_SetDeviceID(long deviceID, void *deviceParameter)
 
 // return current device ID
 // NOTE: This function needs to function before any other calls may have happened.
-long BAE_GetDeviceID(void *deviceParameter)
+int32_t BAE_GetDeviceID(void *deviceParameter)
 {
    deviceParameter;
    return(0);
@@ -878,13 +878,13 @@ long BAE_GetDeviceID(void *deviceParameter)
 //          "WinOS,waveOut,multi threaded"
 //          "WinOS,VxD,low level hardware"
 //          "WinOS,plugin,Director"
-void BAE_GetDeviceName(long deviceID, char *cName, unsigned long cNameLength)
+void BAE_GetDeviceName(int32_t deviceID, char *cName, uint32_t cNameLength)
 {
    static char id[] =
    {
       "MacOS,Cocoa,AudioQueue"
    };
-   unsigned long length;
+   uint32_t length;
 
    if ((cName) && (cNameLength))
    {

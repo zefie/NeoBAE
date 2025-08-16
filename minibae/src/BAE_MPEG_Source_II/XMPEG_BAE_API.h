@@ -34,7 +34,7 @@
 **
 **  Layer between BAE and MPEG decoder.
 **
-**  © Copyright 2000-2001 Beatnik, Inc, All Rights Reserved.
+**  ï¿½ Copyright 2000-2001 Beatnik, Inc, All Rights Reserved.
 **  Written by Steve Hales
 **
 **  Beatnik products contain certain trade secrets and confidential and
@@ -86,7 +86,7 @@
 void * MPG_NewStream(void *fileName_in);
 void * MPG_NewStreamXFILENAME(XFILENAME *fileName_in);
 void * MPG_NewStreamXFILE(XFILE file);
-void * MPG_NewStreamFromMemory(void *mpeg_stream, unsigned long mpeg_stream_length);
+void * MPG_NewStreamFromMemory(void *mpeg_stream, uint32_t mpeg_stream_length);
 
 // free vaild stream
 void MPG_FreeStream(void *stream);
@@ -98,10 +98,10 @@ int MPG_GetBufferSize(void *reference);
 int MPG_GetFrameBufferSizeInBytes(void *reference);
 
 // reposition stream, start reading from newPos.
-int MPG_SeekStream(void *reference, unsigned long newPos);
+int MPG_SeekStream(void *reference, uint32_t newPos);
 
 // return the max number of frames
-unsigned long MPG_GetMaxBuffers(void *reference);
+uint32_t MPG_GetMaxBuffers(void *reference);
 
 // Given a valid stream, and a buffer fill the pcm audio samples from the stream
 int MPG_FillBuffer(void *stream, void *buffer);
@@ -119,31 +119,31 @@ int MPG_GetBitrate(void *stream);
 int MPG_GetSampleRate(void *stream);
 
 // return the number of samples in this stream
-unsigned long MPG_GetNumberOfSamples(void *stream);
+uint32_t MPG_GetNumberOfSamples(void *stream);
 
 // return the size in bytes of the complete uncompressed MPEG file
-unsigned long MPG_GetSizeInBytes(void *reference);
+uint32_t MPG_GetSizeInBytes(void *reference);
 
 //#### encoder API
 
 // create new mpeg stream to prepare for memory based encoding. Returns NULL if failed.
-void * MPG_EncodeNewStream(unsigned long encodeRate,
-                            unsigned long sampleRate, unsigned long channels,
-                            XPTR data, unsigned long dataLength);
+void * MPG_EncodeNewStream(uint32_t encodeRate,
+                            uint32_t sampleRate, uint32_t channels,
+                            XPTR data, uint32_t dataLength);
 
 // compress frame
 // returns number of samples processed
 // returns *pLastFrame TRUE if last mpeg frame
-int MPG_EncodeProcess(void *stream, XPTR *pReturnedBuffer, unsigned long *pReturnedSize, XBOOL *pLastFrame);
+int MPG_EncodeProcess(void *stream, XPTR *pReturnedBuffer, uint32_t *pReturnedSize, XBOOL *pLastFrame);
 
 // free vaild stream and return compressed MPG stream m_results
 void MPG_EncodeFreeStream(void *stream);
 
 // get max mpeg frames we're going to encode
-unsigned long MPG_EncodeMaxFrames(void *stream);
+uint32_t MPG_EncodeMaxFrames(void *stream);
 
 // get max size of an mpeg frame in bytes
-unsigned long MPG_EncodeMaxFrameSize(void *stream);
+uint32_t MPG_EncodeMaxFrameSize(void *stream);
 
 // Use these to make your buffer ('data' in MPG_EncodeNewStream) refillable
 // by having this callback refill the 'data' buffer when called.

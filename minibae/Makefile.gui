@@ -4,7 +4,7 @@ DEBUG			:= 0
 BUILD_GUI   := 1
 include inc/Makefile.common
 
-ARCH		:= -m32 -static
+ARCH		:= -static
 CC		:= gcc
 CXX		:= g++
 LD		:= $(CC)
