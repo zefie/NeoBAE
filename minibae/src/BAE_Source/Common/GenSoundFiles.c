@@ -3543,7 +3543,7 @@ OPErr GM_FinalizeFileHeader(XFILE file, AudioFileType fileType)
                                 dataSize = fileSize - XFileGetPosition(file);
                                 
                                 // Go back and write the correct data size
-                                XFileSetPositionRelative(file, -sizeof(chunkSize));
+                                XFileSetPositionRelative(file, (int32_t)-sizeof(chunkSize));
                                 tmp = dataSize;
 #if X_WORD_ORDER == FALSE // motorola
                                 tmp = XSwapLong(tmp);

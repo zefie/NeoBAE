@@ -36,6 +36,85 @@ static void gui_audio_task(void *reference) {
     }
 }
 
+// Forward declaration
+static char* get_executable_directory();
+
+// Helper function to convert a path to absolute path
+static char* get_absolute_path(const char* path) {
+    if (!path || !path[0]) return NULL;
+    
+    // Handle special case for built-in bank
+    if (strcmp(path, "__builtin__") == 0) {
+        char* result = malloc(strlen(path) + 1);
+        if (result) {
+            strcpy(result, path);
+        }
+        return result;
+    }
+    
+#ifdef _WIN32
+    char* abs_path = malloc(MAX_PATH);
+    if (abs_path && _fullpath(abs_path, path, MAX_PATH)) {
+        BAE_PRINTF("Converted path '%s' to absolute: '%s'\n", path, abs_path);
+        return abs_path;
+    }
+    if (abs_path) free(abs_path);
+    BAE_PRINTF("Failed to convert path '%s' to absolute\n", path);
+    return NULL;
+#else
+    char* abs_path = realpath(path, NULL);
+    if (abs_path) {
+        BAE_PRINTF("Converted path '%s' to absolute: '%s'\n", path, abs_path);
+    } else {
+        BAE_PRINTF("Failed to convert path '%s' to absolute\n", path);
+    }
+    return abs_path; // realpath allocates memory that caller must free
+#endif
+}
+
+// Helper function to get the directory where the executable is located
+static char* get_executable_directory() {
+    static char exe_dir[512] = "";
+    
+    // Only compute once
+    if (exe_dir[0] != '\0') {
+        return exe_dir;
+    }
+    
+#ifdef _WIN32
+    char exe_path[MAX_PATH];
+    DWORD result = GetModuleFileNameA(NULL, exe_path, MAX_PATH);
+    if (result > 0 && result < MAX_PATH) {
+        // Find the last backslash and null-terminate there
+        char* last_slash = strrchr(exe_path, '\\');
+        if (last_slash) {
+            *last_slash = '\0';
+            strncpy(exe_dir, exe_path, sizeof(exe_dir) - 1);
+            exe_dir[sizeof(exe_dir) - 1] = '\0';
+            return exe_dir;
+        }
+    }
+#else
+    // On Unix-like systems, we can try reading /proc/self/exe or use argv[0]
+    char exe_path[512];
+    ssize_t len = readlink("/proc/self/exe", exe_path, sizeof(exe_path) - 1);
+    if (len != -1) {
+        exe_path[len] = '\0';
+        char* last_slash = strrchr(exe_path, '/');
+        if (last_slash) {
+            *last_slash = '\0';
+            strncpy(exe_dir, exe_path, sizeof(exe_dir) - 1);
+            exe_dir[sizeof(exe_dir) - 1] = '\0';
+            return exe_dir;
+        }
+    }
+#endif
+    
+    // Fallback to current directory
+    strcpy(exe_dir, ".");
+    return exe_dir;
+}
+
 // Optional SDL_ttf
 #ifdef GUI_WITH_TTF
 #include <SDL_ttf.h>

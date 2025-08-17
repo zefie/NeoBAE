@@ -1088,10 +1088,10 @@ struct GM_Song
     void                        *songEndCallbackReference;
 
     GM_SongTimeCallbackProcPtr  songTimeCallbackPtr;    // called every slice to pass the time
-    int32_t                        songTimeCallbackReference;
+    void                        *songTimeCallbackReference;
 
     GM_SongMetaCallbackProcPtr  metaEventCallbackPtr;   // called during playback with current meta events
-    void *                      metaEventCallbackReference;    // changed to pointer for 64-bit safety
+    void                        *metaEventCallbackReference;    // changed to pointer for 64-bit safety
 
     // these pointers are NULL until used, then they are allocated
     GM_ControlCallbackPtr       controllerCallback;     // called during playback with controller info
@@ -1984,10 +1984,10 @@ void GM_GetInstrumentUsedRange(GM_Song *pSong, XLongResourceID thePatch, XSBYTE 
 void GM_ResetTempoToDefault(GM_Song *pSong);
 
 void GM_SetSongCallback(GM_Song *theSong, GM_SongCallbackProcPtr songEndCallbackPtr, void *reference);
-void GM_SetSongTimeCallback(GM_Song *theSong, GM_SongTimeCallbackProcPtr songTimeCallbackPtr, int32_t reference);
+void GM_SetSongTimeCallback(GM_Song *theSong, GM_SongTimeCallbackProcPtr songTimeCallbackPtr, void *reference);
 void GM_SetSongMetaEventCallback(GM_Song *theSong, GM_SongMetaCallbackProcPtr theCallback, void *reference);
 
-void GM_SetControllerCallback(GM_Song *theSong, void * reference, GM_ControlerCallbackPtr controllerCallback, int16_t controller);
+void GM_SetControllerCallback(GM_Song *theSong, void *reference, GM_ControlerCallbackPtr controllerCallback, int16_t controller);
 
 // Display
 XSWORD GM_GetAudioSampleFrame(XSWORD *pLeft, XSWORD *pRight);
