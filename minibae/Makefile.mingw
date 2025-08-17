@@ -120,7 +120,7 @@ $(TARGET_BIN): ${OBJ_BIN}
 	${LD} -o $(TARGET_OUT)${TARGET_BIN} ${LDFLAGS} ${OBJ_BIN} ${LIBS}
 
 pack: ${TARGET_BIN}
-	cat $(TARGET_OUT)${TARGET_BIN} | gzip -9c > $(TARGET_OUT)${TARGET_NAME}
+	cat $(TARGET_OUT)${TARGET_BIN} | gzip -9c > $(TARGET_OUT)${TARGET_NAME}.gz
 
 
 # Rules for compiling source files to object files

@@ -3186,7 +3186,9 @@ BAEResult BAEMixer_ServiceAudioOutputToFile(BAEMixer theMixer)
     theErr = NO_ERR;
 
 #ifdef WASM
-    channels = ( theModifiers /*iModifiers*/ & ~BAE_USE_STEREO) ? 2 : 1;
+    // FIX: previous code used bitwise NOT (~BAE_USE_STEREO) producing almost always non-zero
+    // which forced channels=2 and led to incorrect header parameters. Correct test below.
+    channels = (theModifiers & BAE_USE_STEREO) ? 2 : 1;
     sampleSize = (theModifiers /*iModifiers*/ & BAE_USE_16) ? 2 : 1;
     uint32_t numSamples = (uint32_t)(mWritingDataBlockSize / sampleSize / channels);
 
@@ -3199,7 +3201,8 @@ BAEResult BAEMixer_ServiceAudioOutputToFile(BAEMixer theMixer)
 
     if (mWritingToFile && mWritingToFileReference)
     {
-        channels = ( theModifiers /*iModifiers*/ & ~BAE_USE_STEREO) ? 2 : 1;
+    // FIX: previous code used bitwise NOT (~BAE_USE_STEREO) causing invalid channel count
+    channels = (theModifiers & BAE_USE_STEREO) ? 2 : 1;
         sampleSize = (theModifiers /*iModifiers*/ & BAE_USE_16) ? 2 : 1;
         if (mWritingDataBlockSize)
         {

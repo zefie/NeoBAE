@@ -3450,6 +3450,12 @@ OPErr GM_FinalizeFileHeader(XFILE file, AudioFileType fileType)
         switch (fileType)
         {
             case FILE_WAVE_TYPE:
+            {
+                XWaveHeader waveHeader;
+                uint32_t fmtChunkPos = 0;
+                uint32_t fmtChunkSize = 0;
+                uint32_t dataSize = 0;
+                
                 fileSize = XFileGetLength(file);
                 
                 XFileSetPosition(file, 0);
@@ -3460,6 +3466,7 @@ OPErr GM_FinalizeFileHeader(XFILE file, AudioFileType fileType)
                     XFileRead(file, &chunk, sizeof(chunk));
                     if (XGetLong(&chunk) == X_WAVE)
                     {
+                        // Update main RIFF chunk size
                         XFileSetPosition(file, 4);
                         tmp = fileSize-8;
 #if X_WORD_ORDER == FALSE // motorola
@@ -3467,33 +3474,133 @@ OPErr GM_FinalizeFileHeader(XFILE file, AudioFileType fileType)
 #endif
                         XFileWrite(file, &tmp, sizeof(tmp));
 
-                        while (XGetLong(&chunk) != X_DATA)
+                        // Find and read the fmt chunk to get format information
+                        XFileSetPosition(file, 12);  // Start after "RIFF????WAVE"
+                        while (XFileGetPosition(file) < fileSize - 8)
                         {
-                            xerr = XFileSetPositionRelative(file, -3);
-                            if (xerr != 0)
-                            {
-                                err = BAD_FILE;
-                            }
-
                             xerr = XFileRead(file, &chunk, sizeof(chunk));
                             if (xerr != 0)
                             {
                                 err = BAD_FILE;
+                                break;
+                            }
+                            
+                            xerr = XFileRead(file, &fmtChunkSize, sizeof(fmtChunkSize));
+                            if (xerr != 0)
+                            {
+                                err = BAD_FILE;
+                                break;
+                            }
+                            
+#if X_WORD_ORDER == FALSE // motorola
+                            fmtChunkSize = XSwapLong(fmtChunkSize);
+#endif
+                            
+                            if (XGetLong(&chunk) == X_FMT)
+                            {
+                                // Found fmt chunk, read the header
+                                fmtChunkPos = XFileGetPosition(file);
+                                if (fmtChunkSize >= sizeof(XWaveHeader))
+                                {
+                                    xerr = XFileRead(file, &waveHeader, sizeof(XWaveHeader));
+                                    if (xerr != 0)
+                                    {
+                                        err = BAD_FILE;
+                                        break;
+                                    }
+                                }
+                                break;
+                            }
+                            else
+                            {
+                                // Skip this chunk
+                                XFileSetPositionRelative(file, fmtChunkSize);
                             }
                         }
-                        tmp = fileSize - XFileGetPosition(file) - sizeof(chunk);
-#if X_WORD_ORDER == FALSE // motorola
-                        tmp = XSwapLong(tmp);
-#endif
-                        xerr = XFileWrite(file, &tmp, sizeof(tmp));
-                        if (xerr != 0)
+
+                        // Find DATA chunk and update its size
+                        XFileSetPosition(file, 12);  // Start after "RIFF????WAVE"
+                        while (XFileGetPosition(file) < fileSize - 8)
                         {
-                            err = BAD_FILE;
+                            uint32_t chunkSize;
+                            xerr = XFileRead(file, &chunk, sizeof(chunk));
+                            if (xerr != 0)
+                            {
+                                err = BAD_FILE;
+                                break;
+                            }
+                            
+                            xerr = XFileRead(file, &chunkSize, sizeof(chunkSize));
+                            if (xerr != 0)
+                            {
+                                err = BAD_FILE;
+                                break;
+                            }
+                            
+                            if (XGetLong(&chunk) == X_DATA)
+                            {
+                                // Found data chunk, calculate and update its size
+                                dataSize = fileSize - XFileGetPosition(file);
+                                
+                                // Go back and write the correct data size
+                                XFileSetPositionRelative(file, -sizeof(chunkSize));
+                                tmp = dataSize;
+#if X_WORD_ORDER == FALSE // motorola
+                                tmp = XSwapLong(tmp);
+#endif
+                                xerr = XFileWrite(file, &tmp, sizeof(tmp));
+                                if (xerr != 0)
+                                {
+                                    err = BAD_FILE;
+                                }
+                                break;
+                            }
+                            else
+                            {
+                                // Skip this chunk
+#if X_WORD_ORDER == FALSE // motorola
+                                chunkSize = XSwapLong(chunkSize);
+#endif
+                                XFileSetPositionRelative(file, chunkSize);
+                            }
+                        }
+
+                        // Update fmt chunk if we found it and have valid data
+                        if (fmtChunkPos > 0 && dataSize > 0 && err == NO_ERR)
+                        {
+                            uint32_t bytesPerSample, samplesPerSec, blockAlign;
+                            
+                            // Extract format info (convert from file byte order)
+#if X_WORD_ORDER == FALSE // motorola
+                            samplesPerSec = XSwapLong(waveHeader.nSamplesPerSec);
+                            blockAlign = XSwapShort(waveHeader.nBlockAlign);
+#else
+                            samplesPerSec = waveHeader.nSamplesPerSec;
+                            blockAlign = waveHeader.nBlockAlign;
+#endif
+                            
+                            if (blockAlign > 0 && samplesPerSec > 0)
+                            {
+                                // Calculate and update nAvgBytesPerSec to ensure correct duration calculation
+                                uint32_t avgBytesPerSec = samplesPerSec * blockAlign;
+                                
+                                // Write back the corrected nAvgBytesPerSec
+                                XFileSetPosition(file, fmtChunkPos + 8);  // Offset to nAvgBytesPerSec field
+                                tmp = avgBytesPerSec;
+#if X_WORD_ORDER == FALSE // motorola
+                                tmp = XSwapLong(tmp);
+#endif
+                                xerr = XFileWrite(file, &tmp, sizeof(tmp));
+                                if (xerr != 0)
+                                {
+                                    err = BAD_FILE;
+                                }
+                            }
                         }
                     }
                 }
+            } break;
 
-            
             case FILE_AIFF_TYPE:
             {
                 uint32_t size;

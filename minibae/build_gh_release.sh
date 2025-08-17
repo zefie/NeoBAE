@@ -31,14 +31,14 @@ mkdir "${ODIR}"
 
 echo "Building MingW32 DirectSound x86..."
 runcmd make -f Makefile.mingw BITS=32 clean all pack
-install_file "${BDIR}/playbae.exe.gz" "${ODIR}/playbae_dsound.exe.gz"
+install_file "${BDIR}/playbae_dsound_x86.exe.gz" "${ODIR}/playbae_dsound_x86.exe.gz"
 runcmd cd "${BDIR}" && runcmd zip -u "${ODIR}/libMiniBAE_win_dsound_x86.zip" *.dll *.lib
 runcmd cd "${RDIR}"
 runcmd make -f Makefile.mingw clean
 
 echo "Building MingW32 SDL2 x86..."
 runcmd make -f Makefile.mingw USE_SDL=1 BITS=32 clean all pack
-install_file "${BDIR}/playbae.exe.gz" "${ODIR}/playbae_sdl2_x86.exe.gz"
+install_file "${BDIR}/playbae_sdl2_x86.exe.gz" "${ODIR}/playbae_sdl2_x86.exe.gz"
 runcmd cd "${BDIR}" && runcmd zip -u "${ODIR}/libMiniBAE_win_sdl2_x86.zip" *.dll *.lib
 
 runcmd cd "${RDIR}"
@@ -46,14 +46,14 @@ runcmd make -f Makefile.mingw clean
 
 echo "Building MingW32 DirectSound x64..."
 runcmd make -f Makefile.mingw BITS=64 clean all pack
-install_file "${BDIR}/playbae.exe.gz" "${ODIR}/playbae_dsound_x64.exe.gz"
+install_file "${BDIR}/playbae_dsound_x64.exe.gz" "${ODIR}/playbae_dsound_x64.exe.gz"
 runcmd cd "${BDIR}" && runcmd zip -u "${ODIR}/libMiniBAE_win_dsound_x64.zip" *.dll *.lib
 runcmd cd "${RDIR}"
 runcmd make -f Makefile.mingw clean
 
 echo "Building MingW32 SDL2 x64..."
 runcmd make -f Makefile.mingw USE_SDL=1 BITS=64 clean all pack
-install_file "${BDIR}/playbae.exe.gz" "${ODIR}/playbae_sdl2_x64.exe.gz"
+install_file "${BDIR}/playbae_sdl2_x64.exe.gz" "${ODIR}/playbae_sdl2_x64.exe.gz"
 runcmd cd "${BDIR}" && runcmd zip -u "${ODIR}/libMiniBAE_win_sdl2_x64.zip" *.dll *.lib
 runcmd cd "${RDIR}"
 runcmd make -f Makefile.mingw clean

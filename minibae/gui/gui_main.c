@@ -508,12 +508,22 @@ static void parse_banks_xml() {
     
     // Try Banks/Banks.xml in executable directory first
 #ifdef _WIN32
+    snprintf(xml_path, sizeof(xml_path), "%s\\BXBanks\\Banks.xml", get_executable_directory());
+#else
+    snprintf(xml_path, sizeof(xml_path), "%s/BXBanks/Banks.xml", get_executable_directory());
+#endif
+    f = fopen(xml_path, "r");
+    
+    if (!f) {
+        // Try Banks.xml directly in executable directory
+#ifdef _WIN32
     snprintf(xml_path, sizeof(xml_path), "%s\\Banks\\Banks.xml", get_executable_directory());
 #else
     snprintf(xml_path, sizeof(xml_path), "%s/Banks/Banks.xml", get_executable_directory());
 #endif
-    f = fopen(xml_path, "r");
-    
+        f = fopen(xml_path, "r");
+    }
+
     if (!f) {
         // Try Banks.xml directly in executable directory
 #ifdef _WIN32
@@ -522,20 +532,7 @@ static void parse_banks_xml() {
         snprintf(xml_path, sizeof(xml_path), "%s/Banks.xml", get_executable_directory());
 #endif
         f = fopen(xml_path, "r");
-    }
-    
-    if (!f) {
-        // Fallback: try current working directory (old behavior)
-        f = fopen("Banks/Banks.xml", "r");
-        if (!f) {
-            f = fopen("Banks.xml", "r");
-            if (!f) {
-                write_to_log("Could not find Banks.xml in executable directory or current directory\n");
-                return;
-            }
-        }
-    }
-    
+    }    
     write_to_log("Loading Banks.xml from: %s\n", xml_path);
     
     char line[1024];
@@ -970,13 +967,13 @@ static bool load_bank_simple(const char *path, bool save_to_settings, int reverb
                 char bank_path[512];
                 snprintf(bank_path, sizeof(bank_path), "Banks/%s", banks[i].src);
                 write_to_log("Trying fallback bank: %s\n", bank_path);
-                if(load_bank(bank_path, false, 0, 100, 100, loop_enabled, reverb_type, dummy_ch, false)) {
+                if(load_bank(bank_path, false, 0, 100, 75, loop_enabled, reverb_type, dummy_ch, false)) {
                     write_to_log("Fallback bank loaded successfully: %s\n", bank_path);
                     return true;
                 }
                 // Try without Banks/ prefix
                 write_to_log("Trying fallback bank without prefix: %s\n", banks[i].src);
-                if(load_bank(banks[i].src, false, 0, 100, 100, loop_enabled, reverb_type, dummy_ch, false)) {
+                if(load_bank(banks[i].src, false, 0, 100, 75, loop_enabled, reverb_type, dummy_ch, false)) {
                     write_to_log("Fallback bank loaded successfully: %s\n", banks[i].src);
                     return true;
                 }
@@ -990,14 +987,14 @@ static bool load_bank_simple(const char *path, bool save_to_settings, int reverb
 #endif
             "patches.hsb","npatches.hsb",NULL};
         for(int i=0; autoBanks[i] && !g_bae.bank_loaded; ++i){ 
-            if(load_bank(autoBanks[i], false, 0, 100, 100, loop_enabled, reverb_type, dummy_ch, false)) {
+            if(load_bank(autoBanks[i], false, 0, 100, 75, loop_enabled, reverb_type, dummy_ch, false)) {
                 return true;
             }
         }
         return false;
     }
     
-    return load_bank(path, false, 0, 100, 100, loop_enabled, reverb_type, dummy_ch, save_to_settings);
+    return load_bank(path, false, 0, 100, 75, loop_enabled, reverb_type, dummy_ch, save_to_settings);
 }
 
 static void bae_shutdown(){
@@ -1203,6 +1200,11 @@ static bool bae_play(bool *playing){
                 if(rr != BAE_NO_ERROR){ write_to_log("BAESong_Resume returned %d\n", rr); }
             } else {
                 write_to_log("Preparing to start song '%s' (pos=%d ms)\n", g_bae.loaded_path, bae_get_pos_ms());
+                // Reapply loop state right before start in case it was cleared by prior stop/export/load
+                if(!g_bae.is_audio_file){
+                    BAESong_SetLoops(g_bae.song, g_bae.loop_enabled_gui ? 32767 : 0);
+                    write_to_log("Loop state applied: %d (loops=%s)\n", g_bae.loop_enabled_gui ? 1:0, g_bae.loop_enabled_gui?"32767":"0");
+                }
                 uint32_t startPosUs = 0;
                 if(g_bae.preserve_position_on_next_start) {
                     startPosUs = g_bae.preserved_start_position_us;
@@ -1365,7 +1367,7 @@ int main(int argc, char *argv[]){
 
     bool running = true;
     bool ch_enable[16]; for(int i=0;i<16;i++) ch_enable[i]=true;
-    int transpose = 0; int tempo = 100; int volume=100; bool loopPlay=true; bool loudMode=true; (void)loudMode; // loud mode not exposed yet
+    int transpose = 0; int tempo = 100; int volume=75; bool loopPlay=true; bool loudMode=true; (void)loudMode; // lowered default volume to 75%
     int reverbLvl=15, chorusLvl=15; (void)reverbLvl; (void)chorusLvl; // placeholders
     int progress=0; int duration= bae_get_len_ms(); bool playing=false; int reverbType=7; // Default to "Small Refl"
     
@@ -1469,6 +1471,54 @@ int main(int argc, char *argv[]){
         if(playing){ progress = bae_get_pos_ms(); duration = bae_get_len_ms(); }
         BAEMixer_Idle(g_bae.mixer); // ensure processing if needed
         bae_update_channel_mutes(ch_enable);
+
+        // Check for end-of-playback to update UI state correctly
+        if(playing && g_bae.song_loaded) {
+            bool song_finished = false;
+            
+            if(g_bae.is_audio_file && g_bae.sound) {
+                // For audio files, check if sound is done playing
+                BAE_BOOL is_done = FALSE;
+                if(BAESound_IsDone(g_bae.sound, &is_done) == BAE_NO_ERROR && is_done) {
+                    song_finished = true;
+                }
+            } else if(!g_bae.is_audio_file && g_bae.song) {
+                // For MIDI/RMF files, check if song is done
+                BAE_BOOL is_done = FALSE;
+                if(BAESong_IsDone(g_bae.song, &is_done) == BAE_NO_ERROR && is_done) {
+                    song_finished = true;
+                }
+            }
+            
+            if(song_finished) {
+                if(g_bae.loop_enabled_gui && !g_bae.is_audio_file && g_bae.song) {
+                    // Song should loop but isn't - this indicates the loop setting may not be working
+                    // Force a restart from the beginning
+                    write_to_log("Song finished but should loop - restarting from beginning\n");
+                    BAESong_Stop(g_bae.song, FALSE);
+                    BAESong_SetMicrosecondPosition(g_bae.song, 0);
+                    BAESong_SetLoops(g_bae.song, 32767); // Re-apply loop setting
+                    BAESong_Preroll(g_bae.song);
+                    BAEResult sr = BAESong_Start(g_bae.song, 0);
+                    if(sr != BAE_NO_ERROR) {
+                        write_to_log("Failed to restart looping song (%d)\n", sr);
+                        playing = false;
+                        g_bae.is_playing = false;
+                        progress = 0;
+                    }
+                } else {
+                    // Song finished and not looping - stop playback
+                    write_to_log("Song finished, stopping playback\n");
+                    playing = false;
+                    g_bae.is_playing = false;
+                    progress = 0;
+                    // For MIDI/RMF, reset position to beginning
+                    if(!g_bae.is_audio_file && g_bae.song) {
+                        BAESong_SetMicrosecondPosition(g_bae.song, 0);
+                    }
+                }
+            }
+        }
 
         // Detect potential playback stall (song started but position stays at 0 for a while)
         static int stallCounter = 0;
