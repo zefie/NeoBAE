@@ -28,4 +28,5 @@
   <bank src="minibae-nokia-ngage.hsb" name="Nokia N-Gage (Mango)" sha1="6b89950cd76e0542ab2575c69ab3448d0f0c17b5" />
   <bank src="danger-hiptop.hsb" name="Danger Hiptop 1.1" sha1="8bb26fc66aecf14e2dfa48d2123e2576863fa2ab" />
   <bank src="nChippyBank.hsb" name="Chippy" sha1="8664e092ecfd66e0adbbee871c9ff5bbbbaf0494" />
+  <bank src="spmidi_meycro2.hsb" name="Micro Bank (6kb!)" sha1="f8438602a0254ee6d224f6051b33804f076ad926" />
 </banks>
