@@ -25,7 +25,15 @@
 #include <unistd.h>  // for readlink
 #endif
 #include "MiniBAE.h"
+#include "BAE_API.h" // for BAE_GetDeviceSamplesPlayedPosition diagnostics
 #include "gui_font.h" // bitmap font fallback
+
+// GUI-specific mixer audio task to ensure stream servicing (mirrors playbae behavior)
+static void gui_audio_task(void *reference) {
+    if (reference) {
+        BAEMixer_ServiceStreams(reference);
+    }
+}
 
 // Forward declaration
 static char* get_executable_directory();
@@ -344,6 +352,9 @@ typedef struct {
     uint32_t position_us_before_export; // to restore playback position
     bool audio_engaged_before_export; // track hardware engagement
     char loaded_path[1024];
+    // Preserve position across bank reloads
+    bool preserve_position_on_next_start;
+    uint32_t preserved_start_position_us;
     // Patch bank info
     BAEBankToken bank_token;
     char bank_name[256];
@@ -797,6 +808,11 @@ static bool bae_init(){
     if(!g_bae.mixer){ write_to_log("BAEMixer_New failed\n"); return false; }
     BAEResult r = BAEMixer_Open(g_bae.mixer, BAE_RATE_44K, BAE_LINEAR_INTERPOLATION, BAE_USE_16|BAE_USE_STEREO, 32, 8, 32, TRUE);
     if(r != BAE_NO_ERROR){ write_to_log("BAEMixer_Open failed %d\n", r); return false; }
+    // IMPORTANT: Without an audio task, MIDI/RMF streams may not advance on some builds/platforms (esp. 64-bit)
+    // playbae sets this; the GUI previously did not, causing silent or non-starting songs.
+    BAEMixer_SetAudioTask(g_bae.mixer, gui_audio_task, g_bae.mixer);
+    // Make sure audio is engaged (defensive)
+    BAEMixer_ReengageAudio(g_bae.mixer);
     // Attempt default reverb
     BAEMixer_SetDefaultReverb(g_bae.mixer, BAE_REVERB_NONE);
     // Bank loaded later via load_bank() helper
@@ -821,13 +837,17 @@ static bool load_bank(const char *path, bool current_playing_state, int transpos
     bool had_song = g_bae.song_loaded;
     char current_song_path[1024] = {0};
     bool was_playing = false;
-    int current_position = 0;
+    int current_position_ms = 0;
+    uint32_t current_position_us = 0;
     
     if(had_song && g_bae.song) {
         strncpy(current_song_path, g_bae.loaded_path, sizeof(current_song_path)-1);
         // Use the passed playing state
         was_playing = current_playing_state;
-        current_position = bae_get_pos_ms();
+    current_position_ms = bae_get_pos_ms();
+    uint32_t tmpUs = 0;
+    BAESong_GetMicrosecondPosition(g_bae.song, &tmpUs);
+    current_position_us = tmpUs; // capture precise position
     }
     
     // Unload existing banks (single active bank paradigm like original patch switcher)
@@ -911,12 +931,18 @@ static bool load_bank(const char *path, bool current_playing_state, int transpos
         set_status_message("Reloading song with new bank...");
         if(bae_load_song_with_settings(current_song_path, transpose, tempo, volume, loop_enabled, reverb_type, ch_enable)) {
             // Restore playback state
-            if(current_position > 0) {
-                bae_seek_ms(current_position);
-            }
             if(was_playing) {
+                // Preserve position for next start (microseconds preferred)
+                if(current_position_us == 0 && current_position_ms > 0) {
+                    current_position_us = (uint32_t)current_position_ms * 1000UL;
+                }
+                g_bae.preserved_start_position_us = current_position_us;
+                g_bae.preserve_position_on_next_start = (current_position_us > 0);
+                write_to_log("Preserving playback position across bank reload: %u us (%d ms)\n", current_position_us, current_position_ms);
                 bool playing_state = false;
-                bae_play(&playing_state); // This will start playback
+                bae_play(&playing_state); // Will honor preserved position
+            } else if(current_position_ms > 0) {
+                bae_seek_ms(current_position_ms);
             }
             write_to_log("Song reloaded successfully with new bank\n");
             set_status_message("Song reloaded with new bank");
@@ -1022,7 +1048,8 @@ static bool bae_load_song(const char* path){
         r = BAESong_LoadRmfFromFile(g_bae.song,(BAEPathName)path,0,TRUE);
     }
     if(r!=BAE_NO_ERROR){ write_to_log("Song load failed %d %s\n", r,path); BAESong_Delete(g_bae.song); g_bae.song=NULL; return false; }
-    BAESong_Preroll(g_bae.song);
+    // Defer preroll until just before first Start so that any user settings
+    // (transpose, tempo, channel mutes, reverb, loops) are applied first.
     BAESong_GetMicrosecondLength(g_bae.song,&g_bae.song_length_us);
     strncpy(g_bae.loaded_path,path,sizeof(g_bae.loaded_path)-1); g_bae.loaded_path[sizeof(g_bae.loaded_path)-1]='\0';
     g_bae.song_loaded=true; g_bae.is_audio_file=false;
@@ -1175,6 +1202,23 @@ static bool bae_play(bool *playing){
                 BAEResult rr = BAESong_Resume(g_bae.song);
                 if(rr != BAE_NO_ERROR){ write_to_log("BAESong_Resume returned %d\n", rr); }
             } else {
+                write_to_log("Preparing to start song '%s' (pos=%d ms)\n", g_bae.loaded_path, bae_get_pos_ms());
+                uint32_t startPosUs = 0;
+                if(g_bae.preserve_position_on_next_start) {
+                    startPosUs = g_bae.preserved_start_position_us;
+                    write_to_log("Resume with preserved position %u us for '%s'\n", startPosUs, g_bae.loaded_path);
+                }
+                if(startPosUs == 0) {
+                    // Standard start from beginning: position then preroll
+                    BAESong_SetMicrosecondPosition(g_bae.song,0);
+                    BAESong_Preroll(g_bae.song);
+                } else {
+                    // For resume, preroll from start (engine needs initial setup) then seek to desired position AFTER preroll
+                    BAESong_SetMicrosecondPosition(g_bae.song,0);
+                    BAESong_Preroll(g_bae.song);
+                    BAESong_SetMicrosecondPosition(g_bae.song,startPosUs);
+                }
+                write_to_log("Preroll complete. Start position now %u us for '%s'\n", startPosUs==0?0:startPosUs, g_bae.loaded_path);
                 write_to_log("Attempting BAESong_Start on '%s'\n", g_bae.loaded_path);
                 BAEResult sr = BAESong_Start(g_bae.song,0);
                 if(sr != BAE_NO_ERROR){
@@ -1182,6 +1226,7 @@ static bool bae_play(bool *playing){
                     // Try a safety preroll + rewind then attempt once more
                     BAESong_SetMicrosecondPosition(g_bae.song,0);
                     BAESong_Preroll(g_bae.song);
+                    if(startPosUs){ BAESong_SetMicrosecondPosition(g_bae.song,startPosUs); }
                     sr = BAESong_Start(g_bae.song,0);
                     if(sr != BAE_NO_ERROR){
                         write_to_log("Second BAESong_Start attempt failed (%d) for '%s'\n", sr, g_bae.loaded_path);
@@ -1192,10 +1237,20 @@ static bool bae_play(bool *playing){
                 } else {
                     write_to_log("BAESong_Start ok for '%s'\n", g_bae.loaded_path);
                 }
+                // Verify resume position if applicable
+                if(startPosUs){
+                    unsigned int verifyPos = 0; BAESong_GetMicrosecondPosition(g_bae.song,&verifyPos);
+                    write_to_log("Post-start verify position %u us (requested %u us)\n", verifyPos, startPosUs);
+                    if(verifyPos < startPosUs - 10000 || verifyPos > startPosUs + 10000){
+                        write_to_log("WARNING: resume position mismatch (delta=%d us)\n", (int)verifyPos - (int)startPosUs);
+                    }
+                }
             }
             // Give mixer a few idle cycles to prime buffers (helps avoid initial stall)
-            if(g_bae.mixer){ for(int i=0;i<3;i++){ BAEMixer_Idle(g_bae.mixer); } }
+            if(g_bae.mixer){ for(int i=0;i<3;i++){ BAEMixer_Idle(g_bae.mixer); BAEMixer_ServiceStreams(g_bae.mixer); } }
             *playing=true; 
+            // Clear preservation now that we've successfully (re)started
+            g_bae.preserve_position_on_next_start = false;
             g_bae.is_playing = true;
             return true;
         } else {
@@ -1414,6 +1469,28 @@ int main(int argc, char *argv[]){
         if(playing){ progress = bae_get_pos_ms(); duration = bae_get_len_ms(); }
         BAEMixer_Idle(g_bae.mixer); // ensure processing if needed
         bae_update_channel_mutes(ch_enable);
+
+        // Detect potential playback stall (song started but position stays at 0 for a while)
+        static int stallCounter = 0;
+        if (playing && !g_bae.is_audio_file && g_bae.song) {
+            int curMs = bae_get_pos_ms();
+            if (curMs == 0) {
+                if (++stallCounter == 120) { // ~2s grace for first buffer fill
+                    BAE_BOOL engaged=FALSE, active=FALSE, paused=FALSE, done=FALSE; 
+                    BAEMixer_IsAudioEngaged(g_bae.mixer, &engaged);
+                    BAEMixer_IsAudioActive(g_bae.mixer, &active);
+                    BAESong_IsPaused(g_bae.song, &paused);
+                    BAESong_IsDone(g_bae.song, &done);
+                    uint32_t devSamples = BAE_GetDeviceSamplesPlayedPosition();
+                    write_to_log("Warn: still 0ms after preroll start (engaged=%d active=%d paused=%d done=%d devSamples=%u)\n", engaged, active, paused, done, devSamples);
+                }
+            } else if (stallCounter) {
+                write_to_log("Playback advanced after initial stall frames=%d (pos=%d ms)\n", stallCounter, curMs);
+                stallCounter = 0;
+            }
+        } else {
+            stallCounter = 0;
+        }
         
         // Service WAV export if active
         bae_service_wav_export();

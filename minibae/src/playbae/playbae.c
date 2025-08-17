@@ -637,9 +637,9 @@ static int PV_IsLikelyMP3Header(const unsigned char header[4]) {
 BAEResult playFile(BAEMixer theMixer, char *parmFile, BAE_UNSIGNED_FIXED volume, unsigned int timeLimit, unsigned int loopCount, BAEReverbType reverbType, char *midiMuteChannels) {
 	BAEResult err = BAE_NO_ERROR;
 	char fileHeader[5] = {0}; // 4 char + 1 null byte
-	intptr_t filePtr;
+	int32_t filePtr;
 	filePtr = BAE_FileOpenForRead(parmFile);
-	if (filePtr != (intptr_t)-1 && filePtr != 0) {  // Check for valid file handle
+	if (filePtr > 0) {
 		BAE_ReadFile(filePtr, &fileHeader, 4);
 		BAE_FileClose(filePtr);
 		if (strcmp(fileHeader,X_FILETYPE_MIDI) == 0) {
@@ -662,7 +662,7 @@ BAEResult playFile(BAEMixer theMixer, char *parmFile, BAE_UNSIGNED_FIXED volume,
 		    err = (BAEResult)10069;
 		}
 	} else {
-		err = BAE_FILE_NOT_FOUND;  // Use proper error code
+		err = (BAEResult)filePtr;
 	}
 	return err;
 }
