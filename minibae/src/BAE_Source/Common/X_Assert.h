@@ -71,6 +71,7 @@
 
 
 #include "X_API.h"
+#include <stdio.h>
 
 // new BAE_PRINTF system
 //  BAE_PRINTF("This is a test of me %d %s\n", 34, "hello");
@@ -81,6 +82,14 @@
 
 #define BAE_STDOUT		printf
 #define BAE_STDERR(...)         fprintf (stderr, __VA_ARGS__)
+#define BAE_LOGFILE(...)                \
+    do {                                \
+        FILE *logFile = fopen("debug.log", "a"); \
+        if (logFile) {                  \
+            fprintf(logFile, __VA_ARGS__); \
+            fclose(logFile);            \
+        }                               \
+    } while (0)
 
 #ifndef _DEBUG
     #if (X_PLATFORM == X_WIN95) || (X_PLATFORM == X_WIN_HARDWARE) || (X_PLATFORM == X_MACINTOSH) || (X_PLATFORM == X_IOS) || (X_PLATFORM == X_ANSI) || (X_PLATFORM == X_SDL2)
@@ -92,7 +101,11 @@
     #define BAE_VERIFY(exp)         (exp)
 #else
     #if (X_PLATFORM == X_WIN95) || (X_PLATFORM == X_WIN_HARDWARE) || (X_PLATFORM == X_MACINTOSH) || (X_PLATFORM == X_IOS) || (X_PLATFORM == X_ANSI) || (X_PLATFORM == X_SDL2)
-        #define BAE_PRINTF		BAE_STDERR
+        #ifdef USING_GUI
+            #define BAE_PRINTF		BAE_LOGFILE
+        #else
+            #define BAE_PRINTF		BAE_STDERR
+        #endif
         #ifdef ASSERT
             #define BAE_ASSERT(exp)     ASSERT(exp)
             #define BAE_VERIFY(exp)     ASSERT(exp)

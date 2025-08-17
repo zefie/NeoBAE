@@ -86,7 +86,7 @@ endif
 
 # Debug
 ifneq (${DEBUG},0)
-        BAE_FLAGS +=    -D_DEBUG=1
+	BAE_FLAGS +=    -D_DEBUG=1
 endif
 
 
@@ -136,6 +136,7 @@ SRC += XMPEG_minimp3_wrapper.c XMPEGFilesSun.c
 
 # playbae = libMiniBAE srcs + playbae.c
 ifneq ($(BUILD_GUI),)
+BAE_FLAGS += -D_USING_GUI=1
 SRC_BIN		:= $(SRC) gui_main.c
 else
 SRC_BIN		:= $(SRC) playbae.c
