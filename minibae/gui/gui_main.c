@@ -359,9 +359,9 @@ static void save_settings(const char* last_bank_path, int reverb_type, bool loop
     char exe_dir[512];
     get_executable_directory(exe_dir, sizeof(exe_dir));
 #ifdef _WIN32
-    snprintf(settings_path, sizeof(settings_path), "%s\\minibae_settings.txt", exe_dir);
+    snprintf(settings_path, sizeof(settings_path), "%s\\minibae.ini", exe_dir);
 #else
-    snprintf(settings_path, sizeof(settings_path), "%s/minibae_settings.txt", exe_dir);
+    snprintf(settings_path, sizeof(settings_path), "%s/minibae.ini", exe_dir);
 #endif
     
     FILE* f = fopen(settings_path, "w");
@@ -389,9 +389,9 @@ static Settings load_settings() {
     char exe_dir[512];
     get_executable_directory(exe_dir, sizeof(exe_dir));    
 #ifdef _WIN32
-    snprintf(settings_path, sizeof(settings_path), "%s\\minibae_settings.txt", exe_dir);
+    snprintf(settings_path, sizeof(settings_path), "%s\\minibae.ini", exe_dir);
 #else
-    snprintf(settings_path, sizeof(settings_path), "%s/minibae_settings.txt", exe_dir);
+    snprintf(settings_path, sizeof(settings_path), "%s/minibae.ini", exe_dir);
 #endif
     
     FILE* f = fopen(settings_path, "r");
@@ -439,20 +439,24 @@ static void parse_banks_xml() {
     char exe_dir[512];
     get_executable_directory(exe_dir, sizeof(exe_dir));
 #ifdef _WIN32
-    snprintf(xml_path, sizeof(xml_path), "%s\\BXBanks\\Banks.xml", exe_dir);
-#else
-    snprintf(xml_path, sizeof(xml_path), "%s/BXBanks/Banks.xml", exe_dir);
-#endif
-    f = fopen(xml_path, "r");
-    
-    if (!f) {
-        // Try Banks.xml directly in executable directory
-#ifdef _WIN32
     snprintf(xml_path, sizeof(xml_path), "%s\\Banks\\Banks.xml", exe_dir);
 #else
     snprintf(xml_path, sizeof(xml_path), "%s/Banks/Banks.xml", exe_dir);
 #endif
+    if (access(xml_path, F_OK) == 0) {
         f = fopen(xml_path, "r");
+    }
+    
+    if (!f) {
+        // Try Banks.xml directly in executable directory
+#ifdef _WIN32
+    snprintf(xml_path, sizeof(xml_path), "%s\\BXBanks\\BXBanks.xml", exe_dir);
+#else
+    snprintf(xml_path, sizeof(xml_path), "%s/BXBanks/BXBanks.xml", exe_dir);
+#endif
+        if (access(xml_path, F_OK) == 0) {
+            f = fopen(xml_path, "r");
+        }
     }
 
     if (!f) {
@@ -462,7 +466,9 @@ static void parse_banks_xml() {
 #else
         snprintf(xml_path, sizeof(xml_path), "%s/Banks.xml", exe_dir);
 #endif
-        f = fopen(xml_path, "r");
+        if (access(xml_path, F_OK) == 0) {
+            f = fopen(xml_path, "r");
+        }
     }    
     BAE_PRINTF("Loading Banks.xml from: %s\n", xml_path);
     
