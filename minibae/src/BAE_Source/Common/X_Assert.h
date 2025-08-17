@@ -79,11 +79,49 @@
 //      To disable you define BAE_PRINTF(...) as blank and it eats everything
 //      in between the () and does nothing.
 
+#include <stdlib.h>
+#include <string.h>
+
+#ifdef _WIN32
+    #include <windows.h>
+    static void get_executable_directory(char *buffer, size_t size) {
+        if (buffer && size > 0) {
+            DWORD length = GetModuleFileNameA(NULL, buffer, (DWORD)size);
+            if (length > 0 && length < size) {
+                char *lastSlash = strrchr(buffer, '\\');
+                if (lastSlash) {
+                    *lastSlash = '\0';
+                }
+            } else {
+                buffer[0] = '\0'; // Fallback to empty string on error
+            }
+        }
+    }
+#else
+    #include <unistd.h>
+    #include <libgen.h>
+    static void get_executable_directory(char *buffer, size_t size) {
+        if (buffer && size > 0) {
+            ssize_t length = readlink("/proc/self/exe", buffer, size - 1);
+            if (length > 0) {
+                buffer[length] = '\0';
+                char *dir = dirname(buffer);
+                strncpy(buffer, dir, size - 1);
+                buffer[size - 1] = '\0'; // Ensure null-termination
+            } else {
+                buffer[0] = '\0'; // Fallback to empty string on error
+            }
+        }
+    }
+#endif
 
 #ifdef OUTPUT_TO_LOGFILE
     #define BAE_STDOUT(...)                \
     do {                                \
-        FILE *logFile = fopen("debug.log", "a"); \
+        char logPath[1024];             \
+        get_executable_directory(logPath, sizeof(logPath)); \
+        strncat(logPath, "/debug.log", sizeof(logPath) - strlen(logPath) - 1); \
+        FILE *logFile = fopen(logPath, "a"); \
         if (logFile) {                  \
             fprintf(logFile, __VA_ARGS__); \
             fclose(logFile);            \

@@ -36,9 +36,6 @@ static void gui_audio_task(void *reference) {
     }
 }
 
-// Forward declaration
-static char* get_executable_directory();
-
 // Helper function to convert a path to absolute path
 static char* get_absolute_path(const char* path) {
     if (!path || !path[0]) return NULL;
@@ -70,49 +67,6 @@ static char* get_absolute_path(const char* path) {
     }
     return abs_path; // realpath allocates memory that caller must free
 #endif
-}
-
-// Helper function to get the directory where the executable is located
-static char* get_executable_directory() {
-    static char exe_dir[512] = "";
-    
-    // Only compute once
-    if (exe_dir[0] != '\0') {
-        return exe_dir;
-    }
-    
-#ifdef _WIN32
-    char exe_path[MAX_PATH];
-    DWORD result = GetModuleFileNameA(NULL, exe_path, MAX_PATH);
-    if (result > 0 && result < MAX_PATH) {
-        // Find the last backslash and null-terminate there
-        char* last_slash = strrchr(exe_path, '\\');
-        if (last_slash) {
-            *last_slash = '\0';
-            strncpy(exe_dir, exe_path, sizeof(exe_dir) - 1);
-            exe_dir[sizeof(exe_dir) - 1] = '\0';
-            return exe_dir;
-        }
-    }
-#else
-    // On Unix-like systems, we can try reading /proc/self/exe or use argv[0]
-    char exe_path[512];
-    ssize_t len = readlink("/proc/self/exe", exe_path, sizeof(exe_path) - 1);
-    if (len != -1) {
-        exe_path[len] = '\0';
-        char* last_slash = strrchr(exe_path, '/');
-        if (last_slash) {
-            *last_slash = '\0';
-            strncpy(exe_dir, exe_path, sizeof(exe_dir) - 1);
-            exe_dir[sizeof(exe_dir) - 1] = '\0';
-            return exe_dir;
-        }
-    }
-#endif
-    
-    // Fallback to current directory
-    strcpy(exe_dir, ".");
-    return exe_dir;
 }
 
 // Optional SDL_ttf
@@ -402,10 +356,12 @@ static void save_settings(const char* last_bank_path, int reverb_type, bool loop
     
     // Build path to settings file in executable directory
     char settings_path[768];
+    char exe_dir[512];
+    get_executable_directory(exe_dir, sizeof(exe_dir));
 #ifdef _WIN32
-    snprintf(settings_path, sizeof(settings_path), "%s\\minibae_settings.txt", get_executable_directory());
+    snprintf(settings_path, sizeof(settings_path), "%s\\minibae_settings.txt", exe_dir);
 #else
-    snprintf(settings_path, sizeof(settings_path), "%s/minibae_settings.txt", get_executable_directory());
+    snprintf(settings_path, sizeof(settings_path), "%s/minibae_settings.txt", exe_dir);
 #endif
     
     FILE* f = fopen(settings_path, "w");
@@ -430,10 +386,12 @@ static Settings load_settings() {
     
     // Build path to settings file in executable directory
     char settings_path[768];
+    char exe_dir[512];
+    get_executable_directory(exe_dir, sizeof(exe_dir));    
 #ifdef _WIN32
-    snprintf(settings_path, sizeof(settings_path), "%s\\minibae_settings.txt", get_executable_directory());
+    snprintf(settings_path, sizeof(settings_path), "%s\\minibae_settings.txt", exe_dir);
 #else
-    snprintf(settings_path, sizeof(settings_path), "%s/minibae_settings.txt", get_executable_directory());
+    snprintf(settings_path, sizeof(settings_path), "%s/minibae_settings.txt", exe_dir);
 #endif
     
     FILE* f = fopen(settings_path, "r");
@@ -478,19 +436,21 @@ static void parse_banks_xml() {
     FILE* f = NULL;
     
     // Try Banks/Banks.xml in executable directory first
+    char exe_dir[512];
+    get_executable_directory(exe_dir, sizeof(exe_dir));
 #ifdef _WIN32
-    snprintf(xml_path, sizeof(xml_path), "%s\\BXBanks\\Banks.xml", get_executable_directory());
+    snprintf(xml_path, sizeof(xml_path), "%s\\BXBanks\\Banks.xml", exe_dir);
 #else
-    snprintf(xml_path, sizeof(xml_path), "%s/BXBanks/Banks.xml", get_executable_directory());
+    snprintf(xml_path, sizeof(xml_path), "%s/BXBanks/Banks.xml", exe_dir);
 #endif
     f = fopen(xml_path, "r");
     
     if (!f) {
         // Try Banks.xml directly in executable directory
 #ifdef _WIN32
-    snprintf(xml_path, sizeof(xml_path), "%s\\Banks\\Banks.xml", get_executable_directory());
+    snprintf(xml_path, sizeof(xml_path), "%s\\Banks\\Banks.xml", exe_dir);
 #else
-    snprintf(xml_path, sizeof(xml_path), "%s/Banks/Banks.xml", get_executable_directory());
+    snprintf(xml_path, sizeof(xml_path), "%s/Banks/Banks.xml", exe_dir);
 #endif
         f = fopen(xml_path, "r");
     }
@@ -498,9 +458,9 @@ static void parse_banks_xml() {
     if (!f) {
         // Try Banks.xml directly in executable directory
 #ifdef _WIN32
-        snprintf(xml_path, sizeof(xml_path), "%s\\Banks.xml", get_executable_directory());
+        snprintf(xml_path, sizeof(xml_path), "%s\\Banks.xml", exe_dir);
 #else
-        snprintf(xml_path, sizeof(xml_path), "%s/Banks.xml", get_executable_directory());
+        snprintf(xml_path, sizeof(xml_path), "%s/Banks.xml", exe_dir);
 #endif
         f = fopen(xml_path, "r");
     }    
@@ -1118,6 +1078,7 @@ static int  bae_get_len_ms(){
 }
 static void bae_set_loop(bool loop){ 
     if(g_bae.is_audio_file || !g_bae.song) return; // Only works with MIDI/RMF
+    // Set repeat counter
     BAESong_SetLoops(g_bae.song, loop? 32767:0); 
 }
 static void bae_set_reverb(int idx){ if(g_bae.mixer){ if(idx<0) idx=0; if(idx>=BAE_REVERB_TYPE_COUNT) idx=BAE_REVERB_TYPE_COUNT-1; BAEMixer_SetDefaultReverb(g_bae.mixer,(BAEReverbType)idx); }}
@@ -1315,6 +1276,13 @@ static char *save_wav_dialog(){
 #endif
 }
 
+void setWindowTitle(SDL_Window *window){
+    const char *libMiniBAECPUArch = BAE_GetCurrentCPUArchitecture();
+    char windowTitle[128];
+    snprintf(windowTitle, sizeof(windowTitle), "miniBAE Player (Prototype) - %s", libMiniBAECPUArch);
+    SDL_SetWindowTitle(window, windowTitle);
+}
+
 int main(int argc, char *argv[]){
     if(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER | SDL_INIT_AUDIO) != 0){ BAE_PRINTF("SDL_Init failed: %s\n", SDL_GetError()); return 1; }
 #ifdef GUI_WITH_TTF
@@ -1331,7 +1299,9 @@ int main(int argc, char *argv[]){
     parse_banks_xml();
     
     if(!g_bae.bank_loaded){ BAE_PRINTF("WARNING: No patch bank loaded. Place patches.hsb next to executable or use built-in patches.\n"); }
+
     SDL_Window *win = SDL_CreateWindow("miniBAE Player (Prototype)", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, WINDOW_W, WINDOW_H, SDL_WINDOW_SHOWN);
+    setWindowTitle(win);
     if(!win){ BAE_PRINTF("Window failed: %s\n", SDL_GetError()); SDL_Quit(); return 1; }
     SDL_Renderer *R = SDL_CreateRenderer(win,-1,SDL_RENDERER_ACCELERATED|SDL_RENDERER_PRESENTVSYNC);
     if(!R) R = SDL_CreateRenderer(win,-1,0);
@@ -1443,50 +1413,32 @@ int main(int argc, char *argv[]){
         BAEMixer_Idle(g_bae.mixer); // ensure processing if needed
         bae_update_channel_mutes(ch_enable);
 
-        // Check for end-of-playback to update UI state correctly
+        // Check for end-of-playback to update UI state correctly. We removed the
+        // previous "force restart" block; looping is now handled entirely by
+        // the engine via BAESong_SetLoops. If loops are set >0 the song should
+        // not report done until all loops are exhausted.
         if(playing && g_bae.song_loaded) {
             bool song_finished = false;
-            
+
             if(g_bae.is_audio_file && g_bae.sound) {
-                // For audio files, check if sound is done playing
                 BAE_BOOL is_done = FALSE;
                 if(BAESound_IsDone(g_bae.sound, &is_done) == BAE_NO_ERROR && is_done) {
                     song_finished = true;
                 }
             } else if(!g_bae.is_audio_file && g_bae.song) {
-                // For MIDI/RMF files, check if song is done
                 BAE_BOOL is_done = FALSE;
                 if(BAESong_IsDone(g_bae.song, &is_done) == BAE_NO_ERROR && is_done) {
                     song_finished = true;
                 }
             }
-            
+
             if(song_finished) {
-                if(g_bae.loop_enabled_gui && !g_bae.is_audio_file && g_bae.song) {
-                    // Song should loop but isn't - this indicates the loop setting may not be working
-                    // Force a restart from the beginning
-                    BAE_PRINTF("Song finished but should loop - restarting from beginning\n");
-                    BAESong_Stop(g_bae.song, FALSE);
+                BAE_PRINTF("Song finished, stopping playback\n");
+                playing = false;
+                g_bae.is_playing = false;
+                progress = 0;
+                if(!g_bae.is_audio_file && g_bae.song) {
                     BAESong_SetMicrosecondPosition(g_bae.song, 0);
-                    BAESong_SetLoops(g_bae.song, 32767); // Re-apply loop setting
-                    BAESong_Preroll(g_bae.song);
-                    BAEResult sr = BAESong_Start(g_bae.song, 0);
-                    if(sr != BAE_NO_ERROR) {
-                        BAE_PRINTF("Failed to restart looping song (%d)\n", sr);
-                        playing = false;
-                        g_bae.is_playing = false;
-                        progress = 0;
-                    }
-                } else {
-                    // Song finished and not looping - stop playback
-                    BAE_PRINTF("Song finished, stopping playback\n");
-                    playing = false;
-                    g_bae.is_playing = false;
-                    progress = 0;
-                    // For MIDI/RMF, reset position to beginning
-                    if(!g_bae.is_audio_file && g_bae.song) {
-                        BAESong_SetMicrosecondPosition(g_bae.song, 0);
-                    }
                 }
             }
         }
