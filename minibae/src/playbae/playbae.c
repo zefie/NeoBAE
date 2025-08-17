@@ -464,7 +464,7 @@ static BAEResult PlayMidi(BAEMixer theMixer, char *fileName, BAE_UNSIGNED_FIXED 
 	    BAESong_SetVolume(theSong, calculateVolume(volume, TRUE));
 #if _DEBUG
             BAESong_SetCallback(theSong, (BAE_SongCallbackPtr)PV_SongCallback, (void *)0x1234);
-	    BAESong_SetMetaEventCallback(theSong, (GM_SongMetaCallbackProcPtr)PV_SongMetaCallback, 0x1235);
+	    BAESong_SetMetaEventCallback(theSong, (GM_SongMetaCallbackProcPtr)PV_SongMetaCallback, (void *)0x1235);
 #endif
 	    if (verboseMode) {
 	            BAESong_DisplayInfo(theSong);

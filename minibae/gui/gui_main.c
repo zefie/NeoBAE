@@ -27,121 +27,13 @@
 #include "MiniBAE.h"
 #include "BAE_API.h" // for BAE_GetDeviceSamplesPlayedPosition diagnostics
 #include "gui_font.h" // bitmap font fallback
+#include "X_Assert.h"
 
 // GUI-specific mixer audio task to ensure stream servicing (mirrors playbae behavior)
 static void gui_audio_task(void *reference) {
     if (reference) {
         BAEMixer_ServiceStreams(reference);
     }
-}
-
-// Forward declaration
-static char* get_executable_directory();
-
-// Helper function to write to gui.log
-static void write_to_log(const char *format, ...) {
-    va_list args;
-    va_start(args, format);
-    
-    // Build path to gui.log in executable directory
-    char log_path[768];
-#ifdef _WIN32
-    snprintf(log_path, sizeof(log_path), "%s\\gui.log", get_executable_directory());
-#else
-    snprintf(log_path, sizeof(log_path), "%s/gui.log", get_executable_directory());
-#endif
-    
-    FILE *log_file = fopen(log_path, "a");
-    if (log_file) {
-        // Add timestamp
-        time_t now = time(NULL);
-        struct tm *tm_info = localtime(&now);
-        fprintf(log_file, "[%04d-%02d-%02d %02d:%02d:%02d] ", 
-                tm_info->tm_year + 1900, tm_info->tm_mon + 1, tm_info->tm_mday,
-                tm_info->tm_hour, tm_info->tm_min, tm_info->tm_sec);
-        
-        // Write the actual message
-        vfprintf(log_file, format, args);
-        fclose(log_file);
-    }
-    
-    va_end(args);
-}
-
-// Helper function to convert a path to absolute path
-static char* get_absolute_path(const char* path) {
-    if (!path || !path[0]) return NULL;
-    
-    // Handle special case for built-in bank
-    if (strcmp(path, "__builtin__") == 0) {
-        char* result = malloc(strlen(path) + 1);
-        if (result) {
-            strcpy(result, path);
-        }
-        return result;
-    }
-    
-#ifdef _WIN32
-    char* abs_path = malloc(MAX_PATH);
-    if (abs_path && _fullpath(abs_path, path, MAX_PATH)) {
-        write_to_log("Converted path '%s' to absolute: '%s'\n", path, abs_path);
-        return abs_path;
-    }
-    if (abs_path) free(abs_path);
-    write_to_log("Failed to convert path '%s' to absolute\n", path);
-    return NULL;
-#else
-    char* abs_path = realpath(path, NULL);
-    if (abs_path) {
-        write_to_log("Converted path '%s' to absolute: '%s'\n", path, abs_path);
-    } else {
-        write_to_log("Failed to convert path '%s' to absolute\n", path);
-    }
-    return abs_path; // realpath allocates memory that caller must free
-#endif
-}
-
-// Helper function to get the directory where the executable is located
-static char* get_executable_directory() {
-    static char exe_dir[512] = "";
-    
-    // Only compute once
-    if (exe_dir[0] != '\0') {
-        return exe_dir;
-    }
-    
-#ifdef _WIN32
-    char exe_path[MAX_PATH];
-    DWORD result = GetModuleFileNameA(NULL, exe_path, MAX_PATH);
-    if (result > 0 && result < MAX_PATH) {
-        // Find the last backslash and null-terminate there
-        char* last_slash = strrchr(exe_path, '\\');
-        if (last_slash) {
-            *last_slash = '\0';
-            strncpy(exe_dir, exe_path, sizeof(exe_dir) - 1);
-            exe_dir[sizeof(exe_dir) - 1] = '\0';
-            return exe_dir;
-        }
-    }
-#else
-    // On Unix-like systems, we can try reading /proc/self/exe or use argv[0]
-    char exe_path[512];
-    ssize_t len = readlink("/proc/self/exe", exe_path, sizeof(exe_path) - 1);
-    if (len != -1) {
-        exe_path[len] = '\0';
-        char* last_slash = strrchr(exe_path, '/');
-        if (last_slash) {
-            *last_slash = '\0';
-            strncpy(exe_dir, exe_path, sizeof(exe_dir) - 1);
-            exe_dir[sizeof(exe_dir) - 1] = '\0';
-            return exe_dir;
-        }
-    }
-#endif
-    
-    // Fallback to current directory
-    strcpy(exe_dir, ".");
-    return exe_dir;
 }
 
 // Optional SDL_ttf
@@ -416,7 +308,7 @@ typedef struct {
 
 static void save_settings(const char* last_bank_path, int reverb_type, bool loop_enabled) {
     if (!last_bank_path || !last_bank_path[0]) {
-        write_to_log("save_settings called with empty path\n");
+        BAE_PRINTF("save_settings called with empty path\n");
         return;
     }
     
@@ -424,9 +316,9 @@ static void save_settings(const char* last_bank_path, int reverb_type, bool loop
     const char* path_to_save = abs_path ? abs_path : last_bank_path;
     
     if (abs_path && strcmp(last_bank_path, abs_path) != 0) {
-        write_to_log("Converting relative path '%s' to absolute path '%s'\n", last_bank_path, abs_path);
+        BAE_PRINTF("Converting relative path '%s' to absolute path '%s'\n", last_bank_path, abs_path);
     } else if (abs_path) {
-        write_to_log("Path '%s' is already absolute\n", last_bank_path);
+        BAE_PRINTF("Path '%s' is already absolute\n", last_bank_path);
     }
     
     // Build path to settings file in executable directory
@@ -443,10 +335,10 @@ static void save_settings(const char* last_bank_path, int reverb_type, bool loop
         fprintf(f, "reverb_type=%d\n", reverb_type);
         fprintf(f, "loop_enabled=%d\n", loop_enabled ? 1 : 0);
         fclose(f);
-        write_to_log("Saved settings: last_bank=%s, reverb=%d, loop=%d\n", 
+        BAE_PRINTF("Saved settings: last_bank=%s, reverb=%d, loop=%d\n", 
                      path_to_save ? path_to_save : "", reverb_type, loop_enabled ? 1 : 0);
     } else {
-        write_to_log("Failed to open %s for writing\n", settings_path);
+        BAE_PRINTF("Failed to open %s for writing\n", settings_path);
     }
     
     if (abs_path) {
@@ -467,7 +359,7 @@ static Settings load_settings() {
     
     FILE* f = fopen(settings_path, "r");
     if (!f) {
-        write_to_log("No settings file found at %s, using defaults\n", settings_path);
+        BAE_PRINTF("No settings file found at %s, using defaults\n", settings_path);
         return settings;
     }
     
@@ -485,16 +377,16 @@ static Settings load_settings() {
                 strncpy(settings.bank_path, path, sizeof(settings.bank_path)-1);
                 settings.bank_path[sizeof(settings.bank_path)-1] = '\0';
                 settings.has_bank = true;
-                write_to_log("Loaded bank setting: %s\n", settings.bank_path);
+                BAE_PRINTF("Loaded bank setting: %s\n", settings.bank_path);
             }
         } else if (strncmp(line, "reverb_type=", 12) == 0) {
             settings.reverb_type = atoi(line + 12);
             settings.has_reverb = true;
-            write_to_log("Loaded reverb setting: %d\n", settings.reverb_type);
+            BAE_PRINTF("Loaded reverb setting: %d\n", settings.reverb_type);
         } else if (strncmp(line, "loop_enabled=", 13) == 0) {
             settings.loop_enabled = (atoi(line + 13) != 0);
             settings.has_loop = true;
-            write_to_log("Loaded loop setting: %d\n", settings.loop_enabled ? 1 : 0);
+            BAE_PRINTF("Loaded loop setting: %d\n", settings.loop_enabled ? 1 : 0);
         }
     }
     fclose(f);
@@ -533,7 +425,7 @@ static void parse_banks_xml() {
 #endif
         f = fopen(xml_path, "r");
     }    
-    write_to_log("Loading Banks.xml from: %s\n", xml_path);
+    BAE_PRINTF("Loading Banks.xml from: %s\n", xml_path);
     
     char line[1024];
     bank_count = 0;
@@ -597,7 +489,7 @@ static void parse_banks_xml() {
     }
     
     fclose(f);
-    write_to_log("Loaded %d banks from Banks.xml\n", bank_count);
+    BAE_PRINTF("Loaded %d banks from Banks.xml\n", bank_count);
 }
 
 // Helper function to get friendly bank name from Banks.xml
@@ -717,7 +609,7 @@ static void bae_stop_wav_export() {
             // Try to re-acquire audio hardware
             BAEResult reacquire_result = BAEMixer_ReengageAudio(g_bae.mixer);
             if (reacquire_result != BAE_NO_ERROR) {
-                write_to_log("Warning: Could not re-engage audio hardware after export (%d)\n", reacquire_result);
+                BAE_PRINTF("Warning: Could not re-engage audio hardware after export (%d)\n", reacquire_result);
             }
         }
         
@@ -745,7 +637,7 @@ static void bae_service_wav_export() {
         if (r != BAE_NO_ERROR) {
             char msg[128]; 
             snprintf(msg, sizeof(msg), "Export error (%d)", r); 
-            write_to_log("ServiceAudioOutputToFile error: %d\n", r);
+            BAE_PRINTF("ServiceAudioOutputToFile error: %d\n", r);
             set_status_message(msg); 
             bae_stop_wav_export(); 
             return; 
@@ -758,7 +650,7 @@ static void bae_service_wav_export() {
         BAESong_IsDone(g_bae.song, &is_done);
         
         if (is_done) { 
-            write_to_log("Song finished at position %lu\n", current_pos);
+            BAE_PRINTF("Song finished at position %lu\n", current_pos);
             bae_stop_wav_export(); 
             return; 
         }
@@ -777,12 +669,12 @@ static void bae_service_wav_export() {
         if (current_pos == g_export_last_pos) {
             g_export_stall_iters++;
             if (current_pos == 0 && g_export_stall_iters > 100) { 
-                write_to_log("Export stalled at position 0 after %d iterations\n", g_export_stall_iters);
+                BAE_PRINTF("Export stalled at position 0 after %d iterations\n", g_export_stall_iters);
                 set_status_message("Export produced no audio (aborting)"); 
                 bae_stop_wav_export(); 
                 return; 
             } else if (current_pos > 0 && g_export_stall_iters > 1000) { 
-                write_to_log("Export stalled at position %lu after %d iterations\n", current_pos, g_export_stall_iters);
+                BAE_PRINTF("Export stalled at position %lu after %d iterations\n", current_pos, g_export_stall_iters);
                 bae_stop_wav_export(); 
                 return; 
             }
@@ -802,9 +694,9 @@ static void bae_service_wav_export() {
 
 static bool bae_init(){
     g_bae.mixer = BAEMixer_New();
-    if(!g_bae.mixer){ write_to_log("BAEMixer_New failed\n"); return false; }
+    if(!g_bae.mixer){ BAE_PRINTF("BAEMixer_New failed\n"); return false; }
     BAEResult r = BAEMixer_Open(g_bae.mixer, BAE_RATE_44K, BAE_LINEAR_INTERPOLATION, BAE_USE_16|BAE_USE_STEREO, 32, 8, 32, TRUE);
-    if(r != BAE_NO_ERROR){ write_to_log("BAEMixer_Open failed %d\n", r); return false; }
+    if(r != BAE_NO_ERROR){ BAE_PRINTF("BAEMixer_Open failed %d\n", r); return false; }
     // IMPORTANT: Without an audio task, MIDI/RMF streams may not advance on some builds/platforms (esp. 64-bit)
     // playbae sets this; the GUI previously did not, causing silent or non-starting songs.
     BAEMixer_SetAudioTask(g_bae.mixer, gui_audio_task, g_bae.mixer);
@@ -862,7 +754,7 @@ static bool load_bank(const char *path, bool current_playing_state, int transpos
             g_bae.bank_loaded=true; 
             strncpy(g_current_bank_path, "__builtin__", sizeof(g_current_bank_path)-1);
             g_current_bank_path[sizeof(g_current_bank_path)-1] = '\0';
-            write_to_log("Loaded built-in bank\n");
+            BAE_PRINTF("Loaded built-in bank\n");
             set_status_message("Loaded built-in bank");
             
             // Save this as the last used bank only if requested
@@ -870,21 +762,21 @@ static bool load_bank(const char *path, bool current_playing_state, int transpos
                 save_settings("__builtin__", reverb_type, loop_enabled);
             }
         } else {
-            write_to_log("Failed loading built-in bank (%d)\n", br); 
+            BAE_PRINTF("Failed loading built-in bank (%d)\n", br); 
             return false;
         }
     } else {
 #endif
         FILE *f=fopen(path,"rb"); 
         if(!f){ 
-            write_to_log("Bank file not found: %s\n", path); 
+            BAE_PRINTF("Bank file not found: %s\n", path); 
             return false; 
         } 
         fclose(f);
         BAEBankToken t; 
         BAEResult br=BAEMixer_AddBankFromFile(g_bae.mixer,(BAEPathName)path,&t);
         if(br!=BAE_NO_ERROR){ 
-            write_to_log("AddBankFromFile failed %d for %s\n", br, path); 
+            BAE_PRINTF("AddBankFromFile failed %d for %s\n", br, path); 
             return false; 
         }
         g_bae.bank_token=t; 
@@ -893,11 +785,11 @@ static bool load_bank(const char *path, bool current_playing_state, int transpos
         g_bae.bank_loaded=true; 
         strncpy(g_current_bank_path, path, sizeof(g_current_bank_path)-1);
         g_current_bank_path[sizeof(g_current_bank_path)-1] = '\0';
-        write_to_log("Loaded bank %s\n", path);
+        BAE_PRINTF("Loaded bank %s\n", path);
         
         // Save this as the last used bank only if requested
         if (save_to_settings) {
-            write_to_log("About to save settings with path: %s\n", path);
+            BAE_PRINTF("About to save settings with path: %s\n", path);
             save_settings(path, reverb_type, loop_enabled);
         }
         
@@ -924,7 +816,7 @@ static bool load_bank(const char *path, bool current_playing_state, int transpos
     
     // Auto-reload current song if one was loaded
     if(had_song && current_song_path[0] != '\0') {
-        write_to_log("Auto-reloading song with new bank: %s\n", current_song_path);
+        BAE_PRINTF("Auto-reloading song with new bank: %s\n", current_song_path);
         set_status_message("Reloading song with new bank...");
         if(bae_load_song_with_settings(current_song_path, transpose, tempo, volume, loop_enabled, reverb_type, ch_enable)) {
             // Restore playback state
@@ -935,16 +827,16 @@ static bool load_bank(const char *path, bool current_playing_state, int transpos
                 }
                 g_bae.preserved_start_position_us = current_position_us;
                 g_bae.preserve_position_on_next_start = (current_position_us > 0);
-                write_to_log("Preserving playback position across bank reload: %u us (%d ms)\n", current_position_us, current_position_ms);
+                BAE_PRINTF("Preserving playback position across bank reload: %u us (%d ms)\n", current_position_us, current_position_ms);
                 bool playing_state = false;
                 bae_play(&playing_state); // Will honor preserved position
             } else if(current_position_ms > 0) {
                 bae_seek_ms(current_position_ms);
             }
-            write_to_log("Song reloaded successfully with new bank\n");
+            BAE_PRINTF("Song reloaded successfully with new bank\n");
             set_status_message("Song reloaded with new bank");
         } else {
-            write_to_log("Failed to reload song with new bank\n");
+            BAE_PRINTF("Failed to reload song with new bank\n");
             set_status_message("Failed to reload song with new bank");
         }
     }
@@ -959,22 +851,22 @@ static bool load_bank_simple(const char *path, bool save_to_settings, int reverb
     
     // If no specific path provided, do fallback discovery
     if (!path) {
-        write_to_log("No bank specified, trying fallback discovery\n");
+        BAE_PRINTF("No bank specified, trying fallback discovery\n");
         
         // First try banks from XML database with default flag
         for(int i=0; i<bank_count && !g_bae.bank_loaded; ++i){
             if(banks[i].is_default) {
                 char bank_path[512];
                 snprintf(bank_path, sizeof(bank_path), "Banks/%s", banks[i].src);
-                write_to_log("Trying fallback bank: %s\n", bank_path);
+                BAE_PRINTF("Trying fallback bank: %s\n", bank_path);
                 if(load_bank(bank_path, false, 0, 100, 75, loop_enabled, reverb_type, dummy_ch, false)) {
-                    write_to_log("Fallback bank loaded successfully: %s\n", bank_path);
+                    BAE_PRINTF("Fallback bank loaded successfully: %s\n", bank_path);
                     return true;
                 }
                 // Try without Banks/ prefix
-                write_to_log("Trying fallback bank without prefix: %s\n", banks[i].src);
+                BAE_PRINTF("Trying fallback bank without prefix: %s\n", banks[i].src);
                 if(load_bank(banks[i].src, false, 0, 100, 75, loop_enabled, reverb_type, dummy_ch, false)) {
-                    write_to_log("Fallback bank loaded successfully: %s\n", banks[i].src);
+                    BAE_PRINTF("Fallback bank loaded successfully: %s\n", banks[i].src);
                     return true;
                 }
             }
@@ -1029,7 +921,7 @@ static bool bae_load_song(const char* path){
         else if(strcmp(ext,".au")==0) ftype = BAE_AU_TYPE;
         else if(strcmp(ext,".mp3")==0) ftype = BAE_MPEG_TYPE;
         BAEResult sr = (ftype!=BAE_INVALID_TYPE) ? BAESound_LoadFileSample(g_bae.sound,(BAEPathName)path,ftype) : BAE_BAD_FILE_TYPE;
-        if(sr!=BAE_NO_ERROR){ BAESound_Delete(g_bae.sound); g_bae.sound=NULL; write_to_log("Audio load failed %d %s\n", sr,path); return false; }
+        if(sr!=BAE_NO_ERROR){ BAESound_Delete(g_bae.sound); g_bae.sound=NULL; BAE_PRINTF("Audio load failed %d %s\n", sr,path); return false; }
         strncpy(g_bae.loaded_path,path,sizeof(g_bae.loaded_path)-1); g_bae.loaded_path[sizeof(g_bae.loaded_path)-1]='\0';
         g_bae.song_loaded=true; g_bae.is_audio_file=true; get_audio_total_frames(); audio_current_position=0;
         const char *base=path; for(const char *p=path; *p; ++p){ if(*p=='/'||*p=='\\') base=p+1; }
@@ -1044,7 +936,7 @@ static bool bae_load_song(const char* path){
     } else {
         r = BAESong_LoadRmfFromFile(g_bae.song,(BAEPathName)path,0,TRUE);
     }
-    if(r!=BAE_NO_ERROR){ write_to_log("Song load failed %d %s\n", r,path); BAESong_Delete(g_bae.song); g_bae.song=NULL; return false; }
+    if(r!=BAE_NO_ERROR){ BAE_PRINTF("Song load failed %d %s\n", r,path); BAESong_Delete(g_bae.song); g_bae.song=NULL; return false; }
     // Defer preroll until just before first Start so that any user settings
     // (transpose, tempo, channel mutes, reverb, loops) are applied first.
     BAESong_GetMicrosecondLength(g_bae.song,&g_bae.song_length_us);
@@ -1175,13 +1067,13 @@ static bool bae_play(bool *playing){
     if(g_bae.is_audio_file && g_bae.sound) {
         // Handle audio files (WAV, MP3, etc.)
         if(!*playing) {
-            write_to_log("Attempting BAESound_Start on '%s'\n", g_bae.loaded_path);
+            BAE_PRINTF("Attempting BAESound_Start on '%s'\n", g_bae.loaded_path);
             BAEResult sr = BAESound_Start(g_bae.sound, 0, FLOAT_TO_UNSIGNED_FIXED(1.0), 0);
             if(sr != BAE_NO_ERROR){
-                write_to_log("BAESound_Start failed (%d) for '%s'\n", sr, g_bae.loaded_path);
+                BAE_PRINTF("BAESound_Start failed (%d) for '%s'\n", sr, g_bae.loaded_path);
                 return false;
             }
-            write_to_log("BAESound_Start ok for '%s'\n", g_bae.loaded_path);
+            BAE_PRINTF("BAESound_Start ok for '%s'\n", g_bae.loaded_path);
             *playing = true;
             return true;
         } else {
@@ -1195,20 +1087,20 @@ static bool bae_play(bool *playing){
             // if paused resume else start
             BAE_BOOL isPaused=FALSE; BAESong_IsPaused(g_bae.song,&isPaused);
             if(isPaused){
-                write_to_log("Resuming paused song '%s'\n", g_bae.loaded_path);
+                BAE_PRINTF("Resuming paused song '%s'\n", g_bae.loaded_path);
                 BAEResult rr = BAESong_Resume(g_bae.song);
-                if(rr != BAE_NO_ERROR){ write_to_log("BAESong_Resume returned %d\n", rr); }
+                if(rr != BAE_NO_ERROR){ BAE_PRINTF("BAESong_Resume returned %d\n", rr); }
             } else {
-                write_to_log("Preparing to start song '%s' (pos=%d ms)\n", g_bae.loaded_path, bae_get_pos_ms());
+                BAE_PRINTF("Preparing to start song '%s' (pos=%d ms)\n", g_bae.loaded_path, bae_get_pos_ms());
                 // Reapply loop state right before start in case it was cleared by prior stop/export/load
                 if(!g_bae.is_audio_file){
                     BAESong_SetLoops(g_bae.song, g_bae.loop_enabled_gui ? 32767 : 0);
-                    write_to_log("Loop state applied: %d (loops=%s)\n", g_bae.loop_enabled_gui ? 1:0, g_bae.loop_enabled_gui?"32767":"0");
+                    BAE_PRINTF("Loop state applied: %d (loops=%s)\n", g_bae.loop_enabled_gui ? 1:0, g_bae.loop_enabled_gui?"32767":"0");
                 }
                 uint32_t startPosUs = 0;
                 if(g_bae.preserve_position_on_next_start) {
                     startPosUs = g_bae.preserved_start_position_us;
-                    write_to_log("Resume with preserved position %u us for '%s'\n", startPosUs, g_bae.loaded_path);
+                    BAE_PRINTF("Resume with preserved position %u us for '%s'\n", startPosUs, g_bae.loaded_path);
                 }
                 if(startPosUs == 0) {
                     // Standard start from beginning: position then preroll
@@ -1220,31 +1112,31 @@ static bool bae_play(bool *playing){
                     BAESong_Preroll(g_bae.song);
                     BAESong_SetMicrosecondPosition(g_bae.song,startPosUs);
                 }
-                write_to_log("Preroll complete. Start position now %u us for '%s'\n", startPosUs==0?0:startPosUs, g_bae.loaded_path);
-                write_to_log("Attempting BAESong_Start on '%s'\n", g_bae.loaded_path);
+                BAE_PRINTF("Preroll complete. Start position now %u us for '%s'\n", startPosUs==0?0:startPosUs, g_bae.loaded_path);
+                BAE_PRINTF("Attempting BAESong_Start on '%s'\n", g_bae.loaded_path);
                 BAEResult sr = BAESong_Start(g_bae.song,0);
                 if(sr != BAE_NO_ERROR){
-                    write_to_log("BAESong_Start failed (%d) for '%s' (will try preroll+restart)\n", sr, g_bae.loaded_path);
+                    BAE_PRINTF("BAESong_Start failed (%d) for '%s' (will try preroll+restart)\n", sr, g_bae.loaded_path);
                     // Try a safety preroll + rewind then attempt once more
                     BAESong_SetMicrosecondPosition(g_bae.song,0);
                     BAESong_Preroll(g_bae.song);
                     if(startPosUs){ BAESong_SetMicrosecondPosition(g_bae.song,startPosUs); }
                     sr = BAESong_Start(g_bae.song,0);
                     if(sr != BAE_NO_ERROR){
-                        write_to_log("Second BAESong_Start attempt failed (%d) for '%s'\n", sr, g_bae.loaded_path);
+                        BAE_PRINTF("Second BAESong_Start attempt failed (%d) for '%s'\n", sr, g_bae.loaded_path);
                         return false;
                     } else {
-                        write_to_log("Second BAESong_Start attempt succeeded for '%s'\n", g_bae.loaded_path);
+                        BAE_PRINTF("Second BAESong_Start attempt succeeded for '%s'\n", g_bae.loaded_path);
                     }
                 } else {
-                    write_to_log("BAESong_Start ok for '%s'\n", g_bae.loaded_path);
+                    BAE_PRINTF("BAESong_Start ok for '%s'\n", g_bae.loaded_path);
                 }
                 // Verify resume position if applicable
                 if(startPosUs){
                     unsigned int verifyPos = 0; BAESong_GetMicrosecondPosition(g_bae.song,&verifyPos);
-                    write_to_log("Post-start verify position %u us (requested %u us)\n", verifyPos, startPosUs);
+                    BAE_PRINTF("Post-start verify position %u us (requested %u us)\n", verifyPos, startPosUs);
                     if(verifyPos < startPosUs - 10000 || verifyPos > startPosUs + 10000){
-                        write_to_log("WARNING: resume position mismatch (delta=%d us)\n", (int)verifyPos - (int)startPosUs);
+                        BAE_PRINTF("WARNING: resume position mismatch (delta=%d us)\n", (int)verifyPos - (int)startPosUs);
                     }
                 }
             }
@@ -1306,7 +1198,7 @@ static char *open_file_dialog(){
             if(l>0){ char *ret=(char*)malloc(l+1); if(ret){ memcpy(ret,buf,l+1);} return ret; }
         } else { pclose(p); }
     }
-    write_to_log("No GUI file chooser available (zenity/kdialog/yad). Drag & drop still works for media and bank files.\n");
+    BAE_PRINTF("No GUI file chooser available (zenity/kdialog/yad). Drag & drop still works for media and bank files.\n");
     return NULL;
 #endif
 }
@@ -1339,29 +1231,29 @@ static char *save_wav_dialog(){
             if(l>0){ char *ret=(char*)malloc(l+1); if(ret){ memcpy(ret,buf,l+1);} return ret; }
         } else { pclose(p); }
     }
-    write_to_log("No GUI file chooser available for saving.\n");
+    BAE_PRINTF("No GUI file chooser available for saving.\n");
     return NULL;
 #endif
 }
 
 int main(int argc, char *argv[]){
-    if(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER | SDL_INIT_AUDIO) != 0){ write_to_log("SDL_Init failed: %s\n", SDL_GetError()); return 1; }
+    if(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER | SDL_INIT_AUDIO) != 0){ BAE_PRINTF("SDL_Init failed: %s\n", SDL_GetError()); return 1; }
 #ifdef GUI_WITH_TTF
-    if(TTF_Init()!=0){ write_to_log("SDL_ttf init failed: %s (continuing with bitmap font)\n", TTF_GetError()); }
+    if(TTF_Init()!=0){ BAE_PRINTF("SDL_ttf init failed: %s (continuing with bitmap font)\n", TTF_GetError()); }
     else {
         const char *tryFonts[] = { "C:/Windows/Fonts/arial.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", NULL };
         for(int i=0; tryFonts[i]; ++i){ if(!g_font){ g_font = TTF_OpenFont(tryFonts[i], 14); } }
     }
 #endif
     if(!g_font){ gui_set_font_scale(2); }
-    if(!bae_init()){ write_to_log("miniBAE init failed\n"); }
+    if(!bae_init()){ BAE_PRINTF("miniBAE init failed\n"); }
     
     // Load bank database
     parse_banks_xml();
     
-    if(!g_bae.bank_loaded){ write_to_log("WARNING: No patch bank loaded. Place patches.hsb next to executable or use built-in patches.\n"); }
+    if(!g_bae.bank_loaded){ BAE_PRINTF("WARNING: No patch bank loaded. Place patches.hsb next to executable or use built-in patches.\n"); }
     SDL_Window *win = SDL_CreateWindow("miniBAE Player (Prototype)", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, WINDOW_W, WINDOW_H, SDL_WINDOW_SHOWN);
-    if(!win){ write_to_log("Window failed: %s\n", SDL_GetError()); SDL_Quit(); return 1; }
+    if(!win){ BAE_PRINTF("Window failed: %s\n", SDL_GetError()); SDL_Quit(); return 1; }
     SDL_Renderer *R = SDL_CreateRenderer(win,-1,SDL_RENDERER_ACCELERATED|SDL_RENDERER_PRESENTVSYNC);
     if(!R) R = SDL_CreateRenderer(win,-1,0);
 
@@ -1375,11 +1267,11 @@ int main(int argc, char *argv[]){
     Settings settings = load_settings();
     if (settings.has_reverb) {
         reverbType = settings.reverb_type;
-        write_to_log("Applied saved reverb setting: %d\n", reverbType);
+        BAE_PRINTF("Applied saved reverb setting: %d\n", reverbType);
     }
     if (settings.has_loop) {
         loopPlay = settings.loop_enabled;
-        write_to_log("Applied saved loop setting: %d\n", loopPlay ? 1 : 0);
+        BAE_PRINTF("Applied saved loop setting: %d\n", loopPlay ? 1 : 0);
     }
     
     g_bae.loop_enabled_gui = loopPlay;
@@ -1387,7 +1279,7 @@ int main(int argc, char *argv[]){
     
     // Load bank (use saved bank if available, otherwise fallback)
     if (settings.has_bank && strlen(settings.bank_path) > 0) {
-        write_to_log("Loading saved bank: %s\n", settings.bank_path);
+        BAE_PRINTF("Loading saved bank: %s\n", settings.bank_path);
         load_bank_simple(settings.bank_path, false, reverbType, loopPlay); // false = don't save to settings (it's already saved)
         // Set current bank path for future settings saves
         if (g_bae.bank_loaded) {
@@ -1395,7 +1287,7 @@ int main(int argc, char *argv[]){
             g_current_bank_path[sizeof(g_current_bank_path)-1] = '\0';
         }
     } else {
-        write_to_log("No saved bank found, using fallback bank loading\n");
+        BAE_PRINTF("No saved bank found, using fallback bank loading\n");
         load_bank_simple(NULL, false, reverbType, loopPlay); // Load default bank without saving
     }
 
@@ -1435,25 +1327,25 @@ int main(int argc, char *argv[]){
                         
                         if (is_bank_file) {
                             // Load as patch bank
-                            write_to_log("Drag and drop: Loading bank file: %s\n", dropped);
+                            BAE_PRINTF("Drag and drop: Loading bank file: %s\n", dropped);
                             if (load_bank(dropped, playing, transpose, tempo, volume, loopPlay, reverbType, ch_enable, true)) {
-                                write_to_log("Successfully loaded dropped bank: %s\n", dropped);
+                                BAE_PRINTF("Successfully loaded dropped bank: %s\n", dropped);
                                 // Status message is set by load_bank function
                             } else {
-                                write_to_log("Failed to load dropped bank: %s\n", dropped);
+                                BAE_PRINTF("Failed to load dropped bank: %s\n", dropped);
                                 set_status_message("Failed to load dropped bank file");
                             }
                         } else {
                             // Try to load as media file (original behavior)
-                            write_to_log("Drag and drop: Loading media file: %s\n", dropped);
+                            BAE_PRINTF("Drag and drop: Loading media file: %s\n", dropped);
                             if(bae_load_song_with_settings(dropped, transpose, tempo, volume, loopPlay, reverbType, ch_enable)) {
                                 duration = bae_get_len_ms(); progress=0; 
                                 playing = false; // Ensure we start from stopped state
                                 bae_play(&playing); // Auto-start playback
-                                write_to_log("Successfully loaded dropped media: %s\n", dropped);
+                                BAE_PRINTF("Successfully loaded dropped media: %s\n", dropped);
                                 // Status message is set by bae_load_song_with_settings function
                             } else {
-                                write_to_log("Failed to load dropped media: %s\n", dropped);
+                                BAE_PRINTF("Failed to load dropped media: %s\n", dropped);
                                 set_status_message("Failed to load dropped media file");
                             }
                         }
@@ -1494,21 +1386,21 @@ int main(int argc, char *argv[]){
                 if(g_bae.loop_enabled_gui && !g_bae.is_audio_file && g_bae.song) {
                     // Song should loop but isn't - this indicates the loop setting may not be working
                     // Force a restart from the beginning
-                    write_to_log("Song finished but should loop - restarting from beginning\n");
+                    BAE_PRINTF("Song finished but should loop - restarting from beginning\n");
                     BAESong_Stop(g_bae.song, FALSE);
                     BAESong_SetMicrosecondPosition(g_bae.song, 0);
                     BAESong_SetLoops(g_bae.song, 32767); // Re-apply loop setting
                     BAESong_Preroll(g_bae.song);
                     BAEResult sr = BAESong_Start(g_bae.song, 0);
                     if(sr != BAE_NO_ERROR) {
-                        write_to_log("Failed to restart looping song (%d)\n", sr);
+                        BAE_PRINTF("Failed to restart looping song (%d)\n", sr);
                         playing = false;
                         g_bae.is_playing = false;
                         progress = 0;
                     }
                 } else {
                     // Song finished and not looping - stop playback
-                    write_to_log("Song finished, stopping playback\n");
+                    BAE_PRINTF("Song finished, stopping playback\n");
                     playing = false;
                     g_bae.is_playing = false;
                     progress = 0;
@@ -1532,10 +1424,10 @@ int main(int argc, char *argv[]){
                     BAESong_IsPaused(g_bae.song, &paused);
                     BAESong_IsDone(g_bae.song, &done);
                     uint32_t devSamples = BAE_GetDeviceSamplesPlayedPosition();
-                    write_to_log("Warn: still 0ms after preroll start (engaged=%d active=%d paused=%d done=%d devSamples=%u)\n", engaged, active, paused, done, devSamples);
+                    BAE_PRINTF("Warn: still 0ms after preroll start (engaged=%d active=%d paused=%d done=%d devSamples=%u)\n", engaged, active, paused, done, devSamples);
                 }
             } else if (stallCounter) {
-                write_to_log("Playback advanced after initial stall frames=%d (pos=%d ms)\n", stallCounter, curMs);
+                BAE_PRINTF("Playback advanced after initial stall frames=%d (pos=%d ms)\n", stallCounter, curMs);
                 stallCounter = 0;
             }
         } else {
@@ -1715,7 +1607,7 @@ int main(int argc, char *argv[]){
                     }
                     playing = false; // force toggle logic
                     if(!bae_play(&playing)){
-                        write_to_log("Autoplay after Open failed for '%s'\n", sel);
+                        BAE_PRINTF("Autoplay after Open failed for '%s'\n", sel);
                     }
                     if(playing && g_bae.mixer){ for(int i=0;i<3;i++){ BAEMixer_Idle(g_bae.mixer); } }
                 } 
@@ -1801,7 +1693,7 @@ int main(int argc, char *argv[]){
                         if(l>4 && strcasecmp(buf+l-4,".hsb")==0){ 
                             load_bank(buf, playing, transpose, tempo, volume, loopPlay, reverbType, ch_enable, true); 
                         } else { 
-                            write_to_log("Not an .hsb file: %s\n", buf); 
+                            BAE_PRINTF("Not an .hsb file: %s\n", buf); 
                         } 
                     } 
                     break; 

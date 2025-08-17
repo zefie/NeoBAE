@@ -80,9 +80,8 @@
 //      in between the () and does nothing.
 
 
-#define BAE_STDOUT		printf
-#define BAE_STDERR(...)         fprintf (stderr, __VA_ARGS__)
-#define BAE_LOGFILE(...)                \
+#ifdef OUTPUT_TO_LOGFILE
+    #define BAE_STDOUT(...)                \
     do {                                \
         FILE *logFile = fopen("debug.log", "a"); \
         if (logFile) {                  \
@@ -90,6 +89,11 @@
             fclose(logFile);            \
         }                               \
     } while (0)
+    #define BAE_STDERR         BAE_STDOUT
+#else 
+    #define BAE_STDOUT		printf
+    #define BAE_STDERR(...)         fprintf (stderr, __VA_ARGS__)
+#endif
 
 #ifndef _DEBUG
     #if (X_PLATFORM == X_WIN95) || (X_PLATFORM == X_WIN_HARDWARE) || (X_PLATFORM == X_MACINTOSH) || (X_PLATFORM == X_IOS) || (X_PLATFORM == X_ANSI) || (X_PLATFORM == X_SDL2)
@@ -101,11 +105,7 @@
     #define BAE_VERIFY(exp)         (exp)
 #else
     #if (X_PLATFORM == X_WIN95) || (X_PLATFORM == X_WIN_HARDWARE) || (X_PLATFORM == X_MACINTOSH) || (X_PLATFORM == X_IOS) || (X_PLATFORM == X_ANSI) || (X_PLATFORM == X_SDL2)
-        #ifdef USING_GUI
-            #define BAE_PRINTF		BAE_LOGFILE
-        #else
-            #define BAE_PRINTF		BAE_STDERR
-        #endif
+        #define BAE_PRINTF		BAE_STDERR
         #ifdef ASSERT
             #define BAE_ASSERT(exp)     ASSERT(exp)
             #define BAE_VERIFY(exp)     ASSERT(exp)

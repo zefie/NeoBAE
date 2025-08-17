@@ -25,12 +25,13 @@ endif
 
 vpath	%.c src/BAE_Source/Common src/BAE_Source/Platform
 vpath	%.c src/banks/patches111
-ifneq ($(BUILD_GUI),) 
-vpath	%.c gui
-else
-vpath	%.c src/playbae
-endif
 vpath	%.c src/BAE_MPEG_Source_II
+
+ifneq ($(BUILD_GUI),) 
+	vpath	%.c gui
+else
+	vpath	%.c src/playbae
+endif
 
 INC_PATH	:= -Isrc/BAE_Source/Common
 INC_PATH	+= -Isrc/BAE_Source/Platform
@@ -136,10 +137,14 @@ SRC += XMPEG_minimp3_wrapper.c XMPEGFilesSun.c
 
 # playbae = libMiniBAE srcs + playbae.c
 ifneq ($(BUILD_GUI),)
-BAE_FLAGS += -D_USING_GUI=1
-SRC_BIN		:= $(SRC) gui_main.c
+	BAE_FLAGS += -DOUTPUT_TO_LOGFILE=1
+	SRC_BIN		:= $(SRC) gui_main.c
 else
-SRC_BIN		:= $(SRC) playbae.c
+	SRC_BIN		:= $(SRC) playbae.c
+endif
+
+ifneq ($(LOGFILE),)
+	BAE_FLAGS += -DOUTPUT_TO_LOGFILE=1
 endif
 
 OBJ_DIR 	:= $(BUILD_DIR)obj/
