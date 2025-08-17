@@ -363,6 +363,7 @@
 //#define TIMESLICE_DEBUG
 
 #include "GenSnd.h"
+#include <stddef.h> /* for size_t */
 #include "GenCache.h"
 #include "GenPriv.h"
 #include "X_Formats.h"
@@ -2411,8 +2412,8 @@ static Q_MIDIEvent * PV_GetNextStorableQueueEvent(UINT32 externalTimeStamp)
         BAE_AcquireMutex(pMixer->queueLock);
         pHead = pMixer->pHead;  // get current write event pointer
         #ifdef QUEUE_DEBUG
-            BAE_PRINTF("minibae::PV_GetNextStorableQueueEvent head: 0x%lx tail: 0x%lx\n",
-                                  (uint32_t)pMixer->pHead, (uint32_t)pMixer->pTail);
+            BAE_PRINTF("minibae::PV_GetNextStorableQueueEvent head: %p tail: %p\n",
+                                  (void*)pMixer->pHead, (void*)pMixer->pTail);
         #endif
         count = 0;
         do
@@ -2456,8 +2457,8 @@ static Q_MIDIEvent * PV_GetNextStorableQueueEvent(UINT32 externalTimeStamp)
         BAE_ReleaseMutex(pMixer->queueLock);
     }
 #ifdef QUEUE_DEBUG
-    BAE_PRINTF(pStoredEvent ? "\tput event 0x%lx on queue. Head now 0x%lx\n" : "QUEUE FULL!\n", 
-                                (int32_t)pStoredEvent, (int32_t)pMixer->pHead);
+    BAE_PRINTF(pStoredEvent ? "\tput event %p on queue. Head now %p\n" : "QUEUE FULL!\n", 
+                                (void*)pStoredEvent, (void*)pMixer->pHead);
 #endif
     return pStoredEvent;
 }
@@ -3326,12 +3327,16 @@ OPErr PV_ProcessMidiSequencerSlice(void *threadContext, GM_Song *pSong)
 Do_GetEvent:
             if (pSong->trackticks[currentTrack] < (IFLOAT)0)
             {
-                if ((UINT32)(midi_stream - pSong->trackstart[currentTrack]) > pSong->tracklen[currentTrack])
+                /* 64-bit safe bounds check: ensure we don't truncate pointer difference */
                 {
-                    // the track has ended unexpectedly.
-                    // just fall through and assume things are cool and go to the next track
-                    pSong->trackon[currentTrack] = TRACK_OFF;
-                    goto ServeNextTrack;
+                    size_t __offset = (size_t)(midi_stream - pSong->trackstart[currentTrack]);
+                    if (__offset > (size_t)pSong->tracklen[currentTrack])
+                    {
+                        // the track has ended unexpectedly.
+                        // just fall through and assume things are cool and go to the next track
+                        pSong->trackon[currentTrack] = TRACK_OFF;
+                        goto ServeNextTrack;
+                    }
                 }
                 goto GetMIDIevent;
             }

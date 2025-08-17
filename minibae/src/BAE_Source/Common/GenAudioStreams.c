@@ -633,7 +633,7 @@ static void PV_AudioBufferCallback(void *context, XPTR pWhichBufferFinished, INT
             BAE_PRINTF("Playback Pos %ld Length %ld\r", pStream->streamPlaybackPosition, *pBufferSize_IN_OUT);
         #endif
         #if DEBUG_STREAMS && 0
-            BAE_PRINTF("buffer done %lx size %ld", pWhichBufferFinished, *pBufferSize_IN_OUT);
+            BAE_PRINTF("buffer done %p size %ld", (void*)pWhichBufferFinished, *pBufferSize_IN_OUT);
         #endif
         pStream->streamPlaybackPosition += *pBufferSize_IN_OUT;
 
