@@ -32,10 +32,31 @@
 #include "X_Assert.h"
 #include <SDL_ttf.h>
 static TTF_Font *g_font = NULL;
+#ifndef MIN
+#define MIN(a,b) ((a) < (b) ? (a) : (b))
+#endif
+#ifndef MAX
+#define MAX(a,b) ((a) > (b) ? (a) : (b))
+#endif
 #include "bankinfo.h" // embedded bank metadata
 
-// Optional embedded TTF font (generated header). Define GUI_EMBED_FONT and
-// generate embedded_font.h via scripts/embed_ttf.py to enable.
+// Theme globals (used by widgets to pick colors for light/dark modes)
+static bool g_is_dark_mode = true;
+static SDL_Color g_accent_color = {50,130,200,255};
+static SDL_Color g_text_color = {240,240,240,255};
+static SDL_Color g_bg_color = {30,30,35,255};
+static SDL_Color g_panel_bg = {45,45,50,255};
+static SDL_Color g_panel_border = {80,80,90,255};
+static SDL_Color g_header_color = {180,200,255,255};
+// Button colors
+static SDL_Color g_button_base = {70,70,80,255};
+static SDL_Color g_button_hover = {90,90,100,255};
+static SDL_Color g_button_press = {50,50,60,255};
+static SDL_Color g_button_text = {250,250,250,255};
+static SDL_Color g_button_border = {120,120,130,255};
+
+// Embedded TTF font (generated header). Define GUI_EMBED_FONT and
+// generate embedded_font.h via scripts/create_embedded_font_h.py to enable.
 #ifdef GUI_EMBED_FONT
 #include "embedded_font.h" // provides embedded_font_data[], embedded_font_size
 #endif
@@ -71,10 +92,26 @@ static void detect_windows_theme() {
     g_theme.is_dark_mode = false;
     g_theme.is_high_contrast = false;
     g_theme.accent_color = (SDL_Color){0, 120, 215, 255}; // Default Windows blue
-    g_theme.text_color = (SDL_Color){220, 220, 220, 255};
-    g_theme.bg_color = (SDL_Color){30, 30, 35, 255};
-    g_theme.panel_bg = (SDL_Color){45, 45, 50, 255};
-    g_theme.border_color = (SDL_Color){80, 80, 90, 255};
+    g_theme.text_color = (SDL_Color){32, 32, 32, 255};
+    g_theme.bg_color = (SDL_Color){248, 248, 248, 255};
+    g_theme.panel_bg = (SDL_Color){255, 255, 255, 255};
+    g_theme.border_color = (SDL_Color){200, 200, 200, 255};
+    // Mirror to local theme globals for use by widgets
+    g_is_dark_mode = g_theme.is_dark_mode;
+    g_accent_color = g_theme.accent_color;
+    g_text_color = g_theme.text_color;
+    g_bg_color = g_theme.bg_color;
+    g_panel_bg = g_theme.panel_bg;
+    g_panel_border = g_theme.border_color;
+    g_header_color = g_theme.accent_color;
+    // Button colors for light mode
+    if(!g_theme.is_dark_mode){
+        g_button_base = (SDL_Color){230,230,230,255};
+        g_button_hover = (SDL_Color){210,210,210,255};
+        g_button_press = (SDL_Color){190,190,190,255};
+        g_button_text = (SDL_Color){32,32,32,255};
+        g_button_border = (SDL_Color){160,160,160,255};
+    }
     
     DWORD value;
     
@@ -116,12 +153,21 @@ static void detect_windows_theme() {
         g_theme.bg_color = (SDL_Color){32, 32, 32, 255};
         g_theme.panel_bg = (SDL_Color){45, 45, 45, 255};
         g_theme.border_color = (SDL_Color){85, 85, 85, 255};
+        g_is_dark_mode = true;
+        g_accent_color = g_theme.accent_color;
+        g_text_color = g_theme.text_color;
+        g_bg_color = g_theme.bg_color;
+        g_panel_bg = g_theme.panel_bg;
+        g_panel_border = g_theme.border_color;
+        g_header_color = (SDL_Color){180,200,255,255};
+        // Button colors for dark mode
+        g_button_base = (SDL_Color){70,70,80,255};
+        g_button_hover = (SDL_Color){90,90,100,255};
+        g_button_press = (SDL_Color){50,50,60,255};
+        g_button_text = (SDL_Color){250,250,250,255};
+        g_button_border = (SDL_Color){120,120,130,255};
     } else {
-        // Light theme colors
-        g_theme.text_color = (SDL_Color){32, 32, 32, 255};
-        g_theme.bg_color = (SDL_Color){248, 248, 248, 255};
-        g_theme.panel_bg = (SDL_Color){255, 255, 255, 255};
-        g_theme.border_color = (SDL_Color){200, 200, 200, 255};
+        g_accent_color = g_theme.accent_color;
     }
     
     if (g_theme.is_high_contrast) {
@@ -264,6 +310,110 @@ static void draw_text(SDL_Renderer *R, int x, int y, const char *text, SDL_Color
     bitmap_draw(R,x,y,text,col);
 }
 
+// Simple word-wrapping helpers used by RMF Info dialog.
+// Returns number of wrapped lines that the text would occupy within max_w pixels.
+static int count_wrapped_lines(const char *text, int max_w){
+    if(!text || !*text) return 0;
+    int lines = 0;
+    char buf[1024]; buf[0] = '\0';
+    const char *p = text;
+    while(*p){
+        // Extract next word
+        const char *q = p;
+        while(*q && *q!=' ' && *q!='\t' && *q!='\n' && *q!='\r') q++;
+        int wlen = (int)(q - p);
+        char word[512]; if(wlen >= (int)sizeof(word)) wlen = (int)sizeof(word)-1;
+        strncpy(word, p, wlen); word[wlen] = '\0';
+
+        char attempt[1536];
+        if(buf[0]) snprintf(attempt, sizeof(attempt), "%s %s", buf, word);
+        else snprintf(attempt, sizeof(attempt), "%s", word);
+        int tw, th; measure_text(attempt, &tw, &th);
+        if(tw <= max_w){
+            if(buf[0]) strncat(buf, " ", sizeof(buf)-strlen(buf)-1);
+            strncat(buf, word, sizeof(buf)-strlen(buf)-1);
+        } else {
+            if(buf[0]){ lines++; buf[0] = '\0'; }
+            measure_text(word, &tw, &th);
+            if(tw <= max_w){ strncpy(buf, word, sizeof(buf)-1); buf[sizeof(buf)-1]='\0'; }
+            else {
+                // Break long word into chunks that fit
+                int start = 0, len = (int)strlen(word);
+                while(start < len){
+                    int take = len - start;
+                    while(take > 0){
+                        char sub[512]; if(take >= (int)sizeof(sub)) take = (int)sizeof(sub)-1;
+                        strncpy(sub, word + start, take); sub[take] = '\0';
+                        measure_text(sub, &tw, &th);
+                        if(tw <= max_w) break;
+                        take--;
+                    }
+                    if(take == 0) take = 1;
+                    start += take;
+                    lines++;
+                }
+                buf[0] = '\0';
+            }
+        }
+        // Advance past whitespace
+        p = q;
+        while(*p==' '||*p=='\t'||*p=='\n'||*p=='\r') p++;
+    }
+    if(buf[0]) lines++;
+    return lines;
+}
+
+// Draw text with simple word-wrapping within max_w pixels. Returns number of lines drawn.
+static int draw_wrapped_text(SDL_Renderer *R, int x, int y, const char *text, SDL_Color col, int max_w, int lineH){
+    if(!text || !*text) return 0;
+    int lines = 0;
+    char buf[1024]; buf[0] = '\0';
+    const char *p = text;
+    while(*p){
+        const char *q = p;
+        while(*q && *q!=' ' && *q!='\t' && *q!='\n' && *q!='\r') q++;
+        int wlen = (int)(q - p);
+        char word[512]; if(wlen >= (int)sizeof(word)) wlen = (int)sizeof(word)-1;
+        strncpy(word, p, wlen); word[wlen] = '\0';
+
+        char attempt[1536];
+        if(buf[0]) snprintf(attempt, sizeof(attempt), "%s %s", buf, word);
+        else snprintf(attempt, sizeof(attempt), "%s", word);
+        int tw, th; measure_text(attempt, &tw, &th);
+        if(tw <= max_w){
+            if(buf[0]) strncat(buf, " ", sizeof(buf)-strlen(buf)-1);
+            strncat(buf, word, sizeof(buf)-strlen(buf)-1);
+        } else {
+            if(buf[0]){ draw_text(R, x, y + lines*lineH, buf, col); lines++; buf[0] = '\0'; }
+            measure_text(word, &tw, &th);
+            if(tw <= max_w){ strncpy(buf, word, sizeof(buf)-1); buf[sizeof(buf)-1]='\0'; }
+            else {
+                int start = 0, len = (int)strlen(word);
+                while(start < len){
+                    int take = len - start;
+                    while(take > 0){
+                        char sub[512]; if(take >= (int)sizeof(sub)) take = (int)sizeof(sub)-1;
+                        strncpy(sub, word + start, take); sub[take] = '\0';
+                        measure_text(sub, &tw, &th);
+                        if(tw <= max_w) break;
+                        take--;
+                    }
+                    if(take == 0) take = 1;
+                    char sub[512]; if(take >= (int)sizeof(sub)) take = (int)sizeof(sub)-1;
+                    strncpy(sub, word + start, take); sub[take] = '\0';
+                    draw_text(R, x, y + lines*lineH, sub, col);
+                    lines++; start += take;
+                }
+                buf[0] = '\0';
+            }
+        }
+        p = q;
+        while(*p==' '||*p=='\t'||*p=='\n'||*p=='\r') p++;
+    }
+    if(buf[0]){ draw_text(R, x, y + lines*lineH, buf, col); lines++; }
+    return lines;
+}
+
 typedef struct {
     int x,y,w,h;
 } Rect;
@@ -285,11 +435,11 @@ static void draw_frame(SDL_Renderer *R, Rect r, SDL_Color c){
 }
 
 static bool ui_button(SDL_Renderer *R, Rect r, const char *label, int mx,int my,bool mdown){
-    SDL_Color base = {70,70,80,255};
-    SDL_Color hover = {90,90,100,255};
-    SDL_Color press = {50,50,60,255};
-    SDL_Color txt = {250,250,250,255};
-    SDL_Color border = {120,120,130,255};
+    SDL_Color base = g_button_base;
+    SDL_Color hover = g_button_hover;
+    SDL_Color press = g_button_press;
+    SDL_Color txt = g_button_text;
+    SDL_Color border = g_button_border;
     bool over = point_in(mx,my,r);
     SDL_Color bg = base;
     if(over) bg = mdown?press:hover;
@@ -308,9 +458,9 @@ static bool ui_dropdown(SDL_Renderer *R, Rect r, int *value, const char **items,
                         int mx,int my,bool mdown,bool mclick){
     bool changed=false; if(count<=0) return false;
     // Draw main box with improved styling
-    SDL_Color bg = {60,60,70,255}; 
-    SDL_Color txt={230,230,230,255}; 
-    SDL_Color frame={120,120,130,255};
+    SDL_Color bg = g_button_base; 
+    SDL_Color txt = g_button_text; 
+    SDL_Color frame = g_button_border;
     bool overMain = point_in(mx,my,r);
     if(overMain) bg = (SDL_Color){80,80,90,255};
     draw_rect(R,r,bg); 
@@ -325,17 +475,18 @@ static bool ui_dropdown(SDL_Renderer *R, Rect r, int *value, const char **items,
     if(*open){
         // list box with improved styling
         int itemH = r.h; int totalH = itemH * count; 
-        Rect box = {r.x, r.y + r.h + 1, r.w, totalH};
-        draw_rect(R, box, (SDL_Color){45,45,55,255}); 
-        draw_frame(R, box, frame);
+    Rect box = {r.x, r.y + r.h + 1, r.w, totalH};
+    draw_rect(R, box, g_panel_bg); 
+    draw_frame(R, box, frame);
         for(int i=0;i<count;i++){
             Rect ir = {box.x, box.y + i*itemH, box.w, itemH};
             bool over = point_in(mx,my,ir);
-            SDL_Color ibg = (i==*value)? (SDL_Color){30,120,200,255} : (SDL_Color){65,65,75,255};
-            if(over) ibg = (SDL_Color){90,90,120,255};
+            SDL_Color ibg = (i==*value)? g_accent_color : g_panel_bg;
+            if(over) ibg = g_button_hover;
             draw_rect(R, ir, ibg); 
             if(i < count-1) { // separator line
-                SDL_SetRenderDrawColor(R,80,80,90,255);
+                SDL_Color sep = g_panel_border; sep.a = 255;
+                SDL_SetRenderDrawColor(R, sep.r, sep.g, sep.b, sep.a);
                 SDL_RenderDrawLine(R, ir.x, ir.y+ir.h, ir.x+ir.w, ir.y+ir.h);
             }
             draw_text(R, ir.x+6, ir.y+6, items[i], txt);
@@ -351,27 +502,26 @@ static bool ui_dropdown(SDL_Renderer *R, Rect r, int *value, const char **items,
 static void draw_custom_checkbox(SDL_Renderer *R, Rect r, bool checked, bool hovered) {
     // Define colors using theme
 #ifdef _WIN32
-    SDL_Color bg_unchecked = g_theme.panel_bg;
-    SDL_Color bg_checked = g_theme.accent_color;
-    SDL_Color bg_hover_unchecked = {g_theme.panel_bg.r + 25, g_theme.panel_bg.g + 25, g_theme.panel_bg.b + 25, 255};
-    SDL_Color bg_hover_checked = {
-        (Uint8)(g_theme.accent_color.r * 0.8f), 
-        (Uint8)(g_theme.accent_color.g * 0.8f), 
-        (Uint8)(g_theme.accent_color.b * 0.8f), 
-        255
-    };
-    SDL_Color border = g_theme.border_color;
-    SDL_Color border_hover = {g_theme.border_color.r + 40, g_theme.border_color.g + 40, g_theme.border_color.b + 40, 255};
-    SDL_Color checkmark = g_theme.is_dark_mode ? (SDL_Color){255,255,255,255} : (SDL_Color){255,255,255,255};
+    SDL_Color bg_unchecked = g_panel_bg;
+    SDL_Color bg_checked = g_accent_color;
+    SDL_Color bg_hover_unchecked = (SDL_Color){
+        (Uint8)MIN(255, g_panel_bg.r + 20), (Uint8)MIN(255, g_panel_bg.g + 20), (Uint8)MIN(255, g_panel_bg.b + 20), 255 };
+    SDL_Color bg_hover_checked = (SDL_Color){
+        (Uint8)(g_accent_color.r * 0.85f), (Uint8)(g_accent_color.g * 0.85f), (Uint8)(g_accent_color.b * 0.85f), 255 };
+    SDL_Color border = g_panel_border;
+    // When hovered/checked prefer a clearer accent-driven border to match system accent
+    SDL_Color border_hover = (SDL_Color){
+        (Uint8)MIN(255, g_accent_color.r), (Uint8)MIN(255, g_accent_color.g), (Uint8)MIN(255, g_accent_color.b), 255 };
+    // Use button text color for checkmark so it contrasts against the accent-filled box
+    SDL_Color checkmark = g_button_text;
 #else
-    // Fallback colors for non-Windows
-    SDL_Color bg_unchecked = {45,45,50,255};
-    SDL_Color bg_checked = {30,120,200,255};
-    SDL_Color bg_hover_unchecked = {70,70,80,255};
-    SDL_Color bg_hover_checked = {50,140,220,255};
-    SDL_Color border = {120,120,130,255};
-    SDL_Color border_hover = {160,160,170,255};
-    SDL_Color checkmark = {255,255,255,255};
+    SDL_Color bg_unchecked = g_panel_bg;
+    SDL_Color bg_checked = g_accent_color;
+    SDL_Color bg_hover_unchecked = g_button_hover;
+    SDL_Color bg_hover_checked = (SDL_Color){(Uint8)(g_accent_color.r*0.85f),(Uint8)(g_accent_color.g*0.85f),(Uint8)(g_accent_color.b*0.85f),255};
+    SDL_Color border = g_panel_border;
+    SDL_Color border_hover = g_button_border;
+    SDL_Color checkmark = g_button_text;
 #endif
     
     // Choose colors based on state
@@ -391,45 +541,38 @@ static void draw_custom_checkbox(SDL_Renderer *R, Rect r, bool checked, bool hov
     
     // Draw inner shadow for depth
     if (!checked) {
-        SDL_SetRenderDrawColor(R, 20, 20, 25, 255);
+        // subtle inner shadow using theme-aware darker panel border
+        SDL_Color inner = g_panel_border; inner.r = (Uint8)MAX(0, inner.r - 60); inner.g = (Uint8)MAX(0, inner.g - 60); inner.b = (Uint8)MAX(0, inner.b - 60);
+        SDL_SetRenderDrawColor(R, inner.r, inner.g, inner.b, 255);
         SDL_RenderDrawLine(R, r.x+1, r.y+1, r.x+r.w-2, r.y+1); // top inner
         SDL_RenderDrawLine(R, r.x+1, r.y+1, r.x+1, r.y+r.h-2); // left inner
     }
     
     // Draw checkmark if checked
     if (checked) {
-        // Draw a nice checkmark using lines
-        int cx = r.x + r.w / 2;
-        int cy = r.y + r.h / 2;
+        // Draw a nice checkmark using lines (ensure contrasting color against accent fill)
         int size = (r.w < r.h ? r.w : r.h) - 6; // Leave some margin
-        
-        // Scale checkmark based on checkbox size
         if (size < 8) size = 8;
-        
         SDL_SetRenderDrawColor(R, checkmark.r, checkmark.g, checkmark.b, checkmark.a);
-        
-        // Draw checkmark with multiple lines for thickness
-        int check_x1 = r.x + 4;
+
+        // Coordinates scaled relative to box for robustness
+        int check_x1 = r.x + 3;
         int check_y1 = r.y + r.h/2;
         int check_x2 = r.x + r.w/2 - 1;
-        int check_y2 = r.y + r.h - 5;
-        int check_x3 = r.x + r.w - 3;
-        int check_y3 = r.y + 3;
-        
-        // First stroke of checkmark (left part)
-        SDL_RenderDrawLine(R, check_x1, check_y1, check_x2, check_y2);
-        SDL_RenderDrawLine(R, check_x1, check_y1-1, check_x2, check_y2-1);
-        SDL_RenderDrawLine(R, check_x1+1, check_y1, check_x2+1, check_y2);
-        
-        // Second stroke of checkmark (right part) 
-        SDL_RenderDrawLine(R, check_x2, check_y2, check_x3, check_y3);
-        SDL_RenderDrawLine(R, check_x2, check_y2-1, check_x3, check_y3-1);
-        SDL_RenderDrawLine(R, check_x2+1, check_y2, check_x3+1, check_y3);
+        int check_y2 = r.y + r.h - 4;
+        int check_x3 = r.x + r.w - 4;
+        int check_y3 = r.y + 4;
+
+        // Draw thicker strokes for visibility
+        for(int off=-1; off<=1; ++off){
+            SDL_RenderDrawLine(R, check_x1, check_y1+off, check_x2, check_y2+off);
+            SDL_RenderDrawLine(R, check_x2, check_y2+off, check_x3, check_y3+off);
+        }
     }
 }
 
 static bool ui_toggle(SDL_Renderer *R, Rect r, bool *value, const char *label, int mx,int my,bool mclick){
-    SDL_Color txt = {230,230,230,255};
+    SDL_Color txt = g_text_color;
     bool over = point_in(mx,my,r);
     
     // Draw custom checkbox
@@ -446,15 +589,15 @@ static bool ui_toggle(SDL_Renderer *R, Rect r, bool *value, const char *label, i
 static bool ui_slider(SDL_Renderer *R, Rect rail, int *val, int min, int max, int mx,int my,bool mdown,bool mclick){
     // horizontal slider with improved styling
 #ifdef _WIN32
-    SDL_Color railC = g_theme.is_dark_mode ? (SDL_Color){40,40,50,255} : (SDL_Color){220,220,220,255};
-    SDL_Color fillC = g_theme.accent_color;
-    SDL_Color knobC = g_theme.is_dark_mode ? (SDL_Color){200,200,210,255} : (SDL_Color){100,100,110,255};
-    SDL_Color border = g_theme.border_color;
+    SDL_Color railC = g_is_dark_mode ? (SDL_Color){40,40,50,255} : (SDL_Color){240,240,240,255};
+    SDL_Color fillC = g_accent_color;
+    SDL_Color knobC = g_is_dark_mode ? (SDL_Color){200,200,210,255} : (SDL_Color){120,120,130,255};
+    SDL_Color border = g_panel_border;
 #else
-    SDL_Color railC = {40,40,50,255};
-    SDL_Color fillC = {50,130,200,255};
-    SDL_Color knobC = {200,200,210,255};
-    SDL_Color border = {80,80,90,255};
+    SDL_Color railC = g_panel_bg;
+    SDL_Color fillC = g_accent_color;
+    SDL_Color knobC = g_button_base;
+    SDL_Color border = g_panel_border;
 #endif
     
     // Draw rail with border
@@ -467,16 +610,17 @@ static bool ui_slider(SDL_Renderer *R, Rect rail, int *val, int min, int max, in
     int fillw = (int)(t * (rail.w - 2));
     if(fillw<0) fillw=0; if(fillw>rail.w-2) fillw=rail.w-2;
     
-    // Draw fill
+    // Draw fill using accent color to indicate value
     if(fillw > 0) {
         draw_rect(R, (Rect){rail.x+1,rail.y+1,fillw,rail.h-2}, fillC);
     }
     
-    // Draw knob
+    // Draw knob using themed knob color and frame that contrasts with panel
     int knobx = rail.x + 1 + fillw - 6;
     Rect knob = {knobx, rail.y-3, 12, rail.h+6};
     draw_rect(R, knob, knobC);
-    draw_frame(R, knob, (SDL_Color){60,60,70,255});
+    // Use themed border for knob so it reads on both light/dark modes
+    draw_frame(R, knob, g_button_border);
     
     if(mdown && point_in(mx,my,(Rect){rail.x,rail.y-4,rail.w,rail.h+8})){
         int rel = mx - rail.x - 1; if(rel<0) rel=0; if(rel>rail.w-2) rel=rail.w-2;
@@ -1663,6 +1807,32 @@ int main(int argc, char *argv[]){
             }
         }
 
+        // If RMF Info dialog is visible, treat it as modal for input: swallow clicks
+        // that occur outside the dialog so underlying UI elements are not activated.
+        if(g_show_rmf_info_dialog && g_bae.is_rmf_file){
+            // Ensure info is loaded so we can compute dialog height for hit testing
+            rmf_info_load_if_needed();
+            int pad = 8; int dlgW = 340; int lineH = 16;
+            int totalLines = 0;
+            for(int i=0;i<INFO_TYPE_COUNT;i++){
+                if(g_rmf_info_values[i][0]){
+                    char tmp[1024]; snprintf(tmp,sizeof(tmp),"%s: %s", rmf_info_label((BAEInfoType)i), g_rmf_info_values[i]);
+                    int c = count_wrapped_lines(tmp, dlgW - pad*2 - 8);
+                    if(c <= 0) c = 1;
+                    totalLines += c;
+                }
+            }
+            if(totalLines == 0) totalLines = 1;
+            int dlgH = pad*2 + 24 + totalLines*lineH + 10; // same formula as rendering
+            Rect dlg = {WINDOW_W - dlgW - 10, 10, dlgW, dlgH};
+
+            // Swallow mouse click/down if outside dialog
+            if((mclick || mdown) && !point_in(mx,my,dlg)){
+                mclick = false;
+                mdown = false;
+            }
+        }
+
         // Sync local 'playing' variable with engine state after export or any external change
         // This ensures progress bar resumes when playback auto-restarts (e.g., after WAV export)
         if(playing != g_bae.is_playing){
@@ -1736,20 +1906,14 @@ int main(int argc, char *argv[]){
 #ifdef _WIN32
         SDL_SetRenderDrawColor(R,g_theme.bg_color.r,g_theme.bg_color.g,g_theme.bg_color.b,255);
 #else
-        SDL_SetRenderDrawColor(R,30,30,35,255);
+    SDL_SetRenderDrawColor(R, g_bg_color.r, g_bg_color.g, g_bg_color.b, g_bg_color.a);
 #endif
         SDL_RenderClear(R);
-#ifdef _WIN32
-        SDL_Color labelCol = g_theme.text_color;
-        SDL_Color headerCol = g_theme.is_dark_mode ? (SDL_Color){180,200,255,255} : (SDL_Color){50,100,200,255};
-        SDL_Color panelBg = g_theme.panel_bg;
-        SDL_Color panelBorder = g_theme.border_color;
-#else
-        SDL_Color labelCol = {220,220,220,255};
-        SDL_Color headerCol = {180,200,255,255};
-        SDL_Color panelBg = {45,45,50,255};
-        SDL_Color panelBorder = {80,80,90,255};
-#endif
+    // Colors driven by theme globals
+    SDL_Color labelCol = g_text_color;
+    SDL_Color headerCol = g_header_color;
+    SDL_Color panelBg = g_panel_bg;
+    SDL_Color panelBorder = g_panel_border;
         
         // Draw main panels
         Rect channelPanel = {10, 10, 380, 140};
@@ -1816,17 +1980,17 @@ int main(int argc, char *argv[]){
         int reverbCount = (int)(sizeof(reverbNames)/sizeof(reverbNames[0]));
         if(reverbCount > BAE_REVERB_TYPE_COUNT) reverbCount = BAE_REVERB_TYPE_COUNT;
         Rect ddRect = {690,40,160,24}; // Moved up 20 pixels from y=60 to y=40
-        // Just draw the closed dropdown here - full dropdown will be rendered later
-        SDL_Color bg = {60,60,70,255}; 
-        SDL_Color txt={230,230,230,255}; 
-        SDL_Color frame={120,120,130,255};
-        bool overMain = point_in(mx,my,ddRect);
-        if(overMain) bg = (SDL_Color){80,80,90,255};
-        draw_rect(R,ddRect,bg); 
-        draw_frame(R,ddRect,frame);
-        const char *cur = (reverbType>=0 && reverbType < reverbCount) ? reverbNames[reverbType] : "?";
-        draw_text(R,ddRect.x+6,ddRect.y+6,cur,txt);
-        draw_text(R,ddRect.x + ddRect.w - 16, ddRect.y+6, g_reverbDropdownOpen?"^":"v", txt);
+    // Closed dropdown: use theme globals
+    SDL_Color dd_bg = g_button_base;
+    SDL_Color dd_txt = g_button_text;
+    SDL_Color dd_frame = g_button_border;
+    bool overMain = point_in(mx,my,ddRect);
+    if(overMain) dd_bg = g_button_hover;
+    draw_rect(R, ddRect, dd_bg);
+    draw_frame(R, ddRect, dd_frame);
+    const char *cur = (reverbType>=0 && reverbType < reverbCount) ? reverbNames[reverbType] : "?";
+    draw_text(R, ddRect.x+6, ddRect.y+6, cur, dd_txt);
+    draw_text(R, ddRect.x + ddRect.w - 16, ddRect.y+6, g_reverbDropdownOpen?"^":"v", dd_txt);
         if(overMain && mclick){ g_reverbDropdownOpen = !g_reverbDropdownOpen; }
 
         // Volume control
@@ -1860,7 +2024,8 @@ int main(int argc, char *argv[]){
 #ifdef _WIN32
             draw_rect(R, (Rect){bar.x+2,bar.y+2,(int)((bar.w-4)*pct),bar.h-4}, g_theme.accent_color);
 #else
-            draw_rect(R, (Rect){bar.x+2,bar.y+2,(int)((bar.w-4)*pct),bar.h-4}, (SDL_Color){50,150,200,255});
+            // Use the theme accent color for the progress fill so it matches checkboxes/sliders
+            draw_rect(R, (Rect){bar.x+2,bar.y+2,(int)((bar.w-4)*pct),bar.h-4}, g_accent_color);
 #endif
         }
         if(mdown && point_in(mx,my,bar)){
@@ -1891,7 +2056,8 @@ int main(int argc, char *argv[]){
     Rect progressRect = {pbuf_x, time_y, pbuf_w, pbuf_h>0?pbuf_h:16};
     bool progressHover = point_in(mx,my,progressRect);
     if(progressHover && mclick){ progress = 0; bae_seek_ms(0); }
-    SDL_Color progressColor = progressHover ? (SDL_Color){100,150,255,255} : labelCol;
+    // Use accent for hover time highlight so it matches other accented controls
+    SDL_Color progressColor = progressHover ? g_accent_color : labelCol;
     draw_text(R,pbuf_x, time_y, pbuf, progressColor);
     int slash_x = pbuf_x + pbuf_w + 6; // gap
     draw_text(R,slash_x, time_y, "/", labelCol);
@@ -1968,9 +2134,11 @@ int main(int argc, char *argv[]){
             for(const char *p=fn; *p; ++p){ 
                 if(*p=='/'||*p=='\\') base=p+1; 
             }
-            draw_text(R,60, 280, base, (SDL_Color){150,200,150,255}); 
+            draw_text(R,60, 280, base, g_accent_color); 
         } else {
-            draw_text(R,60, 280, "<none>", (SDL_Color){150,150,150,255}); 
+            // muted text for empty file
+            SDL_Color muted = g_is_dark_mode ? (SDL_Color){150,150,150,255} : (SDL_Color){120,120,120,255};
+            draw_text(R,60, 280, "<none>", muted); 
         }
         
         // Bank info with tooltip (friendly name shown, filename/path on hover)
@@ -1980,8 +2148,8 @@ int main(int argc, char *argv[]){
             const char *base = g_bae.bank_name; 
             for(const char *p = g_bae.bank_name; *p; ++p){ if(*p=='/'||*p=='\\') base=p+1; }
             const char *display_name = (friendly_name && friendly_name[0]) ? friendly_name : base;
-            SDL_Color bankCol = {150,200,255,255};
-            draw_text(R,60, 300, display_name, bankCol);
+            // Use user's accent color for bank display so light-mode accent is respected
+            draw_text(R,60, 300, display_name, g_accent_color);
             // Simple tooltip region (approx width based on char count * 8px mono font)
             int textLen = (int)strlen(display_name);
             int approxW = textLen * 8; if(approxW < 8) approxW = 8; if(approxW > 400) approxW = 400; // crude clamp
@@ -2003,16 +2171,19 @@ int main(int argc, char *argv[]){
                     if(tx + tw > WINDOW_W - 4) tx = WINDOW_W - tw - 4;
                     if(ty + th > WINDOW_H - 4) ty = WINDOW_H - th - 4;
                     Rect tipRect = {tx, ty, tw, th};
-                    SDL_Color tbg = {25,25,35,230};
-                    SDL_Color tbd = {100,100,120,255};
-                    SDL_Color tfg = {210,210,230,255};
-                    draw_rect(R, tipRect, tbg);
-                    draw_frame(R, tipRect, tbd);
-                    draw_text(R, tipRect.x + 4, tipRect.y + 4, tip, tfg);
+                            // Use theme-driven colors for tooltip so it adapts to light/dark modes
+                            SDL_Color tbg = g_panel_bg; tbg.a = 230; // slightly translucent panel bg
+                            SDL_Color tbd = g_panel_border;
+                            SDL_Color tfg = g_text_color;
+                            draw_rect(R, tipRect, tbg);
+                            draw_frame(R, tipRect, tbd);
+                            draw_text(R, tipRect.x + 4, tipRect.y + 4, tip, tfg);
                 }
             }
         } else {
-            draw_text(R,60, 300, "<none>", (SDL_Color){150,150,150,255});
+            // Muted text: slightly darker in light mode for better contrast on pale panels
+            SDL_Color muted = g_is_dark_mode ? (SDL_Color){150,150,150,255} : (SDL_Color){80,80,80,255};
+            draw_text(R,60, 300, "<none>", muted);
         }
         
     // Shifted right and slightly wider so it doesn't cover friendly bank info text
@@ -2051,15 +2222,19 @@ int main(int argc, char *argv[]){
             #endif
         }
         
-        // Status indicator
+        // Status indicator (use theme colors)
         const char *status = playing ? "♪ Playing" : "⏸ Stopped";
-        draw_text(R,20, 320, status, playing ? (SDL_Color){100,255,100,255} : (SDL_Color){255,255,100,255});
-        
+        SDL_Color statusCol = playing ? g_accent_color : g_header_color;
+        draw_text(R,20, 320, status, statusCol);
+
         // Show status message if recent (within 3 seconds)
         if(g_bae.status_message[0] != '\0' && (now - g_bae.status_message_time) < 3000) {
-            draw_text(R,120, 320, g_bae.status_message, (SDL_Color){150,220,255,255});
+            // Use accent color for transient status messages so they stand out
+            draw_text(R,120, 320, g_bae.status_message, g_accent_color);
         } else {
-            draw_text(R,120, 320, "(Drag & drop media/bank files here)", (SDL_Color){120,120,120,255});
+            // Muted fallback text that adapts to theme; darker on light backgrounds for readability
+            SDL_Color muted = g_is_dark_mode ? (SDL_Color){150,150,150,255} : (SDL_Color){80,80,80,255};
+            draw_text(R,120, 320, "(Drag & drop media/bank files here)", muted);
         }
 
         // Render dropdown list on top of everything else if open
@@ -2069,28 +2244,29 @@ int main(int argc, char *argv[]){
             if(reverbCount > BAE_REVERB_TYPE_COUNT) reverbCount = BAE_REVERB_TYPE_COUNT;
             Rect ddRect = {690,40,160,24}; // Moved up 20 pixels from y=60 to y=40
             
-            // Draw the dropdown list
-            int itemH = ddRect.h; 
-            int totalH = itemH * reverbCount; 
+            // Draw the dropdown list using theme globals
+            int itemH = ddRect.h;
+            int totalH = itemH * reverbCount;
             Rect box = {ddRect.x, ddRect.y + ddRect.h + 1, ddRect.w, totalH};
-            SDL_Color panelBg = {45,45,55,255};
-            SDL_Color frame = {120,120,130,255};
-            SDL_Color txt = {230,230,230,255};
-            
-            draw_rect(R, box, panelBg); 
-            draw_frame(R, box, frame);
+            draw_rect(R, box, g_panel_bg);
+            draw_frame(R, box, g_panel_border);
             
             for(int i=0; i<reverbCount; i++){
                 Rect ir = {box.x, box.y + i*itemH, box.w, itemH};
                 bool over = point_in(mx,my,ir);
-                SDL_Color ibg = (i==reverbType)? (SDL_Color){30,120,200,255} : (SDL_Color){65,65,75,255};
-                if(over) ibg = (SDL_Color){90,90,120,255};
-                draw_rect(R, ir, ibg); 
+                SDL_Color ibg = (i==reverbType) ? g_accent_color : g_panel_bg;
+                if(over) ibg = g_button_hover;
+                draw_rect(R, ir, ibg);
                 if(i < reverbCount-1) { // separator line
-                    SDL_SetRenderDrawColor(R,80,80,90,255);
+                    SDL_Color sep = g_panel_border; sep.a = 255; // use panel border as separator
+                    SDL_SetRenderDrawColor(R, sep.r, sep.g, sep.b, sep.a);
                     SDL_RenderDrawLine(R, ir.x, ir.y+ir.h, ir.x+ir.w, ir.y+ir.h);
                 }
-                draw_text(R, ir.x+6, ir.y+6, reverbNames[i], txt);
+                // Choose text color: use button text on selected/hover, otherwise normal text
+                SDL_Color itemTxt = g_text_color;
+                if(i == reverbType) itemTxt = g_button_text;
+                if(over) itemTxt = g_button_text;
+                draw_text(R, ir.x+6, ir.y+6, reverbNames[i], itemTxt);
                 if(over && mclick){ 
                     reverbType = i; 
                     g_reverbDropdownOpen = false; 
@@ -2108,38 +2284,52 @@ int main(int argc, char *argv[]){
             }
         }
 
-        // Non-blocking RMF Info dialog overlay
+        // Non-blocking RMF Info dialog overlay (with word wrapping)
         if(g_show_rmf_info_dialog && g_bae.is_rmf_file){
             rmf_info_load_if_needed();
-            // Determine dynamic height based on number of non-empty fields (cap lines)
-            int lines=0; for(int i=0;i<INFO_TYPE_COUNT;i++){ if(g_rmf_info_values[i][0]) lines++; }
-            if(lines==0) lines=1; // show placeholder
-            int lineH = 16; int pad=8; int dlgW=340; int dlgH = pad*2 + 24 + lines*lineH + 10; // title + fields
+            int pad=8; int dlgW=340; int lineH = 16; // line height for wrapped lines
+            // Compute total wrapped lines across all non-empty fields
+            int totalLines = 0;
+            for(int i=0;i<INFO_TYPE_COUNT;i++){
+                if(g_rmf_info_values[i][0]){
+                    char tmp[1024]; snprintf(tmp,sizeof(tmp),"%s: %s", rmf_info_label((BAEInfoType)i), g_rmf_info_values[i]);
+                    int count = count_wrapped_lines(tmp, dlgW - pad*2 - 8); // inner width
+                    if(count <= 0) count = 1;
+                    totalLines += count;
+                }
+            }
+            if(totalLines == 0) totalLines = 1; // placeholder
+            int dlgH = pad*2 + 24 + totalLines*lineH + 10; // title + fields
             Rect dlg = {WINDOW_W - dlgW - 10, 10, dlgW, dlgH};
-            SDL_Color bg = {30,30,40,230};
-            SDL_Color border = {120,120,140,255};
-            draw_rect(R, dlg, bg);
-            draw_frame(R, dlg, border);
-            draw_text(R, dlg.x + 10, dlg.y + 8, "RMF Metadata", (SDL_Color){220,220,240,255});
-            // Close button (simple X)
+            // Theme-aware dialog background and border (keep slight translucency)
+            SDL_Color dlgBg = g_panel_bg; dlgBg.a = 230;
+            SDL_Color dlgBorder = g_panel_border;
+            draw_rect(R, dlg, dlgBg);
+            draw_frame(R, dlg, dlgBorder);
+            // Title uses header color
+            draw_text(R, dlg.x + 10, dlg.y + 8, "RMF Metadata", g_header_color);
+            // Close button (simple X) styled with button colors so it fits theme
             Rect closeBtn = {dlg.x + dlg.w - 22, dlg.y + 6, 16,16};
             bool overClose = point_in(mx,my,closeBtn);
-            SDL_Color cbg = overClose ? (SDL_Color){200,60,60,255} : (SDL_Color){120,50,50,255};
-            draw_rect(R, closeBtn, cbg); draw_frame(R, closeBtn, (SDL_Color){80,20,20,255});
-            draw_text(R, closeBtn.x + 4, closeBtn.y + 2, "X", (SDL_Color){255,255,255,255});
+            SDL_Color cbg = overClose ? g_button_hover : g_button_base;
+            draw_rect(R, closeBtn, cbg);
+            draw_frame(R, closeBtn, g_button_border);
+            draw_text(R, closeBtn.x + 4, closeBtn.y + 2, "X", g_button_text);
             if(mclick && overClose){ g_show_rmf_info_dialog=false; }
-            // Scroll not implemented (compact). Render fields
+            // Render wrapped fields
             int y = dlg.y + 32; int rendered=0;
             for(int i=0;i<INFO_TYPE_COUNT;i++){
                 if(g_rmf_info_values[i][0]){
-                    char line[640]; snprintf(line,sizeof(line),"%s: %s", rmf_info_label((BAEInfoType)i), g_rmf_info_values[i]);
-                    // Truncate if too wide
-                    if(strlen(line) > 90){ line[90]='\0'; }
-                    draw_text(R, dlg.x + 10, y, line, (SDL_Color){200,200,210,255});
-                    y += lineH; rendered++;
+                    char full[1024]; snprintf(full,sizeof(full),"%s: %s", rmf_info_label((BAEInfoType)i), g_rmf_info_values[i]);
+                    // Use theme text color for wrapped fields
+                    int drawn = draw_wrapped_text(R, dlg.x + 10, y, full, g_text_color, dlg.w - pad*2 - 8, lineH);
+                    y += drawn * lineH; rendered += drawn;
                 }
             }
-            if(rendered==0){ draw_text(R, dlg.x+10, y, "(No metadata fields present)", (SDL_Color){160,160,170,255}); }
+            if(rendered==0){ 
+                SDL_Color placeholder = g_is_dark_mode ? (SDL_Color){160,160,170,255} : (SDL_Color){100,100,100,255};
+                draw_text(R, dlg.x+10, y, "(No metadata fields present)", placeholder);
+            }
             // Clicking outside dialog closes it
             if(mclick && !point_in(mx,my,dlg) && !point_in(mx,my,(Rect){440, 215, 80,22})){ g_show_rmf_info_dialog=false; }
         }
