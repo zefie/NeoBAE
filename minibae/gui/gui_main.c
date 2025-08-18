@@ -17,6 +17,7 @@
 #include <commdlg.h>
 #include <stdlib.h>  // for _fullpath
 #include <SDL_syswm.h>
+#include <winreg.h>  // for registry access
 #endif
 #if !defined(_WIN32)
 #include <stdio.h>
@@ -29,6 +30,104 @@
 #include "BAE_API.h" // for BAE_GetDeviceSamplesPlayedPosition diagnostics
 #include "gui_font.h" // bitmap font fallback
 #include "X_Assert.h"
+
+#ifdef _WIN32
+// Windows theme detection functions
+typedef struct {
+    bool is_dark_mode;
+    bool is_high_contrast;
+    SDL_Color accent_color;
+    SDL_Color text_color;
+    SDL_Color bg_color;
+    SDL_Color panel_bg;
+    SDL_Color border_color;
+} WindowsTheme;
+
+static WindowsTheme g_theme = {0};
+
+static bool get_registry_dword(HKEY hkey, const char* subkey, const char* value, DWORD* result) {
+    HKEY key;
+    if (RegOpenKeyExA(hkey, subkey, 0, KEY_READ, &key) != ERROR_SUCCESS) {
+        return false;
+    }
+    
+    DWORD type, size = sizeof(DWORD);
+    bool success = (RegQueryValueExA(key, value, NULL, &type, (BYTE*)result, &size) == ERROR_SUCCESS && type == REG_DWORD);
+    RegCloseKey(key);
+    return success;
+}
+
+static void detect_windows_theme() {
+    // Default light theme
+    g_theme.is_dark_mode = false;
+    g_theme.is_high_contrast = false;
+    g_theme.accent_color = (SDL_Color){0, 120, 215, 255}; // Default Windows blue
+    g_theme.text_color = (SDL_Color){220, 220, 220, 255};
+    g_theme.bg_color = (SDL_Color){30, 30, 35, 255};
+    g_theme.panel_bg = (SDL_Color){45, 45, 50, 255};
+    g_theme.border_color = (SDL_Color){80, 80, 90, 255};
+    
+    DWORD value;
+    
+    // Check for dark mode (Windows 10/11)
+    if (get_registry_dword(HKEY_CURRENT_USER, 
+                          "Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize", 
+                          "AppsUseLightTheme", &value)) {
+        g_theme.is_dark_mode = (value == 0);
+    }
+    
+    // Check for high contrast mode
+    if (get_registry_dword(HKEY_CURRENT_USER, 
+                          "Control Panel\\Accessibility\\HighContrast", 
+                          "Flags", &value)) {
+        g_theme.is_high_contrast = (value & 1);
+    }
+    
+    // Get accent color
+    if (get_registry_dword(HKEY_CURRENT_USER, 
+                          "Software\\Microsoft\\Windows\\DWM", 
+                          "AccentColor", &value)) {
+        // Windows stores color as AABBGGRR, we need RRGGBB
+        g_theme.accent_color.r = (value >> 0) & 0xFF;
+        g_theme.accent_color.g = (value >> 8) & 0xFF;
+        g_theme.accent_color.b = (value >> 16) & 0xFF;
+        g_theme.accent_color.a = 255;
+    }
+    
+    // Adjust colors based on theme
+    if (g_theme.is_dark_mode) {
+        // Dark theme colors
+        g_theme.text_color = (SDL_Color){240, 240, 240, 255};
+        g_theme.bg_color = (SDL_Color){32, 32, 32, 255};
+        g_theme.panel_bg = (SDL_Color){45, 45, 45, 255};
+        g_theme.border_color = (SDL_Color){85, 85, 85, 255};
+    } else {
+        // Light theme colors
+        g_theme.text_color = (SDL_Color){32, 32, 32, 255};
+        g_theme.bg_color = (SDL_Color){248, 248, 248, 255};
+        g_theme.panel_bg = (SDL_Color){255, 255, 255, 255};
+        g_theme.border_color = (SDL_Color){200, 200, 200, 255};
+    }
+    
+    if (g_theme.is_high_contrast) {
+        // High contrast overrides
+        g_theme.text_color = (SDL_Color){255, 255, 255, 255};
+        g_theme.bg_color = (SDL_Color){0, 0, 0, 255};
+        g_theme.panel_bg = (SDL_Color){0, 0, 0, 255};
+        g_theme.border_color = (SDL_Color){255, 255, 255, 255};
+        g_theme.accent_color = (SDL_Color){255, 255, 0, 255}; // Yellow for high contrast
+    }
+    
+    BAE_PRINTF("Windows theme detected: %s mode, accent: R%d G%d B%d\n", 
+               g_theme.is_dark_mode ? "dark" : "light",
+               g_theme.accent_color.r, g_theme.accent_color.g, g_theme.accent_color.b);
+}
+#else
+// Dummy theme detection for non-Windows
+static void detect_windows_theme() {
+    // Use default dark theme colors for non-Windows
+}
+#endif
 
 // GUI-specific mixer audio task to ensure stream servicing (mirrors playbae behavior)
 static void gui_audio_task(void *reference) {
@@ -147,8 +246,8 @@ static bool ui_button(SDL_Renderer *R, Rect r, const char *label, int mx,int my,
     if(over) bg = mdown?press:hover;
     draw_rect(R,r,bg);
     draw_frame(R,r,border);
-    // Center text in button
-    int text_w = strlen(label) * 6; // rough estimate for bitmap font
+    // Center text in button - simple and reliable
+    int text_w = strlen(label) * 5; // Slightly smaller multiplier for better centering
     int text_x = r.x + (r.w - text_w) / 2;
     int text_y = r.y + (r.h - 12) / 2;
     draw_text(R,text_x,text_y,label,txt);
@@ -202,7 +301,22 @@ static bool ui_dropdown(SDL_Renderer *R, Rect r, int *value, const char **items,
 
 // Custom checkbox drawing function
 static void draw_custom_checkbox(SDL_Renderer *R, Rect r, bool checked, bool hovered) {
-    // Define colors
+    // Define colors using theme
+#ifdef _WIN32
+    SDL_Color bg_unchecked = g_theme.panel_bg;
+    SDL_Color bg_checked = g_theme.accent_color;
+    SDL_Color bg_hover_unchecked = {g_theme.panel_bg.r + 25, g_theme.panel_bg.g + 25, g_theme.panel_bg.b + 25, 255};
+    SDL_Color bg_hover_checked = {
+        (Uint8)(g_theme.accent_color.r * 0.8f), 
+        (Uint8)(g_theme.accent_color.g * 0.8f), 
+        (Uint8)(g_theme.accent_color.b * 0.8f), 
+        255
+    };
+    SDL_Color border = g_theme.border_color;
+    SDL_Color border_hover = {g_theme.border_color.r + 40, g_theme.border_color.g + 40, g_theme.border_color.b + 40, 255};
+    SDL_Color checkmark = g_theme.is_dark_mode ? (SDL_Color){255,255,255,255} : (SDL_Color){255,255,255,255};
+#else
+    // Fallback colors for non-Windows
     SDL_Color bg_unchecked = {45,45,50,255};
     SDL_Color bg_checked = {30,120,200,255};
     SDL_Color bg_hover_unchecked = {70,70,80,255};
@@ -210,6 +324,7 @@ static void draw_custom_checkbox(SDL_Renderer *R, Rect r, bool checked, bool hov
     SDL_Color border = {120,120,130,255};
     SDL_Color border_hover = {160,160,170,255};
     SDL_Color checkmark = {255,255,255,255};
+#endif
     
     // Choose colors based on state
     SDL_Color bg = checked ? bg_checked : bg_unchecked;
@@ -282,10 +397,17 @@ static bool ui_toggle(SDL_Renderer *R, Rect r, bool *value, const char *label, i
 
 static bool ui_slider(SDL_Renderer *R, Rect rail, int *val, int min, int max, int mx,int my,bool mdown,bool mclick){
     // horizontal slider with improved styling
+#ifdef _WIN32
+    SDL_Color railC = g_theme.is_dark_mode ? (SDL_Color){40,40,50,255} : (SDL_Color){220,220,220,255};
+    SDL_Color fillC = g_theme.accent_color;
+    SDL_Color knobC = g_theme.is_dark_mode ? (SDL_Color){200,200,210,255} : (SDL_Color){100,100,110,255};
+    SDL_Color border = g_theme.border_color;
+#else
     SDL_Color railC = {40,40,50,255};
     SDL_Color fillC = {50,130,200,255};
     SDL_Color knobC = {200,200,210,255};
     SDL_Color border = {80,80,90,255};
+#endif
     
     // Draw rail with border
     draw_rect(R, rail, railC);
@@ -1383,6 +1505,10 @@ int main(int argc, char *argv[]){
     }
 #endif
     if(!g_font){ gui_set_font_scale(2); }
+    
+    // Detect Windows theme
+    detect_windows_theme();
+    
     if(!bae_init()){ BAE_PRINTF("miniBAE init failed\n"); }
     
     // Load bank database
@@ -1562,16 +1688,27 @@ int main(int argc, char *argv[]){
         bae_service_wav_export();
 
         // Draw UI with improved layout and styling
+#ifdef _WIN32
+        SDL_SetRenderDrawColor(R,g_theme.bg_color.r,g_theme.bg_color.g,g_theme.bg_color.b,255);
+#else
         SDL_SetRenderDrawColor(R,30,30,35,255);
+#endif
         SDL_RenderClear(R);
+#ifdef _WIN32
+        SDL_Color labelCol = g_theme.text_color;
+        SDL_Color headerCol = g_theme.is_dark_mode ? (SDL_Color){180,200,255,255} : (SDL_Color){50,100,200,255};
+        SDL_Color panelBg = g_theme.panel_bg;
+        SDL_Color panelBorder = g_theme.border_color;
+#else
         SDL_Color labelCol = {220,220,220,255};
         SDL_Color headerCol = {180,200,255,255};
         SDL_Color panelBg = {45,45,50,255};
         SDL_Color panelBorder = {80,80,90,255};
+#endif
         
         // Draw main panels
-        Rect channelPanel = {10, 10, 430, 140};
-        Rect controlPanel = {450, 10, 440, 140};
+        Rect channelPanel = {10, 10, 380, 140};
+        Rect controlPanel = {400, 10, 490, 140};
         Rect transportPanel = {10, 160, 880, 80};
         Rect statusPanel = {10, 250, 880, 100};
         
@@ -1585,15 +1722,17 @@ int main(int argc, char *argv[]){
         for(int i=0;i<16;i++){
             int col = i % 8;
             int row = i / 8;
-            Rect r = {chStartX + col*48, chStartY + row*35, 24, 24};
+            Rect r = {chStartX + col*45, chStartY + row*35, 16, 16};
             char buf[4]; snprintf(buf,sizeof(buf),"%d", i+1);
             bool clicked = ui_toggle(R,r,&ch_enable[i],NULL,mx,my,mclick);
-            // Channel number below with better spacing
-            draw_text(R,r.x+6,r.y+26,buf,labelCol);
+            // Channel number below with better centering
+            int text_width = (i < 9) ? 6 : 12; // Single digit vs double digit
+            int center_x = r.x + (r.w - text_width) / 2;
+            draw_text(R,center_x,r.y+18,buf,labelCol);
         }
 
         // Channel control buttons in a row
-        int btnY = chStartY + 80;
+        int btnY = chStartY + 75;
         if(ui_button(R,(Rect){20,btnY,80,26},"Invert",mx,my,mdown) && mclick){
             for(int i=0;i<16;i++) ch_enable[i]=!ch_enable[i];
         }
@@ -1607,32 +1746,32 @@ int main(int argc, char *argv[]){
         // Control panel
         draw_rect(R, controlPanel, panelBg);
         draw_frame(R, controlPanel, panelBorder);
-        draw_text(R, 460, 20, "PLAYBACK CONTROLS", headerCol);
+        draw_text(R, 410, 20, "PLAYBACK CONTROLS", headerCol);
         
         // Transpose control
-        draw_text(R,460, 45, "Transpose:", labelCol);
-        ui_slider(R,(Rect){460, 60, 160, 14}, &transpose, -24, 24, mx,my,mdown,mclick);
+        draw_text(R,410, 45, "Transpose:", labelCol);
+        ui_slider(R,(Rect){410, 60, 160, 14}, &transpose, -24, 24, mx,my,mdown,mclick);
         char tbuf[64]; snprintf(tbuf,sizeof(tbuf),"%+d", transpose); 
-        draw_text(R,630, 58, tbuf, labelCol);
-        if(ui_button(R,(Rect){680, 56, 50,20},"Reset",mx,my,mdown) && mclick){ 
+        draw_text(R,580, 58, tbuf, labelCol);
+        if(ui_button(R,(Rect){620, 56, 50,20},"Reset",mx,my,mdown) && mclick){ 
             transpose=0; bae_set_transpose(transpose);
         }        
 
         // Tempo control  
-        draw_text(R,460, 85, "Tempo:", labelCol);
-        ui_slider(R,(Rect){460, 100, 160, 14}, &tempo, 25, 200, mx,my,mdown,mclick);
+        draw_text(R,410, 85, "Tempo:", labelCol);
+        ui_slider(R,(Rect){410, 100, 160, 14}, &tempo, 25, 200, mx,my,mdown,mclick);
         snprintf(tbuf,sizeof(tbuf),"%d%%", tempo); 
-        draw_text(R,630, 98, tbuf, labelCol);
-        if(ui_button(R,(Rect){680, 96, 50,20},"Reset",mx,my,mdown) && mclick){ 
+        draw_text(R,580, 98, tbuf, labelCol);
+        if(ui_button(R,(Rect){620, 96, 50,20},"Reset",mx,my,mdown) && mclick){ 
             tempo=100; bae_set_tempo(tempo);
         }        
 
         // Reverb controls
-        draw_text(R,750, 25, "Reverb:", labelCol);
-        static const char *reverbNames[] = {"No Change","None","Closet","Garage","Acoustic Lab","Cavern","Dungeon","Small Refl","Early Refl","Basement","Banquet","Catacombs"};
+        draw_text(R,690, 25, "Reverb:", labelCol);
+        static const char *reverbNames[] = {"No Change","None","Closet","Garage","Acoustic Lab","Cavern","Dungeon","Small Reflections","Early Reflections","Basement","Banquet","Catacombs"};
         int reverbCount = (int)(sizeof(reverbNames)/sizeof(reverbNames[0]));
         if(reverbCount > BAE_REVERB_TYPE_COUNT) reverbCount = BAE_REVERB_TYPE_COUNT;
-        Rect ddRect = {750,40,120,24}; // Moved up 20 pixels from y=60 to y=40
+        Rect ddRect = {690,40,160,24}; // Moved up 20 pixels from y=60 to y=40
         // Just draw the closed dropdown here - full dropdown will be rendered later
         SDL_Color bg = {60,60,70,255}; 
         SDL_Color txt={230,230,230,255}; 
@@ -1647,14 +1786,14 @@ int main(int argc, char *argv[]){
         if(overMain && mclick){ g_reverbDropdownOpen = !g_reverbDropdownOpen; }
 
         // Volume control
-        draw_text(R,750, 80, "Volume:", labelCol);
+        draw_text(R,690, 80, "Volume:", labelCol);
         // Disable volume slider interaction when reverb dropdown is open
         bool volume_enabled = !g_reverbDropdownOpen;
-        ui_slider(R,(Rect){750, 95, 120, 14}, &volume, 0, 100, 
+        ui_slider(R,(Rect){690, 95, 120, 14}, &volume, 0, 100, 
                  volume_enabled ? mx : -1, volume_enabled ? my : -1, 
                  volume_enabled ? mdown : false, volume_enabled ? mclick : false);
         char vbuf[32]; snprintf(vbuf,sizeof(vbuf),"%d%%", volume); 
-        draw_text(R,750,115,vbuf,labelCol);
+        draw_text(R,690,115,vbuf,labelCol);
 
         // Transport panel
         draw_rect(R, transportPanel, panelBg);
@@ -1663,14 +1802,22 @@ int main(int argc, char *argv[]){
         
         // Progress bar with better styling
         Rect bar = {20, 190, 650, 20};
+#ifdef _WIN32
+        draw_rect(R, bar, g_theme.is_dark_mode ? (SDL_Color){25,25,30,255} : (SDL_Color){240,240,240,255});
+#else
         draw_rect(R, bar, (SDL_Color){25,25,30,255});
+#endif
         draw_frame(R, bar, panelBorder);
         if(duration != bae_get_len_ms()) duration = bae_get_len_ms();
         progress = playing? bae_get_pos_ms(): progress;
         float pct = (duration>0)? (float)progress/duration : 0.f; 
         if(pct<0)pct=0; if(pct>1)pct=1;
         if(pct > 0) {
+#ifdef _WIN32
+            draw_rect(R, (Rect){bar.x+2,bar.y+2,(int)((bar.w-4)*pct),bar.h-4}, g_theme.accent_color);
+#else
             draw_rect(R, (Rect){bar.x+2,bar.y+2,(int)((bar.w-4)*pct),bar.h-4}, (SDL_Color){50,150,200,255});
+#endif
         }
         if(mdown && point_in(mx,my,bar)){
             int rel = mx - bar.x; if(rel<0)rel=0; if(rel>bar.w) rel=bar.w; 
@@ -1745,7 +1892,7 @@ int main(int argc, char *argv[]){
         
         // WAV Export button (only for MIDI/RMF files)
         if(!g_bae.is_audio_file && g_bae.song_loaded) {
-            if(ui_button(R,(Rect){320, 215, 90,22}, g_exporting ? "Exporting..." : "Export WAV", mx,my,mdown) && mclick && !g_exporting){
+            if(ui_button(R,(Rect){320, 215, 110,22}, g_exporting ? "Exporting..." : "Export WAV", mx,my,mdown) && mclick && !g_exporting){
                 char *export_file = save_wav_dialog();
                 if(export_file) {
                     bae_start_wav_export(export_file);
@@ -1844,10 +1991,10 @@ int main(int argc, char *argv[]){
 
         // Render dropdown list on top of everything else if open
         if(g_reverbDropdownOpen) {
-            static const char *reverbNames[] = {"No Change","None","Closet","Garage","Acoustic Lab","Cavern","Dungeon","Small Refl","Early Refl","Basement","Banquet","Catacombs"};
+            static const char *reverbNames[] = {"No Change","None","Closet","Garage","Acoustic Lab","Cavern","Dungeon","Small Reflections","Early Reflections","Basement","Banquet","Catacombs"};
             int reverbCount = (int)(sizeof(reverbNames)/sizeof(reverbNames[0]));
             if(reverbCount > BAE_REVERB_TYPE_COUNT) reverbCount = BAE_REVERB_TYPE_COUNT;
-            Rect ddRect = {750,40,120,24}; // Moved up 20 pixels from y=60 to y=40
+            Rect ddRect = {690,40,160,24}; // Moved up 20 pixels from y=60 to y=40
             
             // Draw the dropdown list
             int itemH = ddRect.h; 
