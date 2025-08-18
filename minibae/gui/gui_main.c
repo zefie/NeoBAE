@@ -1164,7 +1164,9 @@ static bool bae_start_wav_export(const char* output_file) {
     }
     
     g_exporting = true;
+#ifdef SUPPORT_KARAOKE    
     g_karaoke_suspended = true; // disable karaoke during export
+#endif
     g_export_progress = 0; // reset (unused for display)
     g_export_last_pos = 0;
     g_export_stall_iters = 0;
@@ -1221,7 +1223,9 @@ static void bae_stop_wav_export() {
         // We'll sync just after frame logic by checking mismatch
         
     g_exporting = false;
+#ifdef SUPPORT_KARAOKE    
     g_karaoke_suspended = false; // re-enable karaoke after export
+#endif
     g_export_progress = 0;
     g_export_path[0] = '\0';
         set_status_message("WAV export completed");
@@ -2276,7 +2280,7 @@ int main(int argc, char *argv[]){
         Rect transportPanel = {10, 160, 880, 80};
 #ifdef SUPPORT_KARAOKE
     // Insert karaoke panel (if active) above status panel; dynamic window height
-    int karaokePanelHeight = 40;
+    int karaokePanelHeight = 40;    
     bool showKaraoke = g_karaoke_enabled && !g_karaoke_suspended && g_lyric_count > 0 && g_bae.song_loaded && !g_bae.is_audio_file;
     Rect karaokePanel = {10, 250, 880, karaokePanelHeight};
     int statusY = 250;

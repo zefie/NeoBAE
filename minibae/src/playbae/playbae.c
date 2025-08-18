@@ -48,6 +48,108 @@
    #undef main
 #endif
 
+static int gWriteToFile = FALSE;
+
+#ifdef SUPPORT_KARAOKE
+// -----------------------------------------------------------------------------
+// Optional karaoke (lyric) support for CLI playback.
+// Mirrors the newline / fragment logic used by the SDL2 GUI:
+//  * Lyrics arrive as fragments via lyric callback.
+//  * Split each incoming lyric string on '/' or '\\' which force newlines.
+//  * An empty fragment ("" meta event) also forces a newline.
+//  * Fragments that are cumulative (next fragment starts with previous fragment
+//    and is longer) replace the current line (growing highlight substring logic
+//    in GUI). Non‑cumulative fragments are appended with NO added space.
+//  * Newline commits the current line to the "previous" display line and clears
+//    the current line for accumulation of the next line.
+// The CLI prints updates only when the current line changes or a newline commits,
+// and is automatically disabled while exporting to a file (-o flag) per request.
+// -----------------------------------------------------------------------------
+
+#include <ctype.h>
+void playbae_printf(const char *fmt, ...);
+static int gEnableKaraoke = 0;         // master toggle (enabled only with -k)
+static char g_karaoke_line_current[256];
+static char g_karaoke_line_previous[256];
+static char g_karaoke_last_fragment[128]; // track last raw fragment for cumulative detection
+
+static void cli_karaoke_reset(void){
+   g_karaoke_line_current[0] = '\0';
+   g_karaoke_line_previous[0] = '\0';
+   g_karaoke_last_fragment[0] = '\0';
+}
+
+static void cli_karaoke_print(void){
+   if(!gEnableKaraoke) return;
+   // Print with a leading newline to avoid overwriting by carriage return position line
+   if(g_karaoke_line_previous[0] && g_karaoke_line_current[0]){
+      playbae_printf("\nKARAOKE:\n%s\n%s\n", g_karaoke_line_previous, g_karaoke_line_current);
+   } else if(g_karaoke_line_current[0]){
+      playbae_printf("\nKARAOKE: %s\n", g_karaoke_line_current);
+   }
+}
+
+static void cli_karaoke_newline(uint32_t t_us){ (void)t_us; // time presently unused in CLI
+   // Commit current -> previous and clear current
+   if(g_karaoke_line_current[0]){
+      strncpy(g_karaoke_line_previous, g_karaoke_line_current, sizeof(g_karaoke_line_previous)-1);
+      g_karaoke_line_previous[sizeof(g_karaoke_line_previous)-1] = '\0';
+      g_karaoke_line_current[0] = '\0';
+   }
+   g_karaoke_last_fragment[0] = '\0';
+}
+
+static void cli_karaoke_add_fragment(const char *frag){
+   if(!frag || !frag[0]) return;
+   size_t fragLen = strlen(frag);
+   size_t lastLen = strlen(g_karaoke_last_fragment);
+   int cumulativeExtension = (lastLen>0 && fragLen>lastLen && strncmp(frag, g_karaoke_last_fragment, lastLen)==0);
+   if(cumulativeExtension){
+      // Replace the entire current line with the growing substring
+      strncpy(g_karaoke_line_current, frag, sizeof(g_karaoke_line_current)-1);
+      g_karaoke_line_current[sizeof(g_karaoke_line_current)-1] = '\0';
+   } else {
+      // Append raw fragment directly (no inserted spaces)
+      strncat(g_karaoke_line_current, frag, sizeof(g_karaoke_line_current)-strlen(g_karaoke_line_current)-1);
+   }
+   strncpy(g_karaoke_last_fragment, frag, sizeof(g_karaoke_last_fragment)-1);
+   g_karaoke_last_fragment[sizeof(g_karaoke_last_fragment)-1] = '\0';
+   cli_karaoke_print();
+}
+
+// Lyric callback prototype is in MiniBAE.h but we include a forward decl to be safe.
+extern BAEResult BAESong_SetLyricCallback(BAESong song, GM_SongLyricCallbackProcPtr pCallback, void *callbackReference);
+
+static void cli_karaoke_lyric_callback(struct GM_Song *songPtr, const char *lyric, uint32_t t_us, void *ref){
+   (void)songPtr; (void)ref; (void)t_us; // timestamp not printed presently
+   if(!gEnableKaraoke) return;
+   if(gWriteToFile) return; // disabled during export
+   if(!lyric) return;
+   // Empty fragment forces newline
+   if(lyric[0] == '\0') { cli_karaoke_newline(t_us); cli_karaoke_print(); return; }
+   // Process delimiters '/' and '\\' exactly like GUI logic
+   const char *p = lyric; const char *segStart = p;
+   while(1){
+      if(*p == '/' || *p == '\\' || *p == '\0'){
+         size_t len = (size_t)(p - segStart);
+         if(len > 0){
+            char segment[192];
+            if(len >= sizeof(segment)) len = sizeof(segment)-1;
+            memcpy(segment, segStart, len); segment[len] = '\0';
+            cli_karaoke_add_fragment(segment);
+         }
+         if(*p == '/' || *p == '\\'){
+            cli_karaoke_newline(t_us);
+            p++; segStart = p; continue;
+         } else {
+            break; // end of string
+         }
+      }
+      p++;
+   }
+}
+#endif
+
 #ifdef _BUILT_IN_PATCHES
 	#include <BAEPatches.h>
 #endif
@@ -142,6 +244,9 @@ char const usageString[] =
    "USAGE:  playbae  -p  {patches.hsb}\n"
    "                 -f  {Play a file (MIDI, RMF, WAV, AIFF, MPEG audio: MP2/MP3)}\n"
    "                 -o  {write output to file}\n"
+#ifdef SUPPORT_KARAOKE
+   "                 -k  {enable karaoke lyric display (MIDI/RMF with lyrics)}\n"
+#endif
    "                 -l  {# of times to loop}\n"
    "                 -v  {max volume (in percent, overdrive allowed) (default: 100)}\n"
    "                 -vc {velocity curve 0-4 (default engine setting)}\n"
@@ -199,8 +304,6 @@ char const velocityCurveList[] =
    "   4               2x Linear\n"
 };
 
-
-static int gWriteToFile = FALSE;
 
 static void PV_Task(void *reference)
 {
@@ -474,6 +577,9 @@ static BAEResult PlayMidi(BAEMixer theMixer, char *fileName, BAE_UNSIGNED_FIXED 
    uint32_t lastPosition = 0;
    uint32_t cumulativeTime = 0;
    BAE_BOOL  done;
+#ifdef SUPPORT_KARAOKE
+   cli_karaoke_reset(); // reset karaoke state per song
+#endif
    if (theSong)
    {
 #if 0
@@ -487,7 +593,13 @@ static BAEResult PlayMidi(BAEMixer theMixer, char *fileName, BAE_UNSIGNED_FIXED 
          BAESong_SetVelocityCurve(theSong, gVelocityCurve);
          playbae_printf("Velocity curve set to %d\n", gVelocityCurve);
       }
-         err = BAESong_Start(theSong, 0);
+#ifdef SUPPORT_KARAOKE
+       // Register lyric callback unless exporting (karaoke disabled during export)
+       if(!gWriteToFile){
+          BAESong_SetLyricCallback(theSong, cli_karaoke_lyric_callback, NULL);
+       }
+#endif
+       err = BAESong_Start(theSong, 0);
          if (err == BAE_NO_ERROR)
          {
 	    BAESong_SetVolume(theSong, calculateVolume(volume, TRUE));
@@ -584,6 +696,9 @@ static BAEResult PlayRMF(BAEMixer theMixer, char *fileName, BAE_UNSIGNED_FIXED v
    uint32_t lastPosition = 0;
    uint32_t cumulativeTime = 0;
    BAE_BOOL  done;
+#ifdef SUPPORT_KARAOKE   
+   cli_karaoke_reset();
+#endif
 
    if (theSong)
    {
@@ -598,7 +713,12 @@ static BAEResult PlayRMF(BAEMixer theMixer, char *fileName, BAE_UNSIGNED_FIXED v
 #if _DEBUG
          BAESong_SetCallback(theSong, (BAE_SongCallbackPtr)PV_SongCallback, (void *)0x1234);
 #endif
-         err = BAESong_Start(theSong, 0);
+#ifdef SUPPORT_KARAOKE
+       if(!gWriteToFile){
+          BAESong_SetLyricCallback(theSong, cli_karaoke_lyric_callback, NULL);
+       }
+#endif
+       err = BAESong_Start(theSong, 0);
          if (err == BAE_NO_ERROR)
          {
 	    if (verboseMode) {
@@ -764,6 +884,13 @@ int main(int argc, char *argv[])
         silentMode = FALSE;
 	verboseMode = TRUE;
    }
+
+#ifdef SUPPORT_KARAOKE
+   if (PV_ParseCommands(argc, argv, "-k", FALSE, NULL))
+   {
+        gEnableKaraoke = 1;
+   }
+#endif
 
    // Velocity curve (parse before mixer/song usage)
    if (PV_ParseCommands(argc, argv, "-vc", TRUE, parmFile))
@@ -943,6 +1070,9 @@ int main(int argc, char *argv[])
             else
             {
                gWriteToFile = TRUE;
+#ifdef SUPPORT_KARAOKE               
+               gEnableKaraoke = 0; // disable karaoke during export
+#endif
                playbae_printf("Writing to file %s\n", parmFile);
             }
          }
