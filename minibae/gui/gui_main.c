@@ -443,7 +443,7 @@ static bool ui_slider(SDL_Renderer *R, Rect rail, int *val, int min, int max, in
 typedef struct {
     BAEMixer mixer;
     BAESong  song;
-    BAESound sound; // For audio files (WAV, MP3, etc.)
+    BAESound sound; // For audio files (WAV, MP2/MP3, etc.)
     uint32_t song_length_us; // cached length
     bool song_loaded;
     bool is_audio_file; // true if loaded file is audio (not MIDI/RMF)
@@ -1136,7 +1136,7 @@ static bool bae_load_song(const char* path){
     if(le){ strncpy(ext, le, sizeof(ext)-1); for(char *p=ext; *p; ++p) *p=(char)tolower(*p); }
     
     bool isAudio = false;
-    if(le){ if(strcmp(ext,".wav")==0 || strcmp(ext,".aif")==0 || strcmp(ext,".aiff")==0 || strcmp(ext,".au")==0 || strcmp(ext,".mp3")==0){ isAudio=true; } }
+    if(le){ if(strcmp(ext,".wav")==0 || strcmp(ext,".aif")==0 || strcmp(ext,".aiff")==0 || strcmp(ext,".au")==0 || strcmp(ext,".mp2")==0 || strcmp(ext,".mp3")==0){ isAudio=true; } }
     
     if(isAudio){
         g_bae.sound = BAESound_New(g_bae.mixer);
@@ -1145,6 +1145,7 @@ static bool bae_load_song(const char* path){
         if(strcmp(ext,".wav")==0) ftype = BAE_WAVE_TYPE;
         else if(strcmp(ext,".aif")==0 || strcmp(ext,".aiff")==0) ftype = BAE_AIFF_TYPE;
         else if(strcmp(ext,".au")==0) ftype = BAE_AU_TYPE;
+        else if(strcmp(ext,".mp2")==0) ftype = BAE_MPEG_TYPE;
         else if(strcmp(ext,".mp3")==0) ftype = BAE_MPEG_TYPE;
         BAEResult sr = (ftype!=BAE_INVALID_TYPE) ? BAESound_LoadFileSample(g_bae.sound,(BAEPathName)path,ftype) : BAE_BAD_FILE_TYPE;
         if(sr!=BAE_NO_ERROR){ BAESound_Delete(g_bae.sound); g_bae.sound=NULL; BAE_PRINTF("Audio load failed %d %s\n", sr,path); return false; }
@@ -1292,7 +1293,7 @@ static bool bae_play(bool *playing){
     if(!g_bae.song_loaded) return false;
     
     if(g_bae.is_audio_file && g_bae.sound) {
-        // Handle audio files (WAV, MP3, etc.)
+        // Handle audio files (WAV, MP2/MP3, etc.)
         if(!*playing) {
             BAE_PRINTF("Attempting BAESound_Start on '%s'\n", g_bae.loaded_path);
             BAEResult sr = BAESound_Start(g_bae.sound, 0, FLOAT_TO_UNSIGNED_FIXED(1.0), 0);
@@ -1404,7 +1405,7 @@ static char *open_file_dialog(){
     OPENFILENAMEA ofn; ZeroMemory(&ofn,sizeof(ofn));
     ofn.lStructSize = sizeof(ofn);
     ofn.hwndOwner = NULL;
-    ofn.lpstrFilter = "Audio/MIDI/RMF\0*.mid;*.midi;*.kar;*.rmf;*.wav;*.aif;*.aiff;*.au;*.mp3\0MIDI Files\0*.mid;*.midi;*.kar\0RMF Files\0*.rmf\0Audio Files\0*.wav;*.aif;*.aiff;*.au;*.mp3\0All Files\0*.*\0";
+    ofn.lpstrFilter = "Audio/MIDI/RMF\0*.mid;*.midi;*.kar;*.rmf;*.wav;*.aif;*.aiff;*.au;*.mp2;*.mp3\0MIDI Files\0*.mid;*.midi;*.kar\0RMF Files\0*.rmf\0Audio Files\0*.wav;*.aif;*.aiff;*.au;*.mp3\0All Files\0*.*\0";
     ofn.lpstrFile = fileBuf; ofn.nMaxFile = sizeof(fileBuf);
     ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST; ofn.lpstrDefExt = "mid";
     if(GetOpenFileNameA(&ofn)){
@@ -1412,9 +1413,9 @@ static char *open_file_dialog(){
     return NULL;
 #else
     const char *cmds[] = {
-        "zenity --file-selection --title='Open Audio/MIDI/RMF' --file-filter='Audio/MIDI/RMF | *.mid *.midi *.kar *.rmf *.wav *.aif *.aiff *.au *.mp3' 2>/dev/null",
-        "kdialog --getopenfilename . '*.mid *.midi *.kar *.rmf *.wav *.aif *.aiff *.au *.mp3' 2>/dev/null",
-        "yad --file-selection --title='Open Audio/MIDI/RMF' --file-filter='Audio/MIDI/RMF | *.mid *.midi *.kar *.rmf *.wav *.aif *.aiff *.au *.mp3' 2>/dev/null",
+        "zenity --file-selection --title='Open Audio/MIDI/RMF' --file-filter='Audio/MIDI/RMF | *.mid *.midi *.kar *.rmf *.wav *.aif *.aiff *.au *.mp2 *.mp3' 2>/dev/null",
+        "kdialog --getopenfilename . '*.mid *.midi *.kar *.rmf *.wav *.aif *.aiff *.au *.mp2 *.mp3' 2>/dev/null",
+        "yad --file-selection --title='Open Audio/MIDI/RMF' --file-filter='Audio/MIDI/RMF | *.mid *.midi *.kar *.rmf *.wav *.aif *.aiff *.au *.mp2 *.mp3' 2>/dev/null",
         NULL};
     for(int i=0; cmds[i]; ++i){
         FILE *p = popen(cmds[i], "r");

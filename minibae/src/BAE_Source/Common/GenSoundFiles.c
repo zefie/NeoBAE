@@ -32,7 +32,7 @@
 /*
 **  GenSoundFiles.c
 **
-**  Reads AIFF, WAVE, MP3, Sun AU sound files
+**  Reads AIFF, WAVE, MPEG audio (MP2/MP3), Sun AU sound files
 **
 **  © Copyright 1989-2001 Beatnik, Inc, All Rights Reserved.
 **  Written by Steve Hales

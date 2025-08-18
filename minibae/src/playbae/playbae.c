@@ -138,7 +138,7 @@ char const copyrightInfo[] =
 char const usageString[] =
 {
    "USAGE:  playbae  -p  {patches.hsb}\n"
-   "                 -f  {Play a file (MIDI, RMF, WAV, AIFF, MP3)}\n"
+   "                 -f  {Play a file (MIDI, RMF, WAV, AIFF, MPEG audio: MP2/MP3)}\n"
    "                 -o  {write output to file}\n"
    "                 -mr {mixer sample rate ie. 11025}\n"
    "                 -l  {# of times to loop}\n"
@@ -164,7 +164,7 @@ char const usageStringExtra[] =
    "                 -a  {Play a AIF file}\n"
    "                 -r  {Play a RMF file}\n"
    "                 -m  {Play a MID file}\n"
-   "                 -mp {Play an MP3/MPEG audio file}\n"
+   "                 -mp {Play an MPEG audio file (MP2/MP3)}\n"
 };
 
 char const reverbTypeList[] =
@@ -692,7 +692,7 @@ BAEResult playFile(BAEMixer theMixer, char *parmFile, BAE_UNSIGNED_FIXED volume,
 	            err = PlayPCM(theMixer, parmFile, BAE_AIFF_TYPE, volume, timeLimit);
 		} else if (PV_IsLikelyMP3Header((unsigned char*)fileHeader) ||
 		           PV_IsFileExtension(parmFile, ".mp3") || PV_IsFileExtension(parmFile, ".mp2") || PV_IsFileExtension(parmFile, ".mpg")) {
-		    playbae_printf("Playing MP3 %s\n", parmFile);
+          playbae_printf("Playing MPEG audio (MP2/MP3) %s\n", parmFile);
 		    err = PlayPCM(theMixer, parmFile, BAE_MPEG_TYPE, volume, timeLimit);
 		} else {
 		    err = (BAEResult)10069;

@@ -14,7 +14,8 @@
 
 /* Embed single-file minimp3 implementation */
 #define MINIMP3_IMPLEMENTATION
-#define MINIMP3_ONLY_MP3
+/* MP2 support: remove MINIMP3_ONLY_MP3 so Layer I/II (MP1/MP2) decoding is enabled */
+/* If binary size becomes a concern, re-introduce MINIMP3_ONLY_MP3 via build system define. */
 #define MINIMP3_NO_SIMD
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wstrict-aliasing"
