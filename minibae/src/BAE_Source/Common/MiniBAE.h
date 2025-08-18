@@ -1844,6 +1844,20 @@ BAEResult           BAESong_SetVolume(BAESong song,
 
 BAEResult           BAESong_SetRouteBus(BAESong song, int routeBus);
 
+// BAESong_SetVelocityCurve()
+// --------------------------------------
+// Sets the velocity curve shaping used when translating incoming MIDI note
+// velocities into internal amplitude. Valid values are currently 0..4 and map
+// to legacy engine tables (0=default S curve, 1=peaky S, 2=subtle, 3=exp, 4=linear).
+// Out-of-range values are clamped into this range.
+// This directly updates the underlying GM_Song (pSong->velocityCurveType).
+// --------------------------------------
+BAEResult           BAESong_SetVelocityCurve(BAESong song, int curveType);
+
+// Global default velocity curve control (applies to subsequently created/loaded songs)
+BAEResult           BAE_SetDefaultVelocityCurve(int curveType);   // clamps 0..4
+BAEResult           BAE_GetDefaultVelocityCurve(int *outCurveType);
+
 // BAESong_GetVolume()
 // --------------------------------------
 // Upon return, the BAE_UNSIGNED_FIXED pointed to by parameter outVolume will hold

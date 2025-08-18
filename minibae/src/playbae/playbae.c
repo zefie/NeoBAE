@@ -58,6 +58,8 @@ static volatile int silentMode = FALSE;
 static volatile int fadeOut = TRUE;
 static int16_t positionDisplayMultiplier = 10; // 100 = 1 second
 static int16_t positionDisplayMultiplierCounter = 0;
+// Velocity curve selection via -vc (0..4). -1 means use engine default.
+static int gVelocityCurve = -1;
 
 #ifdef _WIN32
     #define stricmp _stricmp
@@ -132,7 +134,7 @@ void playbae_printf(const char *fmt, ...) {
 
 char const copyrightInfo[] =
 {
-   "Copyright (C) 2009 Beatnik, Inc and Copyright (C) 2021 Zefie Networks. All rights reserved.\n"
+   "Copyright (C) 2009 Beatnik, Inc and Copyright (C) 2021-2025 Zefie Networks. All rights reserved.\n"
 };
 
 char const usageString[] =
@@ -140,16 +142,14 @@ char const usageString[] =
    "USAGE:  playbae  -p  {patches.hsb}\n"
    "                 -f  {Play a file (MIDI, RMF, WAV, AIFF, MPEG audio: MP2/MP3)}\n"
    "                 -o  {write output to file}\n"
-   "                 -mr {mixer sample rate ie. 11025}\n"
    "                 -l  {# of times to loop}\n"
    "                 -v  {max volume (in percent, overdrive allowed) (default: 100)}\n"
+   "                 -vc {velocity curve 0-4 (default engine setting)}\n"
    "                 -t  {max length in seconds to play midi (0 = forever)}\n"
-   "		     -mc {MIDI/RMF Channels to mute, 1-16, comma seperated (example: 1,10,16)}\n"
+   "                 -mc {MIDI/RMF Channels to mute, 1-16, comma seperated (example: 1,10,16)}\n"
    "                 -rv {set default reverb type}\n"
-   "                 -rl {display reverb definitions}\n"
    "                 -nf {disable fade-out when stopping via time limit or CTRL-C}\n"
    "                 -q  {quiet mode}\n"
-   "                 -d  {verbose (debug) mode}\n"
    "                 -h  {displays this message then exits}\n"
    "                 -x  {displays additional lesser-used options}\n"
 };
@@ -157,14 +157,19 @@ char const usageString[] =
 char const usageStringExtra[] =
 {
    " Additional flags:\n"
+   "                 -mr {mixer sample rate ie. 11025}\n"
+   "                 -ns {mono output (no stereo)}\n"
    "                 -2p {use 2-point Interpolation rather than default of Linear}\n"
    "                 -mv {max voices (default: 64)}\n"
+   "                 -cl {list velocity curves}\n"
+   "                 -rl {display reverb definitions}\n"
    "                 -sw {Stream a WAV file}\n"
    "                 -sa {Stream a AIF file}\n"
    "                 -a  {Play a AIF file}\n"
    "                 -r  {Play a RMF file}\n"
    "                 -m  {Play a MID file}\n"
    "                 -mp {Play an MPEG audio file (MP2/MP3)}\n"
+   "                 -d  {verbose (debug) mode}\n"
 };
 
 char const reverbTypeList[] =
@@ -182,6 +187,16 @@ char const reverbTypeList[] =
   "   9               Basement (variable verb)\n"
   "   10              Banquet hall (variable verb)\n"
   "   11              Catacombs (variable verb)\n"
+};
+
+char const velocityCurveList[] =
+{
+   "Valid Velocity Curves for -vc command:\n"
+   "   0               Default S Curve\n"
+   "   1               Peaky S Curve\n"
+   "   2               WebTV Curve\n"
+   "   3               2x Exponential\n"
+   "   4               2x Linear\n"
 };
 
 
@@ -468,6 +483,10 @@ static BAEResult PlayMidi(BAEMixer theMixer, char *fileName, BAE_UNSIGNED_FIXED 
       err = BAESong_LoadMidiFromFile(theSong, (BAEPathName)fileName, TRUE);
       if (err == BAE_NO_ERROR)
       {
+      if (gVelocityCurve >= 0) {
+         BAESong_SetVelocityCurve(theSong, gVelocityCurve);
+         playbae_printf("Velocity curve set to %d\n", gVelocityCurve);
+      }
          err = BAESong_Start(theSong, 0);
          if (err == BAE_NO_ERROR)
          {
@@ -572,6 +591,10 @@ static BAEResult PlayRMF(BAEMixer theMixer, char *fileName, BAE_UNSIGNED_FIXED v
       if (err == BAE_NO_ERROR)
       {
 	 BAESong_SetVolume(theSong, calculateVolume(volume, TRUE));
+         if (gVelocityCurve >= 0) {
+            BAESong_SetVelocityCurve(theSong, gVelocityCurve);
+            playbae_printf("Velocity curve set to %d\n", gVelocityCurve);
+         }
 #if _DEBUG
          BAESong_SetCallback(theSong, (BAE_SongCallbackPtr)PV_SongCallback, (void *)0x1234);
 #endif
@@ -742,12 +765,28 @@ int main(int argc, char *argv[])
 	verboseMode = TRUE;
    }
 
+   // Velocity curve (parse before mixer/song usage)
+   if (PV_ParseCommands(argc, argv, "-vc", TRUE, parmFile))
+   {
+      gVelocityCurve = atoi(parmFile);
+      if (gVelocityCurve < 0 || gVelocityCurve > 4) {
+         playbae_printf("Invalid velocity curve %d, expected 0-4. Using 0.\n", gVelocityCurve);
+         gVelocityCurve = 0;
+      }
+      BAE_SetDefaultVelocityCurve(gVelocityCurve);
+   }
+
    if (!silentMode) {
       libMiniBAEVersion = BAE_GetVersion();
       libMiniBAECompInfo = BAE_GetCompileInfo();
       libMiniBAECPUArch = BAE_GetCurrentCPUArchitecture();
       playbae_printf("playbae %s built with %s, libminiBAE %s\n", libMiniBAECPUArch, libMiniBAECompInfo, libMiniBAEVersion);
       playbae_printf(copyrightInfo);
+   }
+
+   BAE_BOOL forceMono = FALSE;
+   if (PV_ParseCommands(argc, argv, "-ns", FALSE, NULL)) {
+      forceMono = TRUE;
    }
 
    signal(SIGINT, intHandler);
@@ -776,6 +815,11 @@ int main(int argc, char *argv[])
            playbae_printf(reverbTypeList);
            return 0;
        }
+      if (PV_ParseCommands(argc, argv, "-cl", FALSE, NULL))
+      {
+         playbae_printf(velocityCurveList);
+         return 0;
+      }
        if (PV_ParseCommands(argc, argv, "-h", FALSE, NULL))
        {
            playbae_printf(usageString);
@@ -832,10 +876,11 @@ int main(int argc, char *argv[])
              rate);
 
       playbae_dprintf("About to call BAEMixer_Open...\n");
+   BAEAudioModifiers mods = (forceMono ? 0 : BAE_USE_STEREO) | BAE_USE_16;
       err = BAEMixer_Open(theMixer,
                           rate,
                           interpol,
-                          BAE_USE_STEREO | BAE_USE_16,
+              mods,
                           rmf,                                          // midi voices
                           pcm,                                          // pcm voices
                           level,

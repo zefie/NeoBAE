@@ -1,29 +1,27 @@
-TAG_COMMIT := $(shell git rev-list --abbrev-commit --tags --max-count=1)
-TAG := $(shell git describe --abbrev=0 --tags ${TAG_COMMIT} 2>/dev/null || true)
-COMMIT := $(shell git rev-parse --short HEAD)
-DATE := $(shell git log -1 --format=%cd --date=format:"%Y%m%d")
-VERSION := $(TAG:v%=%)
-ifneq ($(COMMIT),)
-  #git info available
-  ifneq ($(COMMIT), $(TAG_COMMIT))
-    # current git commit matches a tag
-    VERSION := $(TAG)
+COMMIT      := $(shell git rev-parse --short HEAD 2>/dev/null)
+DIRTY       := $(shell git status --porcelain 2>/dev/null | head -n 1)
+TAG_COMMIT  := $(shell git rev-list --abbrev-commit --tags --max-count=1 2>/dev/null)
+TAG         := $(shell git describe --abbrev=0 --tags $(TAG_COMMIT) 2>/dev/null || true)
+DATE        := $(shell git log -1 --format=%cd --date=format:"%Y%m%d" 2>/dev/null)
+
+ifeq ($(COMMIT),)
+  # No git metadata (export tarball). Fallback to date.
+  ifeq ($(DATE),)
+    DATE := $(shell date +%Y%m%d)
   endif
-  ifeq ($(VERSION),)
-    # current git commit does not match a tag
-    VERSION := git-$(COMMIT)-$(DATE)
-  endif
-  ifneq ($(shell git status --porcelain),)
-    # current git repo has modifications since last commit
-    VERSION := $(VERSION)-dirty
-  endif
+  VERSION := $(DATE)
 else
-  # no git info available
-  ifeq ($(VERSION),)
-    ifeq ($(DATE),)
-      # get current date
-      DATE := $(shell date +%Y-%m-%d)
+  ifneq ($(TAG),)
+    # If HEAD equals tag commit, use the tag (strip leading v)
+    ifeq ($(COMMIT),$(TAG_COMMIT))
+      VERSION := $(TAG:v%=%)
+    else
+      VERSION := git-$(COMMIT)
     endif
-    VERSION := $(DATE)
+  else
+    VERSION := git-$(COMMIT)
+  endif
+  ifneq ($(DIRTY),)
+    VERSION := $(VERSION)-dirty
   endif
 endif

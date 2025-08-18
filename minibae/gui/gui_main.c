@@ -20,6 +20,7 @@
 #include <stdlib.h>  // for _fullpath
 #include <SDL_syswm.h>
 #include <winreg.h>  // for registry access
+#include <shellapi.h> // for ShellExecuteA
 #endif
 #if !defined(_WIN32)
 #include <stdio.h>
@@ -850,7 +851,7 @@ static Settings load_settings() {
     Settings settings = {0};
     settings.has_bank = false;
     settings.bank_path[0] = '\0';
-    settings.has_reverb = false; settings.reverb_type = 7;
+    settings.has_reverb = false; settings.reverb_type = 0;
     settings.has_loop = false; settings.loop_enabled = true;
     settings.has_volume_curve = false; settings.volume_curve = 0;
     settings.has_stereo = false; settings.stereo_output = true;
@@ -1831,6 +1832,10 @@ int main(int argc, char *argv[]){
     if (settings.has_loop) { loopPlay = settings.loop_enabled; }
     if (settings.has_volume_curve) { g_volume_curve = (settings.volume_curve>=0 && settings.volume_curve<=4)?settings.volume_curve:0; }
     if (settings.has_stereo) { g_stereo_output = settings.stereo_output; }
+    // Apply stored default velocity (aka volume) curve to global engine setting so new songs adopt it
+    if (settings.has_volume_curve) {
+        BAE_SetDefaultVelocityCurve(g_volume_curve);
+    }
     if(!bae_init(44100, g_stereo_output)){ BAE_PRINTF("miniBAE init failed\n"); }
     if(!bae_init(44100, g_stereo_output)){ BAE_PRINTF("miniBAE init failed\n"); }
 
@@ -2038,7 +2043,7 @@ int main(int argc, char *argv[]){
 #ifdef _WIN32
         SDL_SetRenderDrawColor(R,g_theme.bg_color.r,g_theme.bg_color.g,g_theme.bg_color.b,255);
 #else
-    SDL_SetRenderDrawColor(R, g_bg_color.r, g_bg_color.g, g_bg_color.b, g_bg_color.a);
+        SDL_SetRenderDrawColor(R, g_bg_color.r, g_bg_color.g, g_bg_color.b, g_bg_color.a);
 #endif
         SDL_RenderClear(R);
     // Colors driven by theme globals
@@ -2112,7 +2117,7 @@ int main(int argc, char *argv[]){
 
         // Reverb controls
         draw_text(R,690, 25, "Reverb:", labelCol);
-        static const char *reverbNames[] = {"No Change","None","Closet","Garage","Acoustic Lab","Cavern","Dungeon","Small Reflections","Early Reflections","Basement","Banquet","Catacombs"};
+        static const char *reverbNames[] = {"Default","None","Igor's Closet","Igor's Garage","Igor's Acoustic Lab","Igor's Cavern","Igor's Dungeon","Small reflections","Early reflections","Basement","Banquet Hall","Catacombs"};
         int reverbCount = (int)(sizeof(reverbNames)/sizeof(reverbNames[0]));
         if(reverbCount > BAE_REVERB_TYPE_COUNT) reverbCount = BAE_REVERB_TYPE_COUNT;
         Rect ddRect = {690,40,160,24}; // Moved up 20 pixels from y=60 to y=40
@@ -2304,9 +2309,23 @@ int main(int argc, char *argv[]){
                     if(ty + th > WINDOW_H - 4) ty = WINDOW_H - th - 4;
                     Rect tipRect = {tx, ty, tw, th};
                             // Use theme-driven colors for tooltip so it adapts to light/dark modes
-                            SDL_Color tbg = g_panel_bg; tbg.a = 230; // slightly translucent panel bg
-                            SDL_Color tbd = g_panel_border;
-                            SDL_Color tfg = g_text_color;
+                            // Tooltip styling: use distinct bg (not same as panel) + small shadow for contrast
+                            SDL_Color shadow = {0,0,0, g_is_dark_mode ? 140 : 100};
+                            Rect shadowRect = {tipRect.x + 2, tipRect.y + 2, tipRect.w, tipRect.h};
+                            draw_rect(R, shadowRect, shadow);
+                            SDL_Color tbg;
+                            if(g_is_dark_mode){
+                                // Slightly lighter than panel for dark mode
+                                int r = g_panel_bg.r + 25; if(r>255) r=255;
+                                int g = g_panel_bg.g + 25; if(g>255) g=255;
+                                int b = g_panel_bg.b + 25; if(b>255) b=255;
+                                tbg = (SDL_Color){ (Uint8)r,(Uint8)g,(Uint8)b,255};
+                            } else {
+                                // Light mode: classic soft yellow tooltip background
+                                tbg = (SDL_Color){255,255,225,255};
+                            }
+                            SDL_Color tbd = g_is_dark_mode ? g_panel_border : (SDL_Color){180,180,130,255};
+                            SDL_Color tfg = g_is_dark_mode ? g_text_color : (SDL_Color){32,32,32,255};
                             draw_rect(R, tipRect, tbg);
                             draw_frame(R, tipRect, tbd);
                             draw_text(R, tipRect.x + 4, tipRect.y + 4, tip, tfg);
@@ -2354,11 +2373,14 @@ int main(int argc, char *argv[]){
             #endif
         }
 
-    // Bottom-right Settings button (text only) with 5px padding
+    // Settings button now lives INSIDE the Status & Bank panel with 4px padding from that panel's border
     {
-        int pad = 5;
-        int btnW = 90; int btnH = 30; // reasonable fixed size
-        Rect settingsBtn = { WINDOW_W - btnW - pad, WINDOW_H - btnH - pad, btnW, btnH };
+        int pad = 4; // panel-relative padding
+        int btnW = 90; int btnH = 30; // fixed size
+        // Anchor to bottom-right corner of statusPanel instead of window
+        Rect settingsBtn = { statusPanel.x + statusPanel.w - pad - btnW,
+                             statusPanel.y + statusPanel.h - pad - btnH,
+                             btnW, btnH };
         bool overSettings = point_in(ui_mx,ui_my,settingsBtn);
         SDL_Color sbg = overSettings ? g_button_hover : g_button_base;
         if(g_show_settings_dialog) sbg = g_button_base;
@@ -2500,7 +2522,7 @@ int main(int argc, char *argv[]){
             // Dim background
             SDL_Color dim = g_is_dark_mode ? (SDL_Color){0,0,0,120} : (SDL_Color){0,0,0,90};
             draw_rect(R,(Rect){0,0,WINDOW_W,WINDOW_H}, dim);
-            int dlgW = 360; int dlgH = 200; int pad = 10;
+            int dlgW = 360; int dlgH = 200; int pad = 10; // +6 height so descenders (e.g., 'y') are not clipped
             Rect dlg = { (WINDOW_W - dlgW)/2, (WINDOW_H - dlgH)/2, dlgW, dlgH };
             SDL_Color dlgBg = g_panel_bg; dlgBg.a = 240;
             SDL_Color dlgFrame = g_panel_border;
@@ -2519,7 +2541,7 @@ int main(int argc, char *argv[]){
 
             // Volume Curve selector
             draw_text(R, dlg.x + pad, dlg.y + 36, "Volume Curve:", g_text_color);
-            const char *volumeCurveNames[] = { "Default S Curve", "Peaky S Curve", "WebTV Curve", "2x Expon", "2x Linear" };
+            const char *volumeCurveNames[] = { "Default S Curve", "Peaky S Curve", "WebTV Curve", "2x Exponential", "2x Linear" };
             int vcCount = 5;
             Rect vcRect = { dlg.x + dlg.w - 170, dlg.y + 32, 150, 24 };
             // Dropdown main
@@ -2554,6 +2576,12 @@ int main(int argc, char *argv[]){
                     if(over && mclick){ 
                         g_volume_curve = i; 
                         g_volumeCurveDropdownOpen = false; 
+                        // Update global default so subsequently loaded songs use this curve
+                        BAE_SetDefaultVelocityCurve(g_volume_curve);
+                        // Also update currently loaded song immediately (if any)
+                        if (g_bae.song && !g_bae.is_audio_file) {
+                            BAESong_SetVelocityCurve(g_bae.song, g_volume_curve);
+                        }
                         save_settings(g_current_bank_path[0]?g_current_bank_path:NULL, reverbType, loopPlay);
                     }
                 }
@@ -2562,9 +2590,48 @@ int main(int argc, char *argv[]){
 
             // (sample rate dropdown logic removed)
 
-            // Footer help text
+            // Footer help text + version
             SDL_Color help = g_is_dark_mode ? (SDL_Color){180,180,190,255} : (SDL_Color){80,80,80,255};
-            draw_text(R, dlg.x + pad, dlg.y + dlg.h - 26, "Settings persist to minibae.ini.", help);
+            // Footer lines (stacked) moved up to prevent overlap/clipping
+            draw_text(R, dlg.x + pad, dlg.y + dlg.h - 40, "Settings persist to minibae.ini.", help);
+            {
+                char ver[80];
+                snprintf(ver, sizeof(ver), "libminiBAE %s", _VERSION);
+                // Make version text clickable: open GitHub commit or tag in browser
+                int vw=0,vh=0; measure_text(ver,&vw,&vh);
+                Rect verRect = { dlg.x + pad, dlg.y + dlg.h - 26, vw, vh>0?vh:14 };
+                bool overVer = point_in(mx,my,verRect);
+                SDL_Color verColor = overVer ? g_accent_color : help;
+                draw_text(R, verRect.x, verRect.y, ver, verColor);
+                if(overVer){
+                    // simple underline
+                    SDL_SetRenderDrawColor(R, verColor.r, verColor.g, verColor.b, verColor.a);
+                    SDL_RenderDrawLine(R, verRect.x, verRect.y + verRect.h - 2, verRect.x + verRect.w, verRect.y + verRect.h - 2);
+                }
+                if(mclick && overVer){
+                    // Parse _VERSION forms: "git-<sha>", "git-<sha>-dirty", or tag form like "1.2.3"
+                    const char *raw = _VERSION;
+                    char url[256]; url[0]='\0';
+                    if(strncmp(raw,"git-",4)==0){
+                        const char *sha = raw+4; // until next '-' or end
+                        char shortSha[64]; int i=0; while(sha[i] && sha[i] != '-' && i < (int)sizeof(shortSha)-1){ shortSha[i]=sha[i]; i++; } shortSha[i]='\0';
+                        snprintf(url,sizeof(url),"https://github.com/zefie/miniBAE/commit/%s", shortSha);
+                    } else {
+                        // Assume tag (we stripped leading 'v' when displaying); reconstruct with 'v'
+                        snprintf(url,sizeof(url),"https://github.com/zefie/miniBAE/tree/v%s", raw);
+                    }
+                    if(url[0]){
+#ifdef _WIN32
+                        ShellExecuteA(NULL, "open", url, NULL, NULL, SW_SHOWNORMAL);
+#else
+                        // Try xdg-open then open
+                        char cmd[512];
+                        snprintf(cmd,sizeof(cmd),"(xdg-open '%s' || open '%s') >/dev/null 2>&1 &", url, url);
+                        system(cmd);
+#endif
+                    }
+                }
+            }
             // Discard clicks outside dialog
             if(mclick && !point_in(mx,my,dlg)) { /* swallow */ }
         }

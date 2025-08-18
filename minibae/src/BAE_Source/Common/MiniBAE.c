@@ -419,6 +419,23 @@ static const char* PV_FindBankFriendly(BAEBankToken token){
     return NULL;
 }
 
+// Remove a bank's friendly name cache entry when the bank is unloaded so a
+// subsequently loaded bank that reuses the same underlying XFILE pointer
+// value doesn't inherit the prior bank's friendly name (stale display bug).
+static void PV_UnregisterBankFriendly(BAEBankToken token){
+    if(!token || g_bankFriendlyCacheCount <= 0) return;
+    for(int i=0;i<g_bankFriendlyCacheCount;i++){
+        if(g_bankFriendlyCache[i].token == token){
+            // Compact array in-place
+            for(int j=i+1;j<g_bankFriendlyCacheCount;j++){
+                g_bankFriendlyCache[j-1] = g_bankFriendlyCache[j];
+            }
+            g_bankFriendlyCacheCount--;
+            break;
+        }
+    }
+}
+
 BAEResult BAE_GetBankFriendlyName(BAEMixer mixer, BAEBankToken token, char *outName, uint32_t outNameSize){
     if(!outName || outNameSize == 0) return BAE_PARAM_ERR;
     outName[0] = '\0';
@@ -718,6 +735,23 @@ AudioFileType BAE_TranslateBAEFileType(BAEFileType fileType)
 // ------------------------------------------------------------------
 // BAEMixer Functions
 // ------------------------------------------------------------------
+// Global default velocity curve (0..4). Applied to songs when they are created or loaded.
+static int g_defaultVelocityCurve = 0;
+
+BAEResult BAE_SetDefaultVelocityCurve(int curveType)
+{
+    if (curveType < 0) curveType = 0;
+    if (curveType > 4) curveType = 4;
+    g_defaultVelocityCurve = curveType;
+    return BAE_NO_ERROR;
+}
+
+BAEResult BAE_GetDefaultVelocityCurve(int *outCurveType)
+{
+    if (!outCurveType) return BAE_PARAM_ERR;
+    *outCurveType = g_defaultVelocityCurve;
+    return BAE_NO_ERROR;
+}
 #if 0
     #pragma mark -
     #pragma mark ##### BAEMixer #####
@@ -1762,6 +1796,9 @@ BAEResult BAEMixer_UnloadBank(BAEMixer mixer, BAEBankToken token)
             if (patchFile == pPatchFiles[i])
             {
                 ok = TRUE; // found it!
+                // Invalidate friendly name cache entry BEFORE closing to avoid
+                // potential pointer reuse mapping to stale friendly string.
+                PV_UnregisterBankFriendly(token);
                 XFileClose(patchFile);
 
                 // compact the array.  
@@ -5982,6 +6019,7 @@ static BAEResult PV_BAESong_InitLiveSong(BAESong song, BAE_BOOL addToMixer)
             BAEMixer_GetSoundVoices(song->mixer, &maxEffectVoices);
             BAEMixer_GetMixLevel(song->mixer, &mixLevel);
             GM_ChangeSongVoices(song->pSong, maxSongVoices, mixLevel, maxEffectVoices);
+            GM_SetVelocityCurveType(song->pSong, (VelocityCurveType)g_defaultVelocityCurve);
 
             if (addToMixer)
             {
@@ -6206,6 +6244,7 @@ BAEResult BAESong_LoadGroovoid(BAESong song, char *cName, BAE_BOOL ignoreBadInst
                         GM_SetDisposeSongDataWhenDoneFlag(pSong, TRUE); // dispose of midi data
                         GM_SetSongLoopFlag(pSong, FALSE);       // don't loop song
                         song->pSong = pSong;                // preserve for use later
+                        GM_SetVelocityCurveType(song->pSong, (VelocityCurveType)g_defaultVelocityCurve);
                         theErr = NO_ERR;
                     }
                     else
@@ -6291,6 +6330,7 @@ BAEResult BAESong_LoadMidiFromMemory(BAESong song, void const* pMidiData, uint32
                         GM_SetDisposeSongDataWhenDoneFlag(pSong, TRUE); // dispose of midi data
                         GM_SetSongLoopFlag(pSong, FALSE);               // don't loop song
                         song->pSong = pSong;                            // preserve for use later
+                        GM_SetVelocityCurveType(song->pSong, (VelocityCurveType)g_defaultVelocityCurve);
 
                         if (pSong->titleOffset)
                         {
@@ -6394,6 +6434,7 @@ BAEResult BAESong_LoadMidiFromFile(BAESong song, BAEPathName filePath, BAE_BOOL 
                         GM_SetDisposeSongDataWhenDoneFlag(pSong, TRUE); // dispose of midi data
                         GM_SetSongLoopFlag(pSong, FALSE);       // don't loop song
                         song->pSong = pSong;                    // preserve for use later
+                        GM_SetVelocityCurveType(song->pSong, (VelocityCurveType)g_defaultVelocityCurve);
                     }
                     else
                     {
@@ -6476,6 +6517,7 @@ BAEResult BAESong_LoadRmfFromMemory(BAESong song, void *pRMFData, uint32_t rmfSi
                             GM_SetDisposeSongDataWhenDoneFlag(pSong, TRUE); // dispose of midi data
                             GM_SetSongLoopFlag(pSong, FALSE);       // don't loop song
                             song->pSong = pSong;                    // preserve for use later
+                            GM_SetVelocityCurveType(song->pSong, (VelocityCurveType)g_defaultVelocityCurve);
                         }
                         else
                         {
@@ -6565,6 +6607,7 @@ BAEResult BAESong_LoadRmfFromFile(BAESong song, BAEPathName filePath, int16_t so
                         GM_SetDisposeSongDataWhenDoneFlag(pSong, TRUE); // dispose of midi data
                         GM_SetSongLoopFlag(pSong, FALSE);       // don't loop song
                         song->pSong = pSong;                    // preserve for use later
+                        GM_SetVelocityCurveType(song->pSong, (VelocityCurveType)g_defaultVelocityCurve);
                     }
                     else
                     {
@@ -6611,6 +6654,31 @@ BAEResult BAESong_SetRouteBus(BAESong song, int routeBus)
         BAE_AcquireMutex(song->mLock);
         song->mRouteBus = routeBus;
         GM_SetSongRouteBus(song->pSong, routeBus);
+        BAE_ReleaseMutex(song->mLock);
+    }
+    else
+    {
+        err = NULL_OBJECT;
+    }
+    return BAE_TranslateOPErr(err);
+}
+
+BAEResult BAESong_SetVelocityCurve(BAESong song, int curveType)
+{
+    OPErr err = NO_ERR;
+    if ((song) && (song->mID == OBJECT_ID))
+    {
+        if (curveType < 0) curveType = 0;
+        if (curveType > 4) curveType = 4; // engine currently supports 0..4
+        BAE_AcquireMutex(song->mLock);
+        if (song->pSong)
+        {
+            GM_SetVelocityCurveType(song->pSong, (VelocityCurveType)curveType);
+        }
+        else
+        {
+            err = NOT_SETUP;
+        }
         BAE_ReleaseMutex(song->mLock);
     }
     else
