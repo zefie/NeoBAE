@@ -874,6 +874,14 @@ static bool g_volumeCurveDropdownOpen = false;
 static bool g_stereo_output = true; // checked == stereo (default on)
 static int  g_sample_rate_hz = 44100;       // current selected sample rate
 static bool g_sampleRateDropdownOpen = false; // dropdown open state
+// Deferred bank filename tooltip state
+static bool g_bank_tooltip_visible = false;
+static Rect g_bank_tooltip_rect; // tooltip rectangle
+static char g_bank_tooltip_text[520];
+// Deferred media file tooltip state
+static bool g_file_tooltip_visible = false;
+static Rect g_file_tooltip_rect;
+static char g_file_tooltip_text[520];
 
 static const char* rmf_info_label(BAEInfoType t){
     switch(t){
@@ -2090,7 +2098,8 @@ int main(int argc, char *argv[]){
         BAE_PRINTF("Loading saved bank: %s\n", settings.bank_path);
         load_bank_simple(settings.bank_path, false, reverbType, loopPlay); // false = don't save to settings (it's already saved)
         // Set current bank path for future settings saves
-        if (g_bae.bank_loaded) {
+
+    if (g_bae.bank_loaded) {
             strncpy(g_current_bank_path, settings.bank_path, sizeof(g_current_bank_path)-1);
             g_current_bank_path[sizeof(g_current_bank_path)-1] = '\0';
         }
@@ -2272,6 +2281,7 @@ int main(int argc, char *argv[]){
         SDL_SetRenderDrawColor(R, g_bg_color.r, g_bg_color.g, g_bg_color.b, g_bg_color.a);
 #endif
         SDL_RenderClear(R);
+
     // Colors driven by theme globals
     SDL_Color labelCol = g_text_color;
     SDL_Color headerCol = g_header_color;
@@ -2553,19 +2563,35 @@ int main(int argc, char *argv[]){
         
     // Current file
     draw_text(R,20, lineY1, "File:", labelCol);
-            if(g_bae.song_loaded){ 
-            // Show just filename, not full path
-            const char *fn = g_bae.loaded_path;
-            const char *base = fn; 
-            for(const char *p=fn; *p; ++p){ 
-                if(*p=='/'||*p=='\\') base=p+1; 
+    if(g_bae.song_loaded){ 
+        // Show just filename, not full path
+        const char *fn = g_bae.loaded_path;
+        const char *base = fn; 
+        for(const char *p=fn; *p; ++p){ if(*p=='/'||*p=='\\') base=p+1; }
+        draw_text(R,60, lineY1, base, g_highlight_color); 
+        // Tooltip hover region approximate width (mono 8px * len) like bank tooltip
+        int textLen = (int)strlen(base); if(textLen<1) textLen=1; int approxW = textLen * 8; if(approxW>480) approxW=480;
+        Rect fileTextRect = {60, lineY1, approxW, 16};
+        if(point_in(ui_mx,ui_my,fileTextRect)){
+            // Use full path as tooltip; if path equals base then show clarifying label
+            char tip[512];
+            if(strcmp(base, fn)==0){ snprintf(tip,sizeof(tip),"File: %s", fn); }
+            else { snprintf(tip,sizeof(tip),"%s", fn); }
+            int tipLen = (int)strlen(tip); if(tipLen>0){
+                int tw = tipLen * 8 + 8; if(tw > 560) tw = 560; int th = 16 + 6;
+                int tx = mx + 12; int ty = my + 12; if(tx + tw > WINDOW_W - 4) tx = WINDOW_W - tw - 4; if(ty + th > g_window_h - 4) ty = g_window_h - th - 4;
+                g_file_tooltip_rect = (Rect){tx,ty,tw,th};
+                strncpy(g_file_tooltip_text, tip, sizeof(g_file_tooltip_text)-1); g_file_tooltip_text[sizeof(g_file_tooltip_text)-1]='\0';
+                g_file_tooltip_visible = true;
             }
-            draw_text(R,60, lineY1, base, g_highlight_color); 
         } else {
-            // muted text for empty file
-            SDL_Color muted = g_is_dark_mode ? (SDL_Color){150,150,150,255} : (SDL_Color){120,120,120,255};
-            draw_text(R,60, lineY1, "<none>", muted); 
+            g_file_tooltip_visible = false;
         }
+    } else {
+        // muted text for empty file
+        SDL_Color muted = g_is_dark_mode ? (SDL_Color){150,150,150,255} : (SDL_Color){120,120,120,255};
+        draw_text(R,60, lineY1, "<none>", muted); 
+    }
         
         // Bank info with tooltip (friendly name shown, filename/path on hover)
         draw_text(R,20, lineY2, "Bank:", labelCol);
@@ -2580,45 +2606,27 @@ int main(int argc, char *argv[]){
             int textLen = (int)strlen(display_name);
             int approxW = textLen * 8; if(approxW < 8) approxW = 8; if(approxW > 400) approxW = 400; // crude clamp
             Rect bankTextRect = {60, lineY2, approxW, 16};
+            // Prepare deferred tooltip drawing at end of frame (post status text)
             if(point_in(ui_mx,ui_my,bankTextRect)){
-                // Tooltip background near cursor
                 char tip[512];
                 if(friendly_name && friendly_name[0] && strcmp(friendly_name, base) != 0){
-                    // Show full original (path or filename) when friendly differs
                     snprintf(tip,sizeof(tip),"%s", g_bae.bank_name);
                 } else {
-                    // When no friendly or identical, clarify it's the file
                     snprintf(tip,sizeof(tip),"File: %s", g_bae.bank_name);
                 }
-                int tipLen = (int)strlen(tip); if(tipLen>0){
-                    int tw = tipLen * 8 + 8; if(tw > 520) tw = 520; // clamp
-                    int th = 16 + 6;
-                    int tx = mx + 12; int ty = my + 12;
+                int tipLen = (int)strlen(tip);
+                if(tipLen>0){
+                    int tw = tipLen * 8 + 8; if(tw > 520) tw = 520; int th = 16 + 6;
+                    int tx = mx + 12; int ty = my + 12; // initial placement near cursor
                     if(tx + tw > WINDOW_W - 4) tx = WINDOW_W - tw - 4;
                     if(ty + th > g_window_h - 4) ty = g_window_h - th - 4;
-                    Rect tipRect = {tx, ty, tw, th};
-                            // Use theme-driven colors for tooltip so it adapts to light/dark modes
-                            // Tooltip styling: use distinct bg (not same as panel) + small shadow for contrast
-                            SDL_Color shadow = {0,0,0, g_is_dark_mode ? 140 : 100};
-                            Rect shadowRect = {tipRect.x + 2, tipRect.y + 2, tipRect.w, tipRect.h};
-                            draw_rect(R, shadowRect, shadow);
-                            SDL_Color tbg;
-                            if(g_is_dark_mode){
-                                // Slightly lighter than panel for dark mode
-                                int r = g_panel_bg.r + 25; if(r>255) r=255;
-                                int g = g_panel_bg.g + 25; if(g>255) g=255;
-                                int b = g_panel_bg.b + 25; if(b>255) b=255;
-                                tbg = (SDL_Color){ (Uint8)r,(Uint8)g,(Uint8)b,255};
-                            } else {
-                                // Light mode: classic soft yellow tooltip background
-                                tbg = (SDL_Color){255,255,225,255};
-                            }
-                            SDL_Color tbd = g_is_dark_mode ? g_panel_border : (SDL_Color){180,180,130,255};
-                            SDL_Color tfg = g_is_dark_mode ? g_text_color : (SDL_Color){32,32,32,255};
-                            draw_rect(R, tipRect, tbg);
-                            draw_frame(R, tipRect, tbd);
-                            draw_text(R, tipRect.x + 4, tipRect.y + 4, tip, tfg);
+                    g_bank_tooltip_rect = (Rect){tx, ty, tw, th};
+                    strncpy(g_bank_tooltip_text, tip, sizeof(g_bank_tooltip_text)-1);
+                    g_bank_tooltip_text[sizeof(g_bank_tooltip_text)-1] = '\0';
+                    g_bank_tooltip_visible = true;
                 }
+            } else {
+                g_bank_tooltip_visible = false;
             }
         } else {
             // Muted text: slightly darker in light mode for better contrast on pale panels
@@ -2722,6 +2730,46 @@ int main(int argc, char *argv[]){
             // Muted fallback text that adapts to theme; darker on light backgrounds for readability
             SDL_Color muted = g_is_dark_mode ? (SDL_Color){150,150,150,255} : (SDL_Color){80,80,80,255};
             draw_text(R,120, lineY3, "(Drag & drop media/bank files here)", muted);
+        }
+
+        // Draw deferred file tooltip (full path)
+        if(g_file_tooltip_visible){
+            Rect tipRect = g_file_tooltip_rect;
+            SDL_Color shadow = {0,0,0, g_is_dark_mode ? 140 : 100};
+            Rect shadowRect = {tipRect.x + 2, tipRect.y + 2, tipRect.w, tipRect.h};
+            draw_rect(R, shadowRect, shadow);
+            SDL_Color tbg;
+            if(g_is_dark_mode){
+                int r = g_panel_bg.r + 25; if(r>255) r=255; int g = g_panel_bg.g + 25; if(g>255) g=255; int b = g_panel_bg.b + 25; if(b>255) b=255;
+                tbg = (SDL_Color){ (Uint8)r,(Uint8)g,(Uint8)b,255};
+            } else {
+                tbg = (SDL_Color){255,255,225,255};
+            }
+            SDL_Color tbd = g_is_dark_mode ? g_panel_border : (SDL_Color){180,180,130,255};
+            SDL_Color tfg = g_is_dark_mode ? g_text_color : (SDL_Color){32,32,32,255};
+            draw_rect(R, tipRect, tbg);
+            draw_frame(R, tipRect, tbd);
+            draw_text(R, tipRect.x + 4, tipRect.y + 4, g_file_tooltip_text, tfg);
+        }
+
+        // Draw deferred bank tooltip last so it appears above status text and other UI
+        if(g_bank_tooltip_visible){
+            Rect tipRect = g_bank_tooltip_rect;
+            SDL_Color shadow = {0,0,0, g_is_dark_mode ? 140 : 100};
+            Rect shadowRect = {tipRect.x + 2, tipRect.y + 2, tipRect.w, tipRect.h};
+            draw_rect(R, shadowRect, shadow);
+            SDL_Color tbg;
+            if(g_is_dark_mode){
+                int r = g_panel_bg.r + 25; if(r>255) r=255; int g = g_panel_bg.g + 25; if(g>255) g=255; int b = g_panel_bg.b + 25; if(b>255) b=255;
+                tbg = (SDL_Color){ (Uint8)r,(Uint8)g,(Uint8)b,255};
+            } else {
+                tbg = (SDL_Color){255,255,225,255};
+            }
+            SDL_Color tbd = g_is_dark_mode ? g_panel_border : (SDL_Color){180,180,130,255};
+            SDL_Color tfg = g_is_dark_mode ? g_text_color : (SDL_Color){32,32,32,255};
+            draw_rect(R, tipRect, tbg);
+            draw_frame(R, tipRect, tbd);
+            draw_text(R, tipRect.x + 4, tipRect.y + 4, g_bank_tooltip_text, tfg);
         }
 
         // Render dropdown list on top of everything else if open
