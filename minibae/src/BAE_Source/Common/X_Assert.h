@@ -120,7 +120,7 @@
     do {                                \
         char logPath[1024];             \
         get_executable_directory(logPath, sizeof(logPath)); \
-        strncat(logPath, "/debug.log", sizeof(logPath) - strlen(logPath) - 1); \
+        strncat(logPath, "/minibae.log", sizeof(logPath) - strlen(logPath) - 1); \
         FILE *logFile = fopen(logPath, "a"); \
         if (logFile) {                  \
             fprintf(logFile, __VA_ARGS__); \

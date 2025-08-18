@@ -443,9 +443,7 @@ static void parse_banks_xml() {
 #else
     snprintf(xml_path, sizeof(xml_path), "%s/Banks/Banks.xml", exe_dir);
 #endif
-    if (access(xml_path, F_OK) == 0) {
-        f = fopen(xml_path, "r");
-    }
+    f = fopen(xml_path, "r");
     
     if (!f) {
         // Try Banks.xml directly in executable directory
@@ -454,9 +452,7 @@ static void parse_banks_xml() {
 #else
     snprintf(xml_path, sizeof(xml_path), "%s/BXBanks/BXBanks.xml", exe_dir);
 #endif
-        if (access(xml_path, F_OK) == 0) {
-            f = fopen(xml_path, "r");
-        }
+        f = fopen(xml_path, "r");
     }
 
     if (!f) {
@@ -466,9 +462,7 @@ static void parse_banks_xml() {
 #else
         snprintf(xml_path, sizeof(xml_path), "%s/Banks.xml", exe_dir);
 #endif
-        if (access(xml_path, F_OK) == 0) {
-            f = fopen(xml_path, "r");
-        }
+        f = fopen(xml_path, "r");
     }    
     BAE_PRINTF("Loading Banks.xml from: %s\n", xml_path);
     
@@ -1444,6 +1438,8 @@ int main(int argc, char *argv[]){
                 g_bae.is_playing = false;
                 progress = 0;
                 if(!g_bae.is_audio_file && g_bae.song) {
+                    // Workaround for loop issue: explicitly stop the song to ensure it's fully stopped
+                    BAESong_Stop(g_bae.song, FALSE);
                     BAESong_SetMicrosecondPosition(g_bae.song, 0);
                 }
             }
@@ -1561,7 +1557,11 @@ int main(int argc, char *argv[]){
 
         // Volume control
         draw_text(R,750, 80, "Volume:", labelCol);
-        ui_slider(R,(Rect){750, 95, 120, 14}, &volume, 0, 100, mx,my,mdown,mclick);
+        // Disable volume slider interaction when reverb dropdown is open
+        bool volume_enabled = !g_reverbDropdownOpen;
+        ui_slider(R,(Rect){750, 95, 120, 14}, &volume, 0, 100, 
+                 volume_enabled ? mx : -1, volume_enabled ? my : -1, 
+                 volume_enabled ? mdown : false, volume_enabled ? mclick : false);
         char vbuf[32]; snprintf(vbuf,sizeof(vbuf),"%d%%", volume); 
         draw_text(R,750,115,vbuf,labelCol);
 

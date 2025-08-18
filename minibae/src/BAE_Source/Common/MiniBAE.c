@@ -7942,6 +7942,7 @@ BAEResult BAESong_SetLoops(BAESong song, int16_t numLoops)
         {
             BAE_PRINTF("Setting song loop count to %d\n", numLoops);
             GM_SetSongLoopMax(song->pSong, numLoops);
+            GM_SetSongLoopFlag(song->pSong, (numLoops) ? TRUE : FALSE);
             GM_SetSongMetaLoopFlag(song->pSong, (numLoops) ? TRUE : FALSE);
         }
         else
