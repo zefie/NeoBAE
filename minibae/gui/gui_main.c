@@ -1825,7 +1825,7 @@ int main(int argc, char *argv[]){
     // Preload settings BEFORE creating mixer so we can open with desired format
     bool ch_enable[16]; for(int i=0;i<16;i++) ch_enable[i]=true; // need early for recreate helper fallback
     int transpose = 0; int tempo = 100; int volume=75; bool loopPlay=true; bool loudMode=true; (void)loudMode;
-    int reverbLvl=15, chorusLvl=15; (void)reverbLvl; (void)chorusLvl; int progress=0; int duration=0; bool playing=false; int reverbType=7;
+    int reverbLvl=15, chorusLvl=15; (void)reverbLvl; (void)chorusLvl; int progress=0; int duration=0; bool playing=false; int reverbType=0; // default reverb index set to 0
     
     Settings settings = load_settings();
     if (settings.has_reverb) { reverbType = settings.reverb_type; }
