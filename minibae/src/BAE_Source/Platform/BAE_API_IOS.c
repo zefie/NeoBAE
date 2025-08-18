@@ -681,7 +681,7 @@ const int kInputBus = 1;
 
 
 // **** Audio card support
-// Aquire and enabled audio card
+// Acquire and enabled audio card
 // return 0 if ok, -1 if failed
 int BAE_AcquireAudioCard(void *threadContext, uint32_t sampleRate, uint32_t channels, uint32_t bits)
 {
@@ -853,7 +853,7 @@ int32_t BAE_MaxDevices(void)
 
 // set the current device. device is from 0 to BAE_MaxDevices()
 // NOTE:    This function needs to function before any other calls may have happened.
-//          Also you will need to call BAE_ReleaseAudioCard then BAE_AquireAudioCard
+//          Also you will need to call BAE_ReleaseAudioCard then BAE_AcquireAudioCard
 //          in order for the change to take place.
 void BAE_SetDeviceID(int32_t deviceID, void *deviceParameter)
 {
