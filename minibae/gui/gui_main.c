@@ -10,6 +10,7 @@
 #include <ctype.h>
 #include <time.h>
 #include <stdarg.h>
+#include <math.h> // for cosf/sinf gear icon
 #include <sys/types.h>
 #include <sys/stat.h>
 #ifdef _WIN32
@@ -40,6 +41,8 @@ static TTF_Font *g_font = NULL;
 #endif
 #include "bankinfo.h" // embedded bank metadata
 
+// Embedded SVG for settings gear icon (original file: settings-gear.svg)
+// Converted to single-line C string for static inclusion so app has no runtime file dependency.
 // Theme globals (used by widgets to pick colors for light/dark modes)
 static bool g_is_dark_mode = true;
 static SDL_Color g_accent_color = {50,130,200,255};
@@ -48,6 +51,8 @@ static SDL_Color g_bg_color = {30,30,35,255};
 static SDL_Color g_panel_bg = {45,45,50,255};
 static SDL_Color g_panel_border = {80,80,90,255};
 static SDL_Color g_header_color = {180,200,255,255};
+// A highlight color that reads well on both dark and light themes
+static SDL_Color g_highlight_color = {50,130,200,255};
 // Button colors
 static SDL_Color g_button_base = {70,70,80,255};
 static SDL_Color g_button_hover = {90,90,100,255};
@@ -177,6 +182,24 @@ static void detect_windows_theme() {
         g_theme.panel_bg = (SDL_Color){0, 0, 0, 255};
         g_theme.border_color = (SDL_Color){255, 255, 255, 255};
         g_theme.accent_color = (SDL_Color){255, 255, 0, 255}; // Yellow for high contrast
+    }
+
+    // Compute a highlight color that is readable on both light and dark themes.
+    // For dark mode prefer the header color (brighter, not the system accent) so
+    // it stands out without relying on the accent. For light mode use a
+    // darkened version of the accent so it contrasts against pale backgrounds.
+    if (g_theme.is_high_contrast) {
+        // High contrast needs a very strong readable highlight
+        g_highlight_color = (SDL_Color){255,255,0,255};
+    } else if (g_theme.is_dark_mode) {
+        // Use the header color in dark mode to remain readable and distinct
+        g_highlight_color = g_header_color;
+    } else {
+        // Light mode: darken the accent for contrast against light panels
+        g_highlight_color = g_accent_color;
+        g_highlight_color.r = (Uint8)MAX(0, g_accent_color.r - 80);
+        g_highlight_color.g = (Uint8)MAX(0, g_accent_color.g - 80);
+        g_highlight_color.b = (Uint8)MAX(0, g_accent_color.b - 80);
     }
     
     BAE_PRINTF("Windows theme detected: %s mode, accent: R%d G%d B%d\n", 
@@ -478,10 +501,10 @@ static bool ui_dropdown(SDL_Renderer *R, Rect r, int *value, const char **items,
     Rect box = {r.x, r.y + r.h + 1, r.w, totalH};
     draw_rect(R, box, g_panel_bg); 
     draw_frame(R, box, frame);
-        for(int i=0;i<count;i++){
+            for(int i=0;i<count;i++){
             Rect ir = {box.x, box.y + i*itemH, box.w, itemH};
             bool over = point_in(mx,my,ir);
-            SDL_Color ibg = (i==*value)? g_accent_color : g_panel_bg;
+            SDL_Color ibg = (i==*value)? g_highlight_color : g_panel_bg;
             if(over) ibg = g_button_hover;
             draw_rect(R, ir, ibg); 
             if(i < count-1) { // separator line
@@ -503,6 +526,7 @@ static void draw_custom_checkbox(SDL_Renderer *R, Rect r, bool checked, bool hov
     // Define colors using theme
 #ifdef _WIN32
     SDL_Color bg_unchecked = g_panel_bg;
+    // Use accent color (not highlight) for checked state; user requested progress bar & checkboxes keep accent styling
     SDL_Color bg_checked = g_accent_color;
     SDL_Color bg_hover_unchecked = (SDL_Color){
         (Uint8)MIN(255, g_panel_bg.r + 20), (Uint8)MIN(255, g_panel_bg.g + 20), (Uint8)MIN(255, g_panel_bg.b + 20), 255 };
@@ -666,6 +690,14 @@ static bool g_reverbDropdownOpen = false;
 static bool g_show_rmf_info_dialog = false;     // visible flag
 static bool g_rmf_info_loaded = false;          // have we populated fields for current file
 static char g_rmf_info_values[INFO_TYPE_COUNT][512]; // storage for each info field
+// Settings dialog state (UI only, functionality not applied yet)
+static bool g_show_settings_dialog = false;
+// Settings button no longer uses icon; keep simple text button
+static int  g_volume_curve = 0; // 0..4
+static bool g_volumeCurveDropdownOpen = false;
+static bool g_stereo_output = true; // checked == stereo (default on)
+// sample rate index removed (fixed 44100)
+// sample rate dropdown flag removed
 
 static const char* rmf_info_label(BAEInfoType t){
     switch(t){
@@ -757,21 +789,30 @@ typedef struct {
     int reverb_type;
     bool has_loop;
     bool loop_enabled;
+    // Newly persisted settings dialog fields
+    bool has_volume_curve;
+    int volume_curve;
+    bool has_stereo;
+    bool stereo_output;
+    /* sample rate removed */
 } Settings;
 
 static void save_settings(const char* last_bank_path, int reverb_type, bool loop_enabled) {
-    if (!last_bank_path || !last_bank_path[0]) {
-        BAE_PRINTF("save_settings called with empty path\n");
-        return;
+    // Allow saving even if no bank path yet (persist other UI settings)
+    if (!last_bank_path) {
+        last_bank_path = ""; // treat as empty
     }
     
-    char* abs_path = get_absolute_path(last_bank_path);
-    const char* path_to_save = abs_path ? abs_path : last_bank_path;
-    
-    if (abs_path && strcmp(last_bank_path, abs_path) != 0) {
-        BAE_PRINTF("Converting relative path '%s' to absolute path '%s'\n", last_bank_path, abs_path);
-    } else if (abs_path) {
-        BAE_PRINTF("Path '%s' is already absolute\n", last_bank_path);
+    char* abs_path = NULL;
+    const char* path_to_save = last_bank_path;
+    if (last_bank_path[0] != '\0') {
+        abs_path = get_absolute_path(last_bank_path);
+        if (abs_path && strcmp(last_bank_path, abs_path) != 0) {
+            BAE_PRINTF("Converting relative path '%s' to absolute path '%s'\n", last_bank_path, abs_path);
+        } else if (abs_path) {
+            BAE_PRINTF("Path '%s' is already absolute\n", last_bank_path);
+        }
+        if (abs_path) path_to_save = abs_path;
     }
     
     // Build path to settings file in executable directory
@@ -786,12 +827,16 @@ static void save_settings(const char* last_bank_path, int reverb_type, bool loop
     
     FILE* f = fopen(settings_path, "w");
     if (f) {
+        // Existing values
         fprintf(f, "last_bank=%s\n", path_to_save ? path_to_save : "");
         fprintf(f, "reverb_type=%d\n", reverb_type);
         fprintf(f, "loop_enabled=%d\n", loop_enabled ? 1 : 0);
+        // New persisted UI settings (always write to simplify parsing)
+        fprintf(f, "volume_curve=%d\n", g_volume_curve);
+        fprintf(f, "stereo_output=%d\n", g_stereo_output ? 1 : 0);
+        BAE_PRINTF("Saved settings: last_bank=%s reverb=%d loop=%d volCurve=%d stereo=%d (fixed 44100)\n", 
+            path_to_save ? path_to_save : "", reverb_type, loop_enabled ? 1 : 0, g_volume_curve, g_stereo_output?1:0);
         fclose(f);
-        BAE_PRINTF("Saved settings: last_bank=%s, reverb=%d, loop=%d\n", 
-                     path_to_save ? path_to_save : "", reverb_type, loop_enabled ? 1 : 0);
     } else {
         BAE_PRINTF("Failed to open %s for writing\n", settings_path);
     }
@@ -802,7 +847,15 @@ static void save_settings(const char* last_bank_path, int reverb_type, bool loop
 }
 
 static Settings load_settings() {
-    Settings settings = {false, "", false, 7, false, true}; // Default values
+    Settings settings = {0};
+    settings.has_bank = false;
+    settings.bank_path[0] = '\0';
+    settings.has_reverb = false; settings.reverb_type = 7;
+    settings.has_loop = false; settings.loop_enabled = true;
+    settings.has_volume_curve = false; settings.volume_curve = 0;
+    settings.has_stereo = false; settings.stereo_output = true;
+    /* sample rate fields removed */
+    /* sample rate removed */
     
     // Build path to settings file in executable directory
     char settings_path[768];
@@ -844,8 +897,17 @@ static Settings load_settings() {
             settings.loop_enabled = (atoi(line + 13) != 0);
             settings.has_loop = true;
             BAE_PRINTF("Loaded loop setting: %d\n", settings.loop_enabled ? 1 : 0);
+        } else if (strncmp(line, "volume_curve=", 13) == 0) {
+            settings.volume_curve = atoi(line + 13);
+            settings.has_volume_curve = true;
+            BAE_PRINTF("Loaded volume curve: %d\n", settings.volume_curve);
+        } else if (strncmp(line, "stereo_output=", 14) == 0) {
+            settings.stereo_output = (atoi(line + 14) != 0);
+            settings.has_stereo = true;
+            BAE_PRINTF("Loaded stereo output: %d\n", settings.stereo_output ? 1 : 0);
         }
     }
+    
     fclose(f);
     return settings;
 }
@@ -1072,13 +1134,14 @@ static void bae_service_wav_export() {
     }
 }
 
-static bool bae_init(){
+// Initialize mixer at fixed 44100Hz
+static bool bae_init(int /*sampleRateHz_unused*/, bool stereo){
     g_bae.mixer = BAEMixer_New();
     if(!g_bae.mixer){ BAE_PRINTF("BAEMixer_New failed\n"); return false; }
-    BAEResult r = BAEMixer_Open(g_bae.mixer, BAE_RATE_44K, BAE_LINEAR_INTERPOLATION, BAE_USE_16|BAE_USE_STEREO, 32, 8, 32, TRUE);
+    BAERate rate = BAE_RATE_44K; // fixed 44100
+    BAEAudioModifiers mods = BAE_USE_16 | (stereo? BAE_USE_STEREO:0);
+    BAEResult r = BAEMixer_Open(g_bae.mixer, rate, BAE_LINEAR_INTERPOLATION, mods, 32, 8, 32, TRUE);
     if(r != BAE_NO_ERROR){ BAE_PRINTF("BAEMixer_Open failed %d\n", r); return false; }
-    // IMPORTANT: Without an audio task, MIDI/RMF streams may not advance on some builds/platforms (esp. 64-bit)
-    // playbae sets this; the GUI previously did not, causing silent or non-starting songs.
     BAEMixer_SetAudioTask(g_bae.mixer, gui_audio_task, g_bae.mixer);
     // Make sure audio is engaged (defensive)
     BAEMixer_ReengageAudio(g_bae.mixer);
@@ -1097,6 +1160,76 @@ static void bae_seek_ms(int ms);
 static int  bae_get_pos_ms(void);
 static bool bae_play(bool *playing);
 static void bae_apply_current_settings(int transpose, int tempo, int volume, bool loop_enabled, int reverb_type, bool ch_enable[16]);
+static bool recreate_mixer_and_restore(int /*sampleRateHz_unused*/, bool stereo, int reverbType,
+                                       int transpose, int tempo, int volume, bool loopPlay,
+                                       bool ch_enable[16]);
+static bool load_bank(const char *path, bool current_playing_state, int transpose, int tempo, int volume, bool loop_enabled, int reverb_type, bool ch_enable[16], bool save_to_settings);
+static bool load_bank_simple(const char *path, bool save_to_settings, int reverb_type, bool loop_enabled);
+
+// map_rate_from_hz removed (fixed 44100Hz)
+
+// Recreate mixer with new sample rate / stereo setting preserving current playback state where possible.
+static bool recreate_mixer_and_restore(int /*sampleRateHz_unused*/, bool stereo, int reverbType,
+                                       int transpose, int tempo, int volume, bool loopPlay,
+                                       bool ch_enable[16]){
+    if(g_exporting){
+        set_status_message("Can't change audio format during export");
+        return false;
+    }
+    // Capture current song/audio state
+    char last_song_path[1024]; last_song_path[0]='\0';
+    bool had_song = g_bae.song_loaded;
+    bool was_audio = g_bae.is_audio_file;
+    bool was_playing = g_bae.is_playing;
+    int pos_ms = 0;
+    if(had_song){
+        strncpy(last_song_path, g_bae.loaded_path, sizeof(last_song_path)-1);
+        last_song_path[sizeof(last_song_path)-1]='\0';
+        pos_ms = bae_get_pos_ms();
+    }
+
+    // Tear down existing mixer & objects (without clearing captured path)
+    if(g_bae.song){ BAESong_Stop(g_bae.song,FALSE); BAESong_Delete(g_bae.song); g_bae.song=NULL; }
+    if(g_bae.sound){ BAESound_Stop(g_bae.sound,FALSE); BAESound_Delete(g_bae.sound); g_bae.sound=NULL; }
+    if(g_bae.mixer){ BAEMixer_Close(g_bae.mixer); BAEMixer_Delete(g_bae.mixer); g_bae.mixer=NULL; }
+    g_bae.song_loaded=false; g_bae.is_playing=false; g_bae.bank_loaded=false; g_bae.bank_token=0;
+
+    // Create new mixer
+    g_bae.mixer = BAEMixer_New();
+    if(!g_bae.mixer){ set_status_message("Mixer recreate failed"); return false; }
+    BAERate rate = BAE_RATE_44K; // fixed 44100
+    BAEAudioModifiers mods = BAE_USE_16 | (stereo? BAE_USE_STEREO:0);
+    BAEResult mr = BAEMixer_Open(g_bae.mixer, rate, BAE_LINEAR_INTERPOLATION, mods, 32, 8, 32, TRUE);
+    if(mr != BAE_NO_ERROR){
+        char msg[96]; snprintf(msg,sizeof(msg),"Mixer open failed (%d)", mr);
+        set_status_message(msg);
+        BAEMixer_Delete(g_bae.mixer); g_bae.mixer=NULL; return false;
+    }
+    BAEMixer_SetAudioTask(g_bae.mixer, gui_audio_task, g_bae.mixer);
+    BAEMixer_ReengageAudio(g_bae.mixer);
+    BAEMixer_SetDefaultReverb(g_bae.mixer, (BAEReverbType)reverbType);
+    BAEMixer_SetMasterVolume(g_bae.mixer, FLOAT_TO_UNSIGNED_FIXED(1.0));
+
+    // Reload bank if we had one recorded
+    if(g_current_bank_path[0]){
+        bool dummy_play=false;
+        // Use load_bank to restore bank (don't instantly save again – pass save_to_settings=false)
+        load_bank(g_current_bank_path, dummy_play, transpose, tempo, volume, loopPlay, reverbType, ch_enable, false);
+    } else {
+        // Attempt fallback default bank
+        load_bank_simple(NULL, false, reverbType, loopPlay);
+    }
+
+    // Reload prior song
+    if(had_song && last_song_path[0]){
+        if(bae_load_song_with_settings(last_song_path, transpose, tempo, volume, loopPlay, reverbType, ch_enable)){
+            if(pos_ms > 0){ bae_seek_ms(pos_ms); }
+            if(was_playing){ bool playFlag=false; bae_play(&playFlag); }
+        }
+    }
+    set_status_message("Audio device reconfigured");
+    return true;
+}
 
 static bool load_bank(const char *path, bool current_playing_state, int transpose, int tempo, int volume, bool loop_enabled, int reverb_type, bool ch_enable[16], bool save_to_settings){
     if(!g_bae.mixer) return false;
@@ -1688,9 +1821,20 @@ int main(int argc, char *argv[]){
     // Detect Windows theme
     detect_windows_theme();
     
-    if(!bae_init()){ BAE_PRINTF("miniBAE init failed\n"); }
+    // Preload settings BEFORE creating mixer so we can open with desired format
+    bool ch_enable[16]; for(int i=0;i<16;i++) ch_enable[i]=true; // need early for recreate helper fallback
+    int transpose = 0; int tempo = 100; int volume=75; bool loopPlay=true; bool loudMode=true; (void)loudMode;
+    int reverbLvl=15, chorusLvl=15; (void)reverbLvl; (void)chorusLvl; int progress=0; int duration=0; bool playing=false; int reverbType=7;
     
-    // Load bank database
+    Settings settings = load_settings();
+    if (settings.has_reverb) { reverbType = settings.reverb_type; }
+    if (settings.has_loop) { loopPlay = settings.loop_enabled; }
+    if (settings.has_volume_curve) { g_volume_curve = (settings.volume_curve>=0 && settings.volume_curve<=4)?settings.volume_curve:0; }
+    if (settings.has_stereo) { g_stereo_output = settings.stereo_output; }
+    if(!bae_init(44100, g_stereo_output)){ BAE_PRINTF("miniBAE init failed\n"); }
+    if(!bae_init(44100, g_stereo_output)){ BAE_PRINTF("miniBAE init failed\n"); }
+
+    // Load bank database AFTER mixer so load_bank can succeed
     load_bankinfo();
     
     if(!g_bae.bank_loaded){ BAE_PRINTF("WARNING: No patch bank loaded. Place patches.hsb next to executable or use built-in patches.\n"); }
@@ -1701,26 +1845,14 @@ int main(int argc, char *argv[]){
     if(!win){ BAE_PRINTF("Window failed: %s\n", SDL_GetError()); SDL_Quit(); return 1; }
     SDL_Renderer *R = SDL_CreateRenderer(win,-1,SDL_RENDERER_ACCELERATED|SDL_RENDERER_PRESENTVSYNC);
     if(!R) R = SDL_CreateRenderer(win,-1,0);
+    // Load gear SVG from embedded string into texture once (no filesystem dependency)
 
     bool running = true;
-    bool ch_enable[16]; for(int i=0;i<16;i++) ch_enable[i]=true;
-    int transpose = 0; int tempo = 100; int volume=75; bool loopPlay=true; bool loudMode=true; (void)loudMode; // lowered default volume to 75%
-    int reverbLvl=15, chorusLvl=15; (void)reverbLvl; (void)chorusLvl; // placeholders
-    int progress=0; int duration= bae_get_len_ms(); bool playing=false; int reverbType=7; // Default to "Small Refl"
-    
-    // Load settings and apply them
-    Settings settings = load_settings();
-    if (settings.has_reverb) {
-        reverbType = settings.reverb_type;
-        BAE_PRINTF("Applied saved reverb setting: %d\n", reverbType);
-    }
-    if (settings.has_loop) {
-        loopPlay = settings.loop_enabled;
-        BAE_PRINTF("Applied saved loop setting: %d\n", loopPlay ? 1 : 0);
-    }
-    
+    duration = bae_get_len_ms();
     g_bae.loop_enabled_gui = loopPlay;
     bae_set_volume(volume); bae_set_tempo(tempo); bae_set_transpose(transpose); bae_set_loop(loopPlay); bae_set_reverb(reverbType);
+    
+    // (moved earlier) already applied
     
     // Load bank (use saved bank if available, otherwise fallback)
     if (settings.has_bank && strlen(settings.bank_path) > 0) {
@@ -1926,13 +2058,17 @@ int main(int argc, char *argv[]){
         draw_frame(R, channelPanel, panelBorder);
         draw_text(R, 20, 20, "MIDI CHANNELS", headerCol);
         
-        // Channel toggles in a neat grid (with measured label centering)
-        int chStartX = 20, chStartY = 40;
+    // Channel toggles in a neat grid (with measured label centering)
+    bool modal_block = g_show_settings_dialog || (g_show_rmf_info_dialog && g_bae.is_rmf_file); // block when any modal dialog open
+    // When a modal is active we fully swallow background hover/drag/click by using off-screen, inert inputs
+    int ui_mx = mx, ui_my = my; bool ui_mdown = mdown; bool ui_mclick = mclick;
+    if(modal_block){ ui_mx = ui_my = -10000; ui_mdown = ui_mclick = false; }
+    int chStartX = 20, chStartY = 40;
         for(int i=0;i<16;i++){
             int col = i % 8; int row = i / 8;
             Rect r = {chStartX + col*45, chStartY + row*35, 16, 16};
             char buf[4]; snprintf(buf,sizeof(buf),"%d", i+1);
-            ui_toggle(R,r,&ch_enable[i],NULL,mx,my,mclick);
+            ui_toggle(R,r,&ch_enable[i],NULL,ui_mx,ui_my, ui_mclick && !modal_block);
             int tw=0,th=0; measure_text(buf,&tw,&th);
             int cx = r.x + (r.w - tw)/2;
             int ty = r.y + r.h + 2; // label below box
@@ -1941,13 +2077,13 @@ int main(int argc, char *argv[]){
 
         // Channel control buttons in a row
         int btnY = chStartY + 75;
-        if(ui_button(R,(Rect){20,btnY,80,26},"Invert",mx,my,mdown) && mclick){
+    if(ui_button(R,(Rect){20,btnY,80,26},"Invert",ui_mx,ui_my,ui_mdown) && ui_mclick && !modal_block){
             for(int i=0;i<16;i++) ch_enable[i]=!ch_enable[i];
         }
-        if(ui_button(R,(Rect){110,btnY,80,26},"Mute All",mx,my,mdown) && mclick){
+    if(ui_button(R,(Rect){110,btnY,80,26},"Mute All",ui_mx,ui_my,ui_mdown) && ui_mclick && !modal_block){
             for(int i=0;i<16;i++) ch_enable[i]=false;
         }
-        if(ui_button(R,(Rect){200,btnY,90,26},"Unmute All",mx,my,mdown) && mclick){
+    if(ui_button(R,(Rect){200,btnY,90,26},"Unmute All",ui_mx,ui_my,ui_mdown) && ui_mclick && !modal_block){
             for(int i=0;i<16;i++) ch_enable[i]=true;
         }
 
@@ -1958,19 +2094,19 @@ int main(int argc, char *argv[]){
         
         // Transpose control
         draw_text(R,410, 45, "Transpose:", labelCol);
-        ui_slider(R,(Rect){410, 60, 160, 14}, &transpose, -24, 24, mx,my,mdown,mclick);
+    ui_slider(R,(Rect){410, 60, 160, 14}, &transpose, -24, 24, ui_mx,ui_my,ui_mdown,ui_mclick);
         char tbuf[64]; snprintf(tbuf,sizeof(tbuf),"%+d", transpose); 
         draw_text(R,580, 58, tbuf, labelCol);
-        if(ui_button(R,(Rect){620, 56, 50,20},"Reset",mx,my,mdown) && mclick){ 
+    if(ui_button(R,(Rect){620, 56, 50,20},"Reset",ui_mx,ui_my,ui_mdown) && ui_mclick && !modal_block){ 
             transpose=0; bae_set_transpose(transpose);
         }        
 
         // Tempo control  
         draw_text(R,410, 85, "Tempo:", labelCol);
-        ui_slider(R,(Rect){410, 100, 160, 14}, &tempo, 25, 200, mx,my,mdown,mclick);
+    ui_slider(R,(Rect){410, 100, 160, 14}, &tempo, 25, 200, ui_mx,ui_my,ui_mdown,ui_mclick);
         snprintf(tbuf,sizeof(tbuf),"%d%%", tempo); 
         draw_text(R,580, 98, tbuf, labelCol);
-        if(ui_button(R,(Rect){620, 96, 50,20},"Reset",mx,my,mdown) && mclick){ 
+    if(ui_button(R,(Rect){620, 96, 50,20},"Reset",ui_mx,ui_my,ui_mdown) && ui_mclick && !modal_block){ 
             tempo=100; bae_set_tempo(tempo);
         }        
 
@@ -1984,22 +2120,22 @@ int main(int argc, char *argv[]){
     SDL_Color dd_bg = g_button_base;
     SDL_Color dd_txt = g_button_text;
     SDL_Color dd_frame = g_button_border;
-    bool overMain = point_in(mx,my,ddRect);
+    bool overMain = point_in(ui_mx,ui_my,ddRect);
     if(overMain) dd_bg = g_button_hover;
     draw_rect(R, ddRect, dd_bg);
     draw_frame(R, ddRect, dd_frame);
     const char *cur = (reverbType>=0 && reverbType < reverbCount) ? reverbNames[reverbType] : "?";
     draw_text(R, ddRect.x+6, ddRect.y+6, cur, dd_txt);
     draw_text(R, ddRect.x + ddRect.w - 16, ddRect.y+6, g_reverbDropdownOpen?"^":"v", dd_txt);
-        if(overMain && mclick){ g_reverbDropdownOpen = !g_reverbDropdownOpen; }
+    if(overMain && ui_mclick){ g_reverbDropdownOpen = !g_reverbDropdownOpen; }
 
         // Volume control
         draw_text(R,690, 80, "Volume:", labelCol);
         // Disable volume slider interaction when reverb dropdown is open
         bool volume_enabled = !g_reverbDropdownOpen;
-        ui_slider(R,(Rect){690, 95, 120, 14}, &volume, 0, 100, 
-                 volume_enabled ? mx : -1, volume_enabled ? my : -1, 
-                 volume_enabled ? mdown : false, volume_enabled ? mclick : false);
+    ui_slider(R,(Rect){690, 95, 120, 14}, &volume, 0, 100, 
+         volume_enabled ? ui_mx : -1, volume_enabled ? ui_my : -1, 
+         volume_enabled ? ui_mdown : false, volume_enabled ? ui_mclick : false);
         char vbuf[32]; snprintf(vbuf,sizeof(vbuf),"%d%%", volume); 
         draw_text(R,690,115,vbuf,labelCol);
 
@@ -2021,15 +2157,11 @@ int main(int argc, char *argv[]){
         float pct = (duration>0)? (float)progress/duration : 0.f; 
         if(pct<0)pct=0; if(pct>1)pct=1;
         if(pct > 0) {
-#ifdef _WIN32
-            draw_rect(R, (Rect){bar.x+2,bar.y+2,(int)((bar.w-4)*pct),bar.h-4}, g_theme.accent_color);
-#else
-            // Use the theme accent color for the progress fill so it matches checkboxes/sliders
+            // Revert progress bar fill to accent color (user wants progress bar to retain accent styling)
             draw_rect(R, (Rect){bar.x+2,bar.y+2,(int)((bar.w-4)*pct),bar.h-4}, g_accent_color);
-#endif
         }
-        if(mdown && point_in(mx,my,bar)){
-            int rel = mx - bar.x; if(rel<0)rel=0; if(rel>bar.w) rel=bar.w; 
+        if(ui_mdown && point_in(ui_mx,ui_my,bar)){
+            int rel = ui_mx - bar.x; if(rel<0)rel=0; if(rel>bar.w) rel=bar.w; 
             int new_progress = (int)( (double)rel/bar.w * duration );
             if(new_progress != last_drag_progress) {
                 progress = new_progress;
@@ -2054,9 +2186,9 @@ int main(int argc, char *argv[]){
     int pbuf_x = 680;
     // Clickable region just around current time text
     Rect progressRect = {pbuf_x, time_y, pbuf_w, pbuf_h>0?pbuf_h:16};
-    bool progressHover = point_in(mx,my,progressRect);
-    if(progressHover && mclick){ progress = 0; bae_seek_ms(0); }
-    // Use accent for hover time highlight so it matches other accented controls
+    bool progressHover = point_in(ui_mx,ui_my,progressRect);
+    if(progressHover && ui_mclick){ progress = 0; bae_seek_ms(0); }
+    // Use accent for hover time highlight so it matches other accented controls (reverted from highlight)
     SDL_Color progressColor = progressHover ? g_accent_color : labelCol;
     draw_text(R,pbuf_x, time_y, pbuf, progressColor);
     int slash_x = pbuf_x + pbuf_w + 6; // gap
@@ -2064,17 +2196,17 @@ int main(int argc, char *argv[]){
     draw_text(R,slash_x + 10, time_y, dbuf, labelCol);
 
         // Transport buttons
-        if(ui_button(R,(Rect){20, 215, 60,22}, playing?"Pause":"Play", mx,my,mdown) && mclick){ 
+    if(ui_button(R,(Rect){20, 215, 60,22}, playing?"Pause":"Play", ui_mx,ui_my,ui_mdown) && ui_mclick && !modal_block){ 
             if(bae_play(&playing)){} 
         }
-        if(ui_button(R,(Rect){90, 215, 60,22}, "Stop", mx,my,mdown) && mclick){ 
+    if(ui_button(R,(Rect){90, 215, 60,22}, "Stop", ui_mx,ui_my,ui_mdown) && ui_mclick && !modal_block){ 
             bae_stop(&playing,&progress);
             // Also stop export if active
             if(g_exporting) {
                 bae_stop_wav_export();
             }
         }
-        if(ui_toggle(R,(Rect){160, 215, 20,20}, &loopPlay, "Loop", mx,my,mclick)) { 
+    if(ui_toggle(R,(Rect){160, 215, 20,20}, &loopPlay, "Loop", ui_mx,ui_my,ui_mclick && !modal_block)) { 
             bae_set_loop(loopPlay);
             g_bae.loop_enabled_gui = loopPlay;
             // Save settings when loop is changed
@@ -2082,7 +2214,7 @@ int main(int argc, char *argv[]){
                 save_settings(g_current_bank_path, reverbType, loopPlay);
             }
         }
-        if(ui_button(R,(Rect){230, 215, 80,22}, "Open...", mx,my,mdown) && mclick){
+    if(ui_button(R,(Rect){230, 215, 80,22}, "Open...", ui_mx,ui_my,ui_mdown) && ui_mclick && !modal_block){
             char *sel = open_file_dialog();
             if(sel){ 
                 if(bae_load_song_with_settings(sel, transpose, tempo, volume, loopPlay, reverbType, ch_enable)){ 
@@ -2104,7 +2236,7 @@ int main(int argc, char *argv[]){
         
         // WAV Export button (only for MIDI/RMF files)
         if(!g_bae.is_audio_file && g_bae.song_loaded) {
-            if(ui_button(R,(Rect){320, 215, 110,22}, g_exporting ? "Exporting..." : "Export WAV", mx,my,mdown) && mclick && !g_exporting){
+            if(ui_button(R,(Rect){320, 215, 110,22}, g_exporting ? "Exporting..." : "Export WAV", ui_mx,ui_my,ui_mdown) && ui_mclick && !g_exporting && !modal_block){
                 char *export_file = save_wav_dialog();
                 if(export_file) {
                     bae_start_wav_export(export_file);
@@ -2113,7 +2245,7 @@ int main(int argc, char *argv[]){
             }
             // RMF Info button (only for RMF files)
             if(g_bae.is_rmf_file){
-                if(ui_button(R,(Rect){440, 215, 80,22}, "RMF Info", mx,my,mdown) && mclick){
+                if(ui_button(R,(Rect){440, 215, 80,22}, "RMF Info", ui_mx,ui_my,ui_mdown) && ui_mclick && !modal_block){
                     if(g_show_rmf_info_dialog){ g_show_rmf_info_dialog=false; }
                     else { g_show_rmf_info_dialog=true; rmf_info_load_if_needed(); }
                 }
@@ -2127,14 +2259,14 @@ int main(int argc, char *argv[]){
         
         // Current file
         draw_text(R,20, 280, "File:", labelCol);
-        if(g_bae.song_loaded){ 
+            if(g_bae.song_loaded){ 
             // Show just filename, not full path
             const char *fn = g_bae.loaded_path;
             const char *base = fn; 
             for(const char *p=fn; *p; ++p){ 
                 if(*p=='/'||*p=='\\') base=p+1; 
             }
-            draw_text(R,60, 280, base, g_accent_color); 
+            draw_text(R,60, 280, base, g_highlight_color); 
         } else {
             // muted text for empty file
             SDL_Color muted = g_is_dark_mode ? (SDL_Color){150,150,150,255} : (SDL_Color){120,120,120,255};
@@ -2149,12 +2281,12 @@ int main(int argc, char *argv[]){
             for(const char *p = g_bae.bank_name; *p; ++p){ if(*p=='/'||*p=='\\') base=p+1; }
             const char *display_name = (friendly_name && friendly_name[0]) ? friendly_name : base;
             // Use user's accent color for bank display so light-mode accent is respected
-            draw_text(R,60, 300, display_name, g_accent_color);
+            draw_text(R,60, 300, display_name, g_highlight_color);
             // Simple tooltip region (approx width based on char count * 8px mono font)
             int textLen = (int)strlen(display_name);
             int approxW = textLen * 8; if(approxW < 8) approxW = 8; if(approxW > 400) approxW = 400; // crude clamp
             Rect bankTextRect = {60, 300, approxW, 16};
-            if(point_in(mx,my,bankTextRect)){
+            if(point_in(ui_mx,ui_my,bankTextRect)){
                 // Tooltip background near cursor
                 char tip[512];
                 if(friendly_name && friendly_name[0] && strcmp(friendly_name, base) != 0){
@@ -2187,7 +2319,7 @@ int main(int argc, char *argv[]){
         }
         
     // Shifted right and slightly wider so it doesn't cover friendly bank info text
-    if(ui_button(R,(Rect){340,298,120,20}, "Load Bank...", mx,my,mdown) && mclick){
+    if(ui_button(R,(Rect){340,298,120,20}, "Load Bank...", ui_mx,ui_my,ui_mdown) && ui_mclick && !modal_block){
             #ifdef _WIN32
             char fileBuf[1024]={0};
             OPENFILENAMEA ofn; ZeroMemory(&ofn,sizeof(ofn));
@@ -2221,16 +2353,37 @@ int main(int argc, char *argv[]){
             }
             #endif
         }
+
+    // Bottom-right Settings button (text only) with 5px padding
+    {
+        int pad = 5;
+        int btnW = 90; int btnH = 30; // reasonable fixed size
+        Rect settingsBtn = { WINDOW_W - btnW - pad, WINDOW_H - btnH - pad, btnW, btnH };
+        bool overSettings = point_in(ui_mx,ui_my,settingsBtn);
+        SDL_Color sbg = overSettings ? g_button_hover : g_button_base;
+        if(g_show_settings_dialog) sbg = g_button_base;
+        draw_rect(R, settingsBtn, sbg);
+        draw_frame(R, settingsBtn, g_button_border);
+        int tw=0,th=0; measure_text("Settings", &tw,&th);
+        draw_text(R, settingsBtn.x + (settingsBtn.w - tw)/2, settingsBtn.y + (settingsBtn.h - th)/2, "Settings", g_button_text);
+        if(!modal_block && ui_mclick && overSettings){
+            g_show_settings_dialog = !g_show_settings_dialog;
+            if(g_show_settings_dialog){
+                g_volumeCurveDropdownOpen = false; g_show_rmf_info_dialog = false;
+                g_volumeCurveDropdownOpen = false; g_show_rmf_info_dialog = false;
+            }
+        }
+    }
         
-        // Status indicator (use theme colors)
-        const char *status = playing ? "♪ Playing" : "⏸ Stopped";
-        SDL_Color statusCol = playing ? g_accent_color : g_header_color;
+    // Status indicator (use theme-safe highlight color for playing state)
+    const char *status = playing ? "♪ Playing" : "⏸ Stopped";
+    SDL_Color statusCol = playing ? g_highlight_color : g_header_color;
         draw_text(R,20, 320, status, statusCol);
 
         // Show status message if recent (within 3 seconds)
         if(g_bae.status_message[0] != '\0' && (now - g_bae.status_message_time) < 3000) {
             // Use accent color for transient status messages so they stand out
-            draw_text(R,120, 320, g_bae.status_message, g_accent_color);
+            draw_text(R,120, 320, g_bae.status_message, g_highlight_color);
         } else {
             // Muted fallback text that adapts to theme; darker on light backgrounds for readability
             SDL_Color muted = g_is_dark_mode ? (SDL_Color){150,150,150,255} : (SDL_Color){80,80,80,255};
@@ -2254,7 +2407,7 @@ int main(int argc, char *argv[]){
             for(int i=0; i<reverbCount; i++){
                 Rect ir = {box.x, box.y + i*itemH, box.w, itemH};
                 bool over = point_in(mx,my,ir);
-                SDL_Color ibg = (i==reverbType) ? g_accent_color : g_panel_bg;
+                SDL_Color ibg = (i==reverbType) ? g_highlight_color : g_panel_bg;
                 if(over) ibg = g_button_hover;
                 draw_rect(R, ir, ibg);
                 if(i < reverbCount-1) { // separator line
@@ -2284,8 +2437,11 @@ int main(int argc, char *argv[]){
             }
         }
 
-        // Non-blocking RMF Info dialog overlay (with word wrapping)
+        // RMF Info dialog (modal overlay with dimming)
         if(g_show_rmf_info_dialog && g_bae.is_rmf_file){
+            // Dim entire background first (drawn before dialog contents)
+            SDL_Color dim = g_is_dark_mode ? (SDL_Color){0,0,0,120} : (SDL_Color){0,0,0,90};
+            draw_rect(R,(Rect){0,0,WINDOW_W,WINDOW_H}, dim);
             rmf_info_load_if_needed();
             int pad=8; int dlgW=340; int lineH = 16; // line height for wrapped lines
             // Compute total wrapped lines across all non-empty fields
@@ -2330,8 +2486,87 @@ int main(int argc, char *argv[]){
                 SDL_Color placeholder = g_is_dark_mode ? (SDL_Color){160,160,170,255} : (SDL_Color){100,100,100,255};
                 draw_text(R, dlg.x+10, y, "(No metadata fields present)", placeholder);
             }
-            // Clicking outside dialog closes it
-            if(mclick && !point_in(mx,my,dlg) && !point_in(mx,my,(Rect){440, 215, 80,22})){ g_show_rmf_info_dialog=false; }
+            // Clicking outside dialog (and not on its opener button) closes it
+            Rect rmfOpener = {440, 215, 80, 22};
+            if(mclick && !point_in(mx,my,dlg) && !point_in(mx,my,rmfOpener)){
+                g_show_rmf_info_dialog=false; 
+            }
+            // Swallow other background clicks while open
+            if((mclick || mdown) && !point_in(mx,my,dlg)) { /* swallowed */ }
+        }
+
+        // Settings dialog (modal overlay)
+        if(g_show_settings_dialog){
+            // Dim background
+            SDL_Color dim = g_is_dark_mode ? (SDL_Color){0,0,0,120} : (SDL_Color){0,0,0,90};
+            draw_rect(R,(Rect){0,0,WINDOW_W,WINDOW_H}, dim);
+            int dlgW = 360; int dlgH = 200; int pad = 10;
+            Rect dlg = { (WINDOW_W - dlgW)/2, (WINDOW_H - dlgH)/2, dlgW, dlgH };
+            SDL_Color dlgBg = g_panel_bg; dlgBg.a = 240;
+            SDL_Color dlgFrame = g_panel_border;
+            draw_rect(R, dlg, dlgBg);
+            draw_frame(R, dlg, dlgFrame);
+            // Title
+            draw_text(R, dlg.x + pad, dlg.y + 8, "Settings", g_header_color);
+            // Close X
+            Rect closeBtn = {dlg.x + dlg.w - 22, dlg.y + 8, 14, 14};
+            bool overClose = point_in(mx,my,closeBtn);
+            draw_rect(R, closeBtn, overClose?g_button_hover:g_button_base);
+            draw_frame(R, closeBtn, g_button_border);
+            draw_text(R, closeBtn.x+3, closeBtn.y+1, "X", g_button_text);
+            if(mclick && overClose){ g_show_settings_dialog = false; g_volumeCurveDropdownOpen = false; }
+            if(mclick && overClose){ g_show_settings_dialog = false; g_volumeCurveDropdownOpen = false; }
+
+            // Volume Curve selector
+            draw_text(R, dlg.x + pad, dlg.y + 36, "Volume Curve:", g_text_color);
+            const char *volumeCurveNames[] = { "Default S Curve", "Peaky S Curve", "WebTV Curve", "2x Expon", "2x Linear" };
+            int vcCount = 5;
+            Rect vcRect = { dlg.x + dlg.w - 170, dlg.y + 32, 150, 24 };
+            // Dropdown main
+            SDL_Color dd_bg = g_button_base; SDL_Color dd_txt = g_button_text; SDL_Color dd_frame = g_button_border;
+            if(point_in(mx,my,vcRect)) dd_bg = g_button_hover;
+            draw_rect(R, vcRect, dd_bg); draw_frame(R, vcRect, dd_frame);
+            const char *vcCur = (g_volume_curve>=0 && g_volume_curve < vcCount) ? volumeCurveNames[g_volume_curve] : "?";
+            draw_text(R, vcRect.x + 6, vcRect.y + 6, vcCur, dd_txt);
+            draw_text(R, vcRect.x + vcRect.w - 16, vcRect.y + 6, g_volumeCurveDropdownOpen?"^":"v", dd_txt);
+            if(point_in(mx,my,vcRect) && mclick){ g_volumeCurveDropdownOpen = !g_volumeCurveDropdownOpen; }
+
+            // Mono/Stereo checkbox
+            Rect cbRect = { dlg.x + pad, dlg.y + 72, 18, 18 };
+            if(ui_toggle(R, cbRect, &g_stereo_output, "Stereo Output", mx,my,mclick)){
+                recreate_mixer_and_restore(44100, g_stereo_output, reverbType, transpose, tempo, volume, loopPlay, ch_enable);
+                save_settings(g_current_bank_path[0]?g_current_bank_path:NULL, reverbType, loopPlay);
+            }
+
+            // Sample Rate controls removed (fixed 44100Hz)
+
+            // Dropdown lists (render on top)
+            if(g_volumeCurveDropdownOpen){
+                int itemH = vcRect.h; int totalH = itemH * vcCount; Rect box = {vcRect.x, vcRect.y + vcRect.h + 1, vcRect.w, totalH};
+                draw_rect(R, box, g_panel_bg); draw_frame(R, box, g_panel_border);
+                for(int i=0;i<vcCount;i++){
+                    Rect ir = {box.x, box.y + i*itemH, box.w, itemH}; bool over = point_in(mx,my,ir);
+                    SDL_Color ibg = (i==g_volume_curve)? g_highlight_color : g_panel_bg; if(over) ibg = g_button_hover;
+                    draw_rect(R, ir, ibg);
+                    if(i < vcCount-1){ SDL_Color sep = g_panel_border; SDL_SetRenderDrawColor(R, sep.r, sep.g, sep.b, 255); SDL_RenderDrawLine(R, ir.x, ir.y+ir.h, ir.x+ir.w, ir.y+ir.h); }
+                    SDL_Color itxt = (i==g_volume_curve || over) ? g_button_text : g_text_color;
+                    draw_text(R, ir.x+6, ir.y+6, volumeCurveNames[i], itxt);
+                    if(over && mclick){ 
+                        g_volume_curve = i; 
+                        g_volumeCurveDropdownOpen = false; 
+                        save_settings(g_current_bank_path[0]?g_current_bank_path:NULL, reverbType, loopPlay);
+                    }
+                }
+                if(mclick && !point_in(mx,my,vcRect) && !point_in(mx,my,box)) g_volumeCurveDropdownOpen = false;
+            }
+
+            // (sample rate dropdown logic removed)
+
+            // Footer help text
+            SDL_Color help = g_is_dark_mode ? (SDL_Color){180,180,190,255} : (SDL_Color){80,80,80,255};
+            draw_text(R, dlg.x + pad, dlg.y + dlg.h - 26, "Settings persist to minibae.ini.", help);
+            // Discard clicks outside dialog
+            if(mclick && !point_in(mx,my,dlg)) { /* swallow */ }
         }
 
     SDL_RenderPresent(R);

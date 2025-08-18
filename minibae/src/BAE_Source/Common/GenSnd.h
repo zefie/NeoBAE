@@ -1099,7 +1099,7 @@ struct GM_Song
 #if REVERB_USED != REVERB_DISABLED
     ReverbMode          defaultReverbType;
 #endif
-    VelocityCurveType   velocityCurveType;          // which curve to use. (Range is 0 to 2)
+    VelocityCurveType   velocityCurveType;          // which curve to use. (Range is 0 to 4)
 
     ScanMode            AnalyzeMode;                // analyze mode (Byte)
     XBOOL               ignoreBadInstruments;       // allow bad patches. Don't fail because it can't load
