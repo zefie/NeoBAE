@@ -3378,13 +3378,29 @@ GetMIDIevent:
                         {
                             XDisposePtr((XPTR)allocated);
                         }
-                        // New dedicated lyric callback (fires only for lyric events) with precise microsecond time
+                        /* Dedicated lyric callback should only be invoked for true Lyric meta (0x05).
+                           Previous code called it for all meta 0x01..0x05 causing generic text, copyright,
+                           track names, etc. to appear as lyrics. Optional fallback macro allows legacy behavior.
+                        */
                         if(pSong->lyricCallbackPtr){
-                            uint32_t lyrTimeUs = (uint32_t)pSong->songMicroseconds; // songMicroseconds already maintained in microseconds
-                            // Ensure we pass a C string (cbPtr already NUL-terminated above)
-                            const char *lyricStr = (const char *)cbPtr;
-                            // Defensive: skip if empty
-                            if(lyricStr && lyricStr[0]){
+                            XBOOL invoke = FALSE;
+                            const char *lyricStr = (const char *)cbPtr; /* NUL terminated */
+                            static XBOOL s_seenTrueLyric = FALSE;
+                            if(midi_byte == 0x05){
+                                invoke = TRUE; s_seenTrueLyric =  TRUE; /* real lyric */
+                            } else if(midi_byte == 0x01){
+                                /* Follow negated form: do NOT treat GenericText starting with '@' as lyric content. */
+                                if(lyricStr && lyricStr[0]=='@'){
+                                    /* Control/reset: translate to newline by sending empty lyric */
+                                    uint32_t lyrTimeUs = (uint32_t)pSong->songMicroseconds;
+                                    char empty[1] = {'\0'};
+                                    pSong->lyricCallbackPtr(pSong, empty, lyrTimeUs, pSong->lyricCallbackReference);
+                                } else {
+                                    if(!s_seenTrueLyric){ invoke = TRUE; }
+                                }
+                            }
+                            if(invoke && lyricStr && lyricStr[0]){
+                                uint32_t lyrTimeUs = (uint32_t)pSong->songMicroseconds;
                                 pSong->lyricCallbackPtr(pSong, lyricStr, lyrTimeUs, pSong->lyricCallbackReference);
                             }
                         }

@@ -72,11 +72,13 @@ static int gEnableKaraoke = 0;         // master toggle (enabled only with -k)
 static char g_karaoke_line_current[256];
 static char g_karaoke_line_previous[256];
 static char g_karaoke_last_fragment[128]; // track last raw fragment for cumulative detection
+static int  g_karaoke_have_meta_lyrics = 0; // set when a true lyric meta (0x05) seen (used if meta fallback path)
 
 static void cli_karaoke_reset(void){
    g_karaoke_line_current[0] = '\0';
    g_karaoke_line_previous[0] = '\0';
    g_karaoke_last_fragment[0] = '\0';
+   g_karaoke_have_meta_lyrics = 0;
 }
 
 static void cli_karaoke_print(void){
@@ -144,6 +146,47 @@ static void cli_karaoke_lyric_callback(struct GM_Song *songPtr, const char *lyri
          } else {
             break; // end of string
          }
+      }
+      p++;
+   }
+}
+
+// Meta event fallback callback (used only if lyric callback API unsupported).
+// Filters meta events so only true lyric meta (0x05) are displayed unless
+static void cli_karaoke_meta_callback(void *threadContext, struct GM_Song *pSong, char markerType, void *pMetaText, int32_t metaTextLength, XSWORD currentTrack){
+   (void)threadContext; (void)pSong; (void)metaTextLength; (void)currentTrack;
+   if(!gEnableKaraoke) return;
+   if(gWriteToFile) return;
+   if(!pMetaText) return;
+   const char *text = (const char*)pMetaText;
+   if(markerType == 0x05){ g_karaoke_have_meta_lyrics = 1; }
+   /* Nuanced handling: Accept 0x05 always. Accept 0x01 only if first char is '@' (control/reset)
+      or (optional fallback) prior to any 0x05 seen. '@' lines trigger a newline/reset and are not shown.
+      All other meta types ignored. */
+   if(markerType == 0x05) {
+      // proceed
+   } else if(markerType == 0x01) {
+   if(text[0]=='@') { cli_karaoke_newline(0); return; } // control/reset only
+   if(!g_karaoke_have_meta_lyrics){ /* allow pre-lyric generic text */ }
+   else return;
+   } else {
+      return; // ignore non-lyric meta types
+   }
+   // Empty => newline
+   if(text[0]=='\0'){ cli_karaoke_newline(0); cli_karaoke_print(); return; }
+   const char *p = text; const char *segStart = p;
+   while(1){
+      if(*p=='/' || *p=='\\' || *p=='\0'){
+         size_t len = (size_t)(p - segStart);
+         if(len>0){
+            char segment[192]; if(len >= sizeof(segment)) len = sizeof(segment)-1;
+            memcpy(segment, segStart, len); segment[len]='\0';
+            cli_karaoke_add_fragment(segment);
+         }
+         if(*p=='/' || *p=='\\'){
+            cli_karaoke_newline(0);
+            p++; segStart = p; continue;
+         } else { break; }
       }
       p++;
    }
@@ -595,8 +638,11 @@ static BAEResult PlayMidi(BAEMixer theMixer, char *fileName, BAE_UNSIGNED_FIXED 
       }
 #ifdef SUPPORT_KARAOKE
        // Register lyric callback unless exporting (karaoke disabled during export)
-       if(!gWriteToFile){
-          BAESong_SetLyricCallback(theSong, cli_karaoke_lyric_callback, NULL);
+       if(!gWriteToFile && gEnableKaraoke){
+          if(BAESong_SetLyricCallback(theSong, cli_karaoke_lyric_callback, NULL) != BAE_NO_ERROR){
+             // Fallback to meta event callback (strict lyric filtering implemented there)
+             BAESong_SetMetaEventCallback(theSong, cli_karaoke_meta_callback, NULL);
+          }
        }
 #endif
        err = BAESong_Start(theSong, 0);
@@ -714,8 +760,10 @@ static BAEResult PlayRMF(BAEMixer theMixer, char *fileName, BAE_UNSIGNED_FIXED v
          BAESong_SetCallback(theSong, (BAE_SongCallbackPtr)PV_SongCallback, (void *)0x1234);
 #endif
 #ifdef SUPPORT_KARAOKE
-       if(!gWriteToFile){
-          BAESong_SetLyricCallback(theSong, cli_karaoke_lyric_callback, NULL);
+       if(!gWriteToFile && gEnableKaraoke){
+          if(BAESong_SetLyricCallback(theSong, cli_karaoke_lyric_callback, NULL) != BAE_NO_ERROR){
+             BAESong_SetMetaEventCallback(theSong, cli_karaoke_meta_callback, NULL);
+          }
        }
 #endif
        err = BAESong_Start(theSong, 0);

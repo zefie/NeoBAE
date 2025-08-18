@@ -709,6 +709,10 @@ static bool g_karaoke_have_meta_lyrics = false; // whether lyric meta events (0x
 static char g_karaoke_last_fragment[128]; // last raw fragment to detect cumulative vs per-word
 static bool g_karaoke_suspended = false; // suspend (e.g., during export)
 
+// If set to 1, allow pre-lyric generic text (meta 0x01) fallback like older behavior.
+// Default 0: only true lyric meta events (0x05) are treated as lyrics to avoid showing
+// non-lyric comment metadata (track names, copyright, etc.).
+
 // Forward declaration (defined later) so helpers can call it
 static void karaoke_commit_line(uint32_t time_us, const char *line);
 
@@ -780,18 +784,24 @@ static void gui_meta_event_callback(void *threadContext, struct GM_Song *pSong, 
     if(!pMetaText) return;
     if(g_karaoke_suspended) return; // ignore while suspended
     const char *text = (const char*)pMetaText;
-    if(markerType == 0x05){ g_karaoke_have_meta_lyrics = true; }
-    // Reset trigger: GenericText starting with '@'
-    if(markerType == 0x01 && text[0]=='@'){
+    if(markerType == 0x05){
+        g_karaoke_have_meta_lyrics = true; // confirmed lyrics present
+    }
+    if(markerType == 0x05) {
+        // proceed – real lyric below
+    } else if(markerType == 0x01) {
+    if(text[0] == '@') {
+        // Control/reset marker: newline only, no lyric content
+        uint32_t pos_us = 0; if(g_bae.song) BAESong_GetMicrosecondPosition(g_bae.song,&pos_us); else BAEMixer_GetTick(g_bae.mixer,&pos_us);
         if(g_lyric_mutex) SDL_LockMutex(g_lyric_mutex);
-        g_karaoke_line_current[0]='\0'; g_karaoke_line_previous[0]='\0';
-        g_lyric_count = 0; g_lyric_cursor = 0; g_lyric_accumulate[0]='\0';
+        karaoke_newline(pos_us);
         if(g_lyric_mutex) SDL_UnlockMutex(g_lyric_mutex);
         return;
     }
-    // Treat GenericText (0x01) as lyrics only if no Lyric meta events have appeared yet
-    if(markerType != 0x05){
-        if(!(markerType == 0x01 && !g_karaoke_have_meta_lyrics)) return;
+    if(!g_karaoke_have_meta_lyrics){ /* allow non '@' generic text pre-lyric */ }
+    else return;
+    } else {
+        return; // not lyric related
     }
     uint32_t pos_us = 0; if(g_bae.song) BAESong_GetMicrosecondPosition(g_bae.song,&pos_us); else BAEMixer_GetTick(g_bae.mixer,&pos_us);
     if(g_lyric_mutex) SDL_LockMutex(g_lyric_mutex);
