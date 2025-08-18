@@ -2923,6 +2923,17 @@ int main(int argc, char *argv[]){
                 if(mclick && overVer && !dropdownActive){
                     const char *raw = _VERSION;
                     char url[256]; url[0]='\0';
+                    if (strstr(raw, "-dirty")) {
+                        size_t len = strlen(raw);
+                        if (len > 6) { // Ensure "-dirty" can be safely removed
+                            strncpy(url, raw, len - 6);
+                            url[len - 6] = '\0';
+                        } else {
+                            snprintf(url, sizeof(url), "%s", raw);
+                        }
+                    } else {
+                        snprintf(url, sizeof(url), "%s", raw);
+                    }
                     if(strncmp(raw,"git-",4)==0){
                         const char *sha = raw+4; 
                         char shortSha[64]; int i=0; while(sha[i] && sha[i] != '-' && i < (int)sizeof(shortSha)-1){ shortSha[i]=sha[i]; i++; } shortSha[i]='\0';
