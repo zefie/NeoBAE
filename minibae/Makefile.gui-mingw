@@ -26,7 +26,8 @@ WINDRES		:= x86_64-w64-mingw32-windres
 endif
 
 OPTI            := -O2 -fPIC
-CFLAGS  	:= $(ARCH) $(OPTI) $(INC_PATH) -D_THREAD_SAFE -DGUI_WITH_TTF -Wno-unused-value 
+CFLAGS  	:= $(ARCH) $(OPTI) $(INC_PATH) -D_THREAD_SAFE -DEMBED_FONT_TTF -Wno-unused-value 
+
 
 ifneq ($(BAE_FLAGS),)
 	CFLAGS	+= $(BAE_FLAGS)

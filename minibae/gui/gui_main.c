@@ -1,7 +1,6 @@
 // SDL2 GUI for miniBAE – simplified approximation of BXPlayer GUI.
 // Implements basic playback using libminiBAE (mixer + song) for MIDI/RMF.
 // Features: channel mute toggles, transpose, tempo, volume, loop, reverb, seek.
-// Font: Uses SDL_ttf if available; falls back to bitmap font (gui_font.h).
 
 #include <SDL.h>
 #include <stdio.h>
@@ -11,6 +10,8 @@
 #include <ctype.h>
 #include <time.h>
 #include <stdarg.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN 1
 #include <windows.h>
@@ -28,8 +29,15 @@
 #endif
 #include "MiniBAE.h"
 #include "BAE_API.h" // for BAE_GetDeviceSamplesPlayedPosition diagnostics
-#include "gui_font.h" // bitmap font fallback
 #include "X_Assert.h"
+#include <SDL_ttf.h>
+static TTF_Font *g_font = NULL;
+
+// Optional embedded TTF font (generated header). Define GUI_EMBED_FONT and
+// generate embedded_font.h via scripts/embed_ttf.py to enable.
+#ifdef GUI_EMBED_FONT
+#include "embedded_font.h" // provides embedded_font_data[], embedded_font_size
+#endif
 
 #ifdef _WIN32
 // Windows theme detection functions
@@ -169,14 +177,6 @@ static char* get_absolute_path(const char* path) {
 #endif
 }
 
-// Optional SDL_ttf
-#ifdef GUI_WITH_TTF
-#include <SDL_ttf.h>
-static TTF_Font *g_font = NULL;
-#else
-static void *g_font = NULL; // placeholder
-#endif
-
 // Global variable to track current bank path for settings saving
 static char g_current_bank_path[512] = "";
 
@@ -197,22 +197,50 @@ static int bank_count = 0;
 // -------- Text rendering abstraction --------
 typedef struct { int dummy; } TextCtx; // placeholder if we extend later
 
+static int g_bitmap_font_scale = 2; // fallback bitmap scale
+
+void gui_set_font_scale(int scale){ if(scale < 1) scale = 1; g_bitmap_font_scale = scale; }
+
+// Minimal 5x7 digit glyphs for fallback use (only digits needed for UI layout centering)
+static const unsigned char kGlyph5x7Digits[10][7] = {
+    {0x1E,0x21,0x23,0x25,0x29,0x31,0x1E}, //0
+    {0x08,0x18,0x08,0x08,0x08,0x08,0x1C}, //1
+    {0x1E,0x21,0x01,0x0E,0x10,0x20,0x3F}, //2
+    {0x1E,0x21,0x01,0x0E,0x01,0x21,0x1E}, //3
+    {0x02,0x06,0x0A,0x12,0x22,0x3F,0x02}, //4
+    {0x3F,0x20,0x3E,0x01,0x01,0x21,0x1E}, //5
+    {0x0E,0x10,0x20,0x3E,0x21,0x21,0x1E}, //6
+    {0x3F,0x01,0x02,0x04,0x08,0x10,0x10}, //7
+    {0x1E,0x21,0x21,0x1E,0x21,0x21,0x1E}, //8
+    {0x1E,0x21,0x21,0x1F,0x01,0x02,0x1C}, //9
+};
+
+static void bitmap_draw(SDL_Renderer *R,int x,int y,const char *text, SDL_Color col){
+    SDL_SetRenderDrawColor(R,col.r,col.g,col.b,col.a);
+    for(const char *p=text; *p; ++p){
+        unsigned char c=*p; bool handled=false;
+        if(c>='0' && c<='9'){ const unsigned char *g=kGlyph5x7Digits[c-'0']; handled=true;
+            for(int row=0;row<7;row++){ unsigned char bits=g[row];
+                for(int bit=0;bit<6;bit++){ // 5 columns (bit4..0)
+                    if(bits & (1<<(4-bit))){ SDL_Rect rr={x+bit*g_bitmap_font_scale,y+row*g_bitmap_font_scale,g_bitmap_font_scale,g_bitmap_font_scale}; SDL_RenderFillRect(R,&rr);} }
+            }
+        }
+        x += (handled?5:5) * g_bitmap_font_scale + g_bitmap_font_scale; // glyph width + spacing
+    }
+}
+
+static void measure_text(const char *text,int *w,int *h){
+    if(!text){ if(w)*w=0; if(h)*h=0; return; }
+    if(g_font){ int tw=0,th=0; if(TTF_SizeUTF8(g_font,text,&tw,&th)==0){ if(w)*w=tw; if(h)*h=th; return; } }
+    int len=(int)strlen(text); if(w)*w = len*(5*g_bitmap_font_scale + g_bitmap_font_scale); if(h)*h = 7*g_bitmap_font_scale;
+}
+
 static void draw_text(SDL_Renderer *R, int x, int y, const char *text, SDL_Color col){
-#ifdef GUI_WITH_TTF
     if(g_font){
         SDL_Surface *s = TTF_RenderUTF8_Blended(g_font, text, col);
-        if(s){
-            SDL_Texture *tx = SDL_CreateTextureFromSurface(R,s);
-            SDL_Rect dst = {x,y,s->w,s->h};
-            SDL_RenderCopy(R,tx,NULL,&dst);
-            SDL_DestroyTexture(tx);
-            SDL_FreeSurface(s);
-            return;
-        }
+        if(s){ SDL_Texture *tx = SDL_CreateTextureFromSurface(R,s); SDL_Rect dst={x,y,s->w,s->h}; SDL_RenderCopy(R,tx,NULL,&dst); SDL_DestroyTexture(tx); SDL_FreeSurface(s); return; }
     }
-#endif
-    // fallback bitmap font
-    gui_draw_text(R,x,y,text,col);
+    bitmap_draw(R,x,y,text,col);
 }
 
 typedef struct {
@@ -246,10 +274,9 @@ static bool ui_button(SDL_Renderer *R, Rect r, const char *label, int mx,int my,
     if(over) bg = mdown?press:hover;
     draw_rect(R,r,bg);
     draw_frame(R,r,border);
-    // Center text in button - simple and reliable
-    int text_w = strlen(label) * 5; // Slightly smaller multiplier for better centering
-    int text_x = r.x + (r.w - text_w) / 2;
-    int text_y = r.y + (r.h - 12) / 2;
+    int text_w=0,text_h=0; measure_text(label,&text_w,&text_h);
+    int text_x = r.x + (r.w - text_w)/2;
+    int text_y = r.y + (r.h - text_h)/2;
     draw_text(R,text_x,text_y,label,txt);
     return over && !mdown; // click released handled externally
 }
@@ -447,6 +474,7 @@ typedef struct {
     uint32_t song_length_us; // cached length
     bool song_loaded;
     bool is_audio_file; // true if loaded file is audio (not MIDI/RMF)
+    bool is_rmf_file;   // true if loaded song is RMF (not MIDI)
     bool paused; // track pause state
     bool is_playing; // track playing state
     bool was_playing_before_export; // for export state restoration
@@ -469,6 +497,54 @@ typedef struct {
 
 static BAEGUI g_bae = {0};
 static bool g_reverbDropdownOpen = false;
+// RMF info dialog state
+static bool g_show_rmf_info_dialog = false;     // visible flag
+static bool g_rmf_info_loaded = false;          // have we populated fields for current file
+static char g_rmf_info_values[INFO_TYPE_COUNT][512]; // storage for each info field
+
+static const char* rmf_info_label(BAEInfoType t){
+    switch(t){
+        case TITLE_INFO: return "Title";
+        case PERFORMED_BY_INFO: return "Performed By";
+        case COMPOSER_INFO: return "Composer";
+        case COPYRIGHT_INFO: return "Copyright";
+        case PUBLISHER_CONTACT_INFO: return "Publisher";
+        case USE_OF_LICENSE_INFO: return "Use Of License";
+        case LICENSED_TO_URL_INFO: return "Licensed URL";
+        case LICENSE_TERM_INFO: return "License Term";
+        case EXPIRATION_DATE_INFO: return "Expiration";
+        case COMPOSER_NOTES_INFO: return "Composer Notes";
+        case INDEX_NUMBER_INFO: return "Index Number";
+        case GENRE_INFO: return "Genre";
+        case SUB_GENRE_INFO: return "Sub-Genre";
+        case TEMPO_DESCRIPTION_INFO: return "Tempo";
+        case ORIGINAL_SOURCE_INFO: return "Source";
+        default: return "Unknown";
+    }
+}
+
+static void rmf_info_reset(){
+    for(int i=0;i<INFO_TYPE_COUNT;i++){ g_rmf_info_values[i][0]='\0'; }
+    g_rmf_info_loaded = false;
+}
+
+static void rmf_info_load_if_needed(){
+    if(!g_bae.is_rmf_file || !g_bae.song_loaded) return;
+    if(g_rmf_info_loaded) return;
+    // Iterate all known info types, fetch if fits
+    for(int i=0;i<INFO_TYPE_COUNT;i++){
+        BAEInfoType it = (BAEInfoType)i;
+        char buf[512]; buf[0]='\0';
+        if(BAEUtil_GetRmfSongInfoFromFile((BAEPathName)g_bae.loaded_path, 0, it, buf, sizeof(buf)-1) == BAE_NO_ERROR){
+            // Only store if non-empty and printable
+            if(buf[0] != '\0'){
+                strncpy(g_rmf_info_values[i], buf, sizeof(g_rmf_info_values[i])-1);
+                g_rmf_info_values[i][sizeof(g_rmf_info_values[i])-1]='\0';
+            }
+        }
+    }
+    g_rmf_info_loaded = true;
+}
 
 // Audio file playback tracking
 static uint32_t audio_total_frames = 0;
@@ -476,9 +552,10 @@ static uint32_t audio_current_position = 0;
 
 // WAV export state
 static bool g_exporting = false;
-static int g_export_progress = 0;
+static int g_export_progress = 0; // retained for potential legacy UI, not shown now
 static uint32_t g_export_last_pos = 0; // track advancement
 static int g_export_stall_iters = 0;        // stall detection
+static char g_export_path[1024] = {0};      // path of current export file
 
 static void set_status_message(const char *msg) {
     strncpy(g_bae.status_message, msg, sizeof(g_bae.status_message)-1);
@@ -793,9 +870,11 @@ static bool bae_start_wav_export(const char* output_file) {
     }
     
     g_exporting = true;
-    g_export_progress = 0;
+    g_export_progress = 0; // reset (unused for display)
     g_export_last_pos = 0;
     g_export_stall_iters = 0;
+    strncpy(g_export_path, output_file ? output_file : "", sizeof(g_export_path)-1);
+    g_export_path[sizeof(g_export_path)-1] = '\0';
     set_status_message("Starting WAV export...");
     return true;
 }
@@ -832,14 +911,23 @@ static void bae_stop_wav_export() {
         
         // Restore playback state
         if (g_bae.was_playing_before_export && g_bae.song) {
-            BAESong_Start(g_bae.song, 0);
-            g_bae.is_playing = true;
+            // Restart song from restored position
+            BAESong_Preroll(g_bae.song);
+            BAESong_SetMicrosecondPosition(g_bae.song, g_bae.position_us_before_export);
+            if(BAESong_Start(g_bae.song, 0) == BAE_NO_ERROR){
+                g_bae.is_playing = true;
+            } else {
+                g_bae.is_playing = false;
+            }
         } else {
             g_bae.is_playing = false;
         }
+        // Mark UI needs sync (local 'playing' variable)
+        // We'll sync just after frame logic by checking mismatch
         
         g_exporting = false;
-        g_export_progress = 0;
+    g_export_progress = 0;
+    g_export_path[0] = '\0';
         set_status_message("WAV export completed");
     }
 }
@@ -879,14 +967,25 @@ static void bae_service_wav_export() {
             if (g_bae.song_length_us > 0) {
                 int pct = (int)((current_pos * 100) / g_bae.song_length_us); 
                 if (pct > 100) pct = 100;
-                g_export_progress = pct;
-                // Only update status message every 10% to reduce string operations
-                static int last_pct = -1;
-                if (pct != last_pct && pct % 10 == 0) {
-                    char msg[64]; 
-                    snprintf(msg, sizeof(msg), "Exporting WAV... %d%%", pct); 
-                    set_status_message(msg);
-                    last_pct = pct;
+                // Replace percent display with file size display.
+                if(g_export_path[0] && (i % 20 == 0)) { // update size every 20 service batches
+                    uint64_t fsize = 0;
+#ifdef _WIN32
+                    struct _stat64 st; if(_stat64(g_export_path, &st) == 0){ fsize = (uint64_t)st.st_size; }
+#else
+                    struct stat st; if(stat(g_export_path, &st) == 0){ fsize = (uint64_t)st.st_size; }
+#endif
+                    if(fsize > 0){
+                        // Human readable
+                        const char *unit = "B"; double val = (double)fsize;
+                        if(val > 1024){ val/=1024; unit="KB"; }
+                        if(val > 1024){ val/=1024; unit="MB"; }
+                        if(val > 1024){ val/=1024; unit="GB"; }
+                        char msg[96];
+                        if(unit== (const char*)"GB") snprintf(msg,sizeof(msg),"Exporting WAV... %.2f %s", val, unit);
+                        else snprintf(msg,sizeof(msg),"Exporting WAV... %.1f %s", val, unit);
+                        set_status_message(msg);
+                    }
                 }
             }
 
@@ -908,11 +1007,21 @@ static void bae_service_wav_export() {
                 g_export_stall_iters = 0;
             }
             
-            // Safety timeout for very long files
-            if (current_pos > 30ULL*60ULL*1000000ULL) { 
-                set_status_message("Export time cap reached"); 
-                bae_stop_wav_export(); 
-                return; 
+            // 4GB WAV size safety cap (RIFF chunk size is 32-bit). Check actual file size on disk.
+            if(g_export_path[0]) {
+                uint64_t fsize = 0;
+#ifdef _WIN32
+                struct _stat64 st; if(_stat64(g_export_path, &st) == 0){ fsize = (uint64_t)st.st_size; }
+#else
+                struct stat st; if(stat(g_export_path, &st) == 0){ fsize = (uint64_t)st.st_size; }
+#endif
+                const uint64_t WAV_4GB_LIMIT = (4ULL * 1024ULL * 1024ULL * 1024ULL); // 4GB
+                // Leave 1MB safety margin for final header/size patching
+                if(fsize >= WAV_4GB_LIMIT - (1024ULL * 1024ULL)) {
+                    set_status_message("Export size cap (4GB) reached");
+                    bae_stop_wav_export();
+                    return;
+                }
             }
         }
     }
@@ -1128,7 +1237,7 @@ static bool bae_load_song(const char* path){
     // Clean previous
     if(g_bae.song){ BAESong_Stop(g_bae.song,FALSE); BAESong_Delete(g_bae.song); g_bae.song=NULL; }
     if(g_bae.sound){ BAESound_Stop(g_bae.sound,FALSE); BAESound_Delete(g_bae.sound); g_bae.sound=NULL; }
-    g_bae.song_loaded=false; g_bae.is_audio_file=false; g_bae.song_length_us=0;
+    g_bae.song_loaded=false; g_bae.is_audio_file=false; g_bae.is_rmf_file=false; g_bae.song_length_us=0; g_show_rmf_info_dialog=false; rmf_info_reset();
     
     // Detect extension
     const char *le = strrchr(path,'.');
@@ -1160,15 +1269,17 @@ static bool bae_load_song(const char* path){
     BAEResult r;
     if(le && (strcmp(ext,".mid")==0 || strcmp(ext,".midi")==0 || strcmp(ext,".kar")==0)){
         r = BAESong_LoadMidiFromFile(g_bae.song,(BAEPathName)path,TRUE);
+        g_bae.is_rmf_file = false;
     } else {
         r = BAESong_LoadRmfFromFile(g_bae.song,(BAEPathName)path,0,TRUE);
+        g_bae.is_rmf_file = true;
     }
     if(r!=BAE_NO_ERROR){ BAE_PRINTF("Song load failed %d %s\n", r,path); BAESong_Delete(g_bae.song); g_bae.song=NULL; return false; }
     // Defer preroll until just before first Start so that any user settings
     // (transpose, tempo, channel mutes, reverb, loops) are applied first.
     BAESong_GetMicrosecondLength(g_bae.song,&g_bae.song_length_us);
     strncpy(g_bae.loaded_path,path,sizeof(g_bae.loaded_path)-1); g_bae.loaded_path[sizeof(g_bae.loaded_path)-1]='\0';
-    g_bae.song_loaded=true; g_bae.is_audio_file=false;
+    g_bae.song_loaded=true; g_bae.is_audio_file=false; // is_rmf_file already set
     const char *base=path; for(const char *p=path; *p; ++p){ if(*p=='/'||*p=='\\') base=p+1; }
     char msg[128]; snprintf(msg,sizeof(msg),"Loaded: %s", base); set_status_message(msg); return true;
 }
@@ -1507,14 +1618,24 @@ void setWindowIcon(SDL_Window *window){
 
 int main(int argc, char *argv[]){
     if(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER | SDL_INIT_AUDIO) != 0){ BAE_PRINTF("SDL_Init failed: %s\n", SDL_GetError()); return 1; }
-#ifdef GUI_WITH_TTF
     if(TTF_Init()!=0){ BAE_PRINTF("SDL_ttf init failed: %s (continuing with bitmap font)\n", TTF_GetError()); }
     else {
-        const char *tryFonts[] = { "C:/Windows/Fonts/arial.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", NULL };
-        for(int i=0; tryFonts[i]; ++i){ if(!g_font){ g_font = TTF_OpenFont(tryFonts[i], 14); } }
+        // 1. Attempt to load embedded font if compiled in.
+        // 2. Fallback to system fonts if no embedded font.
+        if(!g_font){
+            const char *tryFonts[] = { 
+                "C:/Windows/Fonts/consola.ttf", // Consolas (Windows)
+                "C:/Windows/Fonts/arial.ttf",   // Arial (Windows)
+                "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf", // DejaVu Sans Mono (Linux)
+                "/usr/share/fonts/truetype/liberation/LiberationMono-Regular.ttf", // Liberation Mono (Linux)
+                "/System/Library/Fonts/SFNSMono.ttf", // macOS older name
+                "/System/Library/Fonts/SFMono-Regular.otf", // SF Mono (macOS)
+                NULL 
+            };
+            for(int i=0; tryFonts[i]; ++i){ if(!g_font){ g_font = TTF_OpenFont(tryFonts[i], 14); } }
+            if(g_font){ BAE_PRINTF("Loaded system TTF font.\n"); }
+        }
     }
-#endif
-    if(!g_font){ gui_set_font_scale(2); }
     
     // Detect Windows theme
     detect_windows_theme();
@@ -1633,6 +1754,12 @@ int main(int argc, char *argv[]){
                     break;
             }
         }
+
+        // Sync local 'playing' variable with engine state after export or any external change
+        // This ensures progress bar resumes when playback auto-restarts (e.g., after WAV export)
+        if(playing != g_bae.is_playing){
+            playing = g_bae.is_playing;
+        }
         // timing update
         Uint32 now = SDL_GetTicks();
         (void)now; (void)lastTick; lastTick=now;
@@ -1727,18 +1854,17 @@ int main(int argc, char *argv[]){
         draw_frame(R, channelPanel, panelBorder);
         draw_text(R, 20, 20, "MIDI CHANNELS", headerCol);
         
-        // Channel toggles in a neat grid
+        // Channel toggles in a neat grid (with measured label centering)
         int chStartX = 20, chStartY = 40;
         for(int i=0;i<16;i++){
-            int col = i % 8;
-            int row = i / 8;
+            int col = i % 8; int row = i / 8;
             Rect r = {chStartX + col*45, chStartY + row*35, 16, 16};
             char buf[4]; snprintf(buf,sizeof(buf),"%d", i+1);
-            bool clicked = ui_toggle(R,r,&ch_enable[i],NULL,mx,my,mclick);
-            // Channel number below with better centering
-            int text_width = (i < 9) ? 6 : 12; // Single digit vs double digit
-            int center_x = r.x + (r.w - text_width) / 2;
-            draw_text(R,center_x,r.y+18,buf,labelCol);
+            ui_toggle(R,r,&ch_enable[i],NULL,mx,my,mclick);
+            int tw=0,th=0; measure_text(buf,&tw,&th);
+            int cx = r.x + (r.w - tw)/2;
+            int ty = r.y + r.h + 2; // label below box
+            draw_text(R,cx,ty,buf,labelCol);
         }
 
         // Channel control buttons in a row
@@ -1909,6 +2035,13 @@ int main(int argc, char *argv[]){
                     free(export_file);
                 }
             }
+            // RMF Info button (only for RMF files)
+            if(g_bae.is_rmf_file){
+                if(ui_button(R,(Rect){440, 215, 80,22}, "RMF Info", mx,my,mdown) && mclick){
+                    if(g_show_rmf_info_dialog){ g_show_rmf_info_dialog=false; }
+                    else { g_show_rmf_info_dialog=true; rmf_info_load_if_needed(); }
+                }
+            }
         }
 
         // Status panel
@@ -2045,6 +2178,42 @@ int main(int argc, char *argv[]){
             }
         }
 
+        // Non-blocking RMF Info dialog overlay
+        if(g_show_rmf_info_dialog && g_bae.is_rmf_file){
+            rmf_info_load_if_needed();
+            // Determine dynamic height based on number of non-empty fields (cap lines)
+            int lines=0; for(int i=0;i<INFO_TYPE_COUNT;i++){ if(g_rmf_info_values[i][0]) lines++; }
+            if(lines==0) lines=1; // show placeholder
+            int lineH = 16; int pad=8; int dlgW=340; int dlgH = pad*2 + 24 + lines*lineH + 10; // title + fields
+            Rect dlg = {WINDOW_W - dlgW - 10, 10, dlgW, dlgH};
+            SDL_Color bg = {30,30,40,230};
+            SDL_Color border = {120,120,140,255};
+            draw_rect(R, dlg, bg);
+            draw_frame(R, dlg, border);
+            draw_text(R, dlg.x + 10, dlg.y + 8, "RMF Metadata", (SDL_Color){220,220,240,255});
+            // Close button (simple X)
+            Rect closeBtn = {dlg.x + dlg.w - 22, dlg.y + 6, 16,16};
+            bool overClose = point_in(mx,my,closeBtn);
+            SDL_Color cbg = overClose ? (SDL_Color){200,60,60,255} : (SDL_Color){120,50,50,255};
+            draw_rect(R, closeBtn, cbg); draw_frame(R, closeBtn, (SDL_Color){80,20,20,255});
+            draw_text(R, closeBtn.x + 4, closeBtn.y + 2, "X", (SDL_Color){255,255,255,255});
+            if(mclick && overClose){ g_show_rmf_info_dialog=false; }
+            // Scroll not implemented (compact). Render fields
+            int y = dlg.y + 32; int rendered=0;
+            for(int i=0;i<INFO_TYPE_COUNT;i++){
+                if(g_rmf_info_values[i][0]){
+                    char line[640]; snprintf(line,sizeof(line),"%s: %s", rmf_info_label((BAEInfoType)i), g_rmf_info_values[i]);
+                    // Truncate if too wide
+                    if(strlen(line) > 90){ line[90]='\0'; }
+                    draw_text(R, dlg.x + 10, y, line, (SDL_Color){200,200,210,255});
+                    y += lineH; rendered++;
+                }
+            }
+            if(rendered==0){ draw_text(R, dlg.x+10, y, "(No metadata fields present)", (SDL_Color){160,160,170,255}); }
+            // Clicking outside dialog closes it
+            if(mclick && !point_in(mx,my,dlg) && !point_in(mx,my,(Rect){440, 215, 80,22})){ g_show_rmf_info_dialog=false; }
+        }
+
     SDL_RenderPresent(R);
     SDL_Delay(16);
     static int lastTranspose=123456, lastTempo=123456, lastVolume=123456, lastReverbType=-1; static bool lastLoop=false;
@@ -2058,10 +2227,8 @@ int main(int argc, char *argv[]){
     SDL_DestroyRenderer(R);
     SDL_DestroyWindow(win);
     bae_shutdown();
-#ifdef GUI_WITH_TTF
     if(g_font) TTF_CloseFont(g_font);
     TTF_Quit();
-#endif
     SDL_Quit();
     return 0;
 }

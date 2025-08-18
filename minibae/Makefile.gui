@@ -12,7 +12,18 @@ AR      	:= ar
 STRIP		:= strip
 
 OPTI            := -O2 -fPIC
-CFLAGS  	:= $(ARCH) $(OPTI) $(INC_PATH) -D_THREAD_SAFE -DGUI_WITH_TTF -Wno-unused-value
+CFLAGS  	:= $(ARCH) $(OPTI) $(INC_PATH) -D_THREAD_SAFE -DEMBED_FONT_TTF -Wno-unused-value
+
+# If EMBED_FONT_TTF specified, generate embedded_font.h and define GUI_EMBED_FONT
+ifdef EMBED_FONT_TTF
+CFLAGS += -DGUI_EMBED_FONT
+EMBED_FONT_HEADER := gui/embedded_font.h
+$(EMBED_FONT_HEADER): $(EMBED_FONT_TTF) ../scripts/embed_ttf.py
+	@echo @embed $<
+	@python3 ../scripts/embed_ttf.py $(EMBED_FONT_TTF) $(EMBED_FONT_HEADER)
+# Ensure binary depends on generated header (order-only so it doesn't rebuild objects unnecessarily)
+$(TARGET_BIN): | $(EMBED_FONT_HEADER)
+endif
 
 ifneq ($(BAE_FLAGS),)
 	CFLAGS	+= $(BAE_FLAGS)
