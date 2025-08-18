@@ -1918,6 +1918,14 @@ static void PV_ProcessController(GM_Song *pSong, INT16 MIDIChannel, INT16 curren
         switch (controler)
         {
             case B_BANK_LSB:    // bank select MSB. This is GS.
+                if (value == 6) {
+                    value = 2;
+                    pSong->channelBank[MIDIChannel] = (SBYTE)value;
+                }
+                else if (value == 5) {
+                    value = 1;
+                    pSong->channelBank[MIDIChannel] = (SBYTE)value;
+                }
                 break;
             case B_BANK_MSB:        // bank select LSB.
                 if (value > (MAX_BANKS/2))
