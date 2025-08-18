@@ -286,7 +286,7 @@ static BAEResult MuteCommaSeperatedChannels(BAESong theSong, char* channelsToMut
 }
 
 
-static void displayCurrentPosition(uint32_t currentPosition) {
+static void displayCurrentPosition(uint32_t currentPosition, uint32_t totalPlayedTime) {
 	int m, s, ms = 0;
 	positionDisplayMultiplierCounter = positionDisplayMultiplierCounter + 1;
 	if (positionDisplayMultiplierCounter == positionDisplayMultiplier) {
@@ -295,7 +295,15 @@ static void displayCurrentPosition(uint32_t currentPosition) {
 		s = (currentPosition - (m*60000)) / 1000;
 		ms = (currentPosition - (60000*m) - (s*1000));
 		if (ms > 1 || s > 0 || m > 0) {
-			playbae_printf("Playback position: %02d:%02d.%03d\r",m,s,ms);
+         if (totalPlayedTime > currentPosition) {
+            int tm, ts, tms = 0;
+            tm = (totalPlayedTime / 60000);
+		      ts = (totalPlayedTime - (m*60000)) / 1000;
+		      tms = (totalPlayedTime - (60000*m) - (s*1000));
+            playbae_printf("Playback position: %02d:%02d.%03d (Total: %02d:%02d.%03d)\r",m,s,ms,tm,ts,tms);
+         } else {
+            playbae_printf("Playback position: %02d:%02d.%03d\r",m,s,ms);
+         }			
 #ifdef WASM
    playbae_printf("\n");
 #endif
@@ -448,6 +456,8 @@ static BAEResult PlayMidi(BAEMixer theMixer, char *fileName, BAE_UNSIGNED_FIXED 
    BAEResult err;
    BAESong   theSong = BAESong_New(theMixer);
    uint32_t currentPosition;
+   uint32_t lastPosition = 0;
+   uint32_t cumulativeTime = 0;
    BAE_BOOL  done;
    if (theSong)
    {
@@ -498,9 +508,21 @@ static BAEResult PlayMidi(BAEMixer theMixer, char *fileName, BAE_UNSIGNED_FIXED 
                BAESong_IsDone(theSong, &done);
 	       BAESong_GetMicrosecondPosition(theSong, &currentPosition);
                currentPosition = currentPosition / 1000;
-               displayCurrentPosition(currentPosition);
+               
+               // Detect loop reset - if current position is significantly less than last position
+               if (currentPosition < lastPosition && (lastPosition - currentPosition) > 1000) {
+                   // Position reset detected, add the last position to cumulative time
+                   cumulativeTime += lastPosition;
+                   playbae_dprintf("Loop detected: added %u ms to cumulative time, now %u ms\n", lastPosition, cumulativeTime);
+               }
+               lastPosition = currentPosition;
+               
+               // Use cumulative time + current position for display and time limit check
+               uint32_t totalPlayedTime = cumulativeTime + currentPosition;
+               displayCurrentPosition(currentPosition, totalPlayedTime);
+               
                if (timeLimit > 0) {
-                  if (currentPosition > (timeLimit * 1000) - 750) {
+                  if (totalPlayedTime > (timeLimit * 1000) - 750) {
                         BAESong_Stop(theSong, fadeOut);
                   }
                }
@@ -540,6 +562,8 @@ static BAEResult PlayRMF(BAEMixer theMixer, char *fileName, BAE_UNSIGNED_FIXED v
    BAEResult err;
    BAESong   theSong = BAESong_New(theMixer);
    uint32_t currentPosition;
+   uint32_t lastPosition = 0;
+   uint32_t cumulativeTime = 0;
    BAE_BOOL  done;
 
    if (theSong)
@@ -585,9 +609,21 @@ static BAEResult PlayRMF(BAEMixer theMixer, char *fileName, BAE_UNSIGNED_FIXED v
                BAESong_IsDone(theSong, &done);
 	       BAESong_GetMicrosecondPosition(theSong, &currentPosition);
                currentPosition = currentPosition / 1000;
-               displayCurrentPosition(currentPosition);
+               
+               // Detect loop reset - if current position is significantly less than last position
+               if (currentPosition < lastPosition && (lastPosition - currentPosition) > 1000) {
+                   // Position reset detected, add the last position to cumulative time
+                   cumulativeTime += lastPosition;
+                   playbae_dprintf("Loop detected: added %u ms to cumulative time, now %u ms\n", lastPosition, cumulativeTime);
+               }
+               lastPosition = currentPosition;
+               
+               // Use cumulative time + current position for display and time limit check
+               uint32_t totalPlayedTime = cumulativeTime + currentPosition;
+               displayCurrentPosition(currentPosition, totalPlayedTime);
+               
                if (timeLimit > 0) {
-                  if (currentPosition > (timeLimit * 1000) - 750) {
+                  if (totalPlayedTime > (timeLimit * 1000) - 750) {
                         BAESong_Stop(theSong, fadeOut);
                   }
                }
