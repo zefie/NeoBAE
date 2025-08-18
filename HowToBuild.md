@@ -2,22 +2,20 @@
 All compilation was tested on **Debian Linux 11 (Buster) amd64**
 Package names and commands may vary if using a different OS.
 
-#### Setup & Compile Linux 32-bit SDL2
-- Install i386 support (one time):
-    - `dpkg --add-architecture i386`
+#### Setup & Compile Linux SDL2
+- Install dependancies support (one time):
     - `apt-get update`
-    - `apt-get install libc6-dev-x32 libsdl2-dev:i386`
+    - `apt-get install libc6-dev libsdl2-dev`
 - Build playbae
     - `cd minibae`
     - `make clean all`
 - Using Build:
     - Run `./bin/playbae -h` for information on usage
 
-#### Setup & Compile Linux 32-bit SDL2 with clang
-- Install i386 support (one time):
-    - `dpkg --add-architecture i386`
+#### Setup & Compile Linux SDL2 with clang
+- Install dependancies support (one time):
     - `apt-get update`
-    - `apt-get install libc6-dev-x32 clang libsdl2-dev:i386`
+    - `apt-get install libc6-dev clang libsdl2-dev`
 - Build playbae
     - `cd minibae`
     - `make -f Makefile.clang clean all`
@@ -27,7 +25,7 @@ Package names and commands may vary if using a different OS.
 #### Setup & Compile Win32 mingw build
 - Install mingw32 (one time):
     - `apt-get update`
-    - `apt-get install binutils-mingw-w64-i686 g++-mingw-w64-i686 g++-mingw-w64-i686-posix g++-mingw-w64-i686-win32 gcc-mingw-w64-base gcc-mingw-w64-i686 gcc-mingw-w64-i686-posix gcc-mingw-w64-i686-posix-runtime gcc-mingw-w64-i686-win32 gcc-mingw-w64-i686-win32-runtime mingw-w64-common mingw-w64-i686-dev`
+    - `apt-get install binutils-mingw-w64-x86_64 g++-mingw-w64-x86_64 g++-mingw-w64-x86_64-posix g++-mingw-w64-x86_64-win32 gcc-mingw-w64-base gcc-mingw-w64-x86_64 gcc-mingw-w64-x86_64-posix gcc-mingw-w64-x86_64-posix-runtime gcc-mingw-w64-x86_64-win32 gcc-mingw-w64-x86_64-win32-runtime mingw-w64-common mingw-w64-x86_64-dev`
 - Build playbae
     - `cd minibae/Tools/playbae`
     - For DirectSound support:
@@ -37,6 +35,18 @@ Package names and commands may vary if using a different OS.
 - Using Build:
     - Copy `./bin/playbae.exe` to a Windows system
     - Run `playbae.exe -h` for information on usage
+
+#### Setup & Compile Prototype GUI
+- If mingw32, all deps are already provided, you can just skip to build
+- Linux: Install dependancies:
+    - apt-get update
+    - apt-get install libsdl2-dev libsdl2-ttf-dev
+- Build GUI
+    - Linux: `make -f Makefile.gui clean all`
+    - MingW: `make -f Makefile.gui-mingw clean all`
+- Using Build:
+    - Copy `./bin/minibae_gui.exe` to a Windows system
+    - Run `minibae_gui.exe`, or drag a supported file over the exe
 
 #### Setup & Compile Emscripten WASM32 build (no sound card support)
 - Install emscripten (one time):
