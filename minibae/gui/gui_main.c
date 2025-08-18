@@ -2046,10 +2046,10 @@ int main(int argc, char *argv[]){
     // Preload settings BEFORE creating mixer so we can open with desired format
     bool ch_enable[16]; for(int i=0;i<16;i++) ch_enable[i]=true; // need early for recreate helper fallback
     int transpose = 0; int tempo = 100; int volume=75; bool loopPlay=true; bool loudMode=true; (void)loudMode;
-    int reverbLvl=15, chorusLvl=15; (void)reverbLvl; (void)chorusLvl; int progress=0; int duration=0; bool playing=false; int reverbType=0; // default reverb index set to 0
+    int reverbLvl=15, chorusLvl=15; (void)reverbLvl; (void)chorusLvl; int progress=0; int duration=0; bool playing=false; int reverbType=7;
     
     Settings settings = load_settings();
-    if (settings.has_reverb) { reverbType = settings.reverb_type; }
+    if (settings.has_reverb) { reverbType = settings.reverb_type; if(reverbType == 0) reverbType = 1; }
     if (settings.has_loop) { loopPlay = settings.loop_enabled; }
     if (settings.has_volume_curve) { g_volume_curve = (settings.volume_curve>=0 && settings.volume_curve<=4)?settings.volume_curve:0; }
     if (settings.has_stereo) { g_stereo_output = settings.stereo_output; }
@@ -2354,9 +2354,12 @@ int main(int argc, char *argv[]){
 
         // Reverb controls
         draw_text(R,690, 25, "Reverb:", labelCol);
-        static const char *reverbNames[] = {"Default","None","Igor's Closet","Igor's Garage","Igor's Acoustic Lab","Igor's Cavern","Igor's Dungeon","Small reflections","Early reflections","Basement","Banquet Hall","Catacombs"};
-        int reverbCount = (int)(sizeof(reverbNames)/sizeof(reverbNames[0]));
-        if(reverbCount > BAE_REVERB_TYPE_COUNT) reverbCount = BAE_REVERB_TYPE_COUNT;
+    // Removed non-functional 'No Change' option; first entry now 'Default' (engine type 0)
+    // Removed engine reverb index 0 (NO_CHANGE). UI list now maps i -> engine index (i+1)
+    static const char *reverbNames[] = {"None","Igor's Closet","Igor's Garage","Igor's Acoustic Lab","Igor's Cavern","Igor's Dungeon","Small Reflections","Early Reflections","Basement","Banquet Hall","Catacombs"};
+    int reverbCount = (int)(sizeof(reverbNames)/sizeof(reverbNames[0]));
+    // Limit by (BAE_REVERB_TYPE_COUNT - 1) because we've removed NO_CHANGE entry
+    if(reverbCount > (BAE_REVERB_TYPE_COUNT - 1)) reverbCount = (BAE_REVERB_TYPE_COUNT - 1);
         Rect ddRect = {690,40,160,24}; // Moved up 20 pixels from y=60 to y=40
     // Closed dropdown: use theme globals
     SDL_Color dd_bg = g_button_base;
@@ -2366,7 +2369,7 @@ int main(int argc, char *argv[]){
     if(overMain) dd_bg = g_button_hover;
     draw_rect(R, ddRect, dd_bg);
     draw_frame(R, ddRect, dd_frame);
-    const char *cur = (reverbType>=0 && reverbType < reverbCount) ? reverbNames[reverbType] : "?";
+    const char *cur = (reverbType>=1 && reverbType <= reverbCount) ? reverbNames[reverbType-1] : "?";
     draw_text(R, ddRect.x+6, ddRect.y+6, cur, dd_txt);
     draw_text(R, ddRect.x + ddRect.w - 16, ddRect.y+6, g_reverbDropdownOpen?"^":"v", dd_txt);
     if(overMain && ui_mclick){ g_reverbDropdownOpen = !g_reverbDropdownOpen; }
@@ -2428,9 +2431,9 @@ int main(int argc, char *argv[]){
     int pbuf_x = 680;
     // Clickable region just around current time text
     Rect progressRect = {pbuf_x, time_y, pbuf_w, pbuf_h>0?pbuf_h:16};
-    bool progressHover = point_in(ui_mx,ui_my,progressRect);
-    if(progressHover && ui_mclick){ progress = 0; bae_seek_ms(0); }
-    // Use highlight color on hover (requested change from accent)
+    bool progressInteract = !g_reverbDropdownOpen;
+    bool progressHover = progressInteract && point_in(ui_mx,ui_my,progressRect);
+    if(progressInteract && progressHover && ui_mclick){ progress = 0; bae_seek_ms(0); }
     SDL_Color progressColor = progressHover ? g_highlight_color : labelCol;
     draw_text(R,pbuf_x, time_y, pbuf, progressColor);
     int slash_x = pbuf_x + pbuf_w + 6; // gap
@@ -2663,14 +2666,16 @@ int main(int argc, char *argv[]){
         Rect settingsBtn = { statusPanel.x + statusPanel.w - pad - btnW,
                              statusPanel.y + statusPanel.h - pad - btnH,
                              btnW, btnH };
-        bool overSettings = point_in(ui_mx,ui_my,settingsBtn);
-        SDL_Color sbg = overSettings ? g_button_hover : g_button_base;
-        if(g_show_settings_dialog) sbg = g_button_base;
+    bool settingsEnabled = !g_reverbDropdownOpen;
+    bool overSettings = settingsEnabled && point_in(ui_mx,ui_my,settingsBtn);
+    SDL_Color sbg = settingsEnabled ? (overSettings ? g_button_hover : g_button_base) : g_button_base;
+    if(!settingsEnabled){ sbg.a = 180; }
+    if(g_show_settings_dialog) sbg = g_button_base;
         draw_rect(R, settingsBtn, sbg);
         draw_frame(R, settingsBtn, g_button_border);
         int tw=0,th=0; measure_text("Settings", &tw,&th);
         draw_text(R, settingsBtn.x + (settingsBtn.w - tw)/2, settingsBtn.y + (settingsBtn.h - th)/2, "Settings", g_button_text);
-        if(!modal_block && ui_mclick && overSettings){
+    if(settingsEnabled && !modal_block && ui_mclick && overSettings){
             g_show_settings_dialog = !g_show_settings_dialog;
             if(g_show_settings_dialog){
                 g_volumeCurveDropdownOpen = false; g_show_rmf_info_dialog = false;
@@ -2696,9 +2701,9 @@ int main(int argc, char *argv[]){
 
         // Render dropdown list on top of everything else if open
         if(g_reverbDropdownOpen) {
-            static const char *reverbNames[] = {"Default","None","Igor's Closet","Igor's Garage","Igor's Acoustic Lab","Igor's Cavern","Igor's Dungeon","Small Reflections","Early Reflections","Basement","Banquet Hall","Catacombs"};
+            static const char *reverbNames[] = {"None","Igor's Closet","Igor's Garage","Igor's Acoustic Lab","Igor's Cavern","Igor's Dungeon","Small Reflections","Early Reflections","Basement","Banquet Hall","Catacombs"};
             int reverbCount = (int)(sizeof(reverbNames)/sizeof(reverbNames[0]));
-            if(reverbCount > BAE_REVERB_TYPE_COUNT) reverbCount = BAE_REVERB_TYPE_COUNT;
+            if(reverbCount > (BAE_REVERB_TYPE_COUNT - 1)) reverbCount = (BAE_REVERB_TYPE_COUNT - 1);
             Rect ddRect = {690,40,160,24}; // Moved up 20 pixels from y=60 to y=40
             
             // Draw the dropdown list using theme globals
@@ -2711,7 +2716,7 @@ int main(int argc, char *argv[]){
             for(int i=0; i<reverbCount; i++){
                 Rect ir = {box.x, box.y + i*itemH, box.w, itemH};
                 bool over = point_in(mx,my,ir);
-                SDL_Color ibg = (i==reverbType) ? g_highlight_color : g_panel_bg;
+                SDL_Color ibg = ((i+1)==reverbType) ? g_highlight_color : g_panel_bg;
                 if(over) ibg = g_button_hover;
                 draw_rect(R, ir, ibg);
                 if(i < reverbCount-1) { // separator line
@@ -2721,11 +2726,11 @@ int main(int argc, char *argv[]){
                 }
                 // Choose text color: use button text on selected/hover, otherwise normal text
                 SDL_Color itemTxt = g_text_color;
-                if(i == reverbType) itemTxt = g_button_text;
+                if((i+1) == reverbType) itemTxt = g_button_text;
                 if(over) itemTxt = g_button_text;
                 draw_text(R, ir.x+6, ir.y+6, reverbNames[i], itemTxt);
                 if(over && mclick){ 
-                    reverbType = i; 
+                    reverbType = i + 1; 
                     g_reverbDropdownOpen = false; 
                     bae_set_reverb(reverbType);
                     // Save settings when reverb is changed
@@ -2886,14 +2891,15 @@ int main(int argc, char *argv[]){
                 }
                 int vw=0,vh=0; measure_text(ver,&vw,&vh);
                 Rect verRect = { dlg.x + pad, lineVerY, vw, vh>0?vh:14 };
-                bool overVer = point_in(mx,my,verRect);
+                bool dropdownActive = g_sampleRateDropdownOpen || g_volumeCurveDropdownOpen;
+                bool overVer = !dropdownActive && point_in(mx,my,verRect);
                 SDL_Color verColor = overVer ? g_accent_color : help;
                 draw_text(R, verRect.x, verRect.y, ver, verColor);
-                if(overVer){
+                if(overVer && !dropdownActive){
                     SDL_SetRenderDrawColor(R, verColor.r, verColor.g, verColor.b, verColor.a);
                     SDL_RenderDrawLine(R, verRect.x, verRect.y + verRect.h - 2, verRect.x + verRect.w, verRect.y + verRect.h - 2);
                 }
-                if(mclick && overVer){
+                if(mclick && overVer && !dropdownActive){
                     const char *raw = _VERSION;
                     char url[256]; url[0]='\0';
                     if(strncmp(raw,"git-",4)==0){
