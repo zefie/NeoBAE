@@ -218,6 +218,8 @@ const char *BAE_GetCurrentCPUArchitecture() { // Get current architecture, detec
     // Append suffix at compile time without allocating new memory.
     #if (X_PLATFORM == X_SDL2)
         #define BAE_SDL_SUFFIX "-SDL2"
+    #elif (X_PLATFORM == X_WIN95)
+        #define BAE_SDL_SUFFIX "-DirectSound"        
     #else
         #define BAE_SDL_SUFFIX ""
     #endif
