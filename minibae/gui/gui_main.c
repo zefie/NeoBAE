@@ -42,6 +42,10 @@ static TTF_Font *g_font = NULL;
 #endif
 #include "bankinfo.h" // embedded bank metadata
 
+// Forward declarations for internal types used in meta callback to avoid including heavy internal headers
+struct GM_Song; // opaque
+typedef short XSWORD; // 16-bit signed used by engine for track index
+
 // Embedded SVG for settings gear icon (original file: settings-gear.svg)
 // Converted to single-line C string for static inclusion so app has no runtime file dependency.
 // Theme globals (used by widgets to pick colors for light/dark modes)
@@ -267,7 +271,8 @@ static BankEntry banks[32]; // Static array for simplicity
 static int bank_count = 0;
 
 #define WINDOW_W 900
-#define WINDOW_H 360
+#define WINDOW_BASE_H 360
+static int g_window_h = WINDOW_BASE_H; // dynamic height (expands when karaoke visible)
 
 static void load_bankinfo() {
     // Replaced XML parsing with embedded metadata from bankinfo.h
@@ -687,6 +692,172 @@ typedef struct {
 
 static BAEGUI g_bae = {0};
 static bool g_reverbDropdownOpen = false;
+#ifdef SUPPORT_KARAOKE
+// Karaoke / lyric display state
+static bool g_karaoke_enabled = true; // simple always-on toggle (future: UI setting)
+typedef struct { uint32_t time_us; char text[128]; } LyricEvent;
+#define KARAOKE_MAX_LINES 256
+static LyricEvent g_lyric_events[KARAOKE_MAX_LINES];
+static int g_lyric_count = 0; // total valid events captured this song
+static int g_lyric_cursor = 0; // current line index (last displayed/current)
+static SDL_mutex *g_lyric_mutex = NULL; // protect event array from audio callback thread
+static char g_lyric_accumulate[256]; // accumulate partial words until newline (if needed)
+// Track display lines similar to BXPlayer logic
+static char g_karaoke_line_current[256];
+static char g_karaoke_line_previous[256];
+static bool g_karaoke_have_meta_lyrics = false; // whether lyric meta events (0x05) encountered
+static char g_karaoke_last_fragment[128]; // last raw fragment to detect cumulative vs per-word
+static bool g_karaoke_suspended = false; // suspend (e.g., during export)
+
+// Forward declaration (defined later) so helpers can call it
+static void karaoke_commit_line(uint32_t time_us, const char *line);
+
+// Helper: commit previous line and shift current -> previous (newline behavior)
+static void karaoke_newline(uint32_t t_us){
+    // Finish the current line: commit it, shift to previous display line, clear current.
+    if(g_karaoke_line_current[0]){
+        karaoke_commit_line(t_us, g_karaoke_line_current);
+        strncpy(g_karaoke_line_previous, g_karaoke_line_current, sizeof(g_karaoke_line_previous)-1);
+        g_karaoke_line_previous[sizeof(g_karaoke_line_previous)-1]='\0';
+        g_karaoke_line_current[0]='\0';
+    }
+    g_karaoke_last_fragment[0]='\0';
+}
+
+// Helper: add a lyric fragment (without any '/' or newline indicators)
+static void karaoke_add_fragment(const char *frag){
+    if(!frag || !frag[0]) return;
+    size_t fragLen = strlen(frag);
+    size_t lastLen = strlen(g_karaoke_last_fragment);
+    bool cumulativeExtension = (lastLen>0 && fragLen>lastLen && strncmp(frag, g_karaoke_last_fragment, lastLen)==0);
+    if(cumulativeExtension){
+        // Replace with growing cumulative substring
+        strncpy(g_karaoke_line_current, frag, sizeof(g_karaoke_line_current)-1);
+        g_karaoke_line_current[sizeof(g_karaoke_line_current)-1]='\0';
+    } else {
+        // Append raw fragment (no added spaces)
+        strncat(g_karaoke_line_current, frag, sizeof(g_karaoke_line_current)-strlen(g_karaoke_line_current)-1);
+    }
+    strncpy(g_karaoke_last_fragment, frag, sizeof(g_karaoke_last_fragment)-1);
+    g_karaoke_last_fragment[sizeof(g_karaoke_last_fragment)-1]='\0';
+}
+
+// Reset lyric storage when loading / stopping song
+static void karaoke_reset(){
+    if(!g_lyric_mutex){ g_lyric_mutex = SDL_CreateMutex(); }
+    if(g_lyric_mutex) SDL_LockMutex(g_lyric_mutex);
+    g_lyric_count = 0; g_lyric_cursor = 0; g_lyric_accumulate[0]='\0';
+    g_karaoke_line_current[0]='\0';
+    g_karaoke_line_previous[0]='\0';
+    g_karaoke_have_meta_lyrics = false;
+    g_karaoke_last_fragment[0]='\0';
+    if(g_lyric_mutex) SDL_UnlockMutex(g_lyric_mutex);
+}
+
+// Commit a completed lyric line into event array with given timestamp
+static void karaoke_commit_line(uint32_t time_us, const char *line){
+    if(!line || !*line) return; // ignore empty
+    if(!g_karaoke_enabled) return;
+    if(!g_lyric_mutex){ g_lyric_mutex = SDL_CreateMutex(); }
+    if(g_lyric_mutex) SDL_LockMutex(g_lyric_mutex);
+    if(g_lyric_count < KARAOKE_MAX_LINES){
+        LyricEvent *ev = &g_lyric_events[g_lyric_count++];
+        ev->time_us = time_us;
+        // Trim leading/trailing whitespace
+        while(*line && isspace((unsigned char)*line)) line++;
+        size_t len = strlen(line);
+        while(len>0 && isspace((unsigned char)line[len-1])) len--;
+        if(len >= sizeof(ev->text)) len = sizeof(ev->text)-1;
+        memcpy(ev->text, line, len); ev->text[len]='\0';
+    }
+    if(g_lyric_mutex) SDL_UnlockMutex(g_lyric_mutex);
+}
+
+// Meta event callback from engine (lyrics arrive here)
+// Legacy meta event callback path retained (if lyric callback not available). Filtered to lyric events only.
+static void gui_meta_event_callback(void *threadContext, struct GM_Song *pSong, char markerType, void *pMetaText, int32_t metaTextLength, XSWORD currentTrack){
+    (void)threadContext; (void)pSong; (void)currentTrack; (void)metaTextLength;
+    if(!pMetaText) return;
+    if(g_karaoke_suspended) return; // ignore while suspended
+    const char *text = (const char*)pMetaText;
+    if(markerType == 0x05){ g_karaoke_have_meta_lyrics = true; }
+    // Reset trigger: GenericText starting with '@'
+    if(markerType == 0x01 && text[0]=='@'){
+        if(g_lyric_mutex) SDL_LockMutex(g_lyric_mutex);
+        g_karaoke_line_current[0]='\0'; g_karaoke_line_previous[0]='\0';
+        g_lyric_count = 0; g_lyric_cursor = 0; g_lyric_accumulate[0]='\0';
+        if(g_lyric_mutex) SDL_UnlockMutex(g_lyric_mutex);
+        return;
+    }
+    // Treat GenericText (0x01) as lyrics only if no Lyric meta events have appeared yet
+    if(markerType != 0x05){
+        if(!(markerType == 0x01 && !g_karaoke_have_meta_lyrics)) return;
+    }
+    uint32_t pos_us = 0; if(g_bae.song) BAESong_GetMicrosecondPosition(g_bae.song,&pos_us); else BAEMixer_GetTick(g_bae.mixer,&pos_us);
+    if(g_lyric_mutex) SDL_LockMutex(g_lyric_mutex);
+    if(text[0]=='\0'){
+        karaoke_newline(pos_us);
+        if(g_lyric_mutex) SDL_UnlockMutex(g_lyric_mutex);
+        return;
+    }
+    // Process '/' or '\\' as explicit newline delimiters
+    const char *p = text; const char *segStart = p;
+    while(1){
+    if(*p=='/' || *p=='\\' || *p=='\0'){
+            size_t len = (size_t)(p - segStart);
+            if(len > 0){
+                char segment[192];
+                if(len >= sizeof(segment)) len = sizeof(segment)-1;
+                memcpy(segment, segStart, len); segment[len]='\0';
+                karaoke_add_fragment(segment);
+            }
+            if(*p=='/' || *p=='\\'){
+                karaoke_newline(pos_us);
+                p++; segStart = p; continue;
+            } else {
+                break;
+            }
+        }
+        p++;
+    }
+    if(g_lyric_mutex) SDL_UnlockMutex(g_lyric_mutex);
+}
+
+// Dedicated lyric callback (new API) – separate to avoid GCC nested function non-portability
+static void gui_lyric_callback(struct GM_Song *songPtr, const char *lyric, uint32_t t_us, void *ref){
+    (void)songPtr; (void)ref;
+    if(!lyric) return;
+    if(g_karaoke_suspended){ if(g_lyric_mutex) SDL_UnlockMutex(g_lyric_mutex); return; }
+    // Use same logic as meta variant for lyric events (engine passes only Lyric meta)
+    if(g_lyric_mutex) SDL_LockMutex(g_lyric_mutex);
+    if(lyric[0]=='\0'){
+        karaoke_newline(t_us);
+        if(g_lyric_mutex) SDL_UnlockMutex(g_lyric_mutex);
+        return;
+    }
+    const char *p2 = lyric; const char *segStart2 = p2;
+    while(1){
+        if(*p2=='/' || *p2=='\\' || *p2=='\0'){
+            size_t len = (size_t)(p2 - segStart2);
+            if(len > 0){
+                char segment[192];
+                if(len >= sizeof(segment)) len = sizeof(segment)-1;
+                memcpy(segment, segStart2, len); segment[len]='\0';
+                karaoke_add_fragment(segment);
+            }
+            if(*p2=='/' || *p2=='\\'){
+                karaoke_newline(t_us);
+                p2++; segStart2 = p2; continue;
+            } else {
+                break;
+            }
+        }
+        p2++;
+    }
+    if(g_lyric_mutex) SDL_UnlockMutex(g_lyric_mutex);
+}
+#endif
+
 // RMF info dialog state
 static bool g_show_rmf_info_dialog = false;     // visible flag
 static bool g_rmf_info_loaded = false;          // have we populated fields for current file
@@ -993,6 +1164,7 @@ static bool bae_start_wav_export(const char* output_file) {
     }
     
     g_exporting = true;
+    g_karaoke_suspended = true; // disable karaoke during export
     g_export_progress = 0; // reset (unused for display)
     g_export_last_pos = 0;
     g_export_stall_iters = 0;
@@ -1048,7 +1220,8 @@ static void bae_stop_wav_export() {
         // Mark UI needs sync (local 'playing' variable)
         // We'll sync just after frame logic by checking mismatch
         
-        g_exporting = false;
+    g_exporting = false;
+    g_karaoke_suspended = false; // re-enable karaoke after export
     g_export_progress = 0;
     g_export_path[0] = '\0';
         set_status_message("WAV export completed");
@@ -1491,6 +1664,18 @@ static bool bae_load_song(const char* path){
     BAESong_GetMicrosecondLength(g_bae.song,&g_bae.song_length_us);
     strncpy(g_bae.loaded_path,path,sizeof(g_bae.loaded_path)-1); g_bae.loaded_path[sizeof(g_bae.loaded_path)-1]='\0';
     g_bae.song_loaded=true; g_bae.is_audio_file=false; // is_rmf_file already set
+#ifdef SUPPORT_KARAOKE
+    // Prepare karaoke capture
+    karaoke_reset();
+    if(g_karaoke_enabled && g_bae.song){
+    // Prefer dedicated lyric callback if engine supports it
+    extern BAEResult BAESong_SetLyricCallback(BAESong song, GM_SongLyricCallbackProcPtr pCallback, void *callbackReference);
+    if(BAESong_SetLyricCallback(g_bae.song, gui_lyric_callback, NULL) != BAE_NO_ERROR){
+            // Fallback to meta event callback if lyric callback unsupported
+            BAESong_SetMetaEventCallback(g_bae.song, gui_meta_event_callback, NULL);
+        }
+    }
+#endif
     const char *base=path; for(const char *p=path; *p; ++p){ if(*p=='/'||*p=='\\') base=p+1; }
     char msg[128]; snprintf(msg,sizeof(msg),"Loaded: %s", base); set_status_message(msg); return true;
 }
@@ -1877,7 +2062,7 @@ int main(int argc, char *argv[]){
     
     if(!g_bae.bank_loaded){ BAE_PRINTF("WARNING: No patch bank loaded. Place patches.hsb next to executable or use built-in patches.\n"); }
 
-    SDL_Window *win = SDL_CreateWindow("miniBAE Player (Prototype)", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, WINDOW_W, WINDOW_H, SDL_WINDOW_SHOWN);
+    SDL_Window *win = SDL_CreateWindow("miniBAE Player (Prototype)", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, WINDOW_W, g_window_h, SDL_WINDOW_SHOWN);
     setWindowTitle(win);
     setWindowIcon(win);
     if(!win){ BAE_PRINTF("Window failed: %s\n", SDL_GetError()); SDL_Quit(); return 1; }
@@ -2089,8 +2274,23 @@ int main(int argc, char *argv[]){
         Rect channelPanel = {10, 10, 380, 140};
         Rect controlPanel = {400, 10, 490, 140};
         Rect transportPanel = {10, 160, 880, 80};
-        Rect statusPanel = {10, 250, 880, 100};
-        
+#ifdef SUPPORT_KARAOKE
+    // Insert karaoke panel (if active) above status panel; dynamic window height
+    int karaokePanelHeight = 40;
+    bool showKaraoke = g_karaoke_enabled && !g_karaoke_suspended && g_lyric_count > 0 && g_bae.song_loaded && !g_bae.is_audio_file;
+    Rect karaokePanel = {10, 250, 880, karaokePanelHeight};
+    int statusY = 250;
+    int neededH = WINDOW_BASE_H;
+    if(showKaraoke){
+        statusY = karaokePanel.y + karaokePanelHeight + 5;
+        neededH = statusY + 110; // status panel + some bottom padding
+    }
+    if(neededH != g_window_h){
+        g_window_h = neededH;
+        SDL_SetWindowSize(win, WINDOW_W, g_window_h);
+    }
+    Rect statusPanel = {10, statusY, 880, 100};
+#endif        
         // Channel panel
         draw_rect(R, channelPanel, panelBg);
         draw_frame(R, channelPanel, panelBorder);
@@ -2291,14 +2491,57 @@ int main(int argc, char *argv[]){
                 }
             }
         }
-
+#ifdef SUPPORT_KARAOKE
+        // Karaoke panel rendering (two lines: current + next)
+        if(showKaraoke){
+            draw_rect(R, karaokePanel, panelBg);
+            draw_frame(R, karaokePanel, panelBorder);
+            if(g_lyric_mutex) SDL_LockMutex(g_lyric_mutex);
+            const char *current = g_karaoke_line_current;
+            const char *previous = g_karaoke_line_previous;
+            const char *lastFrag = g_karaoke_last_fragment;
+            int cw=0,ch=0,pw=0,ph=0; measure_text(current,&cw,&ch); measure_text(previous,&pw,&ph);
+            int prevY = karaokePanel.y + 4;
+            int curY = karaokePanel.y + karaokePanel.h/2;
+            int prevX = karaokePanel.x + (karaokePanel.w - pw)/2;
+            int curX = karaokePanel.x + (karaokePanel.w - cw)/2;
+            SDL_Color prevCol = g_text_color; prevCol.a = 180;
+            draw_text(R, prevX, prevY, previous, prevCol);
+            // Draw current line with only latest fragment highlighted
+            if(current[0]){
+                size_t curLen = strlen(current);
+                size_t fragLen = lastFrag ? strlen(lastFrag) : 0;
+                bool suffixMatch = (fragLen>0 && fragLen <= curLen && strncmp(current + (curLen - fragLen), lastFrag, fragLen)==0);
+                if(suffixMatch && fragLen < curLen){
+                    size_t prefixLen = curLen - fragLen;
+                    if(prefixLen >= sizeof(g_karaoke_last_fragment)) prefixLen = sizeof(g_karaoke_last_fragment)-1; // reuse size cap
+                    char prefixBuf[256];
+                    if(prefixLen > sizeof(prefixBuf)-1) prefixLen = sizeof(prefixBuf)-1;
+                    memcpy(prefixBuf, current, prefixLen); prefixBuf[prefixLen]='\0';
+                    int prefixW=0,prefixH=0; measure_text(prefixBuf,&prefixW,&prefixH);
+                    // Draw prefix in normal text color
+                    draw_text(R, curX, curY, prefixBuf, g_text_color);
+                    // Draw fragment highlighted
+                    draw_text(R, curX + prefixW, curY, lastFrag, g_highlight_color);
+                } else {
+                    // Fallback highlight whole line (e.g., cumulative extension or no fragment info)
+                    draw_text(R, curX, curY, current, g_highlight_color);
+                }
+            }
+            if(g_lyric_mutex) SDL_UnlockMutex(g_lyric_mutex);
+        }
+#endif
         // Status panel
-        draw_rect(R, statusPanel, panelBg);
-        draw_frame(R, statusPanel, panelBorder);
-        draw_text(R, 20, 260, "STATUS & BANK", headerCol);
+    draw_rect(R, statusPanel, panelBg);
+    draw_frame(R, statusPanel, panelBorder);
+    int statusBaseY = statusPanel.y + 10;
+    draw_text(R, 20, statusBaseY, "STATUS & BANK", headerCol);
+    int lineY1 = statusBaseY + 20;
+    int lineY2 = statusBaseY + 40;
+    int lineY3 = statusBaseY + 60;
         
-        // Current file
-        draw_text(R,20, 280, "File:", labelCol);
+    // Current file
+    draw_text(R,20, lineY1, "File:", labelCol);
             if(g_bae.song_loaded){ 
             // Show just filename, not full path
             const char *fn = g_bae.loaded_path;
@@ -2306,26 +2549,26 @@ int main(int argc, char *argv[]){
             for(const char *p=fn; *p; ++p){ 
                 if(*p=='/'||*p=='\\') base=p+1; 
             }
-            draw_text(R,60, 280, base, g_highlight_color); 
+            draw_text(R,60, lineY1, base, g_highlight_color); 
         } else {
             // muted text for empty file
             SDL_Color muted = g_is_dark_mode ? (SDL_Color){150,150,150,255} : (SDL_Color){120,120,120,255};
-            draw_text(R,60, 280, "<none>", muted); 
+            draw_text(R,60, lineY1, "<none>", muted); 
         }
         
         // Bank info with tooltip (friendly name shown, filename/path on hover)
-        draw_text(R,20, 300, "Bank:", labelCol);
+        draw_text(R,20, lineY2, "Bank:", labelCol);
         if (g_bae.bank_loaded) {
             const char *friendly_name = get_bank_friendly_name(g_bae.bank_name);
             const char *base = g_bae.bank_name; 
             for(const char *p = g_bae.bank_name; *p; ++p){ if(*p=='/'||*p=='\\') base=p+1; }
             const char *display_name = (friendly_name && friendly_name[0]) ? friendly_name : base;
             // Use user's accent color for bank display so light-mode accent is respected
-            draw_text(R,60, 300, display_name, g_highlight_color);
+            draw_text(R,60, lineY2, display_name, g_highlight_color);
             // Simple tooltip region (approx width based on char count * 8px mono font)
             int textLen = (int)strlen(display_name);
             int approxW = textLen * 8; if(approxW < 8) approxW = 8; if(approxW > 400) approxW = 400; // crude clamp
-            Rect bankTextRect = {60, 300, approxW, 16};
+            Rect bankTextRect = {60, lineY2, approxW, 16};
             if(point_in(ui_mx,ui_my,bankTextRect)){
                 // Tooltip background near cursor
                 char tip[512];
@@ -2341,7 +2584,7 @@ int main(int argc, char *argv[]){
                     int th = 16 + 6;
                     int tx = mx + 12; int ty = my + 12;
                     if(tx + tw > WINDOW_W - 4) tx = WINDOW_W - tw - 4;
-                    if(ty + th > WINDOW_H - 4) ty = WINDOW_H - th - 4;
+                    if(ty + th > g_window_h - 4) ty = g_window_h - th - 4;
                     Rect tipRect = {tx, ty, tw, th};
                             // Use theme-driven colors for tooltip so it adapts to light/dark modes
                             // Tooltip styling: use distinct bg (not same as panel) + small shadow for contrast
@@ -2369,11 +2612,11 @@ int main(int argc, char *argv[]){
         } else {
             // Muted text: slightly darker in light mode for better contrast on pale panels
             SDL_Color muted = g_is_dark_mode ? (SDL_Color){150,150,150,255} : (SDL_Color){80,80,80,255};
-            draw_text(R,60, 300, "<none>", muted);
+            draw_text(R,60, lineY2, "<none>", muted);
         }
         
     // Shifted right and slightly wider so it doesn't cover friendly bank info text
-    if(ui_button(R,(Rect){340,298,120,20}, "Load Bank...", ui_mx,ui_my,ui_mdown) && ui_mclick && !modal_block){
+    if(ui_button(R,(Rect){340,lineY2-2,120,20}, "Load Bank...", ui_mx,ui_my,ui_mdown) && ui_mclick && !modal_block){
             #ifdef _WIN32
             char fileBuf[1024]={0};
             OPENFILENAMEA ofn; ZeroMemory(&ofn,sizeof(ofn));
@@ -2410,7 +2653,7 @@ int main(int argc, char *argv[]){
 
     // Settings button now lives INSIDE the Status & Bank panel with 4px padding from that panel's border
     {
-        int pad = 4; // panel-relative padding
+    int pad = 4; // panel-relative padding
         int btnW = 90; int btnH = 30; // fixed size
         // Anchor to bottom-right corner of statusPanel instead of window
         Rect settingsBtn = { statusPanel.x + statusPanel.w - pad - btnW,
@@ -2435,16 +2678,16 @@ int main(int argc, char *argv[]){
     // Status indicator (use theme-safe highlight color for playing state)
     const char *status = playing ? "♪ Playing" : "⏸ Stopped";
     SDL_Color statusCol = playing ? g_highlight_color : g_header_color;
-        draw_text(R,20, 320, status, statusCol);
+        draw_text(R,20, lineY3, status, statusCol);
 
         // Show status message if recent (within 3 seconds)
         if(g_bae.status_message[0] != '\0' && (now - g_bae.status_message_time) < 3000) {
             // Use accent color for transient status messages so they stand out
-            draw_text(R,120, 320, g_bae.status_message, g_highlight_color);
+            draw_text(R,120, lineY3, g_bae.status_message, g_highlight_color);
         } else {
             // Muted fallback text that adapts to theme; darker on light backgrounds for readability
             SDL_Color muted = g_is_dark_mode ? (SDL_Color){150,150,150,255} : (SDL_Color){80,80,80,255};
-            draw_text(R,120, 320, "(Drag & drop media/bank files here)", muted);
+            draw_text(R,120, lineY3, "(Drag & drop media/bank files here)", muted);
         }
 
         // Render dropdown list on top of everything else if open
@@ -2498,7 +2741,7 @@ int main(int argc, char *argv[]){
         if(g_show_rmf_info_dialog && g_bae.is_rmf_file){
             // Dim entire background first (drawn before dialog contents)
             SDL_Color dim = g_is_dark_mode ? (SDL_Color){0,0,0,120} : (SDL_Color){0,0,0,90};
-            draw_rect(R,(Rect){0,0,WINDOW_W,WINDOW_H}, dim);
+            draw_rect(R,(Rect){0,0,WINDOW_W,g_window_h}, dim);
             rmf_info_load_if_needed();
             int pad=8; int dlgW=340; int lineH = 16; // line height for wrapped lines
             // Compute total wrapped lines across all non-empty fields
@@ -2556,9 +2799,9 @@ int main(int argc, char *argv[]){
         if(g_show_settings_dialog){
             // Dim background
             SDL_Color dim = g_is_dark_mode ? (SDL_Color){0,0,0,120} : (SDL_Color){0,0,0,90};
-            draw_rect(R,(Rect){0,0,WINDOW_W,WINDOW_H}, dim);
+            draw_rect(R,(Rect){0,0,WINDOW_W,g_window_h}, dim);
             int dlgW = 360; int dlgH = 200; int pad = 10; // +6 height so descenders (e.g., 'y') are not clipped
-            Rect dlg = { (WINDOW_W - dlgW)/2, (WINDOW_H - dlgH)/2, dlgW, dlgH };
+            Rect dlg = { (WINDOW_W - dlgW)/2, (g_window_h - dlgH)/2, dlgW, dlgH };
             SDL_Color dlgBg = g_panel_bg; dlgBg.a = 240;
             SDL_Color dlgFrame = g_panel_border;
             draw_rect(R, dlg, dlgBg);

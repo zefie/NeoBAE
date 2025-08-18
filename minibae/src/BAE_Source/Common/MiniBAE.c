@@ -7664,7 +7664,14 @@ static void PV_DefaultSongDoneCallback(void *threadContext, GM_Song *pSong, void
 static void PV_BAESong_SetMetaEventCallback(BAESong song, GM_SongMetaCallbackProcPtr pCallback, void *callbackReference) {
 	GM_SetSongMetaEventCallback(song->pSong, pCallback, callbackReference);
 }
-
+#ifdef SUPPORT_KARAOKE
+static void PV_BAESong_SetLyricCallback(BAESong song, GM_SongLyricCallbackProcPtr pCallback, void *callbackReference) {
+    if(song && song->pSong){
+        song->pSong->lyricCallbackPtr = pCallback;
+        song->pSong->lyricCallbackReference = callbackReference;
+    }
+}
+#endif
 BAEResult BAESong_SetMetaEventCallback(BAESong song, GM_SongMetaCallbackProcPtr pCallback, void *callbackReference)
 {
     OPErr       err;
@@ -7682,6 +7689,20 @@ BAEResult BAESong_SetMetaEventCallback(BAESong song, GM_SongMetaCallbackProcPtr 
     }
     return BAE_TranslateOPErr(err);
 }
+#ifdef SUPPORT_KARAOKE
+BAEResult BAESong_SetLyricCallback(BAESong song, GM_SongLyricCallbackProcPtr pCallback, void *callbackReference)
+{
+    OPErr err = NO_ERR;
+    if((song) && (song->mID == OBJECT_ID)){
+        BAE_AcquireMutex(song->mLock);
+        PV_BAESong_SetLyricCallback(song, pCallback, callbackReference);
+        BAE_ReleaseMutex(song->mLock);
+    } else {
+        err = NULL_OBJECT;
+    }
+    return BAE_TranslateOPErr(err);
+}
+#endif
 
 static void PV_BAESong_SetCallback(BAESong song, BAE_SongCallbackPtr pCallback, void *callbackReference)
 {

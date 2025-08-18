@@ -650,6 +650,8 @@ typedef void        (*GM_ControlerCallbackPtr)(void *threadContext, struct GM_So
 typedef void        (*GM_SongCallbackProcPtr)(void *threadContext, struct GM_Song *pSong, void *reference);
 typedef void        (*GM_SongTimeCallbackProcPtr)(void *threadContext, struct GM_Song *pSong, XDWORD currentMicroseconds, XDWORD currentMidiClock);
 typedef void        (*GM_SongMetaCallbackProcPtr)(void *threadContext, struct GM_Song *pSong, char markerType, void *pMetaText, int32_t metaTextLength, XSWORD currentTrack);
+// New lyric-specific callback providing precise song microsecond timestamp when lyric meta event (0x05) occurs
+typedef void        (*GM_SongLyricCallbackProcPtr)(struct GM_Song *pSong, const char *lyricText, uint32_t lyricTimeMicroseconds, void *reference);
 
 // mixer callbacks
 typedef void        (*GM_AudioTaskCallbackPtr)(void *threadContext, void *reference);
@@ -1092,6 +1094,9 @@ struct GM_Song
 
     GM_SongMetaCallbackProcPtr  metaEventCallbackPtr;   // called during playback with current meta events
     void                        *metaEventCallbackReference;    // changed to pointer for 64-bit safety
+    // Karaoke / lyric support (separate from generic meta callback so GUI can opt-in without parsing every meta event)
+    GM_SongLyricCallbackProcPtr lyricCallbackPtr;
+    void                        *lyricCallbackReference;
 
     // these pointers are NULL until used, then they are allocated
     GM_ControlCallbackPtr       controllerCallback;     // called during playback with controller info

@@ -1830,6 +1830,8 @@ BAEResult           BAESong_SetCallback(BAESong sound, BAE_SongCallbackPtr pCall
 BAEResult           BAESong_GetCallback(BAESong sound, BAE_SongCallbackPtr *pResult);
 
 BAEResult	    BAESong_SetMetaEventCallback(BAESong song, GM_SongMetaCallbackProcPtr  pCallback, void *callbackReference);
+// Register a dedicated lyric callback (fires only on LYRIC_TYPE meta 0x05) with microsecond timestamp.
+BAEResult        BAESong_SetLyricCallback(BAESong song, GM_SongLyricCallbackProcPtr pCallback, void *callbackReference);
 BAEResult           BAESong_GetControllerCallback(BAESong song, BAE_SongControllerCallbackPtr *pResult);
 BAEResult           BAESong_SetControllerCallback(BAESong song, BAE_SongControllerCallbackPtr pCallback, void *callbackReference, int16_t controller);
 

@@ -3378,6 +3378,16 @@ GetMIDIevent:
                         {
                             XDisposePtr((XPTR)allocated);
                         }
+                        // New dedicated lyric callback (fires only for lyric events) with precise microsecond time
+                        if(pSong->lyricCallbackPtr){
+                            uint32_t lyrTimeUs = (uint32_t)pSong->songMicroseconds; // songMicroseconds already maintained in microseconds
+                            // Ensure we pass a C string (cbPtr already NUL-terminated above)
+                            const char *lyricStr = (const char *)cbPtr;
+                            // Defensive: skip if empty
+                            if(lyricStr && lyricStr[0]){
+                                pSong->lyricCallbackPtr(pSong, lyricStr, lyrTimeUs, pSong->lyricCallbackReference);
+                            }
+                        }
                     }
 //                  BAE_PRINTF("lyric event: %s\n", (char *)cbPtr);
 		    goto SkipMeta;
