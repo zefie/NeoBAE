@@ -2901,7 +2901,7 @@ int main(int argc, char *argv[]){
                         char shortSha[64]; int i=0; while(sha[i] && sha[i] != '-' && i < (int)sizeof(shortSha)-1){ shortSha[i]=sha[i]; i++; } shortSha[i]='\0';
                         snprintf(url,sizeof(url),"https://github.com/zefie/miniBAE/commit/%s", shortSha);
                     } else {
-                        snprintf(url,sizeof(url),"https://github.com/zefie/miniBAE/tree/v%s", raw);
+                        snprintf(url,sizeof(url),"https://github.com/zefie/miniBAE/tree/%s", raw);
                     }
                     if(url[0]){
 #ifdef _WIN32
