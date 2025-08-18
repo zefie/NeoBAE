@@ -14,5 +14,5 @@ tests/
 
 local.properties
 .idea/
-
 .vscode/
+minibae/.vscode/
