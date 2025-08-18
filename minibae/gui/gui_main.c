@@ -697,8 +697,8 @@ static bool g_show_settings_dialog = false;
 static int  g_volume_curve = 0; // 0..4
 static bool g_volumeCurveDropdownOpen = false;
 static bool g_stereo_output = true; // checked == stereo (default on)
-// sample rate index removed (fixed 44100)
-// sample rate dropdown flag removed
+static int  g_sample_rate_hz = 44100;       // current selected sample rate
+static bool g_sampleRateDropdownOpen = false; // dropdown open state
 
 static const char* rmf_info_label(BAEInfoType t){
     switch(t){
@@ -795,7 +795,8 @@ typedef struct {
     int volume_curve;
     bool has_stereo;
     bool stereo_output;
-    /* sample rate removed */
+    bool has_sample_rate;
+    int sample_rate_hz;
 } Settings;
 
 static void save_settings(const char* last_bank_path, int reverb_type, bool loop_enabled) {
@@ -835,8 +836,9 @@ static void save_settings(const char* last_bank_path, int reverb_type, bool loop
         // New persisted UI settings (always write to simplify parsing)
         fprintf(f, "volume_curve=%d\n", g_volume_curve);
         fprintf(f, "stereo_output=%d\n", g_stereo_output ? 1 : 0);
-        BAE_PRINTF("Saved settings: last_bank=%s reverb=%d loop=%d volCurve=%d stereo=%d (fixed 44100)\n", 
-            path_to_save ? path_to_save : "", reverb_type, loop_enabled ? 1 : 0, g_volume_curve, g_stereo_output?1:0);
+        fprintf(f, "sample_rate=%d\n", g_sample_rate_hz);
+        BAE_PRINTF("Saved settings: last_bank=%s reverb=%d loop=%d volCurve=%d stereo=%d rate=%d\n", 
+            path_to_save ? path_to_save : "", reverb_type, loop_enabled ? 1 : 0, g_volume_curve, g_stereo_output?1:0, g_sample_rate_hz);
         fclose(f);
     } else {
         BAE_PRINTF("Failed to open %s for writing\n", settings_path);
@@ -855,8 +857,7 @@ static Settings load_settings() {
     settings.has_loop = false; settings.loop_enabled = true;
     settings.has_volume_curve = false; settings.volume_curve = 0;
     settings.has_stereo = false; settings.stereo_output = true;
-    /* sample rate fields removed */
-    /* sample rate removed */
+    settings.has_sample_rate = false; settings.sample_rate_hz = 44100;
     
     // Build path to settings file in executable directory
     char settings_path[768];
@@ -906,6 +907,11 @@ static Settings load_settings() {
             settings.stereo_output = (atoi(line + 14) != 0);
             settings.has_stereo = true;
             BAE_PRINTF("Loaded stereo output: %d\n", settings.stereo_output ? 1 : 0);
+        } else if (strncmp(line, "sample_rate=", 12) == 0) {
+            settings.sample_rate_hz = atoi(line + 12);
+            if(settings.sample_rate_hz < 7000 || settings.sample_rate_hz > 50000){ settings.sample_rate_hz = 44100; }
+            settings.has_sample_rate = true;
+            BAE_PRINTF("Loaded sample rate: %d\n", settings.sample_rate_hz);
         }
     }
     
@@ -945,10 +951,8 @@ static bool bae_start_wav_export(const char* output_file) {
         g_bae.is_playing = false;
     }
 
-    // Rewind to beginning and disable looping (do this BEFORE starting output)
+    // Rewind to beginning (export always starts from start)
     BAESong_SetMicrosecondPosition(g_bae.song, 0);
-    BAESong_SetLoops(g_bae.song, 0); // force disable loops regardless of GUI flag
-    BAE_PRINTF("Export: loops forced to 0 (pre-output)\n");
     
     // CORRECTED ORDER: Start export FIRST, then start song
     // This is the correct order based on working MBAnsi test code
@@ -968,15 +972,12 @@ static bool bae_start_wav_export(const char* output_file) {
     BAESong_Stop(g_bae.song, FALSE);
     BAESong_SetMicrosecondPosition(g_bae.song, 0);
     BAESong_Preroll(g_bae.song);
-    BAESong_SetLoops(g_bae.song, 0);
-    BAE_PRINTF("Export: loops forced to 0 (post-preroll, auto-start)\n");
     result = BAESong_Start(g_bae.song, 0);
     if (result != BAE_NO_ERROR) {
         BAE_PRINTF("Export: initial BAESong_Start failed (%d), retrying with re-preroll\n", result);
         BAESong_Stop(g_bae.song, FALSE);
         BAESong_SetMicrosecondPosition(g_bae.song, 0);
         BAESong_Preroll(g_bae.song);
-        BAESong_SetLoops(g_bae.song, 0);
         result = BAESong_Start(g_bae.song, 0);
         if(result != BAE_NO_ERROR){
             char msg[128];
@@ -1062,8 +1063,6 @@ static void bae_service_wav_export() {
     int max_iterations = 100; // Increased from 10 to 100 for much faster export
     
     for (int i = 0; i < max_iterations && g_exporting; ++i) {
-    // Extra safety: ensure loops remain disabled while exporting
-    if(g_bae.song){ BAESong_SetLoops(g_bae.song, 0); }
     BAEResult r = BAEMixer_ServiceAudioOutputToFile(g_bae.mixer);
         if (r != BAE_NO_ERROR) {
             char msg[128]; 
@@ -1151,21 +1150,38 @@ static void bae_service_wav_export() {
     }
 }
 
-// Initialize mixer at fixed 44100Hz
-static bool bae_init(int /*sampleRateHz_unused*/, bool stereo){
+// Map integer Hz to BAERate enum (subset offered in UI)
+static BAERate map_rate_from_hz(int hz){
+    switch(hz){
+        case 8000: return BAE_RATE_8K;
+        case 11025: return BAE_RATE_11K;
+        case 16000: return BAE_RATE_16K;
+        case 22050: return BAE_RATE_22K;
+        case 32000: return BAE_RATE_32K;
+        case 44100: return BAE_RATE_44K;
+        case 48000: return BAE_RATE_48K;
+        default: // choose closest
+            if(hz < 9600) return BAE_RATE_8K;
+            if(hz < 13500) return BAE_RATE_11K;
+            if(hz < 19000) return BAE_RATE_16K;
+            if(hz < 27000) return BAE_RATE_22K;
+            if(hz < 38000) return BAE_RATE_32K;
+            if(hz < 46000) return BAE_RATE_44K;
+            return BAE_RATE_48K;
+    }
+}
+
+// Initialize mixer at selected sample rate
+static bool bae_init(int sampleRateHz, bool stereo){
     g_bae.mixer = BAEMixer_New();
     if(!g_bae.mixer){ BAE_PRINTF("BAEMixer_New failed\n"); return false; }
-    BAERate rate = BAE_RATE_44K; // fixed 44100
+    BAERate rate = map_rate_from_hz(sampleRateHz);
     BAEAudioModifiers mods = BAE_USE_16 | (stereo? BAE_USE_STEREO:0);
     BAEResult r = BAEMixer_Open(g_bae.mixer, rate, BAE_LINEAR_INTERPOLATION, mods, 32, 8, 32, TRUE);
     if(r != BAE_NO_ERROR){ BAE_PRINTF("BAEMixer_Open failed %d\n", r); return false; }
     BAEMixer_SetAudioTask(g_bae.mixer, gui_audio_task, g_bae.mixer);
-    // Make sure audio is engaged (defensive)
-    BAEMixer_ReengageAudio(g_bae.mixer);
-    // Attempt default reverb
+    BAEMixer_ReengageAudio(g_bae.mixer); // ensure audio starts
     BAEMixer_SetDefaultReverb(g_bae.mixer, BAE_REVERB_NONE);
-    // Bank loaded later via load_bank() helper
-    // Set master volume to full
     BAEMixer_SetMasterVolume(g_bae.mixer, FLOAT_TO_UNSIGNED_FIXED(1.0));
     return true;
 }
@@ -1177,16 +1193,16 @@ static void bae_seek_ms(int ms);
 static int  bae_get_pos_ms(void);
 static bool bae_play(bool *playing);
 static void bae_apply_current_settings(int transpose, int tempo, int volume, bool loop_enabled, int reverb_type, bool ch_enable[16]);
-static bool recreate_mixer_and_restore(int /*sampleRateHz_unused*/, bool stereo, int reverbType,
+static bool recreate_mixer_and_restore(int sampleRateHz, bool stereo, int reverbType,
                                        int transpose, int tempo, int volume, bool loopPlay,
                                        bool ch_enable[16]);
 static bool load_bank(const char *path, bool current_playing_state, int transpose, int tempo, int volume, bool loop_enabled, int reverb_type, bool ch_enable[16], bool save_to_settings);
 static bool load_bank_simple(const char *path, bool save_to_settings, int reverb_type, bool loop_enabled);
 
-// map_rate_from_hz removed (fixed 44100Hz)
+// map_rate_from_hz provided above
 
 // Recreate mixer with new sample rate / stereo setting preserving current playback state where possible.
-static bool recreate_mixer_and_restore(int /*sampleRateHz_unused*/, bool stereo, int reverbType,
+static bool recreate_mixer_and_restore(int sampleRateHz, bool stereo, int reverbType,
                                        int transpose, int tempo, int volume, bool loopPlay,
                                        bool ch_enable[16]){
     if(g_exporting){
@@ -1214,7 +1230,7 @@ static bool recreate_mixer_and_restore(int /*sampleRateHz_unused*/, bool stereo,
     // Create new mixer
     g_bae.mixer = BAEMixer_New();
     if(!g_bae.mixer){ set_status_message("Mixer recreate failed"); return false; }
-    BAERate rate = BAE_RATE_44K; // fixed 44100
+    BAERate rate = map_rate_from_hz(sampleRateHz);
     BAEAudioModifiers mods = BAE_USE_16 | (stereo? BAE_USE_STEREO:0);
     BAEResult mr = BAEMixer_Open(g_bae.mixer, rate, BAE_LINEAR_INTERPOLATION, mods, 32, 8, 32, TRUE);
     if(mr != BAE_NO_ERROR){
@@ -1848,12 +1864,13 @@ int main(int argc, char *argv[]){
     if (settings.has_loop) { loopPlay = settings.loop_enabled; }
     if (settings.has_volume_curve) { g_volume_curve = (settings.volume_curve>=0 && settings.volume_curve<=4)?settings.volume_curve:0; }
     if (settings.has_stereo) { g_stereo_output = settings.stereo_output; }
+    if (settings.has_sample_rate) { g_sample_rate_hz = settings.sample_rate_hz; }
     // Apply stored default velocity (aka volume) curve to global engine setting so new songs adopt it
     if (settings.has_volume_curve) {
         BAE_SetDefaultVelocityCurve(g_volume_curve);
     }
-    if(!bae_init(44100, g_stereo_output)){ BAE_PRINTF("miniBAE init failed\n"); }
-    if(!bae_init(44100, g_stereo_output)){ BAE_PRINTF("miniBAE init failed\n"); }
+    if(!bae_init(g_sample_rate_hz, g_stereo_output)){ BAE_PRINTF("miniBAE init failed\n"); }
+    if(!bae_init(g_sample_rate_hz, g_stereo_output)){ BAE_PRINTF("miniBAE init failed (retry)\n"); }
 
     // Load bank database AFTER mixer so load_bank can succeed
     load_bankinfo();
@@ -2260,7 +2277,9 @@ int main(int argc, char *argv[]){
             if(ui_button(R,(Rect){320, 215, 110,22}, g_exporting ? "Exporting..." : "Export WAV", ui_mx,ui_my,ui_mdown) && ui_mclick && !g_exporting && !modal_block){
                 char *export_file = save_wav_dialog();
                 if(export_file) {
-                    bae_start_wav_export(export_file);
+                    if(!bae_start_wav_export(export_file)){
+                        // Failed (status already set); keep file chooser result for potential retry not needed
+                    }
                     free(export_file);
                 }
             }
@@ -2569,38 +2588,36 @@ int main(int argc, char *argv[]){
             draw_text(R, vcRect.x + vcRect.w - 16, vcRect.y + 6, g_volumeCurveDropdownOpen?"^":"v", dd_txt);
             if(point_in(mx,my,vcRect) && mclick){ g_volumeCurveDropdownOpen = !g_volumeCurveDropdownOpen; }
 
-            // Mono/Stereo checkbox
-            Rect cbRect = { dlg.x + pad, dlg.y + 72, 18, 18 };
+            // Sample Rate selector
+            draw_text(R, dlg.x + pad, dlg.y + 72, "Sample Rate:", g_text_color);
+            const int sampleRates[] = {8000,11025,16000,22050,32000,44100,48000};
+            const int sampleRateCount = (int)(sizeof(sampleRates)/sizeof(sampleRates[0]));
+            // Validate current selection belongs to list (snap to closest if not)
+            int curR = g_sample_rate_hz; int best = sampleRates[0]; int bestDiff = abs(curR - best); bool exact=false;
+            for(int i=0;i<sampleRateCount;i++){ if(sampleRates[i]==curR){ exact=true; break; } int d = abs(curR - sampleRates[i]); if(d < bestDiff){ bestDiff=d; best=sampleRates[i]; } }
+            if(!exact){ g_sample_rate_hz = best; }
+            char srLabel[32]; snprintf(srLabel,sizeof(srLabel),"%d Hz", g_sample_rate_hz);
+            Rect srRect = { dlg.x + dlg.w - 170, dlg.y + 68, 150, 24 };
+            SDL_Color sr_bg = g_button_base; if(point_in(mx,my,srRect)) sr_bg = g_button_hover;
+            draw_rect(R, srRect, sr_bg); draw_frame(R, srRect, g_button_border);
+            draw_text(R, srRect.x + 6, srRect.y + 6, srLabel, g_button_text);
+            draw_text(R, srRect.x + srRect.w - 16, srRect.y + 6, g_sampleRateDropdownOpen?"^":"v", g_button_text);
+            if(point_in(mx,my,srRect) && mclick){ g_sampleRateDropdownOpen = !g_sampleRateDropdownOpen; }
+
+            // Stereo checkbox now below sample rate selector
+            Rect cbRect = { dlg.x + pad, dlg.y + 108, 18, 18 };
             if(ui_toggle(R, cbRect, &g_stereo_output, "Stereo Output", mx,my,mclick)){
-                // Capture position & playing state before recreate
-                int prePosMs = bae_get_pos_ms();
-                bool wasPlayingBefore = g_bae.is_playing; // reflects actual engine state
-                if(recreate_mixer_and_restore(44100, g_stereo_output, reverbType, transpose, tempo, volume, loopPlay, ch_enable)){
-                    // After recreate, engine may have resumed playback; resync local progress/duration
-                    if(wasPlayingBefore){
-                        // Position already sought inside recreate; just query fresh value
-                        progress = bae_get_pos_ms();
-                        duration = bae_get_len_ms();
-                    } else {
-                        // If previously stopped, ensure we restore prior position without auto-start
-                        if(prePosMs > 0){
-                            bae_seek_ms(prePosMs);
-                            progress = prePosMs;
-                            duration = bae_get_len_ms();
-                        } else {
-                            progress = 0; duration = bae_get_len_ms();
-                        }
-                        playing = false; // keep stopped state in UI
+                int prePosMs = bae_get_pos_ms(); bool wasPlayingBefore = g_bae.is_playing;
+                if(recreate_mixer_and_restore(g_sample_rate_hz, g_stereo_output, reverbType, transpose, tempo, volume, loopPlay, ch_enable)){
+                    if(wasPlayingBefore){ progress = bae_get_pos_ms(); duration = bae_get_len_ms(); }
+                    else {
+                        if(prePosMs > 0){ bae_seek_ms(prePosMs); progress = prePosMs; duration = bae_get_len_ms(); }
+                        else { progress = 0; duration = bae_get_len_ms(); }
+                        playing=false;
                     }
                 }
                 save_settings(g_current_bank_path[0]?g_current_bank_path:NULL, reverbType, loopPlay);
             }
-
-            // Sample Rate controls removed (fixed 44100Hz)
-
-            // (volume curve dropdown list rendering moved after footer so it truly appears on top of footer text)
-
-            // (sample rate dropdown logic removed)
 
             // Footer help text + version
             SDL_Color help = g_is_dark_mode ? (SDL_Color){180,180,190,255} : (SDL_Color){80,80,80,255};
@@ -2644,7 +2661,41 @@ int main(int argc, char *argv[]){
                     }
                 }
             }
-            // Now render the volume curve dropdown list LAST so it layers over footer text
+            // Render dropdown lists LAST so they layer over footer text
+            if(g_sampleRateDropdownOpen){
+                int itemH = 24; // consistent with control height
+                Rect srRect = { dlg.x + dlg.w - 170, dlg.y + 68, 150, 24 }; // recompute (same as above)
+                int sampleRateCount = 7; const int sampleRates[7] = {8000,11025,16000,22050,32000,44100,48000};
+                Rect box = {srRect.x, srRect.y + srRect.h + 1, srRect.w, itemH * sampleRateCount};
+                SDL_Color ddBg = g_panel_bg; ddBg.a = 255; SDL_Color shadow = {0,0,0, g_is_dark_mode ? 120 : 90};
+                Rect shadowRect = {box.x + 2, box.y + 2, box.w, box.h};
+                draw_rect(R, shadowRect, shadow);
+                draw_rect(R, box, ddBg); draw_frame(R, box, g_panel_border);
+                for(int i=0;i<sampleRateCount;i++){
+                    Rect ir = {box.x, box.y + i*itemH, box.w, itemH}; bool over = point_in(mx,my,ir);
+                    int r = sampleRates[i]; bool selected = (r == g_sample_rate_hz);
+                    SDL_Color ibg = selected? g_highlight_color : g_panel_bg; if(over) ibg = g_button_hover;
+                    draw_rect(R, ir, ibg);
+                    if(i < sampleRateCount-1){ SDL_Color sep = g_panel_border; SDL_SetRenderDrawColor(R, sep.r, sep.g, sep.b, 255); SDL_RenderDrawLine(R, ir.x, ir.y+ir.h, ir.x+ir.w, ir.y+ir.h); }
+                    char txt[32]; snprintf(txt,sizeof(txt),"%d Hz", r);
+                    SDL_Color itxt = (selected||over)? g_button_text : g_text_color; draw_text(R, ir.x+6, ir.y+6, txt, itxt);
+                    if(over && mclick){
+                        bool changed = (g_sample_rate_hz != r);
+                        g_sample_rate_hz = r; g_sampleRateDropdownOpen=false;
+                        if(changed){
+                            int prePosMs = bae_get_pos_ms(); bool wasPlayingBefore = g_bae.is_playing;
+                            if(recreate_mixer_and_restore(g_sample_rate_hz, g_stereo_output, reverbType, transpose, tempo, volume, loopPlay, ch_enable)){
+                                if(wasPlayingBefore){ progress = bae_get_pos_ms(); duration = bae_get_len_ms(); }
+                                else if(prePosMs > 0){ bae_seek_ms(prePosMs); progress=prePosMs; duration=bae_get_len_ms(); playing=false; }
+                                else { progress=0; duration=bae_get_len_ms(); playing=false; }
+                                save_settings(g_current_bank_path[0]?g_current_bank_path:NULL, reverbType, loopPlay);
+                            }
+                        }
+                    }
+                }
+                if(mclick && !point_in(mx,my,srRect) && !point_in(mx,my,box)) g_sampleRateDropdownOpen=false;
+            }
+            // Volume curve dropdown (after sample rate list so each layers independently)
             if(g_volumeCurveDropdownOpen){
                 int itemH = vcRect.h; int totalH = itemH * vcCount; Rect box = {vcRect.x, vcRect.y + vcRect.h + 1, vcRect.w, totalH};
                 SDL_Color ddBg = g_panel_bg; ddBg.a = 255; 

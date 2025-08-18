@@ -49,28 +49,27 @@ static Uint8 *g_sliceStatic = NULL;
 static size_t g_sliceStaticSize = 0;
 
 static void PV_ComputeSliceSizeFromEngine(void) {
-    int16_t maxFrames44 = BAE_GetMaxSamplePerSlice();
-    BAE_PRINTF("BAE_GetMaxSamplePerSlice returned: %d\n", maxFrames44);
-    
-    if (maxFrames44 <= 0) {
-        BAE_PRINTF("maxFrames44 <= 0, using fallback value 512\n");
-        maxFrames44 = 512; // fallback
+    // Engine already returns the per-slice frame count for the CURRENT configured rate.
+    // Earlier code incorrectly tried to rescale this assuming a 44.1k baseline which
+    // caused buffer size mismatches and potential overruns at other rates.
+    int16_t maxFrames = BAE_GetMaxSamplePerSlice();
+    BAE_PRINTF("BAE_GetMaxSamplePerSlice returned (engine @ %u Hz): %d\n", g_sampleRate, maxFrames);
+
+    if (maxFrames <= 0) {
+        BAE_PRINTF("maxFrames <= 0, using fallback value 512\n");
+        maxFrames = 512; // fallback safeguard
     }
-    
-    // scale frames for current sample rate relative to 44100 baseline assumption
-    uint32_t frames = (uint32_t)maxFrames44;
-    if (g_sampleRate != 44100 && g_sampleRate > 0) {
-        frames = (uint32_t)(( (unsigned long long)frames * g_sampleRate + 22050) / 44100);
-        BAE_PRINTF("Scaled frames for %u Hz: %u -> %u\n", g_sampleRate, (uint32_t)maxFrames44, frames);
-    }
-    
-    if (frames < 64) frames = 64;
+
+    uint32_t frames = (uint32_t)maxFrames;
+    if (frames < 64) frames = 64; // sanity floor
     g_framesPerSlice = frames;
     g_audioByteBufferSize = (int32_t)(frames * g_channels * (g_bits/8));
+    // align to 64 bytes for SIMD/cache friendliness
     g_audioByteBufferSize = (g_audioByteBufferSize + 63) & ~63;
-    
-    BAE_PRINTF("Computed slice: %u frames, %ld bytes\n", g_framesPerSlice, g_audioByteBufferSize);
-    
+
+    BAE_PRINTF("Computed slice (no rescale): %u frames, %ld bytes (channels=%u bits=%u)\n",
+               g_framesPerSlice, g_audioByteBufferSize, g_channels, g_bits);
+
     if (g_sliceStaticSize < (size_t)g_audioByteBufferSize) {
         BAE_PRINTF("Reallocating slice buffer: %zu -> %ld bytes\n", g_sliceStaticSize, g_audioByteBufferSize);
         free(g_sliceStatic);
@@ -363,7 +362,7 @@ int BAE_AcquireAudioCard(void *threadContext, uint32_t sampleRate, uint32_t chan
         BAE_PRINTF("SDL audio subsystem initialized successfully\n");
     }
     g_sampleRate = sampleRate; g_channels = channels; g_bits = bits;
-    BAE_PRINTF("Computing slice size from engine...\n");
+    BAE_PRINTF("Computing provisional slice size from engine (pre SDL_OpenAudioDevice)...\n");
     PV_ComputeSliceSizeFromEngine();
     
     SDL_AudioSpec want; SDL_zero(want);
@@ -371,8 +370,11 @@ int BAE_AcquireAudioCard(void *threadContext, uint32_t sampleRate, uint32_t chan
     want.channels = (Uint8)channels;
     want.format = (bits==16)?AUDIO_S16SYS:AUDIO_U8;
     // request buffer roughly equal to one slice; SDL may choose different
-    want.samples = (Uint16) (g_framesPerSlice > 4096 ? 4096 : g_framesPerSlice);
-    if (want.samples < 256) want.samples = 256; // lower bound
+    // Request a device buffer roughly equal to one engine slice (capped) so callback cadence
+    // matches engine timing closely even at very low sample rates.
+    want.samples = (Uint16)(g_framesPerSlice > 4096 ? 4096 : g_framesPerSlice);
+    // Enforce a practical minimum of 64 frames (our slice floor); SDL can handle small sizes.
+    if (want.samples < 64) want.samples = 64;
     want.callback = audio_callback;
     want.userdata = threadContext;
     
@@ -385,9 +387,21 @@ int BAE_AcquireAudioCard(void *threadContext, uint32_t sampleRate, uint32_t chan
         return -1; 
     }
     
-    BAE_PRINTF("Audio device opened successfully, starting playback...\n");
+    BAE_PRINTF("Audio device opened successfully. SDL actual: %d Hz, %d ch, fmt 0x%x, dev buf %u frames\n",
+               g_have.freq, g_have.channels, g_have.format, g_have.samples);
+
+    // If SDL adjusted the frequency or channel count, update and recompute slice.
+    if ((uint32_t)g_have.freq != g_sampleRate || (uint32_t)g_have.channels != g_channels) {
+        BAE_PRINTF("SDL adjusted audio format (requested %u Hz/%u ch -> got %d Hz/%d ch). Recomputing slice.\n",
+                   g_sampleRate, g_channels, g_have.freq, g_have.channels);
+        g_sampleRate = (uint32_t)g_have.freq;
+        g_channels = (uint32_t)g_have.channels;
+        PV_ComputeSliceSizeFromEngine();
+    }
+
     SDL_PauseAudioDevice(g_audioDevice,0);
-    BAE_PRINTF("SDL2 audio device opened: %d Hz, %d ch, fmt 0x%x, dev buf %u frames, slice %lu frames (%ld bytes)\n", g_have.freq, g_have.channels, g_have.format, g_have.samples, g_framesPerSlice, g_audioByteBufferSize);
+    BAE_PRINTF("SDL2 audio device active: %u Hz, %u ch, dev buf %u frames, slice %u frames (%ld bytes)\n",
+               g_sampleRate, g_channels, g_have.samples, g_framesPerSlice, g_audioByteBufferSize);
     return 0;
 }
 

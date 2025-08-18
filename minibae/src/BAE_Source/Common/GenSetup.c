@@ -228,13 +228,15 @@
 // Add rates here, to allow use
 static XBOOL PV_ValidateRate(Rate theRate)
 {
-    XBOOL   ok = FALSE;
-
-    if ((theRate > Q_RATE_7K) && (theRate < Q_RATE_48K))
-    {
-        ok = TRUE;
+    // Accept explicit supported positive rates in the enum inclusively (>= 7K, <= 48K)
+    // and allow the two special interpolated negative "TERP" rates.
+    if (theRate == Q_RATE_22K_TERP_44K || theRate == Q_RATE_11K_TERP_22K) {
+        return TRUE; // handled specially later
     }
-    return ok;
+    if (theRate >= Q_RATE_7K && theRate <= Q_RATE_48K) {
+        return TRUE;
+    }
+    return FALSE;
 }
 
 
