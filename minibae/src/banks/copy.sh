@@ -8,7 +8,7 @@ cp "${BANK_DIR}/BankDevelopment/SalterNokiaRev3/NokiaRev BS3.hsb" "${TARGET_DIR}
 cp "${BANK_DIR}/BankDevelopment/SalterNokiaRev4/NokiaRev BS4.hsb" "${TARGET_DIR}/NokiaRev BS4.hsb"
 cp "${BANK_DIR}/BankDevelopment/HruskaNokiaSoundsetRev5/HruskaNokiaRev5Soundset.hsb" "${TARGET_DIR}/minibae-hruskanokia-rev5.hsb"
 cp "${BANK_DIR}/BankDevelopment/SalterNokiaRev8a/nupatches.hsb" "${TARGET_DIR}/minibae-salternokia-rev8a.hsb"
-cp "${BANK_DIR}/patches/patches.hsb" "${TARGET_DIR}/soundbank-min.gm"
+cp "${BANK_DIR}/patches/patches.hsb" "${TARGET_DIR}/soundbank-min.hsb"
 cp "${BANK_DIR}/patches111/patches111.hsb" "${TARGET_DIR}/patches111-uncompressed.hsb"
 cp "${BANK_DIR}/patchesp/patchesp.hsb" "${TARGET_DIR}/patchesp.hsb"
 cp "${BANK_DIR}/SonyUIQBank/SonyUIQBank_P800.hsb" "${TARGET_DIR}/sony-ericsson-p800.hsb"
