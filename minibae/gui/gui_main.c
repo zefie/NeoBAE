@@ -255,6 +255,57 @@ static char* get_absolute_path(const char* path) {
 #endif
 }
 
+#ifdef _WIN32
+// Single-instance support: mutex name must be stable across runs.
+static const char *g_single_instance_mutex_name = "miniBAE_single_instance_mutex_v1";
+// Previous window proc so we can chain messages we don't handle
+static WNDPROC g_prev_wndproc = NULL;
+
+// Helper for EnumWindows: find window with title containing desired substring
+struct EnumCtx { const char *want; HWND found; };
+static BOOL CALLBACK miniBAE_EnumProc(HWND hwnd, LPARAM lparam) {
+    struct EnumCtx *ctx = (struct EnumCtx*)lparam;
+    char title[512];
+    if (GetWindowTextA(hwnd, title, sizeof(title)) > 0) {
+        if (strstr(title, ctx->want)) {
+            ctx->found = hwnd;
+            return FALSE; // stop enumeration
+        }
+    }
+    return TRUE; // continue
+}
+
+// Custom window proc to receive WM_COPYDATA and forward to SDL event queue.
+static LRESULT CALLBACK miniBAE_WndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
+{
+    if (uMsg == WM_COPYDATA) {
+        PCOPYDATASTRUCT cds = (PCOPYDATASTRUCT)lParam;
+        if (cds && cds->lpData && cds->cbData > 0) {
+            // Allocate a null-terminated copy and push it as an SDL user event.
+            char *s = (char*)malloc(cds->cbData + 1);
+            if (s) {
+                memcpy(s, cds->lpData, cds->cbData);
+                s[cds->cbData] = '\0';
+                SDL_Event ev;
+                memset(&ev, 0, sizeof(ev));
+                ev.type = SDL_USEREVENT;
+                ev.user.code = 1; // code 1 == external file open
+                ev.user.data1 = s;
+                ev.user.data2 = NULL;
+                SDL_PushEvent(&ev);
+                // Bring window to foreground and restore if minimized
+                ShowWindow(hwnd, SW_RESTORE);
+                SetForegroundWindow(hwnd);
+                return 1; // handled
+            }
+        }
+    }
+    // Chain to previous proc for unhandled messages
+    if (g_prev_wndproc) return CallWindowProc(g_prev_wndproc, hwnd, uMsg, wParam, lParam);
+    return DefWindowProc(hwnd, uMsg, wParam, lParam);
+}
+#endif
+
 // Global variable to track current bank path for settings saving
 static char g_current_bank_path[512] = "";
 
@@ -2032,6 +2083,49 @@ void setWindowIcon(SDL_Window *window){
 }
 
 int main(int argc, char *argv[]){
+    // Single-instance check (Windows): if another instance exists, forward any file arg and exit.
+#ifdef _WIN32
+    HANDLE singleMutex = CreateMutexA(NULL, FALSE, g_single_instance_mutex_name);
+    if (singleMutex) {
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            // Another instance running: find its main window by enumerating top-level windows and match title
+            if (argc > 1) {
+                // Build a single string with the first argument (path). We only forward first file for simplicity.
+                const char *pathToSend = argv[1];
+                HWND found = NULL;
+                // Title we expect
+                const char *want = "miniBAE Player (Prototype)";
+                // Enumerator callback
+                struct EnumCtx { const char *want; HWND found; } ctx;
+                ctx.want = want; ctx.found = NULL;
+                BOOL CALLBACK enumProc(HWND hwnd, LPARAM lparam) {
+                    char title[512];
+                    if (GetWindowTextA(hwnd, title, sizeof(title)) > 0) {
+                        if (strstr(title, want)) {
+                            ((struct EnumCtx*)lparam)->found = hwnd;
+                            return FALSE; // stop enumeration
+                        }
+                    }
+                    return TRUE; // continue
+                }
+                // Enumerate windows
+                EnumWindows(miniBAE_EnumProc, (LPARAM)&ctx);
+                found = ctx.found;
+                if (found) {
+                    COPYDATASTRUCT cds;
+                    cds.dwData = 0xBAE1; // magic
+                    // Include terminating NUL so receiver can rely on it
+                    cds.cbData = (DWORD)(strlen(pathToSend) + 1);
+                    cds.lpData = (PVOID)pathToSend;
+                    SendMessageA(found, WM_COPYDATA, (WPARAM)NULL, (LPARAM)&cds);
+                }
+            }
+            CloseHandle(singleMutex);
+            return 0; // exit second instance
+        }
+    }
+#endif
+
     if(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER | SDL_INIT_AUDIO) != 0){ BAE_PRINTF("SDL_Init failed: %s\n", SDL_GetError()); return 1; }
     if(TTF_Init()!=0){ BAE_PRINTF("SDL_ttf init failed: %s (continuing with bitmap font)\n", TTF_GetError()); }
     else {
@@ -2117,6 +2211,17 @@ int main(int argc, char *argv[]){
         }
     }
 
+#ifdef _WIN32
+    // Subclass the native HWND to receive WM_COPYDATA messages from subsequent instances
+    SDL_SysWMinfo wminfo;
+    SDL_VERSION(&wminfo.version);
+    if (SDL_GetWindowWMInfo(win, &wminfo) && wminfo.subsystem == SDL_SYSWM_WINDOWS) {
+        HWND hwnd = wminfo.info.win.window;
+        g_prev_wndproc = (WNDPROC)SetWindowLongPtr(hwnd, GWLP_WNDPROC, (LONG_PTR)miniBAE_WndProc);
+        BAE_PRINTF("Installed miniBAE_WndProc chain (prev=%p)\n", (void*)g_prev_wndproc);
+    }
+#endif
+
     Uint32 lastTick = SDL_GetTicks(); bool mdown=false; bool mclick=false; int mx=0,my=0;
     int last_drag_progress = -1; // Track last dragged position to avoid repeated seeks
 
@@ -2124,6 +2229,39 @@ int main(int argc, char *argv[]){
         SDL_Event e; mclick=false;
         while(SDL_PollEvent(&e)){
             switch(e.type){
+                case SDL_USEREVENT: {
+                    if(e.user.code == 1 && e.user.data1){
+                        char *incoming = (char*)e.user.data1;
+                        BAE_PRINTF("Received external open request: %s\n", incoming);
+                        // Try loading as bank or media file depending on extension
+                        const char *ext = strrchr(incoming, '.');
+                        bool is_bank_file = false;
+                        if (ext) {
+#ifdef _WIN32
+                            is_bank_file = (_stricmp(ext, ".hsb") == 0);
+#else
+                            is_bank_file = (strcasecmp(ext, ".hsb") == 0);
+#endif
+                        }
+                        if (is_bank_file) {
+                            if (load_bank(incoming, playing, transpose, tempo, volume, loopPlay, reverbType, ch_enable, true)) {
+                                set_status_message("Loaded bank from external request");
+                            } else {
+                                set_status_message("Failed to load external bank file");
+                            }
+                        } else {
+                            if(bae_load_song_with_settings(incoming, transpose, tempo, volume, loopPlay, reverbType, ch_enable)) {
+                                duration = bae_get_len_ms(); progress=0; 
+                                playing = false;
+                                bae_play(&playing);
+                            } else {
+                                set_status_message("Failed to load external media file");
+                            }
+                        }
+                        free(incoming);
+                    }
+                } break;
+
                 case SDL_QUIT: running=false; break;
                 case SDL_MOUSEBUTTONDOWN: if(e.button.button==SDL_BUTTON_LEFT){ mdown=true; } break;
                 case SDL_MOUSEBUTTONUP: if(e.button.button==SDL_BUTTON_LEFT){ mdown=false; mclick=true; } break;
