@@ -904,11 +904,14 @@ int main(int argc, char *argv[])
    }
 
    if (!silentMode) {
-      libMiniBAEVersion = BAE_GetVersion();
-      libMiniBAECompInfo = BAE_GetCompileInfo();
-      libMiniBAECPUArch = BAE_GetCurrentCPUArchitecture();
-      playbae_printf("playbae %s built with %s, libminiBAE %s\n", libMiniBAECPUArch, libMiniBAECompInfo, libMiniBAEVersion);
-      playbae_printf(copyrightInfo);
+   libMiniBAEVersion = BAE_GetVersion();
+   libMiniBAECompInfo = BAE_GetCompileInfo();
+   libMiniBAECPUArch = BAE_GetCurrentCPUArchitecture();
+   playbae_printf("playbae %s built with %s, libminiBAE %s\n", libMiniBAECPUArch, libMiniBAECompInfo, libMiniBAEVersion);
+   playbae_printf(copyrightInfo);
+   /* BAE_GetVersion() and BAE_GetCompileInfo() return malloc'd strings; free them. */
+   if (libMiniBAECompInfo) { free((void*)libMiniBAECompInfo); libMiniBAECompInfo = NULL; }
+   if (libMiniBAEVersion) { free((void*)libMiniBAEVersion); libMiniBAEVersion = NULL; }
    }
 
    BAE_BOOL forceMono = FALSE;

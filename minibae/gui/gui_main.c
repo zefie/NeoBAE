@@ -2866,47 +2866,54 @@ int main(int argc, char *argv[]){
                 save_settings(g_current_bank_path[0]?g_current_bank_path:NULL, reverbType, loopPlay);
             }
 
-            // Footer help text + version
+            // Footer help + version + compile info (shifted up one row for extra line)
             SDL_Color help = g_is_dark_mode ? (SDL_Color){180,180,190,255} : (SDL_Color){80,80,80,255};
-            // Footer lines (stacked) moved up to prevent overlap/clipping
-            draw_text(R, dlg.x + pad, dlg.y + dlg.h - 40, "Settings persist to minibae.ini.", help);
+            int lineHelpY = dlg.y + dlg.h - 54;   // moved up
+            int lineVerY  = dlg.y + dlg.h - 40;   // moved up
+            int lineCompY = dlg.y + dlg.h - 26;   // original version slot
+            draw_text(R, dlg.x + pad, lineHelpY, "Settings persist to minibae.ini.", help);
             {
-                char ver[80];
-                snprintf(ver, sizeof(ver), "libminiBAE %s", _VERSION);
-                // Make version text clickable: open GitHub commit or tag in browser
+                char ver[160];
+                char ver2[160];
+                char *compInfo = (char*)BAE_GetCompileInfo();
+                if (compInfo) {
+                    snprintf(ver, sizeof(ver), "libminiBAE %s", _VERSION);
+                    snprintf(ver2, sizeof(ver2), "built with %s", compInfo);
+                    free(compInfo);
+                } else {
+                    snprintf(ver, sizeof(ver), "libminiBAE %s", _VERSION);
+                    ver2[0] = '\0';
+                }
                 int vw=0,vh=0; measure_text(ver,&vw,&vh);
-                Rect verRect = { dlg.x + pad, dlg.y + dlg.h - 26, vw, vh>0?vh:14 };
+                Rect verRect = { dlg.x + pad, lineVerY, vw, vh>0?vh:14 };
                 bool overVer = point_in(mx,my,verRect);
                 SDL_Color verColor = overVer ? g_accent_color : help;
                 draw_text(R, verRect.x, verRect.y, ver, verColor);
                 if(overVer){
-                    // simple underline
                     SDL_SetRenderDrawColor(R, verColor.r, verColor.g, verColor.b, verColor.a);
                     SDL_RenderDrawLine(R, verRect.x, verRect.y + verRect.h - 2, verRect.x + verRect.w, verRect.y + verRect.h - 2);
                 }
                 if(mclick && overVer){
-                    // Parse _VERSION forms: "git-<sha>", "git-<sha>-dirty", or tag form like "1.2.3"
                     const char *raw = _VERSION;
                     char url[256]; url[0]='\0';
                     if(strncmp(raw,"git-",4)==0){
-                        const char *sha = raw+4; // until next '-' or end
+                        const char *sha = raw+4; 
                         char shortSha[64]; int i=0; while(sha[i] && sha[i] != '-' && i < (int)sizeof(shortSha)-1){ shortSha[i]=sha[i]; i++; } shortSha[i]='\0';
                         snprintf(url,sizeof(url),"https://github.com/zefie/miniBAE/commit/%s", shortSha);
                     } else {
-                        // Assume tag (we stripped leading 'v' when displaying); reconstruct with 'v'
                         snprintf(url,sizeof(url),"https://github.com/zefie/miniBAE/tree/v%s", raw);
                     }
                     if(url[0]){
 #ifdef _WIN32
                         ShellExecuteA(NULL, "open", url, NULL, NULL, SW_SHOWNORMAL);
 #else
-                        // Try xdg-open then open
                         char cmd[512];
                         snprintf(cmd,sizeof(cmd),"(xdg-open '%s' || open '%s') >/dev/null 2>&1 &", url, url);
                         system(cmd);
 #endif
                     }
                 }
+                if(ver2[0]){ draw_text(R, dlg.x + pad, lineCompY, ver2, help); }
             }
             // Render dropdown lists LAST so they layer over footer text
             if(g_sampleRateDropdownOpen){
