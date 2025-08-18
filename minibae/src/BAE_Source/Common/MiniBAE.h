@@ -855,6 +855,16 @@ BAEResult           BAEMixer_GetBankVersion(BAEMixer mixer,
                             int16_t *pVersionMinor,
                             int16_t *pVersionSubMinor);
 
+// BAE_GetBankFriendlyName()
+// ------------------------------------
+// Returns a human-friendly descriptive name for a loaded bank token if
+// its SHA1 matches a known embedded entry. Copies up to outNameSize-1
+// chars and NUL terminates. Returns BAE_RESOURCE_NOT_FOUND if unknown.
+BAEResult            BAE_GetBankFriendlyName(BAEMixer mixer,
+                             BAEBankToken token,
+                             char *outName,
+                             uint32_t outNameSize);
+
 
 // BAEMixer_GetGroovoidNameFromBank()
 // ------------------------------------

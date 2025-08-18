@@ -123,7 +123,8 @@ SRC		+=	DriverTools.c \
 			g721.c \
 			g723_24.c \
 			g723_40.c \
-			g72x.c
+			g72x.c \
+			sha1mini.c
 
 # Compile in patches if desired
 ifeq ($(BAE_BUILT_IN_PATCHES),1)

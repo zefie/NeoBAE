@@ -157,6 +157,8 @@
 #include "X_Assert.h"
 #include <limits.h>
 #include <stdint.h>
+#include "bankinfo.h"      // embedded bank metadata (hash -> friendly)
+#include "sha1mini.h"       // hashing for friendly name resolution
 
 #ifdef WASM
     #include <emscripten.h>
@@ -212,50 +214,57 @@ const char* BAE_GetCompileInfo() {
         return versionString;
 }
 
-const char *BAE_GetCurrentCPUArchitecture() { //Get current architecture, detectx nearly every architecture. Coded by Freak
-        #if defined(__x86_64__) || defined(_M_X64)
-        return "x86_64";
-        #elif defined(i386) || defined(__i386__) || defined(__i386) || defined(_M_IX86)
-        return "x86_32";
-        #elif defined(__ARM_ARCH_2__)
-        return "ARM2";
-        #elif defined(__ARM_ARCH_3__) || defined(__ARM_ARCH_3M__)
-        return "ARM3";
-        #elif defined(__ARM_ARCH_4T__) || defined(__TARGET_ARM_4T)
-        return "ARM4T";
-        #elif defined(__ARM_ARCH_5_) || defined(__ARM_ARCH_5E_)
-        return "ARM5"
-        #elif defined(__ARM_ARCH_6T2_) || defined(__ARM_ARCH_6T2_)
-        return "ARM6T2";
-        #elif defined(__ARM_ARCH_6__) || defined(__ARM_ARCH_6J__) || defined(__ARM_ARCH_6K__) || defined(__ARM_ARCH_6Z__) || defined(__ARM_ARCH_6ZK__)
-        return "ARM6";
-        #elif defined(__ARM_ARCH_7__) || defined(__ARM_ARCH_7A__) || defined(__ARM_ARCH_7R__) || defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7S__)
-        return "ARM7";
-        #elif defined(__ARM_ARCH_7A__) || defined(__ARM_ARCH_7R__) || defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7S__)
-        return "ARM7A";
-        #elif defined(__ARM_ARCH_7R__) || defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7S__)
-        return "ARM7R";
-        #elif defined(__ARM_ARCH_7M__)
-        return "ARM7M";
-        #elif defined(__ARM_ARCH_7S__)
-        return "ARM7S";
-        #elif defined(__aarch64__) || defined(_M_ARM64)
-        return "ARM64";
-        #elif defined(mips) || defined(__mips__) || defined(__mips)
-        return "MIPS";
-        #elif defined(__sh__)
-        return "SUPERH";
-        #elif defined(__powerpc) || defined(__powerpc__) || defined(__powerpc64__) || defined(__POWERPC__) || defined(__ppc__) || defined(__PPC__) || defined(_ARCH_PPC)
-        return "POWERPC";
-        #elif defined(__PPC64__) || defined(__ppc64__) || defined(_ARCH_PPC64)
-        return "POWERPC64";
-        #elif defined(__sparc__) || defined(__sparc)
-        return "SPARC";
-        #elif defined(__m68k__)
-        return "M68K";
-        #else
-        return "UNKNOWN";
-        #endif
+const char *BAE_GetCurrentCPUArchitecture() { // Get current architecture, detects many architectures. Coded by Freak. Modified to append -SDL when built for SDL2.
+    // Append suffix at compile time without allocating new memory.
+    #if (X_PLATFORM == X_SDL2)
+        #define BAE_SDL_SUFFIX "-SDL"
+    #else
+        #define BAE_SDL_SUFFIX ""
+    #endif
+    #if defined(__x86_64__) || defined(_M_X64)
+        return "x86_64" BAE_SDL_SUFFIX;
+    #elif defined(i386) || defined(__i386__) || defined(__i386) || defined(_M_IX86)
+        return "x86_32" BAE_SDL_SUFFIX;
+    #elif defined(__ARM_ARCH_2__)
+        return "ARM2" BAE_SDL_SUFFIX;
+    #elif defined(__ARM_ARCH_3__) || defined(__ARM_ARCH_3M__)
+        return "ARM3" BAE_SDL_SUFFIX;
+    #elif defined(__ARM_ARCH_4T__) || defined(__TARGET_ARM_4T)
+        return "ARM4T" BAE_SDL_SUFFIX;
+    #elif defined(__ARM_ARCH_5_) || defined(__ARM_ARCH_5E_)
+        return "ARM5" BAE_SDL_SUFFIX;
+    #elif defined(__ARM_ARCH_6T2__)
+        return "ARM6T2" BAE_SDL_SUFFIX;
+    #elif defined(__ARM_ARCH_6__) || defined(__ARM_ARCH_6J__) || defined(__ARM_ARCH_6K__) || defined(__ARM_ARCH_6Z__) || defined(__ARM_ARCH_6ZK__)
+        return "ARM6" BAE_SDL_SUFFIX;
+    #elif defined(__ARM_ARCH_7__) || defined(__ARM_ARCH_7A__) || defined(__ARM_ARCH_7R__) || defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7S__)
+        return "ARM7" BAE_SDL_SUFFIX;   // Generic ARMv7
+    #elif defined(__ARM_ARCH_7A__)
+        return "ARM7A" BAE_SDL_SUFFIX;
+    #elif defined(__ARM_ARCH_7R__)
+        return "ARM7R" BAE_SDL_SUFFIX;
+    #elif defined(__ARM_ARCH_7M__)
+        return "ARM7M" BAE_SDL_SUFFIX;
+    #elif defined(__ARM_ARCH_7S__)
+        return "ARM7S" BAE_SDL_SUFFIX;
+    #elif defined(__aarch64__) || defined(_M_ARM64)
+        return "ARM64" BAE_SDL_SUFFIX;
+    #elif defined(mips) || defined(__mips__) || defined(__mips)
+        return "MIPS" BAE_SDL_SUFFIX;
+    #elif defined(__sh__)
+        return "SUPERH" BAE_SDL_SUFFIX;
+    #elif defined(__powerpc64__) || defined(__PPC64__) || defined(__ppc64__) || defined(_ARCH_PPC64)
+        return "POWERPC64" BAE_SDL_SUFFIX;
+    #elif defined(__powerpc) || defined(__powerpc__) || defined(__POWERPC__) || defined(__ppc__) || defined(__PPC__) || defined(_ARCH_PPC)
+        return "POWERPC" BAE_SDL_SUFFIX;
+    #elif defined(__sparc__) || defined(__sparc)
+        return "SPARC" BAE_SDL_SUFFIX;
+    #elif defined(__m68k__)
+        return "M68K" BAE_SDL_SUFFIX;
+    #else
+        return "UNKNOWN" BAE_SDL_SUFFIX;
+    #endif
+    #undef BAE_SDL_SUFFIX
 }
 
 
@@ -380,6 +389,45 @@ struct sBAEStream
 // MiniBAE.c globals
 // ----------------------------------------------------------------------------
 static XShortResourceID midiSongCount = 0;          // everytime a new song is loaded, this is increments
+// Friendly name cache for loaded banks (token -> sha1 + friendly)
+typedef struct {
+    BAEBankToken token;
+    char sha1[41];
+    const char *friendly; // points into kEmbeddedBanks name or NULL
+} BAE_FriendlyCacheEntry;
+
+static BAE_FriendlyCacheEntry g_bankFriendlyCache[32];
+static int g_bankFriendlyCacheCount = 0;
+
+static void PV_RegisterBankFriendly(BAEBankToken token, const char *sha1Hex){
+    if(!token || !sha1Hex) return;
+    if(g_bankFriendlyCacheCount >= (int)(sizeof(g_bankFriendlyCache)/sizeof(g_bankFriendlyCache[0]))) return;
+    // Avoid duplicates
+    for(int i=0;i<g_bankFriendlyCacheCount;i++){ if(g_bankFriendlyCache[i].token == token) return; }
+    BAE_FriendlyCacheEntry *e = &g_bankFriendlyCache[g_bankFriendlyCacheCount];
+    e->token = token;
+    strncpy(e->sha1, sha1Hex, 40); e->sha1[40]='\0';
+    e->friendly = NULL;
+    for(int i=0;i<kEmbeddedBankCount;i++){
+        if(strcmp(sha1Hex, kEmbeddedBanks[i].sha1)==0){ e->friendly = kEmbeddedBanks[i].name; break; }
+    }
+    g_bankFriendlyCacheCount++;
+}
+
+static const char* PV_FindBankFriendly(BAEBankToken token){
+    for(int i=0;i<g_bankFriendlyCacheCount;i++){ if(g_bankFriendlyCache[i].token == token){ return g_bankFriendlyCache[i].friendly; } }
+    return NULL;
+}
+
+BAEResult BAE_GetBankFriendlyName(BAEMixer mixer, BAEBankToken token, char *outName, uint32_t outNameSize){
+    if(!outName || outNameSize == 0) return BAE_PARAM_ERR;
+    outName[0] = '\0';
+    if(!mixer || !token) return BAE_NULL_OBJECT;
+    const char *n = PV_FindBankFriendly(token);
+    if(!n) return BAE_RESOURCE_NOT_FOUND;
+    strncpy(outName, n, outNameSize-1); outName[outNameSize-1]='\0';
+    return BAE_NO_ERROR;
+}
                                                     // this is used as an ID for song callbacks and such
 
 // globals for *OutputToFile support. these were BAEMixer class members from BAE
@@ -1620,6 +1668,14 @@ BAEResult BAEMixer_AddBankFromMemory(BAEMixer mixer, void * pAudioFile, uint32_t
             {
                 *outToken = (BAEBankToken)newPatchFile;
             }
+            // Compute sha1 of memory bank for friendly name cache
+            if(theErr == BAE_NO_ERROR){
+                unsigned char digest[20];
+                char hex[41];
+                sha1mini((const unsigned char*)pAudioFile, fileSize, digest);
+                static const char *hexmap="0123456789abcdef"; for(int i=0;i<20;i++){ hex[i*2]=hexmap[digest[i]>>4]; hex[i*2+1]=hexmap[digest[i]&15]; } hex[40]='\0';
+                PV_RegisterBankFriendly((BAEBankToken)newPatchFile, hex);
+            }
         }
         else
         {
@@ -1655,6 +1711,16 @@ BAEResult BAEMixer_AddBankFromFile(BAEMixer mixer, BAEPathName pAudioPathName, B
             if (outToken)
             {
                 *outToken = (BAEBankToken)newPatchFile;
+            }
+            // After loading from file, read its bytes to compute sha1
+            if(theErr == BAE_NO_ERROR){
+                // Use XFile routines: open resource already returns handle; need raw data pointer & size
+                // Simplest: reopen file normally and read bytes.
+                FILE *f = fopen(pAudioPathName, "rb");
+                if(f){
+                    fseek(f,0,SEEK_END); long sz = ftell(f); if(sz>0 && sz < (32*1024*1024)){ fseek(f,0,SEEK_SET); unsigned char *buf = (unsigned char*)malloc(sz); if(buf){ size_t rd=fread(buf,1,sz,f); if(rd==(size_t)sz){ unsigned char dg[20]; char hx[41]; sha1mini(buf, sz, dg); static const char *hm="0123456789abcdef"; for(int i=0;i<20;i++){ hx[i*2]=hm[dg[i]>>4]; hx[i*2+1]=hm[dg[i]&15]; } hx[40]='\0'; PV_RegisterBankFriendly((BAEBankToken)newPatchFile, hx);} free(buf);} }
+                    fclose(f);
+                }
             }
         }
         else

@@ -43,7 +43,7 @@
 #include <signal.h>
 #include <stdarg.h>
 #include <stdint.h>
-
+#include "bankinfo.h" // reuse embedded bank metadata for friendly names
 #ifdef main
    #undef main
 #endif
@@ -857,10 +857,10 @@ int main(int argc, char *argv[])
          }
          playbae_dprintf("BAE memory used during idle prior to SetBankToFile: %ld bytes\n\n", BAE_GetSizeOfMemoryUsed());
 
-         if (PV_ParseCommands(argc, argv, "-p", TRUE, parmFile))
-         {
-            playbae_printf("Using bank '%s'\n", parmFile);
-            err = BAEMixer_AddBankFromFile(theMixer, (BAEPathName)parmFile, &bank);
+       if (PV_ParseCommands(argc, argv, "-p", TRUE, parmFile))
+       {
+         err = BAEMixer_AddBankFromFile(theMixer, (BAEPathName)parmFile, &bank);
+         if(err==BAE_NO_ERROR){ char friendlyBuf[128]; if(BAE_GetBankFriendlyName(theMixer, bank, friendlyBuf, sizeof(friendlyBuf))==BAE_NO_ERROR){ playbae_printf("Using bank '%s' (%s)\n", parmFile, friendlyBuf); } else { playbae_printf("Using bank '%s'\n", parmFile); } }
             if (err > 0) {
 		playbae_printf("Error %d loading patch bank %s",err,parmFile);
 		return(1);
@@ -868,8 +868,9 @@ int main(int argc, char *argv[])
             playbae_dprintf("BAE memory used during idle after SetBankToFile: %ld bytes\n\n", BAE_GetSizeOfMemoryUsed());
          } else {
 #ifdef _BUILT_IN_PATCHES
-            playbae_printf("Using built-in bank\n");
-	    err = BAEMixer_AddBankFromMemory(theMixer, BAE_PATCHES,(unsigned int)BAE_PATCHES_size,&bank);
+         // Attempt to identify default built-in bank if present among embedded list
+         err = BAEMixer_AddBankFromMemory(theMixer, BAE_PATCHES,(unsigned int)BAE_PATCHES_size,&bank);
+         if(err==BAE_NO_ERROR){ char friendlyBuf[128]; if(BAE_GetBankFriendlyName(theMixer, bank, friendlyBuf, sizeof(friendlyBuf))==BAE_NO_ERROR){ playbae_printf("Using built-in bank (%s)\n", friendlyBuf); } else { playbae_printf("Using built-in bank\n"); } }
             if (err > 0) {
 		playbae_printf("Error %d loading patch bank", err);
 		return(1);

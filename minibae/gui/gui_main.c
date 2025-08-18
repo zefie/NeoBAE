@@ -32,6 +32,7 @@
 #include "X_Assert.h"
 #include <SDL_ttf.h>
 static TTF_Font *g_font = NULL;
+#include "bankinfo.h" // embedded bank metadata
 
 // Optional embedded TTF font (generated header). Define GUI_EMBED_FONT and
 // generate embedded_font.h via scripts/embed_ttf.py to enable.
@@ -88,6 +89,12 @@ static void detect_windows_theme() {
     if (get_registry_dword(HKEY_CURRENT_USER, 
                           "Control Panel\\Accessibility\\HighContrast", 
                           "Flags", &value)) {
+        g_theme.is_dark_mode = (value == 1);
+    }
+    // Check for high contrast mode
+    if (get_registry_dword(HKEY_CURRENT_USER, 
+                          "Control Panel\\Accessibility\\HighContrast", 
+                          "Flags", &value)) {
         g_theme.is_high_contrast = (value & 1);
     }
     
@@ -137,7 +144,6 @@ static void detect_windows_theme() {
 }
 #endif
 
-// GUI-specific mixer audio task to ensure stream servicing (mirrors playbae behavior)
 static void gui_audio_task(void *reference) {
     if (reference) {
         BAEMixer_ServiceStreams(reference);
@@ -180,19 +186,34 @@ static char* get_absolute_path(const char* path) {
 // Global variable to track current bank path for settings saving
 static char g_current_bank_path[512] = "";
 
-// Simple XML parsing for Banks.xml
+// BankEntry retains legacy fields; src may be empty when using hash-based lookup.
 typedef struct {
-    char src[256];
-    char name[256];
-    char sha1[64];
+    char src[128];
+    char name[128];
+    char sha1[48];
     bool is_default;
 } BankEntry;
-
 static BankEntry banks[32]; // Static array for simplicity
 static int bank_count = 0;
 
 #define WINDOW_W 900
 #define WINDOW_H 360
+
+static void load_bankinfo() {
+    // Replaced XML parsing with embedded metadata from bankinfo.h
+    bank_count = 0;
+    for(int i=0; i<kEmbeddedBankCount && i<32; ++i){
+        const EmbeddedBankInfo *eb = &kEmbeddedBanks[i];
+        BankEntry *be = &banks[bank_count];
+        memset(be,0,sizeof(*be));
+        // src now unknown until user loads; retain legacy src field only for UI display when known
+        strncpy(be->name, eb->name, sizeof(be->name)-1);
+        strncpy(be->sha1, eb->sha1, sizeof(be->sha1)-1);
+        be->is_default = eb->is_default ? true : false;
+        bank_count++;
+    }
+    BAE_PRINTF("Loaded %d embedded banks (no XML IO)\n", bank_count);
+}
 
 // -------- Text rendering abstraction --------
 typedef struct { int dummy; } TextCtx; // placeholder if we extend later
@@ -685,136 +706,16 @@ static Settings load_settings() {
     return settings;
 }
 
-static void parse_banks_xml() {
-    // Simple XML parser for Banks.xml
-    char xml_path[768];
-    FILE* f = NULL;
-    
-    // Try Banks/Banks.xml in executable directory first
-    char exe_dir[512];
-    get_executable_directory(exe_dir, sizeof(exe_dir));
-#ifdef _WIN32
-    snprintf(xml_path, sizeof(xml_path), "%s\\Banks\\Banks.xml", exe_dir);
-#else
-    snprintf(xml_path, sizeof(xml_path), "%s/Banks/Banks.xml", exe_dir);
-#endif
-    f = fopen(xml_path, "r");
-    
-    if (!f) {
-        // Try Banks.xml directly in executable directory
-#ifdef _WIN32
-    snprintf(xml_path, sizeof(xml_path), "%s\\BXBanks\\BXBanks.xml", exe_dir);
-#else
-    snprintf(xml_path, sizeof(xml_path), "%s/BXBanks/BXBanks.xml", exe_dir);
-#endif
-        f = fopen(xml_path, "r");
+// Helper: resolve friendly bank name via new core API & embedded metadata
+// Ignores path; uses the stored BAEBankToken captured when the bank was loaded.
+static const char* get_bank_friendly_name(const char* /*bank_path_unused*/) {
+    if(!g_bae.mixer || !g_bae.bank_loaded || !g_bae.bank_token) return NULL;
+    static char name[128];
+    if(BAE_GetBankFriendlyName(g_bae.mixer, g_bae.bank_token, name, (uint32_t)sizeof(name)) == BAE_NO_ERROR){
+        name[sizeof(name)-1]='\0';
+        return (name[0] != '\0') ? name : NULL;
     }
-
-    if (!f) {
-        // Try Banks.xml directly in executable directory
-#ifdef _WIN32
-        snprintf(xml_path, sizeof(xml_path), "%s\\Banks.xml", exe_dir);
-#else
-        snprintf(xml_path, sizeof(xml_path), "%s/Banks.xml", exe_dir);
-#endif
-        f = fopen(xml_path, "r");
-    }    
-    BAE_PRINTF("Loading Banks.xml from: %s\n", xml_path);
-    
-    char line[1024];
-    bank_count = 0;
-    
-    while (fgets(line, sizeof(line), f) && bank_count < 32) {
-        // Look for <bank> tags
-        char* bank_start = strstr(line, "<bank ");
-        if (!bank_start) continue;
-        
-        BankEntry* entry = &banks[bank_count];
-        memset(entry, 0, sizeof(BankEntry));
-        
-        // Parse src attribute
-        char* src = strstr(bank_start, "src=\"");
-        if (src) {
-            src += 5; // Skip 'src="'
-            char* end = strchr(src, '"');
-            if (end) {
-                size_t len = end - src;
-                if (len < sizeof(entry->src)) {
-                    memcpy(entry->src, src, len);
-                    entry->src[len] = '\0';
-                }
-            }
-        }
-        
-        // Parse name attribute
-        char* name = strstr(bank_start, "name=\"");
-        if (name) {
-            name += 6; // Skip 'name="'
-            char* end = strchr(name, '"');
-            if (end) {
-                size_t len = end - name;
-                if (len < sizeof(entry->name)) {
-                    memcpy(entry->name, name, len);
-                    entry->name[len] = '\0';
-                }
-            }
-        }
-        
-        // Parse sha1 attribute
-        char* sha1 = strstr(bank_start, "sha1=\"");
-        if (sha1) {
-            sha1 += 6; // Skip 'sha1="'
-            char* end = strchr(sha1, '"');
-            if (end) {
-                size_t len = end - sha1;
-                if (len < sizeof(entry->sha1)) {
-                    memcpy(entry->sha1, sha1, len);
-                    entry->sha1[len] = '\0';
-                }
-            }
-        }
-        
-        // Check for default attribute
-        entry->is_default = strstr(bank_start, "default=\"true\"") != NULL;
-        
-        if (entry->src[0] != '\0' && entry->name[0] != '\0') {
-            bank_count++;
-        }
-    }
-    
-    fclose(f);
-    BAE_PRINTF("Loaded %d banks from Banks.xml\n", bank_count);
-}
-
-// Helper function to get friendly bank name from Banks.xml
-static const char* get_bank_friendly_name(const char* bank_path) {
-    if (!bank_path || !bank_path[0]) return NULL;
-    
-    // Extract just the filename from the full path
-    const char *filename = bank_path;
-    for (const char *p = bank_path; *p; ++p) {
-        if (*p == '/' || *p == '\\') filename = p + 1;
-    }
-    
-    // Look through our loaded banks for a match
-    for (int i = 0; i < bank_count; i++) {
-        // Extract filename from bank src path
-        const char *bank_filename = banks[i].src;
-        for (const char *p = banks[i].src; *p; ++p) {
-            if (*p == '/' || *p == '\\') bank_filename = p + 1;
-        }
-        
-        // Compare filenames (case-insensitive)
-#ifdef _WIN32
-        if (_stricmp(filename, bank_filename) == 0) {
-#else
-        if (strcasecmp(filename, bank_filename) == 0) {
-#endif
-            return banks[i].name;
-        }
-    }
-    
-    return NULL; // No match found
+    return NULL;
 }
 
 // WAV Export functionality
@@ -1646,7 +1547,7 @@ int main(int argc, char *argv[]){
     if(!bae_init()){ BAE_PRINTF("miniBAE init failed\n"); }
     
     // Load bank database
-    parse_banks_xml();
+    load_bankinfo();
     
     if(!g_bae.bank_loaded){ BAE_PRINTF("WARNING: No patch bank loaded. Place patches.hsb next to executable or use built-in patches.\n"); }
 
@@ -1730,7 +1631,11 @@ int main(int argc, char *argv[]){
                             BAE_PRINTF("Drag and drop: Loading bank file: %s\n", dropped);
                             if (load_bank(dropped, playing, transpose, tempo, volume, loopPlay, reverbType, ch_enable, true)) {
                                 BAE_PRINTF("Successfully loaded dropped bank: %s\n", dropped);
-                                // Status message is set by load_bank function
+                                // Reinforce status with friendly name to ensure immediate UI update
+                                const char *fn = get_bank_friendly_name(dropped);
+                                if(fn && fn[0]){
+                                    char msg[160]; snprintf(msg,sizeof(msg),"Loaded bank: %s", fn); set_status_message(msg);
+                                }
                             } else {
                                 BAE_PRINTF("Failed to load dropped bank: %s\n", dropped);
                                 set_status_message("Failed to load dropped bank file");
@@ -2068,30 +1973,50 @@ int main(int argc, char *argv[]){
             draw_text(R,60, 280, "<none>", (SDL_Color){150,150,150,255}); 
         }
         
-        // Bank info  
+        // Bank info with tooltip (friendly name shown, filename/path on hover)
         draw_text(R,20, 300, "Bank:", labelCol);
         if (g_bae.bank_loaded) {
-            // Try to get friendly name from Banks.xml
             const char *friendly_name = get_bank_friendly_name(g_bae.bank_name);
-            const char *display_name;
-            
-            if (friendly_name && friendly_name[0]) {
-                display_name = friendly_name;
-            } else {
-                // Fall back to filename
-                const char *base = g_bae.bank_name; 
-                for(const char *p = g_bae.bank_name; *p; ++p){ 
-                    if(*p=='/'||*p=='\\') base=p+1; 
+            const char *base = g_bae.bank_name; 
+            for(const char *p = g_bae.bank_name; *p; ++p){ if(*p=='/'||*p=='\\') base=p+1; }
+            const char *display_name = (friendly_name && friendly_name[0]) ? friendly_name : base;
+            SDL_Color bankCol = {150,200,255,255};
+            draw_text(R,60, 300, display_name, bankCol);
+            // Simple tooltip region (approx width based on char count * 8px mono font)
+            int textLen = (int)strlen(display_name);
+            int approxW = textLen * 8; if(approxW < 8) approxW = 8; if(approxW > 400) approxW = 400; // crude clamp
+            Rect bankTextRect = {60, 300, approxW, 16};
+            if(point_in(mx,my,bankTextRect)){
+                // Tooltip background near cursor
+                char tip[512];
+                if(friendly_name && friendly_name[0] && strcmp(friendly_name, base) != 0){
+                    // Show full original (path or filename) when friendly differs
+                    snprintf(tip,sizeof(tip),"%s", g_bae.bank_name);
+                } else {
+                    // When no friendly or identical, clarify it's the file
+                    snprintf(tip,sizeof(tip),"File: %s", g_bae.bank_name);
                 }
-                display_name = base;
+                int tipLen = (int)strlen(tip); if(tipLen>0){
+                    int tw = tipLen * 8 + 8; if(tw > 520) tw = 520; // clamp
+                    int th = 16 + 6;
+                    int tx = mx + 12; int ty = my + 12;
+                    if(tx + tw > WINDOW_W - 4) tx = WINDOW_W - tw - 4;
+                    if(ty + th > WINDOW_H - 4) ty = WINDOW_H - th - 4;
+                    Rect tipRect = {tx, ty, tw, th};
+                    SDL_Color tbg = {25,25,35,230};
+                    SDL_Color tbd = {100,100,120,255};
+                    SDL_Color tfg = {210,210,230,255};
+                    draw_rect(R, tipRect, tbg);
+                    draw_frame(R, tipRect, tbd);
+                    draw_text(R, tipRect.x + 4, tipRect.y + 4, tip, tfg);
+                }
             }
-            
-            draw_text(R,60, 300, display_name, (SDL_Color){150,200,255,255});
         } else {
             draw_text(R,60, 300, "<none>", (SDL_Color){150,150,150,255});
         }
         
-        if(ui_button(R,(Rect){300,298,100,20}, "Load Bank...", mx,my,mdown) && mclick){
+    // Shifted right and slightly wider so it doesn't cover friendly bank info text
+    if(ui_button(R,(Rect){340,298,120,20}, "Load Bank...", mx,my,mdown) && mclick){
             #ifdef _WIN32
             char fileBuf[1024]={0};
             OPENFILENAMEA ofn; ZeroMemory(&ofn,sizeof(ofn));
