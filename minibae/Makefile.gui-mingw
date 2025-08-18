@@ -13,6 +13,7 @@ LD		:= $(CC)
 AR      	:= i686-w64-mingw32-gcc-ar-win32
 STRIP      	:= i686-w64-mingw32-strip
 DLLTOOL		:= i686-w64-mingw32-dlltool
+WINDRES		:= i686-w64-mingw32-windres
 else
 ARCH		:= -m64 -static
 CC		:= x86_64-w64-mingw32-gcc-win32
@@ -21,6 +22,7 @@ LD		:= $(CC)
 AR      	:= x86_64-w64-mingw32-gcc-ar-win32
 STRIP      	:= x86_64-w64-mingw32-strip
 DLLTOOL		:= x86_64-w64-mingw32-dlltool
+WINDRES		:= x86_64-w64-mingw32-windres
 endif
 
 OPTI            := -O2 -fPIC
@@ -90,7 +92,13 @@ $(TARGET_LIB).dll: ${OBJ}
 $(TARGET_BIN): ${OBJ_BIN}
 	@mkdir -p $(TARGET_OUT)/Banks
 	$(${SOURCE_DIR}/src/banks/copy.sh $(TARGET_OUT)/Banks)
-	${LD} -o $(TARGET_OUT)${TARGET_BIN} ${LDFLAGS} ${OBJ_BIN} -Wl,--subsystem,windows ${LIBS}
+	@if [ -f gui/minibae_gui.rc ]; then \
+		echo "Compiling resource file..."; \
+		${WINDRES} gui/minibae_gui.rc $(OBJ_DIR)minibae_gui.o; \
+		${LD} -o $(TARGET_OUT)${TARGET_BIN} ${LDFLAGS} ${OBJ_BIN} $(OBJ_DIR)minibae_gui.o -Wl,--subsystem,windows ${LIBS}; \
+	else \
+		${LD} -o $(TARGET_OUT)${TARGET_BIN} ${LDFLAGS} ${OBJ_BIN} -Wl,--subsystem,windows ${LIBS}; \
+	fi
 
 pack: ${TARGET_BIN}
 	cat $(TARGET_OUT)${TARGET_BIN} | gzip -9c > $(TARGET_OUT)minibae_gui.exe.gz
@@ -111,6 +119,7 @@ clean:
 	@rm -rf $(OBJ_DIR)
 	@rm -rf $(BUILD_DIR)
 	@rm -rf $(TEST_OUT_DIR)
+	@rm -f $(OBJ_DIR)minibae_gui.o
 	@echo Cleaned!
 
 include inc/Makefile.tests

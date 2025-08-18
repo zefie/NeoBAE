@@ -16,6 +16,7 @@
 #include <windows.h>
 #include <commdlg.h>
 #include <stdlib.h>  // for _fullpath
+#include <SDL_syswm.h>
 #endif
 #if !defined(_WIN32)
 #include <stdio.h>
@@ -199,27 +200,82 @@ static bool ui_dropdown(SDL_Renderer *R, Rect r, int *value, const char **items,
     return changed;
 }
 
+// Custom checkbox drawing function
+static void draw_custom_checkbox(SDL_Renderer *R, Rect r, bool checked, bool hovered) {
+    // Define colors
+    SDL_Color bg_unchecked = {45,45,50,255};
+    SDL_Color bg_checked = {30,120,200,255};
+    SDL_Color bg_hover_unchecked = {70,70,80,255};
+    SDL_Color bg_hover_checked = {50,140,220,255};
+    SDL_Color border = {120,120,130,255};
+    SDL_Color border_hover = {160,160,170,255};
+    SDL_Color checkmark = {255,255,255,255};
+    
+    // Choose colors based on state
+    SDL_Color bg = checked ? bg_checked : bg_unchecked;
+    SDL_Color border_color = border;
+    
+    if (hovered) {
+        bg = checked ? bg_hover_checked : bg_hover_unchecked;
+        border_color = border_hover;
+    }
+    
+    // Draw background
+    draw_rect(R, r, bg);
+    
+    // Draw border with slightly rounded appearance (simulate with multiple rects)
+    draw_frame(R, r, border_color);
+    
+    // Draw inner shadow for depth
+    if (!checked) {
+        SDL_SetRenderDrawColor(R, 20, 20, 25, 255);
+        SDL_RenderDrawLine(R, r.x+1, r.y+1, r.x+r.w-2, r.y+1); // top inner
+        SDL_RenderDrawLine(R, r.x+1, r.y+1, r.x+1, r.y+r.h-2); // left inner
+    }
+    
+    // Draw checkmark if checked
+    if (checked) {
+        // Draw a nice checkmark using lines
+        int cx = r.x + r.w / 2;
+        int cy = r.y + r.h / 2;
+        int size = (r.w < r.h ? r.w : r.h) - 6; // Leave some margin
+        
+        // Scale checkmark based on checkbox size
+        if (size < 8) size = 8;
+        
+        SDL_SetRenderDrawColor(R, checkmark.r, checkmark.g, checkmark.b, checkmark.a);
+        
+        // Draw checkmark with multiple lines for thickness
+        int check_x1 = r.x + 4;
+        int check_y1 = r.y + r.h/2;
+        int check_x2 = r.x + r.w/2 - 1;
+        int check_y2 = r.y + r.h - 5;
+        int check_x3 = r.x + r.w - 3;
+        int check_y3 = r.y + 3;
+        
+        // First stroke of checkmark (left part)
+        SDL_RenderDrawLine(R, check_x1, check_y1, check_x2, check_y2);
+        SDL_RenderDrawLine(R, check_x1, check_y1-1, check_x2, check_y2-1);
+        SDL_RenderDrawLine(R, check_x1+1, check_y1, check_x2+1, check_y2);
+        
+        // Second stroke of checkmark (right part) 
+        SDL_RenderDrawLine(R, check_x2, check_y2, check_x3, check_y3);
+        SDL_RenderDrawLine(R, check_x2, check_y2-1, check_x3, check_y3-1);
+        SDL_RenderDrawLine(R, check_x2+1, check_y2, check_x3+1, check_y3);
+    }
+}
+
 static bool ui_toggle(SDL_Renderer *R, Rect r, bool *value, const char *label, int mx,int my,bool mclick){
-    SDL_Color off = {60,60,70,255};
-    SDL_Color on  = {30,120,200,255};
-    SDL_Color frame = {120,120,130,255};
     SDL_Color txt = {230,230,230,255};
     bool over = point_in(mx,my,r);
     
-    // Add hover effect
-    SDL_Color bg = *value ? on : off;
-    if(over && !*value) bg = (SDL_Color){80,80,90,255};
-    if(over && *value) bg = (SDL_Color){50,140,220,255};
+    // Draw custom checkbox
+    draw_custom_checkbox(R, r, *value, over);
     
-    draw_rect(R,r,bg);
-    draw_frame(R,r,frame);
-    
-    // Add checkmark or indicator for active state
-    if(*value) {
-        draw_text(R,r.x + 4, r.y + 2, "*", (SDL_Color){255,255,255,255});
-    }
-    
+    // Draw label if provided
     if(label) draw_text(R,r.x + r.w + 6, r.y+2,label,txt);
+    
+    // Handle click
     if(over && mclick){ *value = !*value; return true; }
     return false;
 }
@@ -1283,6 +1339,40 @@ void setWindowTitle(SDL_Window *window){
     SDL_SetWindowTitle(window, windowTitle);
 }
 
+void setWindowIcon(SDL_Window *window){
+#ifdef _WIN32
+    // On Windows, the icon will be automatically loaded from the resource file
+    // when the executable is built with the resource compiled in.
+    // The window icon is typically handled by the system for applications with embedded icons.
+    
+    // Try to get the window handle and set the icon manually as a fallback
+    SDL_SysWMinfo wmInfo;
+    SDL_VERSION(&wmInfo.version);
+    if (SDL_GetWindowWMInfo(window, &wmInfo) && wmInfo.subsystem == SDL_SYSWM_WINDOWS) {
+        HWND hwnd = wmInfo.info.win.window;
+        HINSTANCE hInstance = GetModuleHandle(NULL);
+        HICON hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(101));
+        
+        if (hIcon) {
+            SendMessage(hwnd, WM_SETICON, ICON_SMALL, (LPARAM)hIcon);
+            SendMessage(hwnd, WM_SETICON, ICON_BIG, (LPARAM)hIcon);
+            BAE_PRINTF("Successfully set window icon from resource\n");
+        } else {
+            BAE_PRINTF("Failed to load icon resource\n");
+        }
+    }
+#else
+    // On non-Windows platforms, try to load beatnik.ico if available
+    char icon_path[512];
+    char exe_dir[512];
+    get_executable_directory(exe_dir, sizeof(exe_dir));
+    snprintf(icon_path, sizeof(icon_path), "%s/beatnik.ico", exe_dir);
+    
+    BAE_PRINTF("Icon path (Linux/macOS): %s\n", icon_path);
+    // Note: Full icon loading would require SDL2_image or custom ICO parser
+#endif
+}
+
 int main(int argc, char *argv[]){
     if(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER | SDL_INIT_AUDIO) != 0){ BAE_PRINTF("SDL_Init failed: %s\n", SDL_GetError()); return 1; }
 #ifdef GUI_WITH_TTF
@@ -1302,6 +1392,7 @@ int main(int argc, char *argv[]){
 
     SDL_Window *win = SDL_CreateWindow("miniBAE Player (Prototype)", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, WINDOW_W, WINDOW_H, SDL_WINDOW_SHOWN);
     setWindowTitle(win);
+    setWindowIcon(win);
     if(!win){ BAE_PRINTF("Window failed: %s\n", SDL_GetError()); SDL_Quit(); return 1; }
     SDL_Renderer *R = SDL_CreateRenderer(win,-1,SDL_RENDERER_ACCELERATED|SDL_RENDERER_PRESENTVSYNC);
     if(!R) R = SDL_CreateRenderer(win,-1,0);
