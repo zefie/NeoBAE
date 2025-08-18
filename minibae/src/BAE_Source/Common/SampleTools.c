@@ -1668,7 +1668,11 @@ XSoundFormat1*      header;
         XBlockMove(src.theWaveform, &snd->sndBuffer.sampleArea, src.waveSize);
         if (src.bitSize == 16)
         {
-            PV_Swap16BitSamplesIfIntel((int16_t*)&snd->sndBuffer.sampleArea,
+            // Fix alignment warning by using a properly aligned pointer
+            // sampleArea is packed, so we use a union to ensure proper alignment
+            union { XBYTE *bytes; int16_t *samples; } aligned_ptr;
+            aligned_ptr.bytes = snd->sndBuffer.sampleArea;
+            PV_Swap16BitSamplesIfIntel(aligned_ptr.samples,
                                         src.waveFrames * src.channels);
         }
 
