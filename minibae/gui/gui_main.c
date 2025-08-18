@@ -2777,19 +2777,56 @@ int main(int argc, char *argv[]){
             SDL_Color dim = g_is_dark_mode ? (SDL_Color){0,0,0,120} : (SDL_Color){0,0,0,90};
             draw_rect(R,(Rect){0,0,WINDOW_W,g_window_h}, dim);
             rmf_info_load_if_needed();
-            int pad=8; int dlgW=340; int lineH = 16; // line height for wrapped lines
-            // Compute total wrapped lines across all non-empty fields
+            int pad=8; int lineH = 16;
+            // Determine inner content width needed so the longest metadata line does not wrap (within limits)
+            int minOuterW = 340; // previous base width
+            int maxOuterW = WINDOW_W - 20; if(maxOuterW < minOuterW) maxOuterW = minOuterW; // keep on-screen
+            int longestInner = 0; // width without wrapping (text only)
+            // Measure title too so dialog is never narrower than it
+            int titleW=0,titleH=0; measure_text("RMF Metadata", &titleW, &titleH);
+            if(titleW > longestInner) longestInner = titleW;
+            for(int i=0;i<INFO_TYPE_COUNT;i++){
+                if(g_rmf_info_values[i][0]){
+                    char tmp[1024]; snprintf(tmp,sizeof(tmp),"%s: %s", rmf_info_label((BAEInfoType)i), g_rmf_info_values[i]);
+                    int w=0,h=0; measure_text(tmp,&w,&h);
+                    if(w > longestInner) longestInner = w;
+                }
+            }
+            // Convert inner width (text) to outer dialog width used by existing wrapping helpers
+            // inner width passed to draw_wrapped_text is (dlgW - pad*2 - 8)
+            int desiredOuterW = longestInner + pad*2 + 8;
+            if(desiredOuterW < minOuterW) desiredOuterW = minOuterW;
+            if(desiredOuterW > maxOuterW) desiredOuterW = maxOuterW;
+            int dlgW = desiredOuterW;
+            // Now compute total wrapped lines for chosen width
             int totalLines = 0;
             for(int i=0;i<INFO_TYPE_COUNT;i++){
                 if(g_rmf_info_values[i][0]){
                     char tmp[1024]; snprintf(tmp,sizeof(tmp),"%s: %s", rmf_info_label((BAEInfoType)i), g_rmf_info_values[i]);
-                    int count = count_wrapped_lines(tmp, dlgW - pad*2 - 8); // inner width
+                    int count = count_wrapped_lines(tmp, dlgW - pad*2 - 8);
                     if(count <= 0) count = 1;
                     totalLines += count;
                 }
             }
             if(totalLines == 0) totalLines = 1; // placeholder
             int dlgH = pad*2 + 24 + totalLines*lineH + 10; // title + fields
+            // If dialog would exceed window height, attempt one more widening (if possible) to reduce wrapping
+            if(dlgH > g_window_h - 20 && dlgW < maxOuterW){
+                int extra = maxOuterW - dlgW; // try expanding to max
+                int newDlgW = dlgW + extra;
+                int newTotalLines = 0;
+                for(int i=0;i<INFO_TYPE_COUNT;i++){
+                    if(g_rmf_info_values[i][0]){
+                        char tmp[1024]; snprintf(tmp,sizeof(tmp),"%s: %s", rmf_info_label((BAEInfoType)i), g_rmf_info_values[i]);
+                        int count = count_wrapped_lines(tmp, newDlgW - pad*2 - 8);
+                        if(count <= 0) count = 1; newTotalLines += count;
+                    }
+                }
+                int newDlgH = pad*2 + 24 + newTotalLines*lineH + 10;
+                if(newDlgH < dlgH){ // only adopt if improves
+                    dlgW = newDlgW; totalLines = newTotalLines; dlgH = newDlgH;
+                }
+            }
             Rect dlg = {WINDOW_W - dlgW - 10, 10, dlgW, dlgH};
             // Theme-aware dialog background and border (keep slight translucency)
             SDL_Color dlgBg = g_panel_bg; dlgBg.a = 230;
