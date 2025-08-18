@@ -2414,7 +2414,7 @@ int main(int argc, char *argv[]){
 
         // Render dropdown list on top of everything else if open
         if(g_reverbDropdownOpen) {
-            static const char *reverbNames[] = {"No Change","None","Closet","Garage","Acoustic Lab","Cavern","Dungeon","Small Reflections","Early Reflections","Basement","Banquet","Catacombs"};
+            static const char *reverbNames[] = {"Default","None","Igor's Closet","Igor's Garage","Igor's Acoustic Lab","Igor's Cavern","Igor's Dungeon","Small Reflections","Early Reflections","Basement","Banquet Hall","Catacombs"};
             int reverbCount = (int)(sizeof(reverbNames)/sizeof(reverbNames[0]));
             if(reverbCount > BAE_REVERB_TYPE_COUNT) reverbCount = BAE_REVERB_TYPE_COUNT;
             Rect ddRect = {690,40,160,24}; // Moved up 20 pixels from y=60 to y=40
