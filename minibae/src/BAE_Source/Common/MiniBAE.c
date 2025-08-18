@@ -217,7 +217,7 @@ const char* BAE_GetCompileInfo() {
 const char *BAE_GetCurrentCPUArchitecture() { // Get current architecture, detects many architectures. Coded by Freak. Modified to append -SDL when built for SDL2.
     // Append suffix at compile time without allocating new memory.
     #if (X_PLATFORM == X_SDL2)
-        #define BAE_SDL_SUFFIX "-SDL"
+        #define BAE_SDL_SUFFIX "-SDL2"
     #else
         #define BAE_SDL_SUFFIX ""
     #endif
