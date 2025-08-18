@@ -2658,6 +2658,27 @@ int main(int argc, char *argv[]){
             #endif
         }
 
+#ifdef _BUILT_IN_PATCHES
+    // Builtin Bank button: placed to the right of Load Bank; disabled when builtin is already loaded
+    {
+        Rect builtinBtn = { 340 + 120 + 8, lineY2-2, 110, 20 };
+        bool builtin_loaded = (g_current_bank_path[0] && strcmp(g_current_bank_path, "__builtin__") == 0);
+        bool builtinEnabled = !builtin_loaded && !modal_block && !g_reverbDropdownOpen;
+        bool overBuiltin = builtinEnabled && point_in(ui_mx, ui_my, builtinBtn);
+        SDL_Color bbg = builtinEnabled ? (overBuiltin ? g_button_hover : g_button_base) : g_button_base;
+        if(!builtinEnabled) bbg.a = 180;
+        draw_rect(R, builtinBtn, bbg);
+        draw_frame(R, builtinBtn, g_button_border);
+        int btw=0,bth=0; measure_text("Builtin Bank", &btw, &bth);
+        draw_text(R, builtinBtn.x + (builtinBtn.w - btw)/2, builtinBtn.y + (builtinBtn.h - bth)/2, "Builtin Bank", g_button_text);
+        if(builtinEnabled && ui_mclick && overBuiltin){
+            if(!load_bank("__builtin__", playing, transpose, tempo, volume, loopPlay, reverbType, ch_enable, true)){
+                set_status_message("Failed to load built-in bank");
+            }
+        }
+    }
+#endif // _BUILT_IN_PATCHES
+
     // Settings button now lives INSIDE the Status & Bank panel with 4px padding from that panel's border
     {
     int pad = 4; // panel-relative padding
