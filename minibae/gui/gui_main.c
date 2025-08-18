@@ -2863,7 +2863,13 @@ int main(int argc, char *argv[]){
             const char *vcCur = (g_volume_curve>=0 && g_volume_curve < vcCount) ? volumeCurveNames[g_volume_curve] : "?";
             draw_text(R, vcRect.x + 6, vcRect.y + 6, vcCur, dd_txt);
             draw_text(R, vcRect.x + vcRect.w - 16, vcRect.y + 6, g_volumeCurveDropdownOpen?"^":"v", dd_txt);
-            if(point_in(mx,my,vcRect) && mclick){ g_volumeCurveDropdownOpen = !g_volumeCurveDropdownOpen; }
+            if(point_in(mx,my,vcRect) && mclick){ 
+                g_volumeCurveDropdownOpen = !g_volumeCurveDropdownOpen; 
+                if(g_volumeCurveDropdownOpen){ 
+                    // Ensure only one dropdown active; disable sample rate menu while volume curve is open
+                    g_sampleRateDropdownOpen = false; 
+                }
+            }
 
             // Sample Rate selector
             draw_text(R, dlg.x + pad, dlg.y + 72, "Sample Rate:", g_text_color);
@@ -2875,11 +2881,15 @@ int main(int argc, char *argv[]){
             if(!exact){ g_sample_rate_hz = best; }
             char srLabel[32]; snprintf(srLabel,sizeof(srLabel),"%d Hz", g_sample_rate_hz);
             Rect srRect = { dlg.x + dlg.w - 170, dlg.y + 68, 150, 24 };
-            SDL_Color sr_bg = g_button_base; if(point_in(mx,my,srRect)) sr_bg = g_button_hover;
+            bool sampleRateEnabled = !g_volumeCurveDropdownOpen; // disable while volume curve menu open
+            SDL_Color sr_bg = g_button_base; 
+            if(!sampleRateEnabled){ sr_bg.a = 180; }
+            else if(point_in(mx,my,srRect)) sr_bg = g_button_hover;
             draw_rect(R, srRect, sr_bg); draw_frame(R, srRect, g_button_border);
-            draw_text(R, srRect.x + 6, srRect.y + 6, srLabel, g_button_text);
-            draw_text(R, srRect.x + srRect.w - 16, srRect.y + 6, g_sampleRateDropdownOpen?"^":"v", g_button_text);
-            if(point_in(mx,my,srRect) && mclick){ g_sampleRateDropdownOpen = !g_sampleRateDropdownOpen; }
+            SDL_Color sr_text_col = g_button_text; if(!sampleRateEnabled){ sr_text_col.a = 180; }
+            draw_text(R, srRect.x + 6, srRect.y + 6, srLabel, sr_text_col);
+            draw_text(R, srRect.x + srRect.w - 16, srRect.y + 6, g_sampleRateDropdownOpen?"^":"v", sr_text_col);
+            if(sampleRateEnabled && point_in(mx,my,srRect) && mclick){ g_sampleRateDropdownOpen = !g_sampleRateDropdownOpen; }
 
             // Stereo checkbox now below sample rate selector
             Rect cbRect = { dlg.x + pad, dlg.y + 108, 18, 18 };
@@ -2958,7 +2968,8 @@ int main(int argc, char *argv[]){
                 if(ver2[0]){ draw_text(R, dlg.x + pad, lineCompY, ver2, help); }
             }
             // Render dropdown lists LAST so they layer over footer text
-            if(g_sampleRateDropdownOpen){
+            // Only render sample rate dropdown if enabled (not while volume curve dropdown is open)
+            if(g_sampleRateDropdownOpen && !g_volumeCurveDropdownOpen){
                 int itemH = 24; // consistent with control height
                 Rect srRect = { dlg.x + dlg.w - 170, dlg.y + 68, 150, 24 }; // recompute (same as above)
                 int sampleRateCount = 7; const int sampleRates[7] = {8000,11025,16000,22050,32000,44100,48000};
