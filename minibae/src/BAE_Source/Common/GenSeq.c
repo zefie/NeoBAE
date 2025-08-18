@@ -3380,7 +3380,7 @@ GetMIDIevent:
                         }
                         /* Dedicated lyric callback should only be invoked for true Lyric meta (0x05).
                            Previous code called it for all meta 0x01..0x05 causing generic text, copyright,
-                           track names, etc. to appear as lyrics. Optional fallback macro allows legacy behavior.
+                           track names, etc. to appear as lyrics. This was undesirable and is now fixed.
                         */
                         if(pSong->lyricCallbackPtr){
                             XBOOL invoke = FALSE;

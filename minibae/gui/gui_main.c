@@ -46,8 +46,6 @@ static TTF_Font *g_font = NULL;
 struct GM_Song; // opaque
 typedef short XSWORD; // 16-bit signed used by engine for track index
 
-// Embedded SVG for settings gear icon (original file: settings-gear.svg)
-// Converted to single-line C string for static inclusion so app has no runtime file dependency.
 // Theme globals (used by widgets to pick colors for light/dark modes)
 static bool g_is_dark_mode = true;
 static SDL_Color g_accent_color = {50,130,200,255};
@@ -708,10 +706,6 @@ static char g_karaoke_line_previous[256];
 static bool g_karaoke_have_meta_lyrics = false; // whether lyric meta events (0x05) encountered
 static char g_karaoke_last_fragment[128]; // last raw fragment to detect cumulative vs per-word
 static bool g_karaoke_suspended = false; // suspend (e.g., during export)
-
-// If set to 1, allow pre-lyric generic text (meta 0x01) fallback like older behavior.
-// Default 0: only true lyric meta events (0x05) are treated as lyrics to avoid showing
-// non-lyric comment metadata (track names, copyright, etc.).
 
 // Forward declaration (defined later) so helpers can call it
 static void karaoke_commit_line(uint32_t time_us, const char *line);

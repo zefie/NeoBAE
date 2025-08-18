@@ -53,15 +53,6 @@ static int gWriteToFile = FALSE;
 #ifdef SUPPORT_KARAOKE
 // -----------------------------------------------------------------------------
 // Optional karaoke (lyric) support for CLI playback.
-// Mirrors the newline / fragment logic used by the SDL2 GUI:
-//  * Lyrics arrive as fragments via lyric callback.
-//  * Split each incoming lyric string on '/' or '\\' which force newlines.
-//  * An empty fragment ("" meta event) also forces a newline.
-//  * Fragments that are cumulative (next fragment starts with previous fragment
-//    and is longer) replace the current line (growing highlight substring logic
-//    in GUI). Non‑cumulative fragments are appended with NO added space.
-//  * Newline commits the current line to the "previous" display line and clears
-//    the current line for accumulation of the next line.
 // The CLI prints updates only when the current line changes or a newline commits,
 // and is automatically disabled while exporting to a file (-o flag) per request.
 // -----------------------------------------------------------------------------
@@ -152,7 +143,6 @@ static void cli_karaoke_lyric_callback(struct GM_Song *songPtr, const char *lyri
 }
 
 // Meta event fallback callback (used only if lyric callback API unsupported).
-// Filters meta events so only true lyric meta (0x05) are displayed unless
 static void cli_karaoke_meta_callback(void *threadContext, struct GM_Song *pSong, char markerType, void *pMetaText, int32_t metaTextLength, XSWORD currentTrack){
    (void)threadContext; (void)pSong; (void)metaTextLength; (void)currentTrack;
    if(!gEnableKaraoke) return;
@@ -160,9 +150,6 @@ static void cli_karaoke_meta_callback(void *threadContext, struct GM_Song *pSong
    if(!pMetaText) return;
    const char *text = (const char*)pMetaText;
    if(markerType == 0x05){ g_karaoke_have_meta_lyrics = 1; }
-   /* Nuanced handling: Accept 0x05 always. Accept 0x01 only if first char is '@' (control/reset)
-      or (optional fallback) prior to any 0x05 seen. '@' lines trigger a newline/reset and are not shown.
-      All other meta types ignored. */
    if(markerType == 0x05) {
       // proceed
    } else if(markerType == 0x01) {
