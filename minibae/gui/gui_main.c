@@ -847,9 +847,11 @@ static void bae_stop_wav_export() {
 static void bae_service_wav_export() {
     if (!g_exporting) return;
     
-    // Service export in smaller chunks to avoid freezing UI
-    // Process up to 10 service calls per frame instead of tight loop
-    for (int i = 0; i < 10 && g_exporting; ++i) {
+    // Aggressive export processing for maximum speed
+    // Process many more service calls per frame - export speed is priority
+    int max_iterations = 100; // Increased from 10 to 100 for much faster export
+    
+    for (int i = 0; i < max_iterations && g_exporting; ++i) {
         BAEResult r = BAEMixer_ServiceAudioOutputToFile(g_bae.mixer);
         if (r != BAE_NO_ERROR) {
             char msg[128]; 
@@ -860,51 +862,58 @@ static void bae_service_wav_export() {
             return; 
         }
         
-        // Check if song is done
-        BAE_BOOL is_done = FALSE;
-        uint32_t current_pos = 0;
-        BAESong_GetMicrosecondPosition(g_bae.song, &current_pos);
-        BAESong_IsDone(g_bae.song, &is_done);
-        
-        if (is_done) { 
-            BAE_PRINTF("Song finished at position %lu\n", current_pos);
-            bae_stop_wav_export(); 
-            return; 
-        }
-        
-        // Update progress
-        if (g_bae.song_length_us > 0) {
-            int pct = (int)((current_pos * 100) / g_bae.song_length_us); 
-            if (pct > 100) pct = 100;
-            g_export_progress = pct;
-            char msg[64]; 
-            snprintf(msg, sizeof(msg), "Exporting WAV... %d%%", pct); 
-            set_status_message(msg);
-        }
-
-        // Stall detection
-        if (current_pos == g_export_last_pos) {
-            g_export_stall_iters++;
-            if (current_pos == 0 && g_export_stall_iters > 100) { 
-                BAE_PRINTF("Export stalled at position 0 after %d iterations\n", g_export_stall_iters);
-                set_status_message("Export produced no audio (aborting)"); 
-                bae_stop_wav_export(); 
-                return; 
-            } else if (current_pos > 0 && g_export_stall_iters > 1000) { 
-                BAE_PRINTF("Export stalled at position %lu after %d iterations\n", current_pos, g_export_stall_iters);
+        // Check if song is done - but only every 10 iterations to reduce overhead
+        if (i % 10 == 0) {
+            BAE_BOOL is_done = FALSE;
+            uint32_t current_pos = 0;
+            BAESong_GetMicrosecondPosition(g_bae.song, &current_pos);
+            BAESong_IsDone(g_bae.song, &is_done);
+            
+            if (is_done) { 
+                BAE_PRINTF("Song finished at position %lu\n", current_pos);
                 bae_stop_wav_export(); 
                 return; 
             }
-        } else {
-            g_export_last_pos = current_pos;
-            g_export_stall_iters = 0;
-        }
-        
-        // Safety timeout for very long files
-        if (current_pos > 30ULL*60ULL*1000000ULL) { 
-            set_status_message("Export time cap reached"); 
-            bae_stop_wav_export(); 
-            return; 
+            
+            // Update progress less frequently to reduce overhead
+            if (g_bae.song_length_us > 0) {
+                int pct = (int)((current_pos * 100) / g_bae.song_length_us); 
+                if (pct > 100) pct = 100;
+                g_export_progress = pct;
+                // Only update status message every 10% to reduce string operations
+                static int last_pct = -1;
+                if (pct != last_pct && pct % 10 == 0) {
+                    char msg[64]; 
+                    snprintf(msg, sizeof(msg), "Exporting WAV... %d%%", pct); 
+                    set_status_message(msg);
+                    last_pct = pct;
+                }
+            }
+
+            // Stall detection - only check every 10 iterations
+            if (current_pos == g_export_last_pos) {
+                g_export_stall_iters++;
+                if (current_pos == 0 && g_export_stall_iters > 1000) { // Increased threshold
+                    BAE_PRINTF("Export stalled at position 0 after %d iterations\n", g_export_stall_iters);
+                    set_status_message("Export produced no audio (aborting)"); 
+                    bae_stop_wav_export(); 
+                    return; 
+                } else if (current_pos > 0 && g_export_stall_iters > 10000) { // Increased threshold
+                    BAE_PRINTF("Export stalled at position %lu after %d iterations\n", current_pos, g_export_stall_iters);
+                    bae_stop_wav_export(); 
+                    return; 
+                }
+            } else {
+                g_export_last_pos = current_pos;
+                g_export_stall_iters = 0;
+            }
+            
+            // Safety timeout for very long files
+            if (current_pos > 30ULL*60ULL*1000000ULL) { 
+                set_status_message("Export time cap reached"); 
+                bae_stop_wav_export(); 
+                return; 
+            }
         }
     }
 }
@@ -1148,7 +1157,7 @@ static bool bae_load_song(const char* path){
     g_bae.song = BAESong_New(g_bae.mixer);
     if(!g_bae.song) return false;
     BAEResult r;
-    if(le && (strcmp(ext,".mid")==0 || strcmp(ext,".midi")==0)){
+    if(le && (strcmp(ext,".mid")==0 || strcmp(ext,".midi")==0 || strcmp(ext,".kar")==0)){
         r = BAESong_LoadMidiFromFile(g_bae.song,(BAEPathName)path,TRUE);
     } else {
         r = BAESong_LoadRmfFromFile(g_bae.song,(BAEPathName)path,0,TRUE);

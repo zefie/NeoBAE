@@ -67,11 +67,11 @@ ifneq ($(USE_SDL),)
     ifeq ($(BITS),32)
         CFLAGS  += -I../SDL2-2.32.8/i686-w64-mingw32/include/SDL2
         LDFLAGS += -L../SDL2-2.32.8/i686-w64-mingw32/lib
-        TARGET_NAME := playbae_sdl_x32.exe
+        TARGET_NAME := playbae_sdl2_x32.exe
     else
         CFLAGS  += -I../SDL2-2.32.8/x86_64-w64-mingw32/include/SDL2
         LDFLAGS += -L../SDL2-2.32.8/x86_64-w64-mingw32/lib
-        TARGET_NAME := playbae_sdl_x64.exe
+        TARGET_NAME := playbae_sdl2_x64.exe
     endif
     # Override LIBS completely for SDL build to enforce correct ordering
     LIBS = \

@@ -362,8 +362,8 @@ struct sBAEStream
 
     BAE_Mutex                   mLock;
     STREAM_REFERENCE            mSoundStreamVoiceReference;
-    BAE_BOOL                    mLoop:1;
-    BAE_BOOL                    mPrerolled:1;
+    unsigned int                mLoop:1;
+    unsigned int                mPrerolled:1;
     uint32_t               mPlaybackLength;
     BAE_UNSIGNED_FIXED          mVolumeState;
     int16_t                   mPanState;
@@ -1365,7 +1365,7 @@ BAEResult BAEMixer_Open(BAEMixer mixer,
             }
 #endif
             theRate = (Rate)q;
-            if (theRate == BAE_RATE_INVALID)
+            if (theRate == (Rate)BAE_RATE_INVALID)
             {
                 theErr = PARAM_ERR;
             }
@@ -2001,9 +2001,9 @@ BAEResult BAEMixer_ChangeAudioModes(BAEMixer mixer, BAERate q, BAETerpMode t, BA
     if (mixer)
     {
         theRate = (Rate)q;
-        if (theRate == BAE_RATE_INVALID)
+        if (theRate == (Rate)BAE_RATE_INVALID)
         {
-            BAE_STDERR("BAEMixer_ChangeAudioModes:invalid rate %ld\n", (int32_t)q);
+            BAE_STDERR("BAEMixer_ChangeAudioModes:invalid rate %d\n", (int32_t)q);
             err = PARAM_ERR;
         }
         
@@ -2048,7 +2048,7 @@ BAEResult BAEMixer_ChangeAudioModes(BAEMixer mixer, BAERate q, BAETerpMode t, BA
         {
             err = GM_ChangeAudioModes(NULL, theRate, theTerp, theMods);
             if (err)
-                BAE_STDERR("audio:failed change %ld\n",(int32_t)err);
+                BAE_STDERR("audio:failed change %d\n",(int32_t)err);
         }
     }
     else
@@ -3194,7 +3194,7 @@ BAEResult BAEMixer_ServiceAudioOutputToFile(BAEMixer theMixer)
 
     BAE_BuildMixerSlice(NULL, mWritingDataBlock, mWritingDataBlockSize, numSamples);
     process_and_send_audio(mWritingDataBlock, numSamples);
-    return theErr;
+    return BAE_TranslateOPErr(theErr);
 #endif
 
 
@@ -5792,13 +5792,13 @@ void BAESong_DisplayInfo(BAESong song)
                 BAE_STDERR("UNKNOWN\n");
             }
         }
-        BAE_STDERR("    sequenceDataSize %ld\n", pSong->sequenceDataSize);
+        BAE_STDERR("    sequenceDataSize %u\n", pSong->sequenceDataSize);
 
         BAE_STDERR("    songID %d\n", pSong->songID);
         BAE_STDERR("    maxSongVoices %d\n", pSong->maxSongVoices);
         BAE_STDERR("    mixLevel %d\n", pSong->mixLevel);
         BAE_STDERR("    maxEffectVoices %d\n", pSong->maxEffectVoices);
-        BAE_STDERR("    MasterTempo %ld\n", pSong->MasterTempo);
+        BAE_STDERR("    MasterTempo %u\n", pSong->MasterTempo);
         BAE_STDERR("    songTempo %d\n", pSong->songTempo);
         BAE_STDERR("    songPitchShift %d\n", pSong->songPitchShift);
         BAE_STDERR("    songPaused %s\n", pSong->songPaused ? "TRUE" : "FALSE");
@@ -5818,8 +5818,8 @@ void BAESong_DisplayInfo(BAESong song)
             BAE_STDERR("    songLoopCount %d\n", pSong->songLoopCount);
             BAE_STDERR("    songMaxLoopCount %d\n", pSong->songMaxLoopCount);                                                   // -1 means GM style bank select, -2 means allow program changes on percussion
 
-            BAE_STDERR("    songMidiTickLength %ld\n", pSong->songMidiTickLength);
-            BAE_STDERR("    songMicrosecondLength %ld\n", pSong->songMicrosecondLength);
+            BAE_STDERR("    songMidiTickLength %u\n", pSong->songMidiTickLength);
+            BAE_STDERR("    songMicrosecondLength %u\n", pSong->songMicrosecondLength);
 
             for (count = 0; count < 16; count++)
             {

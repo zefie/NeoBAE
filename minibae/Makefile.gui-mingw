@@ -26,7 +26,7 @@ WINDRES		:= x86_64-w64-mingw32-windres
 endif
 
 OPTI            := -O2 -fPIC
-CFLAGS  	:= $(ARCH) $(OPTI) $(INC_PATH) -D_THREAD_SAFE -DGUI_WITH_TTF -Wno-unused-value
+CFLAGS  	:= $(ARCH) $(OPTI) $(INC_PATH) -D_THREAD_SAFE -DGUI_WITH_TTF -Wno-unused-value 
 
 ifneq ($(BAE_FLAGS),)
 	CFLAGS	+= $(BAE_FLAGS)
@@ -101,7 +101,7 @@ $(TARGET_BIN): ${OBJ_BIN}
 	fi
 
 pack: ${TARGET_BIN}
-	cat $(TARGET_OUT)${TARGET_BIN} | gzip -9c > $(TARGET_OUT)minibae_gui.exe.gz
+	cat $(TARGET_OUT)${TARGET_BIN}.exe | gzip -9 > $(TARGET_OUT)minibae_gui.exe.gz
 
 # Rules for compiling source files to object files
 $(OBJ_DIR)%.o : %.cpp

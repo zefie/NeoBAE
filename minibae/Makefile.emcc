@@ -4,7 +4,7 @@ DEBUG			:= 0
 
 TARGET_LIB	:= libminiBAE.js
 TARGET_BIN	:= playbae.js
-PACK_FILENAME	:= playbae_wasm32.tar.gz
+PACK_FILENAME	:= playbae_wasm.tar.gz
 
 include inc/Makefile.common
 
@@ -12,7 +12,7 @@ EXTRA_FILES		:= \
 			src/playbae/minibae-audio.htm \
 			src/playbae/minibae-audio.js
 
-ARCH		:= -m32 -static
+ARCH		:= -static
 CC		:= emcc
 CXX		:= emcc
 LD		:= $(CC)

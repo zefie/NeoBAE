@@ -457,7 +457,7 @@ int32_t BAE_FileDelete(void *fileName)
 
 // Open a file
 // Return -1 if error, otherwise file handle
-int32_t BAE_FileOpenForRead(void *fileName)
+intptr_t BAE_FileOpenForRead(void *fileName)
 {
     if (fileName)
     {
@@ -466,7 +466,7 @@ int32_t BAE_FileOpenForRead(void *fileName)
     return(-1);
 }
 
-int32_t BAE_FileOpenForWrite(void *fileName)
+intptr_t BAE_FileOpenForWrite(void *fileName)
 {
     if (fileName)
     {
@@ -475,7 +475,7 @@ int32_t BAE_FileOpenForWrite(void *fileName)
     return(-1);
 }
 
-int32_t BAE_FileOpenForReadWrite(void *fileName)
+intptr_t BAE_FileOpenForReadWrite(void *fileName)
 {
     if (fileName)
     {
@@ -485,14 +485,14 @@ int32_t BAE_FileOpenForReadWrite(void *fileName)
 }
 
 // Close a file
-void BAE_FileClose(int32_t fileReference)
+void BAE_FileClose(intptr_t fileReference)
 {
     close(fileReference);
 }
 
 // Read a block of memory from a file.
 // Return -1 if error, otherwise length of data read.
-int32_t BAE_ReadFile(int32_t fileReference, void *pBuffer, int32_t bufferLength)
+int32_t BAE_ReadFile(intptr_t fileReference, void *pBuffer, int32_t bufferLength)
 {
     if ((pBuffer) && (bufferLength))
     {
@@ -503,7 +503,7 @@ int32_t BAE_ReadFile(int32_t fileReference, void *pBuffer, int32_t bufferLength)
 
 // Write a block of memory from a file
 // Return -1 if error, otherwise length of data written.
-int32_t BAE_WriteFile(int32_t fileReference, void *pBuffer, int32_t bufferLength)
+int32_t BAE_WriteFile(intptr_t fileReference, void *pBuffer, int32_t bufferLength)
 {
     if ((pBuffer) && (bufferLength))
     {
@@ -514,19 +514,19 @@ int32_t BAE_WriteFile(int32_t fileReference, void *pBuffer, int32_t bufferLength
 
 // set file position in absolute file byte position
 // Return -1 if error, otherwise 0.
-int32_t BAE_SetFilePosition(int32_t fileReference, uint32_t filePosition)
+int32_t BAE_SetFilePosition(intptr_t fileReference, uint32_t filePosition)
 {
     return((lseek(fileReference, filePosition, SEEK_SET) == -1) ? -1 : 0);
 }
 
 // get file position in absolute file bytes
-uint32_t BAE_GetFilePosition(int32_t fileReference)
+uint32_t BAE_GetFilePosition(intptr_t fileReference)
 {
     return(lseek(fileReference, 0, SEEK_CUR));
 }
 
 // get length of file
-uint32_t BAE_GetFileLength(int32_t fileReference)
+uint32_t BAE_GetFileLength(intptr_t fileReference)
 {
     uint32_t pos;
 
@@ -536,7 +536,7 @@ uint32_t BAE_GetFileLength(int32_t fileReference)
 }
 
 // set the length of a file. Return 0, if ok, or -1 for error
-int BAE_SetFileLength(int32_t fileReference, uint32_t newSize)
+int BAE_SetFileLength(intptr_t fileReference, uint32_t newSize)
 {
     return -1;
 }
