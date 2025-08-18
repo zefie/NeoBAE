@@ -683,7 +683,7 @@ const int kInputBus = 1;
 // **** Audio card support
 // Aquire and enabled audio card
 // return 0 if ok, -1 if failed
-int BAE_AquireAudioCard(void *threadContext, uint32_t sampleRate, uint32_t channels, uint32_t bits)
+int BAE_AcquireAudioCard(void *threadContext, uint32_t sampleRate, uint32_t channels, uint32_t bits)
 {
     int           flag;
     int32_t          bufferSize;

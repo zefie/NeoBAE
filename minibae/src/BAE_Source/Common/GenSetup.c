@@ -1345,7 +1345,7 @@ XBOOL GM_StartHardwareSoundManager(void *threadContext)
     {
         sampleRate = (int32_t)GM_ConvertFromOutputRateToRate(MusicGlobals->outputRate);
 
-        ok = BAE_AquireAudioCard(threadContext, sampleRate,
+        ok = BAE_AcquireAudioCard(threadContext, sampleRate,
                                     (MusicGlobals->generateStereoOutput) ? 2 : 1,
                                     (MusicGlobals->generate16output) ? 16 : 8);
         return (ok == 0) ? TRUE : FALSE;

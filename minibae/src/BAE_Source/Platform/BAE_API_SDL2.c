@@ -344,9 +344,9 @@ static int PV_CalcSliceSize(void){ // 11ms slice
     bytes = (bytes + 63) & ~63; return bytes;
 }
 
-int BAE_AquireAudioCard(void *threadContext, uint32_t sampleRate, uint32_t channels, uint32_t bits){ 
+int BAE_AcquireAudioCard(void *threadContext, uint32_t sampleRate, uint32_t channels, uint32_t bits){ 
     (void)threadContext; 
-    BAE_PRINTF("BAE_AquireAudioCard called: %u Hz, %u ch, %u bits\n", sampleRate, channels, bits);
+    BAE_PRINTF("BAE_AcquireAudioCard called: %u Hz, %u ch, %u bits\n", sampleRate, channels, bits);
     
     if (g_audioDevice) {
         BAE_PRINTF("Audio device already acquired\n");
@@ -422,7 +422,7 @@ void BAE_ReleaseMutex(BAE_Mutex lock){ if (!lock) return; sSDLMutex *m = (sSDLMu
 void BAE_DestroyMutex(BAE_Mutex lock){ if (!lock) return; sSDLMutex *m = (sSDLMutex*)lock; if (m->mtx) SDL_DestroyMutex(m->mtx); BAE_Deallocate(m); }
 
 // ---- Capture stubs (not implemented) ----
-int BAE_AquireAudioCapture(void *threadContext, uint32_t sampleRate, uint32_t channels, uint32_t bits, uint32_t *pCaptureHandle){ (void)threadContext; (void)sampleRate; (void)channels; (void)bits; (void)pCaptureHandle; return -1; }
+int BAE_AcquireAudioCapture(void *threadContext, uint32_t sampleRate, uint32_t channels, uint32_t bits, uint32_t *pCaptureHandle){ (void)threadContext; (void)sampleRate; (void)channels; (void)bits; (void)pCaptureHandle; return -1; }
 int BAE_ReleaseAudioCapture(void *threadContext){ (void)threadContext; return -1; }
 int BAE_StartAudioCapture(BAE_CaptureDone done, void *callbackContext){ (void)done; (void)callbackContext; return -1; }
 int BAE_StopAudioCapture(void){ return -1; }

@@ -250,10 +250,10 @@ uint32_t BAE_GetFileLength(intptr_t fileReference);
 int BAE_SetFileLength(intptr_t fileReference, uint32_t newSize);
 
 // **** Audio card support
-// Aquire and enabled audio card. sampleRate is 44100, 22050, or 11025; channels is 1 or 2;
+// Acquire and enabled audio card. sampleRate is 44100, 22050, or 11025; channels is 1 or 2;
 // bits is 8 or 16.
 // return 0 if ok, -1 if failed
-int BAE_AquireAudioCard(void *threadContext, uint32_t sampleRate, uint32_t channels, uint32_t bits);
+int BAE_AcquireAudioCard(void *threadContext, uint32_t sampleRate, uint32_t channels, uint32_t bits);
 
 // Release and free audio card.
 // return 0 if ok, -1 if failed.
@@ -318,7 +318,7 @@ typedef struct BAEWinOSParameters BAEWinOSParameters;
 
 // set the current device. device is from 0 to BAE_MaxDevices()
 // NOTE:    This function needs to function before any other calls may have happened.
-//          Also you will need to call BAE_ReleaseAudioCard then BAE_AquireAudioCard
+//          Also you will need to call BAE_ReleaseAudioCard then BAE_AcquireAudioCard
 //          in order for the change to take place. deviceParameter is a device specific
 //          pointer. Pass NULL if you don't know what to use.
 void BAE_SetDeviceID(int32_t deviceID, void *deviceParameter);
@@ -399,12 +399,12 @@ extern int  BAE_SleepFrameThread(void* threadContext, int32_t msec);
 
 // CAPTURE API
 
-// Aquire and capture audio. sampleRate is 48000 to 2000. Will fail if device doesn't support it
+// Acquire and capture audio. sampleRate is 48000 to 2000. Will fail if device doesn't support it
 // bits is 8 or 16; channels is 1 or 2;
 // *pCaptureHandle will contain a device dependent ID for the capture device.
 // pCaptureHandle can be NULL.
 // return 0 if ok, -1 if failed
-int BAE_AquireAudioCapture(void *threadContext, uint32_t sampleRate, uint32_t channels, uint32_t bits,
+int BAE_AcquireAudioCapture(void *threadContext, uint32_t sampleRate, uint32_t channels, uint32_t bits,
                             uint32_t *pCaptureHandle);
 
 // Release and free audio capture device
@@ -454,7 +454,7 @@ int32_t BAE_MaxCaptureDevices(void);
 
 // set the current device. device is from 0 to BAE_MaxCaptureDevices()
 // NOTE:    This function needs to function before any other calls may have happened.
-//          Also you will need to call BAE_ReleaseAudioCapture then BAE_AquireAudioCapture
+//          Also you will need to call BAE_ReleaseAudioCapture then BAE_AcquireAudioCapture
 //          in order for the change to take place. deviceParameter is a device specific
 //          pointer. Pass NULL if you don't know what to use.
 void BAE_SetCaptureDeviceID(int32_t deviceID, void *deviceParameter);
@@ -520,7 +520,7 @@ uint32_t BAE_GetDeviceSamplesCapturedPosition();
 #define HAE_GetFilePosition                 BAE_GetFilePosition
 #define HAE_GetFileLength                   BAE_GetFileLength
 #define HAE_SetFileLength                   BAE_SetFileLength
-#define HAE_AquireAudioCard                 BAE_AquireAudioCard
+#define HAE_AcquireAudioCard                BAE_AcquireAudioCard
 #define HAE_ReleaseAudioCard                BAE_ReleaseAudioCard
 #define HAE_Idle                            BAE_Idle
 #define HAE_GetDeviceSamplesPlayedPosition  BAE_GetDeviceSamplesPlayedPosition
