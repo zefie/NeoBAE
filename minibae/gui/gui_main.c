@@ -939,19 +939,16 @@ static bool bae_start_wav_export(const char* output_file) {
     g_bae.was_playing_before_export = g_bae.is_playing;
     g_bae.loop_was_enabled_before_export = g_bae.loop_enabled_gui;
     
-    // Stop current playback if running
+    // Stop current playback if running (we'll always restart for export)
     if (g_bae.is_playing) {
         BAESong_Stop(g_bae.song, FALSE);
         g_bae.is_playing = false;
     }
 
-    // Temporarily disable looping so export finishes
-    if (g_bae.loop_enabled_gui && g_bae.song) {
-        BAESong_SetLoops(g_bae.song, 0);
-    }
-
-    // Rewind to beginning for export
+    // Rewind to beginning and disable looping (do this BEFORE starting output)
     BAESong_SetMicrosecondPosition(g_bae.song, 0);
+    BAESong_SetLoops(g_bae.song, 0); // force disable loops regardless of GUI flag
+    BAE_PRINTF("Export: loops forced to 0 (pre-output)\n");
     
     // CORRECTED ORDER: Start export FIRST, then start song
     // This is the correct order based on working MBAnsi test code
@@ -967,14 +964,31 @@ static bool bae_start_wav_export(const char* output_file) {
         return false;
     }
     
-    // Now start the song (after export is initialized)
+    // Auto-start path: preroll then start
+    BAESong_Stop(g_bae.song, FALSE);
+    BAESong_SetMicrosecondPosition(g_bae.song, 0);
+    BAESong_Preroll(g_bae.song);
+    BAESong_SetLoops(g_bae.song, 0);
+    BAE_PRINTF("Export: loops forced to 0 (post-preroll, auto-start)\n");
     result = BAESong_Start(g_bae.song, 0);
     if (result != BAE_NO_ERROR) {
-        char msg[128];
-        snprintf(msg, sizeof(msg), "Song start failed during export (%d)", result);
-        set_status_message(msg);
-        BAEMixer_StopOutputToFile();
-        return false;
+        BAE_PRINTF("Export: initial BAESong_Start failed (%d), retrying with re-preroll\n", result);
+        BAESong_Stop(g_bae.song, FALSE);
+        BAESong_SetMicrosecondPosition(g_bae.song, 0);
+        BAESong_Preroll(g_bae.song);
+        BAESong_SetLoops(g_bae.song, 0);
+        result = BAESong_Start(g_bae.song, 0);
+        if(result != BAE_NO_ERROR){
+            char msg[128];
+            snprintf(msg, sizeof(msg), "Song start failed during export (%d)", result);
+            set_status_message(msg);
+            BAEMixer_StopOutputToFile();
+            return false;
+        } else {
+            g_bae.is_playing = true;
+        }
+    } else {
+        g_bae.is_playing = true;
     }
     
     g_exporting = true;
@@ -983,7 +997,7 @@ static bool bae_start_wav_export(const char* output_file) {
     g_export_stall_iters = 0;
     strncpy(g_export_path, output_file ? output_file : "", sizeof(g_export_path)-1);
     g_export_path[sizeof(g_export_path)-1] = '\0';
-    set_status_message("Starting WAV export...");
+    // Status already set appropriately above
     return true;
 }
 
@@ -1048,7 +1062,9 @@ static void bae_service_wav_export() {
     int max_iterations = 100; // Increased from 10 to 100 for much faster export
     
     for (int i = 0; i < max_iterations && g_exporting; ++i) {
-        BAEResult r = BAEMixer_ServiceAudioOutputToFile(g_bae.mixer);
+    // Extra safety: ensure loops remain disabled while exporting
+    if(g_bae.song){ BAESong_SetLoops(g_bae.song, 0); }
+    BAEResult r = BAEMixer_ServiceAudioOutputToFile(g_bae.mixer);
         if (r != BAE_NO_ERROR) {
             char msg[128]; 
             snprintf(msg, sizeof(msg), "Export error (%d)", r); 
@@ -2193,8 +2209,8 @@ int main(int argc, char *argv[]){
     Rect progressRect = {pbuf_x, time_y, pbuf_w, pbuf_h>0?pbuf_h:16};
     bool progressHover = point_in(ui_mx,ui_my,progressRect);
     if(progressHover && ui_mclick){ progress = 0; bae_seek_ms(0); }
-    // Use accent for hover time highlight so it matches other accented controls (reverted from highlight)
-    SDL_Color progressColor = progressHover ? g_accent_color : labelCol;
+    // Use highlight color on hover (requested change from accent)
+    SDL_Color progressColor = progressHover ? g_highlight_color : labelCol;
     draw_text(R,pbuf_x, time_y, pbuf, progressColor);
     int slash_x = pbuf_x + pbuf_w + 6; // gap
     draw_text(R,slash_x, time_y, "/", labelCol);
@@ -2556,37 +2572,33 @@ int main(int argc, char *argv[]){
             // Mono/Stereo checkbox
             Rect cbRect = { dlg.x + pad, dlg.y + 72, 18, 18 };
             if(ui_toggle(R, cbRect, &g_stereo_output, "Stereo Output", mx,my,mclick)){
-                recreate_mixer_and_restore(44100, g_stereo_output, reverbType, transpose, tempo, volume, loopPlay, ch_enable);
+                // Capture position & playing state before recreate
+                int prePosMs = bae_get_pos_ms();
+                bool wasPlayingBefore = g_bae.is_playing; // reflects actual engine state
+                if(recreate_mixer_and_restore(44100, g_stereo_output, reverbType, transpose, tempo, volume, loopPlay, ch_enable)){
+                    // After recreate, engine may have resumed playback; resync local progress/duration
+                    if(wasPlayingBefore){
+                        // Position already sought inside recreate; just query fresh value
+                        progress = bae_get_pos_ms();
+                        duration = bae_get_len_ms();
+                    } else {
+                        // If previously stopped, ensure we restore prior position without auto-start
+                        if(prePosMs > 0){
+                            bae_seek_ms(prePosMs);
+                            progress = prePosMs;
+                            duration = bae_get_len_ms();
+                        } else {
+                            progress = 0; duration = bae_get_len_ms();
+                        }
+                        playing = false; // keep stopped state in UI
+                    }
+                }
                 save_settings(g_current_bank_path[0]?g_current_bank_path:NULL, reverbType, loopPlay);
             }
 
             // Sample Rate controls removed (fixed 44100Hz)
 
-            // Dropdown lists (render on top)
-            if(g_volumeCurveDropdownOpen){
-                int itemH = vcRect.h; int totalH = itemH * vcCount; Rect box = {vcRect.x, vcRect.y + vcRect.h + 1, vcRect.w, totalH};
-                draw_rect(R, box, g_panel_bg); draw_frame(R, box, g_panel_border);
-                for(int i=0;i<vcCount;i++){
-                    Rect ir = {box.x, box.y + i*itemH, box.w, itemH}; bool over = point_in(mx,my,ir);
-                    SDL_Color ibg = (i==g_volume_curve)? g_highlight_color : g_panel_bg; if(over) ibg = g_button_hover;
-                    draw_rect(R, ir, ibg);
-                    if(i < vcCount-1){ SDL_Color sep = g_panel_border; SDL_SetRenderDrawColor(R, sep.r, sep.g, sep.b, 255); SDL_RenderDrawLine(R, ir.x, ir.y+ir.h, ir.x+ir.w, ir.y+ir.h); }
-                    SDL_Color itxt = (i==g_volume_curve || over) ? g_button_text : g_text_color;
-                    draw_text(R, ir.x+6, ir.y+6, volumeCurveNames[i], itxt);
-                    if(over && mclick){ 
-                        g_volume_curve = i; 
-                        g_volumeCurveDropdownOpen = false; 
-                        // Update global default so subsequently loaded songs use this curve
-                        BAE_SetDefaultVelocityCurve(g_volume_curve);
-                        // Also update currently loaded song immediately (if any)
-                        if (g_bae.song && !g_bae.is_audio_file) {
-                            BAESong_SetVelocityCurve(g_bae.song, g_volume_curve);
-                        }
-                        save_settings(g_current_bank_path[0]?g_current_bank_path:NULL, reverbType, loopPlay);
-                    }
-                }
-                if(mclick && !point_in(mx,my,vcRect) && !point_in(mx,my,box)) g_volumeCurveDropdownOpen = false;
-            }
+            // (volume curve dropdown list rendering moved after footer so it truly appears on top of footer text)
 
             // (sample rate dropdown logic removed)
 
@@ -2632,7 +2644,36 @@ int main(int argc, char *argv[]){
                     }
                 }
             }
-            // Discard clicks outside dialog
+            // Now render the volume curve dropdown list LAST so it layers over footer text
+            if(g_volumeCurveDropdownOpen){
+                int itemH = vcRect.h; int totalH = itemH * vcCount; Rect box = {vcRect.x, vcRect.y + vcRect.h + 1, vcRect.w, totalH};
+                SDL_Color ddBg = g_panel_bg; ddBg.a = 255; 
+                SDL_Color shadow = {0,0,0, g_is_dark_mode ? 120 : 90};
+                Rect shadowRect = {box.x + 2, box.y + 2, box.w, box.h};
+                draw_rect(R, shadowRect, shadow);
+                draw_rect(R, box, ddBg); 
+                draw_frame(R, box, g_panel_border);
+                for(int i=0;i<vcCount;i++){
+                    Rect ir = {box.x, box.y + i*itemH, box.w, itemH}; bool over = point_in(mx,my,ir);
+                    SDL_Color ibg = (i==g_volume_curve)? g_highlight_color : g_panel_bg; if(over) ibg = g_button_hover;
+                    draw_rect(R, ir, ibg);
+                    if(i < vcCount-1){ SDL_Color sep = g_panel_border; SDL_SetRenderDrawColor(R, sep.r, sep.g, sep.b, 255); SDL_RenderDrawLine(R, ir.x, ir.y+ir.h, ir.x+ir.w, ir.y+ir.h); }
+                    SDL_Color itxt = (i==g_volume_curve || over) ? g_button_text : g_text_color;
+                    draw_text(R, ir.x+6, ir.y+6, volumeCurveNames[i], itxt);
+                    if(over && mclick){ 
+                        g_volume_curve = i; 
+                        g_volumeCurveDropdownOpen = false; 
+                        BAE_SetDefaultVelocityCurve(g_volume_curve);
+                        if (g_bae.song && !g_bae.is_audio_file) {
+                            BAESong_SetVelocityCurve(g_bae.song, g_volume_curve);
+                        }
+                        save_settings(g_current_bank_path[0]?g_current_bank_path:NULL, reverbType, loopPlay);
+                    }
+                }
+                if(mclick && !point_in(mx,my,vcRect) && !point_in(mx,my,box)) g_volumeCurveDropdownOpen = false;
+            }
+
+            // Discard clicks outside dialog (after dropdown so it doesn't immediately close on open)
             if(mclick && !point_in(mx,my,dlg)) { /* swallow */ }
         }
 
