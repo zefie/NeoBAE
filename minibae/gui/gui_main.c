@@ -1414,10 +1414,12 @@ static bool bae_play(bool *playing){
             }
             BAE_PRINTF("BAESound_Start ok for '%s'\n", g_bae.loaded_path);
             *playing = true;
+            g_bae.is_playing = true; // ensure main loop sees playing state for progress updates
             return true;
         } else {
             BAESound_Stop(g_bae.sound, FALSE);
             *playing = false;
+            g_bae.is_playing = false;
             return true;
         }
     } else if(!g_bae.is_audio_file && g_bae.song) {
@@ -1499,6 +1501,7 @@ static void bae_stop(bool *playing,int *progress){
     if(g_bae.is_audio_file && g_bae.sound) {
         BAESound_Stop(g_bae.sound, FALSE);
         *playing=false; *progress=0;
+    g_bae.is_playing = false;
     } else if(!g_bae.is_audio_file && g_bae.song) {
         BAESong_Stop(g_bae.song,FALSE); 
         BAESong_SetMicrosecondPosition(g_bae.song,0); 
@@ -1968,24 +1971,26 @@ int main(int argc, char *argv[]){
             last_drag_progress = -1;
         }
         
-        // Time display
-        char pbuf[64]; snprintf(pbuf,sizeof(pbuf),"%02d:%02d", (progress/1000)/60, (progress/1000)%60);
-        char dbuf[64]; snprintf(dbuf,sizeof(dbuf),"%02d:%02d", (duration/1000)/60, (duration/1000)%60);
-        
-        // Make progress time clickable to seek to beginning
-        Rect progressRect = {680, 194, 50, 16}; // Clickable area for progress time
-        bool progressHover = point_in(mx,my,progressRect);
-        
-        if(progressHover && mclick){
-            progress = 0;
-            bae_seek_ms(0);
-        }
-        
-        // Draw progress time with hover effect
-        SDL_Color progressColor = progressHover ? (SDL_Color){100,150,255,255} : labelCol;
-        draw_text(R,680, 194, pbuf, progressColor);
-        draw_text(R,750, 194, "/", labelCol);
-        draw_text(R,760, 194, dbuf, labelCol);
+    // Time display (add milliseconds to current position)
+    int prog_ms = progress % 1000;
+    int prog_sec = (progress/1000) % 60;
+    int prog_min = (progress/1000) / 60;
+    char pbuf[64]; snprintf(pbuf,sizeof(pbuf),"%02d:%02d.%03d", prog_min, prog_sec, prog_ms);
+    char dbuf[64]; snprintf(dbuf,sizeof(dbuf),"%02d:%02d", (duration/1000)/60, (duration/1000)%60);
+
+    int pbuf_w=0,pbuf_h=0; measure_text(pbuf,&pbuf_w,&pbuf_h);
+    int dbuf_w=0,dbuf_h=0; measure_text(dbuf,&dbuf_w,&dbuf_h);
+    int time_y = 194;
+    int pbuf_x = 680;
+    // Clickable region just around current time text
+    Rect progressRect = {pbuf_x, time_y, pbuf_w, pbuf_h>0?pbuf_h:16};
+    bool progressHover = point_in(mx,my,progressRect);
+    if(progressHover && mclick){ progress = 0; bae_seek_ms(0); }
+    SDL_Color progressColor = progressHover ? (SDL_Color){100,150,255,255} : labelCol;
+    draw_text(R,pbuf_x, time_y, pbuf, progressColor);
+    int slash_x = pbuf_x + pbuf_w + 6; // gap
+    draw_text(R,slash_x, time_y, "/", labelCol);
+    draw_text(R,slash_x + 10, time_y, dbuf, labelCol);
 
         // Transport buttons
         if(ui_button(R,(Rect){20, 215, 60,22}, playing?"Pause":"Play", mx,my,mdown) && mclick){ 
