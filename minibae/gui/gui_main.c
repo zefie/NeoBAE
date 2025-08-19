@@ -2773,7 +2773,8 @@ int main(int argc, char *argv[]){
         }
         
     // Shifted right and slightly wider so it doesn't cover friendly bank info text
-    if(ui_button(R,(Rect){340,lineY2-2,120,20}, "Load Bank...", ui_mx,ui_my,ui_mdown) && ui_mclick && !modal_block){
+    // Moved further right by 150px to avoid overlapping friendly names
+    if(ui_button(R,(Rect){490,lineY2-2,120,20}, "Load Bank...", ui_mx,ui_my,ui_mdown) && ui_mclick && !modal_block){
             #ifdef _WIN32
             char fileBuf[1024]={0};
             OPENFILENAMEA ofn; ZeroMemory(&ofn,sizeof(ofn));
@@ -2811,7 +2812,8 @@ int main(int argc, char *argv[]){
 #ifdef _BUILT_IN_PATCHES
     // Builtin Bank button: placed to the right of Load Bank; disabled when builtin is already loaded
     {
-        Rect builtinBtn = { 340 + 120 + 8, lineY2-2, 110, 20 };
+        // Move builtin button in tandem with Load Bank (+150px)
+        Rect builtinBtn = { 490 + 120 + 8, lineY2-2, 110, 20 };
         bool builtin_loaded = (g_current_bank_path[0] && strcmp(g_current_bank_path, "__builtin__") == 0);
         bool builtinEnabled = !builtin_loaded && !modal_block && !g_reverbDropdownOpen;
         bool overBuiltin = builtinEnabled && point_in(ui_mx, ui_my, builtinBtn);

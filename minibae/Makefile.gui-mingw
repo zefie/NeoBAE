@@ -45,7 +45,7 @@ else
 CFLAGS  += -I../SDL2-2.32.8/x86_64-w64-mingw32/include/SDL2 -I../SDL2_ttf-2.24.0/x86_64-w64-mingw32/include/SDL2
 LDFLAGS += -L../SDL2-2.32.8/x86_64-w64-mingw32/lib -L ../SDL2_ttf-2.24.0/x86_64-w64-mingw32/lib
 endif
-# Override LIBS completely for SDL build to enforce correct ordering
+
 LIBS = \
 			-lmingw32 \
 			-lSDL2main \
