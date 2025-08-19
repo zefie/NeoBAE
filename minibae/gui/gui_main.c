@@ -2433,7 +2433,14 @@ int main(int argc, char *argv[]){
 #ifdef SUPPORT_KARAOKE
     // Insert karaoke panel (if active) above status panel; dynamic window height
     int karaokePanelHeight = 40;    
-    bool showKaraoke = g_karaoke_enabled && !g_karaoke_suspended && g_lyric_count > 0 && g_bae.song_loaded && !g_bae.is_audio_file;
+    // Show karaoke if enabled and not suspended for the current song.
+    // Previously this required g_lyric_count>0 which hid the panel while
+    // fragments were being accumulated (no committed lines yet). Include
+    // the transient current/previous buffers so the panel appears as soon
+    // as any lyric text exists.
+    bool showKaraoke = g_karaoke_enabled && !g_karaoke_suspended &&
+        (g_lyric_count > 0 || g_karaoke_line_current[0] || g_karaoke_line_previous[0]) &&
+        g_bae.song_loaded && !g_bae.is_audio_file;
     Rect karaokePanel = {10, 250, 880, karaokePanelHeight};
     int statusY = 250;
     int neededH = WINDOW_BASE_H;
