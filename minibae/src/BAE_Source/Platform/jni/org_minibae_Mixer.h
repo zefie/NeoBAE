@@ -12,7 +12,7 @@ extern "C" {
  * Method:    _newMixer
  * Signature: ()I
  */
-JNIEXPORT jint JNICALL Java_org_minibae_Mixer__1newMixer
+JNIEXPORT jlong JNICALL Java_org_minibae_Mixer__1newMixer
   (JNIEnv *, jclass);
 
 /*
@@ -21,7 +21,7 @@ JNIEXPORT jint JNICALL Java_org_minibae_Mixer__1newMixer
  * Signature: (I)V
  */
 JNIEXPORT void JNICALL Java_org_minibae_Mixer__1deleteMixer
-  (JNIEnv *, jclass, jint);
+  (JNIEnv *, jclass, jlong);
 
 /*
  * Class:     org_minibae_Mixer
@@ -29,7 +29,22 @@ JNIEXPORT void JNICALL Java_org_minibae_Mixer__1deleteMixer
  * Signature: (IIIIII)I
  */
 JNIEXPORT jint JNICALL Java_org_minibae_Mixer__1openMixer
-  (JNIEnv *, jclass, jint, jint, jint, jint, jint, jint);
+  (JNIEnv *, jclass, jlong, jint, jint, jint, jint, jint);
+
+JNIEXPORT jint JNICALL Java_org_minibae_Mixer__1setDefaultReverb
+  (JNIEnv *, jclass, jlong, jint);
+
+JNIEXPORT jint JNICALL Java_org_minibae_Mixer__1addBankFromFile
+  (JNIEnv *, jclass, jlong, jstring);
+
+JNIEXPORT jint JNICALL Java_org_minibae_Mixer__1setMasterVolume
+  (JNIEnv *, jclass, jlong, jint);
+
+JNIEXPORT jint JNICALL Java_org_minibae_Mixer__1setDefaultVelocityCurve
+  (JNIEnv *, jclass, jint);
+
+JNIEXPORT jstring JNICALL Java_org_minibae_Mixer__1getBankFriendlyName
+  (JNIEnv *, jclass, jlong);
 
 #ifdef __cplusplus
 }

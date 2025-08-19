@@ -1,0 +1,71 @@
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+    id 'org.jetbrains.kotlin.plugin.compose' // Added
+}
+
+android {
+    namespace "com.zefie.miniBAEDroid"
+    compileSdk 36
+
+    defaultConfig {
+        applicationId "com.zefie.miniBAEDroid"
+        minSdk 21
+        targetSdk 36
+        versionCode 1
+        versionName "1.0"
+        ndk {
+            abiFilters 'armeabi-v7a','arm64-v8a','x86','x86_64'
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    externalNativeBuild {
+        ndkBuild {
+            path file('../jni/Android.mk')
+        }
+    }
+
+    buildFeatures {
+        compose true
+    }
+
+    // It's also common to define the compiler version directly in the plugin block if needed,
+    // or rely on the versions brought in by your Compose BOM.
+}
+
+dependencies {
+    implementation 'androidx.appcompat:appcompat:1.7.1'
+    implementation 'org.jetbrains.kotlin:kotlin-stdlib:2.2.10' // You are using Kotlin 2.2.10
+
+    // Jetpack Compose core dependencies via BOM (removes explicit versions to avoid resolution mismatch)
+    def composeBom = platform('androidx.compose:compose-bom:2025.08.00') // Keep updated with latest stable
+    implementation composeBom
+    androidTestImplementation composeBom
+
+    implementation 'androidx.activity:activity-compose:1.10.1' // Activity Compose (not in BOM group)
+    implementation 'androidx.compose.ui:ui'
+    implementation 'androidx.compose.material:material'
+    implementation 'androidx.compose.material:material-icons-extended'
+    implementation 'androidx.compose.ui:ui-tooling-preview'
+    // DocumentFile (SAF) support
+    implementation 'androidx.documentfile:documentfile:1.1.0'
+
+    debugImplementation 'androidx.compose.ui:ui-tooling'
+
+    // Add the Compose compiler dependency (often not needed if using the plugin and BOM correctly)
+    // implementation "androidx.compose.compiler:compiler:LATEST_COMPATIBLE_VERSION"
+}
+
+// Ensure Kotlin compiler produces Java 1.8 bytecode to match Java compile task
+tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+    kotlinOptions {
+        jvmTarget = "1.8"
+    }
+}

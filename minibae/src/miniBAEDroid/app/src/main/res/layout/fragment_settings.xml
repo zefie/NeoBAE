@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="match_parent">
+    <LinearLayout android:orientation="vertical" android:layout_width="match_parent" android:layout_height="wrap_content" android:padding="16dp">
+
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Reverb" />
+        <Spinner android:id="@+id/reverb_spinner" android:layout_width="match_parent" android:layout_height="wrap_content" />
+
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Bank" android:layout_marginTop="12dp" />
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+            <Button android:id="@+id/load_bank" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="Load bank (pick .hsb)" />
+            <Button android:id="@+id/load_builtin_patches" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Load built-in patches" android:layout_marginStart="8dp" />
+        </LinearLayout>
+        <TextView
+            android:id="@+id/bank_name"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="No bank loaded"
+            android:textStyle="italic" />
+
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Master Volume" android:layout_marginTop="12dp" />
+        <SeekBar android:id="@+id/master_volume" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="100" android:progress="75" />
+
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Velocity Curve" android:layout_marginTop="12dp" />
+        <Spinner android:id="@+id/curve_spinner" android:layout_width="match_parent" android:layout_height="wrap_content" />
+
+    </LinearLayout>
+</ScrollView>

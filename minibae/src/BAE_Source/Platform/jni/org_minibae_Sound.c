@@ -13,15 +13,36 @@
 #include "org_minibae_Sound.h"
 #include "MiniBAE.h"
 
+#include <android/asset_manager.h>
+#include <android/asset_manager_jni.h>
+#include <sys/stat.h>
+#include <stdlib.h>
+
+// Optional writable cache directory provided by Java layer. If empty, fallback to /data/local/tmp
+static char g_miniBAE_cache_dir[512] = "";
+
+// JNI setter to allow Java to provide a writable cache directory for temp files
+JNIEXPORT void JNICALL Java_org_minibae_Mixer__1setNativeCacheDir(JNIEnv* env, jclass clazz, jstring path)
+{
+	if(!path) return;
+	const char* cpath = (*env)->GetStringUTFChars(env, path, NULL);
+	if(!cpath) return;
+	// copy up to buffer size-1
+	strncpy(g_miniBAE_cache_dir, cpath, sizeof(g_miniBAE_cache_dir)-1);
+	g_miniBAE_cache_dir[sizeof(g_miniBAE_cache_dir)-1] = '\0';
+	__android_log_print(ANDROID_LOG_DEBUG, "miniBAE", "g_miniBAE_cache_dir set to %s", g_miniBAE_cache_dir);
+	(*env)->ReleaseStringUTFChars(env, path, cpath);
+}
+
 /*
  * Class:     org_minibae_Sound
  * Method:    _newNativeSound
  * Signature: (I)I
  */
-JNIEXPORT jint JNICALL Java_org_minibae_Sound__1newNativeSound
-  (JNIEnv* env, jobject jsound, jint mixerReference)
+JNIEXPORT jlong JNICALL Java_org_minibae_Sound__1newNativeSound
+	(JNIEnv* env, jobject jsound, jlong mixerReference)
 {
-	BAEMixer mixer = (BAEMixer)mixerReference;
+		BAEMixer mixer = (BAEMixer)(intptr_t)mixerReference;
 	BAESound sound = NULL;
 
 	if (mixer)
@@ -29,7 +50,7 @@ JNIEXPORT jint JNICALL Java_org_minibae_Sound__1newNativeSound
 		__android_log_print(ANDROID_LOG_DEBUG, "miniBAE", "hello sound %p", (void*)mixer);
 		sound = BAESound_New(mixer);
 	}
-	return (jint)sound;
+	return (jlong)(intptr_t)sound;
 }
 
 /*
@@ -38,12 +59,50 @@ JNIEXPORT jint JNICALL Java_org_minibae_Sound__1newNativeSound
  * Signature: (Ljava/nio/ByteBuffer;)I
  */
 JNIEXPORT jint JNICALL Java_org_minibae_Sound__1loadSound__Ljava_nio_ByteBuffer_2
-  (JNIEnv* env, jobject snd, jint soundReference, jobject byteBuffer)
+	(JNIEnv* env, jobject snd, jlong soundReference, jobject byteBuffer)
 {
-	BAESound sound = (BAESound)soundReference;
-	__android_log_print(ANDROID_LOG_DEBUG, "miniBAE", "hello sound %p", (void*)soundReference);
+	BAESound sound = (BAESound)(intptr_t)soundReference;
+	__android_log_print(ANDROID_LOG_DEBUG, "miniBAE", "_loadSound(ByteBuffer) sound=%p byteBuffer=%p", (void*)sound, (void*)byteBuffer);
 
-	return 0;
+	if(!sound){ __android_log_print(ANDROID_LOG_ERROR, "miniBAE", "_loadSound(ByteBuffer): invalid sound handle"); return (jint)BAE_PARAM_ERR; }
+	if(!byteBuffer){ __android_log_print(ANDROID_LOG_ERROR, "miniBAE", "ByteBuffer is null"); return (jint)BAE_PARAM_ERR; }
+
+	void* data = (*env)->GetDirectBufferAddress(env, byteBuffer);
+	if(!data){ __android_log_print(ANDROID_LOG_ERROR, "miniBAE", "GetDirectBufferAddress returned NULL - perhaps not a direct ByteBuffer"); return (jint)BAE_PARAM_ERR; }
+	jsize cap = (*env)->GetDirectBufferCapacity(env, byteBuffer);
+	if(cap <= 0){ __android_log_print(ANDROID_LOG_ERROR, "miniBAE", "ByteBuffer capacity <= 0"); return (jint)BAE_BAD_FILE; }
+
+	// Heuristic file type detection (extension-less memory buffer)
+	const unsigned char *bytes = (const unsigned char*)data;
+	BAEFileType ftype = BAE_INVALID_TYPE;
+	if(cap >= 12 && (memcmp(bytes, "RIFF", 4) == 0) && memcmp(bytes+8, "WAVE", 4) == 0){
+		ftype = BAE_WAVE_TYPE;
+	}else if(cap >= 12 && (memcmp(bytes, "FORM", 4) == 0) && (memcmp(bytes+8, "AIFF", 4) == 0 || memcmp(bytes+8, "AIFC", 4) == 0)){
+		ftype = BAE_AIFF_TYPE;
+	}else if(cap >= 4 && (memcmp(bytes, ".snd", 4) == 0)){
+		ftype = BAE_AU_TYPE;
+	}else if(cap >= 3 && (memcmp(bytes, "ID3", 3) == 0)){
+		ftype = BAE_MPEG_TYPE; // MP3 with ID3 tag
+	}else if(cap >= 2 && bytes[0] == 0xFF && (bytes[1] & 0xE0) == 0xE0){
+		// Likely MPEG frame (MP2/MP3). Distinguish Layer via bits but engine uses single MPEG type.
+		ftype = BAE_MPEG_TYPE;
+	}
+
+	if(ftype == BAE_INVALID_TYPE){
+		__android_log_print(ANDROID_LOG_ERROR, "miniBAE", "_loadSound(ByteBuffer) unknown/unsupported buffer format");
+		return (jint)BAE_UNSUPPORTED_FORMAT;
+	}
+
+	// Copy to owned memory because underlying load routine may read asynchronously or expect stable pointer
+	unsigned char *copy = (unsigned char*)malloc((size_t)cap);
+	if(!copy){ return (jint)BAE_MEMORY_ERR; }
+	memcpy(copy, data, (size_t)cap);
+	BAEResult sr = BAESound_LoadMemorySample(sound, (void*)copy, (uint32_t)cap, ftype);
+	// BAESound_LoadMemorySample copies/allocates its own internal Wave data; we can free our temp copy.
+	free(copy);
+	if(sr != BAE_NO_ERROR){ __android_log_print(ANDROID_LOG_ERROR, "miniBAE", "BAESound_LoadMemorySample failed %d", sr); return (jint)sr; }
+	__android_log_print(ANDROID_LOG_DEBUG, "miniBAE", "Loaded sound from ByteBuffer (%d bytes) type=%d", (int)cap, ftype);
+	return (jint)BAE_NO_ERROR;
 }
 
 /*
@@ -52,11 +111,291 @@ JNIEXPORT jint JNICALL Java_org_minibae_Sound__1loadSound__Ljava_nio_ByteBuffer_
  * Signature: (Landroid/content/res/AssetManager;Ljava/lang/String;)I
  */
 JNIEXPORT jint JNICALL Java_org_minibae_Sound__1loadSound__Landroid_content_res_AssetManager_2Ljava_lang_String_2
-  (JNIEnv* env, jobject jsound, jint soundReference, jobject assetManager, jstring filename)
+	(JNIEnv* env, jobject jsound, jlong soundReference, jobject assetManager, jstring filename)
 {
-	BAESound sound = (BAESound)soundReference;
-	__android_log_print(ANDROID_LOG_DEBUG, "miniBAE", "hello sound %p", (void*)soundReference);
+		BAESound sound = (BAESound)(intptr_t)soundReference;
+		__android_log_print(ANDROID_LOG_DEBUG, "miniBAE", "hello sound %p", (void*)sound);
 
-	return 0;
+	if(!assetManager || !filename) return (jint)BAE_PARAM_ERR;
+
+	AAssetManager* mgr = AAssetManager_fromJava(env, assetManager);
+	if(!mgr) return (jint)BAE_GENERAL_ERR;
+
+	const char* fname = (*env)->GetStringUTFChars(env, filename, NULL);
+	if(!fname) return (jint)BAE_PARAM_ERR;
+
+	AAsset* asset = AAssetManager_open(mgr, fname, AASSET_MODE_STREAMING);
+	if(!asset){ __android_log_print(ANDROID_LOG_ERROR, "miniBAE", "Failed to open asset %s", fname); (*env)->ReleaseStringUTFChars(env, filename, fname); return (jint)BAE_FILE_NOT_FOUND; }
+
+	// Read entire asset into memory
+	off_t asset_len = AAsset_getLength(asset);
+	if(asset_len <= 0){ __android_log_print(ANDROID_LOG_ERROR, "miniBAE", "Asset has zero length %s", fname); AAsset_close(asset); (*env)->ReleaseStringUTFChars(env, filename, fname); return (jint)BAE_BAD_FILE; }
+	unsigned char *mem = (unsigned char*)malloc((size_t)asset_len);
+	if(!mem){ __android_log_print(ANDROID_LOG_ERROR, "miniBAE", "Out of memory reading asset %s", fname); AAsset_close(asset); (*env)->ReleaseStringUTFChars(env, filename, fname); return (jint)BAE_MEMORY_ERR; }
+	int32_t read_total = 0;
+	int32_t r = 0;
+	while(read_total < asset_len && (r = AAsset_read(asset, mem + read_total, (size_t)(asset_len - read_total))) > 0){ read_total += r; }
+	AAsset_close(asset);
+
+	// Determine extension BEFORE releasing UTF chars
+	const char *ext = strrchr(fname, '.');
+	// copy extension for safety after release
+	char extCopy[16];
+	if(ext){
+		strncpy(extCopy, ext, sizeof(extCopy)-1);
+		extCopy[sizeof(extCopy)-1] = '\0';
+		ext = extCopy;
+	}
+	(*env)->ReleaseStringUTFChars(env, filename, fname);
+	if(ext){
+		if(strcasecmp(ext, ".mid") == 0 || strcasecmp(ext, ".midi") == 0 || strcasecmp(ext, ".kar") == 0){
+			// create BAESong and load from memory
+			BAEMixer mixer = NULL;
+			if(sound){ BAESound_GetMixer(sound, &mixer); }
+			if(!mixer){ free(mem); __android_log_print(ANDROID_LOG_ERROR, "miniBAE", "No mixer available for sound load"); return (jint)BAE_NOT_SETUP; }
+
+			BAESong song = BAESong_New(mixer);
+			if(!song){ free(mem); return (jint)BAE_MEMORY_ERR; }
+			BAEResult sr = BAESong_LoadMidiFromMemory(song, (void const*)mem, (uint32_t)read_total, TRUE);
+			free(mem);
+			if(sr != BAE_NO_ERROR){ BAESong_Delete(song); __android_log_print(ANDROID_LOG_ERROR, "miniBAE", "BAESong_LoadMidiFromMemory failed %d", sr); return (jint)sr; }
+			BAESong_Preroll(song);
+			sr = BAESong_Start(song, 0);
+			if(sr != BAE_NO_ERROR){ BAESong_Stop(song, FALSE); BAESong_Delete(song); __android_log_print(ANDROID_LOG_ERROR, "miniBAE", "BAESong_Start failed %d", sr); return (jint)sr; }
+			__android_log_print(ANDROID_LOG_DEBUG, "miniBAE", "Started song from asset memory %s", fname);
+			return (jint)BAE_NO_ERROR;
+		}
+	}
+
+	// Fallback: attempt to load as BAESound sample file from memory
+	if(sound){
+		BAEFileType ftype = BAE_INVALID_TYPE;
+		if(ext){ if(strcasecmp(ext, ".wav") == 0) ftype = BAE_WAVE_TYPE; else if(strcasecmp(ext, ".aif") == 0 || strcasecmp(ext, ".aiff") == 0) ftype = BAE_AIFF_TYPE; else if(strcasecmp(ext, ".au") == 0) ftype = BAE_AU_TYPE; else if(strcasecmp(ext, ".mp3") == 0) ftype = BAE_MPEG_TYPE; }
+		if(ftype != BAE_INVALID_TYPE){
+			BAEResult sr = BAESound_LoadMemorySample(sound, (void*)mem, (uint32_t)read_total, ftype);
+			free(mem);
+			if(sr != BAE_NO_ERROR){ __android_log_print(ANDROID_LOG_ERROR, "miniBAE", "BAESound_LoadMemorySample failed %d", sr); return (jint)sr; }
+			BAESong_Preroll(sound);
+			sr = BAESound_Start(sound, 0, FLOAT_TO_UNSIGNED_FIXED(1.0), 0);
+			if(sr != BAE_NO_ERROR){ BAESound_Stop(sound, FALSE); __android_log_print(ANDROID_LOG_ERROR, "miniBAE", "BAESound_Start failed %d", sr); return (jint)sr; }
+			return (jint)BAE_NO_ERROR;
+		}
+		free(mem);
+	}
+
+	free(mem);
+	return (jint)BAE_UNSUPPORTED_FORMAT;
 }
 
+// Helper to get mixer from sound - forward declaration (if not present in header)
+// Implement BAESound_GetMixer wrapper if missing
+
+// SONG JNI bindings
+JNIEXPORT jlong JNICALL Java_org_minibae_Song__1newNativeSong
+	(JNIEnv* env, jobject jsong, jlong mixerReference)
+{
+		BAEMixer mixer = (BAEMixer)(intptr_t)mixerReference;
+		BAESong song = NULL;
+		if(mixer){ song = BAESong_New(mixer); }
+		return (jlong)(intptr_t)song;
+}
+
+JNIEXPORT jint JNICALL Java_org_minibae_Song__1loadSong
+	(JNIEnv* env, jobject jsong, jlong songReference, jstring path)
+{
+		if(!path) return (jint)BAE_PARAM_ERR;
+		const char *cpath = (*env)->GetStringUTFChars(env, path, NULL);
+		if(!cpath) return (jint)BAE_PARAM_ERR;
+		__android_log_print(ANDROID_LOG_DEBUG, "miniBAE", "_loadSong path=%s song=%p", cpath, (void*)(intptr_t)songReference);
+		BAESong song = (BAESong)(intptr_t)songReference;
+		if(!song){ __android_log_print(ANDROID_LOG_ERROR, "miniBAE", "_loadSong: invalid song handle"); (*env)->ReleaseStringUTFChars(env, path, cpath); return (jint)BAE_PARAM_ERR; }
+	BAEResult r = BAE_BAD_FILE;
+	const char *ext = strrchr(cpath, '.');
+	if(ext && (strcasecmp(ext, ".mid") == 0 || strcasecmp(ext, ".midi") == 0 || strcasecmp(ext, ".kar") == 0)){
+		r = BAESong_LoadMidiFromFile(song, (BAEPathName)cpath, TRUE);
+		__android_log_print(ANDROID_LOG_DEBUG, "miniBAE", "BAESong_LoadMidiFromFile returned %d", r);
+	} else {
+		// Try multiple RMF song indices (0..7)
+		const int kMaxSongIndexProbe = 8;
+		for(int idx = 0; idx < kMaxSongIndexProbe; ++idx){
+			BAEResult tr = BAESong_LoadRmfFromFile(song, (BAEPathName)cpath, (int16_t)idx, TRUE);
+			__android_log_print(ANDROID_LOG_DEBUG, "miniBAE", "BAESong_LoadRmfFromFile(index=%d) returned %d", idx, tr);
+			if(tr == BAE_NO_ERROR){ r = tr; break; }
+			if(tr != BAE_RESOURCE_NOT_FOUND){ r = tr; break; }
+			if(idx == kMaxSongIndexProbe - 1){ r = tr; }
+		}
+	}
+	(*env)->ReleaseStringUTFChars(env, path, cpath);
+	return (jint)r;
+}
+
+JNIEXPORT jint JNICALL Java_org_minibae_Song__1loadSongFromMemory
+	(JNIEnv* env, jobject jsong, jlong songReference, jbyteArray data)
+{
+	if(!data) return (jint)BAE_PARAM_ERR;
+	BAESong song = (BAESong)(intptr_t)songReference;
+	if(!song) return (jint)BAE_PARAM_ERR;
+
+	jsize len = (*env)->GetArrayLength(env, data);
+	jbyte *bytes = (*env)->GetByteArrayElements(env, data, NULL);
+	if(!bytes) return (jint)BAE_MEMORY_ERR;
+
+	__android_log_print(ANDROID_LOG_DEBUG, "miniBAE", "_loadSongFromMemory song=%p len=%d", (void*)(intptr_t)songReference, (int)len);
+
+	// RMF header probe (first 12 bytes: 'IREZ' mapID, version, totalResources). Always log to help diagnose 10030.
+	if(len >= 12){
+		unsigned char *ub = (unsigned char*)bytes;
+		uint32_t be_mapID = (uint32_t)ub[0]<<24 | (uint32_t)ub[1]<<16 | (uint32_t)ub[2]<<8 | (uint32_t)ub[3];
+		uint32_t be_version = (uint32_t)ub[4]<<24 | (uint32_t)ub[5]<<16 | (uint32_t)ub[6]<<8 | (uint32_t)ub[7];
+		uint32_t be_total = (uint32_t)ub[8]<<24 | (uint32_t)ub[9]<<16 | (uint32_t)ub[10]<<8 | (uint32_t)ub[11];
+		__android_log_print(ANDROID_LOG_DEBUG, "miniBAE", "RMF probe: raw12=%02X%02X%02X%02X %02X%02X%02X%02X %02X%02X%02X%02X mapID_be=0x%08X version_be=%u totalResources_be=%u", ub[0],ub[1],ub[2],ub[3],ub[4],ub[5],ub[6],ub[7],ub[8],ub[9],ub[10],ub[11], be_mapID, be_version, be_total);
+		// If bytes look like 'IREZ' in ASCII order (big-endian), mapID should be 0x4952455A
+		if(be_mapID == 0x4952455A){
+			__android_log_print(ANDROID_LOG_DEBUG, "miniBAE", "RMF probe: detected IREZ header (potential RMF resource file)");
+			// Enumerate resource entries for diagnostics (types, ids) if totalResources reasonable
+			if(be_total > 0 && be_total < 256){
+				uint32_t nextOffset = 12; // sizeof map
+				for(uint32_t resIndex=0; resIndex < be_total; ++resIndex){
+					if(nextOffset + 4*3 + 1 + 4 > (uint32_t)len){ // need at least minimal header
+						__android_log_print(ANDROID_LOG_DEBUG, "miniBAE", "RMF enumerate: truncated before resource %u", resIndex);
+						break;
+					}
+					unsigned char *base = ub + nextOffset;
+					uint32_t rawNext = (uint32_t)base[0]<<24 | (uint32_t)base[1]<<16 | (uint32_t)base[2]<<8 | (uint32_t)base[3];
+					uint32_t rawType = (uint32_t)base[4]<<24 | (uint32_t)base[5]<<16 | (uint32_t)base[6]<<8 | (uint32_t)base[7];
+					uint32_t rawID   = (uint32_t)base[8]<<24 | (uint32_t)base[9]<<16 | (uint32_t)base[10]<<8 | (uint32_t)base[11];
+					uint8_t nameLen = base[12];
+					uint32_t minEntrySize = 4/*next*/+4/*type*/+4/*id*/+1/*len*/+nameLen+4/*resLen*/;
+					if(nextOffset + minEntrySize > (uint32_t)len){
+						__android_log_print(ANDROID_LOG_DEBUG, "miniBAE", "RMF enumerate: resource %u truncated (need %u bytes)", resIndex, (unsigned)minEntrySize);
+						break;
+					}
+					uint32_t rawResLenOffset = nextOffset + 4+4+4+1+nameLen; // position of length field
+					unsigned char *lenPtr = ub + rawResLenOffset;
+					uint32_t rawResLen = (uint32_t)lenPtr[0]<<24 | (uint32_t)lenPtr[1]<<16 | (uint32_t)lenPtr[2]<<8 | (uint32_t)lenPtr[3];
+					char typeStr[5]; typeStr[0]=(char)(rawType>>24); typeStr[1]=(char)(rawType>>16); typeStr[2]=(char)(rawType>>8); typeStr[3]=(char)(rawType); typeStr[4]='\0';
+					char nameBuf[64];
+					if(nameLen){
+						uint32_t copyLen = (nameLen < sizeof(nameBuf)-1)? nameLen : (uint32_t)(sizeof(nameBuf)-1);
+						memcpy(nameBuf, base+13, copyLen); nameBuf[copyLen]='\0';
+					}else{ nameBuf[0]='\0'; }
+					__android_log_print(ANDROID_LOG_DEBUG, "miniBAE", "RMF resource[%u]: type='%s' (0x%08X) id=%u nameLen=%u name='%s' dataLen=%u next=0x%08X", resIndex, typeStr, rawType, rawID, nameLen, nameBuf, rawResLen, rawNext);
+					// compute start of data after len field
+					uint32_t dataStart = rawResLenOffset + 4;
+					if(rawResLen && dataStart + rawResLen <= (uint32_t)len){
+						// log first up to 8 bytes hex for SONG or other interesting types
+						if(rawType == 0x534F4E47 /*'SONG'*/){
+							char hexPreview[3*8+1]; hexPreview[0]='\0';
+							uint32_t preview = (rawResLen < 8)? rawResLen : 8;
+							for(uint32_t pi=0; pi<preview; ++pi){
+								char tmp[4]; snprintf(tmp, sizeof(tmp), "%02X ", ub[dataStart+pi]); strncat(hexPreview, tmp, sizeof(hexPreview)-strlen(hexPreview)-1);
+							}
+							__android_log_print(ANDROID_LOG_DEBUG, "miniBAE", "RMF resource[%u] SONG first bytes: %s", resIndex, hexPreview);
+						}
+					}
+					if(rawNext == 0 || rawNext >= (uint32_t)len){
+						// if rawNext seems invalid, infer next by skipping this entry
+						rawNext = dataStart + rawResLen;
+					}
+					nextOffset = rawNext;
+					if(nextOffset <= 12){
+						__android_log_print(ANDROID_LOG_DEBUG, "miniBAE", "RMF enumerate: nextOffset stuck (%u), abort", nextOffset);
+						break;
+					}
+					if(nextOffset >= (uint32_t)len){
+						__android_log_print(ANDROID_LOG_DEBUG, "miniBAE", "RMF enumerate: nextOffset past end (%u >= %d)", nextOffset, (int)len);
+						break;
+					}
+				}
+			}
+		}
+	}
+
+	BAEResult r;
+	BAE_BOOL headerIsRMF = FALSE;
+	if(len >= 4){
+		unsigned char *ub = (unsigned char*)bytes;
+		uint32_t be_mapID = (uint32_t)ub[0]<<24 | (uint32_t)ub[1]<<16 | (uint32_t)ub[2]<<8 | (uint32_t)ub[3];
+		if(be_mapID == 0x4952455A){ headerIsRMF = TRUE; }
+	}
+	if(!headerIsRMF){
+		// Try loading as MIDI first if not clearly RMF
+		r = BAESong_LoadMidiFromMemory(song, (void const*)bytes, (uint32_t)len, TRUE);
+		__android_log_print(ANDROID_LOG_DEBUG, "miniBAE", "BAESong_LoadMidiFromMemory returned %d", r);
+		if(r == BAE_NO_ERROR){
+			// Done
+			(*env)->ReleaseByteArrayElements(env, data, bytes, JNI_ABORT);
+			return (jint)r;
+		}
+	}
+	// Either detected RMF header or MIDI load failed; attempt RMF indices.
+	const int kMaxSongIndexProbe = 4; // only need small probe; SONG index is relative to SONG entries
+	BAEResult lastErr = BAE_RESOURCE_NOT_FOUND;
+	for(int idx = 0; idx < kMaxSongIndexProbe; ++idx){
+		BAEResult tr = BAESong_LoadRmfFromMemory(song, (void const*)bytes, (uint32_t)len, (int16_t)idx, TRUE);
+		__android_log_print(ANDROID_LOG_DEBUG, "miniBAE", "BAESong_LoadRmfFromMemory(index=%d) returned %d", idx, tr);
+		if(tr == BAE_NO_ERROR){ r = tr; goto doneLoad; }
+		if(tr != BAE_RESOURCE_NOT_FOUND){ lastErr = tr; break; }
+		lastErr = tr; // keep last
+	}
+	r = lastErr;
+doneLoad:
+
+	(*env)->ReleaseByteArrayElements(env, data, bytes, JNI_ABORT);
+	return (jint)r;
+}
+
+JNIEXPORT jint JNICALL Java_org_minibae_Song__1startSong
+	(JNIEnv* env, jobject jsong, jlong songReference)
+{
+	BAESong song = (BAESong)(intptr_t)songReference;
+	if(!song) return (jint)BAE_PARAM_ERR;
+	// ensure song volume applied
+	BAE_UNSIGNED_FIXED cur;
+	if(BAESong_GetVolume(song, &cur) == BAE_NO_ERROR){ BAESong_SetVolume(song, cur); }
+	__android_log_print(ANDROID_LOG_DEBUG, "miniBAE", "_startSong song=%p", (void*)(intptr_t)songReference);
+	BAESong_Preroll(song);
+	BAEResult r = BAESong_Start(song, 0);
+	__android_log_print(ANDROID_LOG_DEBUG, "miniBAE", "BAESong_Start returned %d", r);
+	return (jint)r;
+}
+
+JNIEXPORT void JNICALL Java_org_minibae_Song__1stopSong
+	(JNIEnv* env, jobject jsong, jlong songReference)
+{
+		BAESong song = (BAESong)(intptr_t)songReference;
+		if(song){ BAESong_Stop(song, FALSE); BAESong_Delete(song); }
+}
+
+
+JNIEXPORT jlong JNICALL
+Java_org_minibae_Sound__1loadSound__ILjava_nio_ByteBuffer_2(JNIEnv *env, jobject thiz,
+                                                            jlong sound_reference,
+                                                            jobject file_data) {
+    // TODO: implement _loadSound()
+}
+
+JNIEXPORT jlong JNICALL
+Java_org_minibae_Sound__1loadSound__ILandroid_content_res_AssetManager_2Ljava_lang_String_2(
+        JNIEnv *env, jobject thiz, jlong sound_reference, jobject asset_manager, jstring file) {
+    // TODO: implement _loadSound()
+}
+
+JNIEXPORT jint JNICALL Java_org_minibae_Song__1setSongVolume
+	(JNIEnv* env, jclass clazz, jlong songReference, jint fixedVolume)
+{
+	BAESong song = (BAESong)(intptr_t)songReference;
+	if(!song) return (jint)BAE_PARAM_ERR;
+	BAEResult r = BAESong_SetVolume(song, (BAE_UNSIGNED_FIXED)fixedVolume);
+	return (jint)r;
+}
+
+JNIEXPORT jint JNICALL Java_org_minibae_Song__1getSongVolume
+	(JNIEnv* env, jclass clazz, jlong songReference)
+{
+	BAESong song = (BAESong)(intptr_t)songReference;
+	if(!song) return 0;
+	BAE_UNSIGNED_FIXED v = 0;
+	if(BAESong_GetVolume(song, &v) == BAE_NO_ERROR){ return (jint)v; }
+	return 0;
+}

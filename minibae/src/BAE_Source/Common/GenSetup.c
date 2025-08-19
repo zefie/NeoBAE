@@ -1342,14 +1342,18 @@ XBOOL GM_StartHardwareSoundManager(void *threadContext)
 {
     int32_t    sampleRate;
     int     ok;
-
     if (MusicGlobals)
     {
         sampleRate = (int32_t)GM_ConvertFromOutputRateToRate(MusicGlobals->outputRate);
-
+#if defined(__ANDROID__)
+        __android_log_print(ANDROID_LOG_DEBUG, "miniBAE", "GM_StartHardwareSoundManager: sampleRate=%d stereo=%d bits=%d", (int)sampleRate, MusicGlobals->generateStereoOutput, MusicGlobals->generate16output ? 16 : 8);
+#endif
         ok = BAE_AcquireAudioCard(threadContext, sampleRate,
-                                    (MusicGlobals->generateStereoOutput) ? 2 : 1,
-                                    (MusicGlobals->generate16output) ? 16 : 8);
+                                   (MusicGlobals->generateStereoOutput) ? 2 : 1,
+                                   (MusicGlobals->generate16output) ? 16 : 8);
+#if defined(__ANDROID__)
+        __android_log_print(ANDROID_LOG_DEBUG, "miniBAE", "GM_StartHardwareSoundManager: BAE_AcquireAudioCard returned %d", ok);
+#endif
         return (ok == 0) ? TRUE : FALSE;
     }
     return FALSE;

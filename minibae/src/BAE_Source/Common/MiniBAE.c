@@ -171,6 +171,48 @@ void process_and_send_audio(int16_t* rawAudio, int length) {
 }
 #endif
 
+// Fallback helper: scan RMF memory directly for SONG resource if cache lookup fails.
+static SongResource * PV_FallbackFindSongInRMFMemory(void *data, uint32_t totalLen, int16_t desiredIndex, XLongResourceID *outID, int32_t *outSize){
+    if(!data || totalLen < 16 || desiredIndex < 0){ return NULL; }
+    unsigned char *ub = (unsigned char*)data;
+    uint32_t mapID = (uint32_t)ub[0]<<24 | (uint32_t)ub[1]<<16 | (uint32_t)ub[2]<<8 | (uint32_t)ub[3];
+    if(mapID != 0x4952455A){ return NULL; } // 'IREZ'
+    uint32_t resourceCount = (uint32_t)ub[8]<<24 | (uint32_t)ub[9]<<16 | (uint32_t)ub[10]<<8 | (uint32_t)ub[11];
+    if(resourceCount == 0 || resourceCount > 4096){ return NULL; }
+    uint32_t nextOffset = 12; // start after map header
+    int songFoundCount = 0;
+    for(uint32_t resIndex = 0; resIndex < resourceCount; ++resIndex){
+        if(nextOffset + 16 > totalLen){ return NULL; }
+        unsigned char *base = ub + nextOffset;
+        uint32_t rawNext = (uint32_t)base[0]<<24 | (uint32_t)base[1]<<16 | (uint32_t)base[2]<<8 | (uint32_t)base[3];
+        uint32_t rawType = (uint32_t)base[4]<<24 | (uint32_t)base[5]<<16 | (uint32_t)base[6]<<8 | (uint32_t)base[7];
+        uint32_t rawID   = (uint32_t)base[8]<<24 | (uint32_t)base[9]<<16 | (uint32_t)base[10]<<8 | (uint32_t)base[11];
+        uint8_t nameLen = base[12];
+        uint32_t lenFieldPos = nextOffset + 13 + nameLen; // after len byte + name
+        if(lenFieldPos + 4 > totalLen){ return NULL; }
+        unsigned char *lenPtr = ub + lenFieldPos;
+        uint32_t rawResLen = (uint32_t)lenPtr[0]<<24 | (uint32_t)lenPtr[1]<<16 | (uint32_t)lenPtr[2]<<8 | (uint32_t)lenPtr[3];
+        uint32_t dataStart = lenFieldPos + 4;
+        if(dataStart + rawResLen > totalLen){ return NULL; }
+        if(rawType == 0x534F4E47){ // 'SONG'
+            if(songFoundCount == desiredIndex){
+                if(outID) *outID = rawID;
+                if(outSize) *outSize = (int32_t)rawResLen;
+                SongResource *copy = (SongResource*)XNewPtr((int32_t)rawResLen);
+                if(copy){ XBlockMove(ub + dataStart, copy, (int32_t)rawResLen); }
+                return copy;
+            }
+            songFoundCount++;
+        }
+        uint32_t computedNext = dataStart + rawResLen;
+        if(rawNext == 0 || rawNext < nextOffset || rawNext > totalLen){ rawNext = computedNext; }
+        if(rawNext <= nextOffset){ return NULL; }
+        nextOffset = rawNext;
+        if(nextOffset >= totalLen){ break; }
+    }
+    return NULL;
+}
+
 #define TRACKING 0
 
 
@@ -1258,9 +1300,11 @@ BAEResult BAEMixer_GetDeviceName(BAEMixer mixer, int32_t deviceID, char *cName, 
 // --------------------------------------
 // Sets/Gets the master default reverb
 //
+static ReverbMode g_defaultReverbType = BAE_REVERB_NONE;
 BAEResult BAEMixer_SetDefaultReverb(BAEMixer mixer, BAEReverbType verb)
 {
 #if REVERB_USED != REVERB_DISABLED
+    g_defaultReverbType = BAE_TranslateFromBAEReverb(verb);
     GM_SetReverbType(BAE_TranslateFromBAEReverb(verb));
     return BAE_NO_ERROR;
 #else
@@ -6022,6 +6066,7 @@ static BAEResult PV_BAESong_InitLiveSong(BAESong song, BAE_BOOL addToMixer)
             BAEMixer_GetMixLevel(song->mixer, &mixLevel);
             GM_ChangeSongVoices(song->pSong, maxSongVoices, mixLevel, maxEffectVoices);
             GM_SetVelocityCurveType(song->pSong, (VelocityCurveType)g_defaultVelocityCurve);
+            GM_SetReverbType(g_defaultReverbType);
 
             if (addToMixer)
             {
@@ -6537,6 +6582,45 @@ BAEResult BAESong_LoadRmfFromMemory(BAESong song, void *pRMFData, uint32_t rmfSi
                 else
                 {
                     theErr = RESOURCE_NOT_FOUND;
+                    // Fallback attempt: direct memory scan if primary lookup failed.
+                    SongResource *fallbackSong = PV_FallbackFindSongInRMFMemory(pRMFData, rmfSize, songIndex, &theID, &size);
+                    if(fallbackSong){
+                        pXSong = fallbackSong; // treat as found
+                        theErr = NO_ERR;
+                        if (song->pSong)
+                        {
+                            PV_BAESong_Unload(song);
+                            pSong = GM_LoadSong(song->mixer->pMixer,
+                                                NULL,
+                                                song,
+                                                (XShortResourceID) theID,
+                                                (void *) pXSong,
+                                                NULL,
+                                                0L,
+                                                NULL,       // no callback
+                                                TRUE,       // load instruments
+                                                ignoreBadInstruments,
+                                                CreateBankToken(),
+                                                &theErr);
+                            if (pSong)
+                            {
+                                GM_SetDisposeSongDataWhenDoneFlag(pSong, TRUE);
+                                GM_SetSongLoopFlag(pSong, FALSE);
+                                song->pSong = pSong;
+                                GM_SetVelocityCurveType(song->pSong, (VelocityCurveType)g_defaultVelocityCurve);
+                            }
+                            else
+                            {
+                                PV_BAESong_InitLiveSong(song, FALSE);
+                                theErr = BAD_FILE;
+                            }
+                        }
+                        else
+                        {
+                            theErr = GENERAL_BAD;
+                        }
+                        XDisposePtr(pXSong); // free fallback copy
+                    }
                 }
                 XFileClose(fileRef);
             }

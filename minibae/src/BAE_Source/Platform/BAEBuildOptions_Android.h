@@ -74,8 +74,8 @@
 //#define CPU_TYPE                                            k80X86
 
 #define X_WORD_ORDER                                            TRUE
-#define USE_FLOAT                                               FALSE
-#define USE_8_BIT_OUTPUT                                        FALSE
+#define USE_FLOAT                                               TRUE
+#define USE_8_BIT_OUTPUT                                        TRUE
 #define USE_16_BIT_OUTPUT                                       TRUE
 #define USE_MONO_OUTPUT                                         TRUE
 #define USE_STEREO_OUTPUT                                       TRUE

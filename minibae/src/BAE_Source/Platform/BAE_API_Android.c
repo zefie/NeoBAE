@@ -119,8 +119,17 @@
 #include <jni.h>
 #include <string.h>
 #include <stdint.h>
+#if defined(__ANDROID__)
+#include <android/log.h>
+#endif
 
 #include "BAE_API.h"
+
+// Use OpenSL ES for Android audio playback
+#if defined(__ANDROID__)
+#include <SLES/OpenSLES.h>
+#include <SLES/OpenSLES_Android.h>
+#endif
 
 
 #undef FALSE
@@ -158,6 +167,32 @@ typedef struct
 } AudioControlData;
 
 static AudioControlData* sHardwareChannel;
+
+// AAudio state (used on API >= 26)
+// OpenSL ES state
+#if defined(__ANDROID__)
+static SLObjectItf gEngineObject = NULL;
+static SLEngineItf gEngineEngine = NULL;
+static SLObjectItf gOutputMixObject = NULL;
+static SLObjectItf gPlayerObject = NULL;
+static SLPlayItf gPlayerPlay = NULL;
+static SLAndroidSimpleBufferQueueItf gBufferQueue = NULL;
+static int16_t *g_audioBufferA = NULL;
+static int16_t *g_audioBufferB = NULL;
+static int g_currentBuffer = 0;
+static int g_bufferFrames = 0;
+static uint32_t g_os_sampleRate = 44100;
+static uint32_t g_os_channels = 2;
+static uint32_t g_os_bits = 16;
+static uint32_t g_totalSamplesPlayed = 0;
+// Software master volume & balance (range volume 0..256, balance -256..256)
+static int16_t g_unscaled_volume = 256;
+static int16_t g_balance = 0;
+#if defined(__ANDROID__)
+// forward declaration for callback (defined below)
+static void bqPlayerCallback(SLAndroidSimpleBufferQueueItf bq, void *context);
+#endif
+#endif
 
 // This file contains API's that need to be defined in order to get BAE (IgorAudio)
 // to link and compile.
@@ -260,17 +295,29 @@ int BAE_Is8BitSupported(void)
 // range, just scale it.
 int16_t BAE_GetHardwareBalance(void)
 {
+#if defined(__ANDROID__)
+    return g_balance;
+#else
     if (sHardwareChannel)
     {
         return sHardwareChannel->mBalance;
     }
     return 0;
+#endif
 }
 
 // 'balance' is in the range of -256 to 256. Left to right. If you're hardware doesn't support this
 // range, just scale it.
 void BAE_SetHardwareBalance(int16_t balance)
 {
+    // pin balance to box
+    if (balance > 256) { balance = 256; }
+    if (balance < -256) { balance = -256; }
+#if defined(__ANDROID__)
+    g_balance = balance;
+    // Re-apply volume scaling with new balance
+    BAE_SetHardwareVolume(g_unscaled_volume);
+#else
    // pin balance to box
    if (balance > 256)
    {
@@ -285,49 +332,43 @@ void BAE_SetHardwareBalance(int16_t balance)
        sHardwareChannel->mBalance = balance;
        BAE_SetHardwareVolume(sHardwareChannel->mUnscaledVolume);
    }
+#endif
 }
 
 // returned volume is in the range of 0 to 256
 int16_t BAE_GetHardwareVolume(void)
 {
+#if defined(__ANDROID__)
+    return g_unscaled_volume;
+#else
     if (sHardwareChannel)
     {
         return sHardwareChannel->mUnscaledVolume;
     }
     return 256;
+#endif
 }
 
 // theVolume is in the range of 0 to 256
 void BAE_SetHardwareVolume(int16_t newVolume)
 {
-   uint32_t volume;
-   int16_t     lbm, rbm;
-
-   // pin volume
-   if (newVolume > 256)
-   {
-      newVolume = 256;
-   }
-   if (newVolume < 0)
-   {
-      newVolume = 0;
-   }
+#if defined(__ANDROID__)
+    // Clamp volume
+    if (newVolume > 256) newVolume = 256;
+    if (newVolume < 0)   newVolume = 0;
+    g_unscaled_volume = newVolume;
+    // Nothing else needed here; scaling happens in callback.
+#else
+    uint32_t volume;
+    int16_t     lbm, rbm;
+    if (newVolume > 256) { newVolume = 256; }
+    if (newVolume < 0)   { newVolume = 0; }
     sHardwareChannel->mUnscaledVolume = newVolume;
-
-   // calculate balance multipliers
-   if (sHardwareChannel->mBalance > 0)
-   {
-      lbm = 256 - sHardwareChannel->mBalance;
-      rbm = 256;
-   }
-   else
-   {
-      lbm = 256;
-      rbm = 256 + sHardwareChannel->mBalance;
-   }
-
-   volume = (((newVolume * lbm) / 256) << 16L) | ((newVolume * rbm) / 256);             // keep scale at 0 to 256
-#warning BAE_SetHardwareVolume not implemented
+    if (sHardwareChannel->mBalance > 0) { lbm = 256 - sHardwareChannel->mBalance; rbm = 256; }
+    else { lbm = 256; rbm = 256 + sHardwareChannel->mBalance; }
+    volume = (((newVolume * lbm) / 256) << 16L) | ((newVolume * rbm) / 256);
+    // TODO: Apply platform-specific hardware volume if supported.
+#endif
 }
 
 // **** Timing services
@@ -427,8 +468,8 @@ void BAE_CopyFileNameNative(void *fileNameSource, void *fileNameDest)
 int32_t BAE_FileCreate(void *fileName)
 {
     int file;
-    
-    file = open((char *)fileName, O_CREAT | O_TRUNC | O_RDWR);
+
+    file = open((char *)fileName, O_CREAT | O_TRUNC | O_RDWR, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
     if (file != -1)
     {
         close(file);
@@ -660,20 +701,104 @@ int BAE_Unmute(void)
 // return 0 if ok, -1 if failed
 int BAE_AcquireAudioCard(void *threadContext, uint32_t sampleRate, uint32_t channels, uint32_t bits)
 {
-	return -1;
+    (void)threadContext;
+#if defined(__ANDROID__)
+    SLresult r;
+#define MINI_BAE_LOGD(fmt, ...) __android_log_print(ANDROID_LOG_DEBUG, "miniBAE", "BAE_AcquireAudioCard: " fmt, ##__VA_ARGS__)
+#define MINI_BAE_LOGE(fmt, ...) __android_log_print(ANDROID_LOG_ERROR, "miniBAE", "BAE_AcquireAudioCard: " fmt, ##__VA_ARGS__)
+    MINI_BAE_LOGD("enter sampleRate=%u channels=%u bits=%u", sampleRate, channels, bits);
+    // if already created, return success
+    if (gPlayerObject != NULL) { MINI_BAE_LOGD("already acquired (gPlayerObject=%p)", (void*)gPlayerObject); return 0; }
+    g_os_sampleRate = sampleRate;
+    g_os_channels = channels;
+    g_os_bits = bits;
+    // Create engine
+    r = slCreateEngine(&gEngineObject, 0, NULL, 0, NULL, NULL); if (r != SL_RESULT_SUCCESS) { MINI_BAE_LOGE("slCreateEngine failed r=%lu", (unsigned long)r); return -1; } else { MINI_BAE_LOGD("slCreateEngine ok"); }
+    r = (*gEngineObject)->Realize(gEngineObject, SL_BOOLEAN_FALSE); if (r != SL_RESULT_SUCCESS) { MINI_BAE_LOGE("Engine Realize failed r=%lu", (unsigned long)r); return -1; }
+    r = (*gEngineObject)->GetInterface(gEngineObject, SL_IID_ENGINE, &gEngineEngine); if (r != SL_RESULT_SUCCESS) { MINI_BAE_LOGE("GetInterface ENGINE failed r=%lu", (unsigned long)r); return -1; }
+    // Create output mix
+    r = (*gEngineEngine)->CreateOutputMix(gEngineEngine, &gOutputMixObject, 0, NULL, NULL); if (r != SL_RESULT_SUCCESS) { MINI_BAE_LOGE("CreateOutputMix failed r=%lu", (unsigned long)r); return -1; }
+    r = (*gOutputMixObject)->Realize(gOutputMixObject, SL_BOOLEAN_FALSE); if (r != SL_RESULT_SUCCESS) { MINI_BAE_LOGE("OutputMix Realize failed r=%lu", (unsigned long)r); return -1; }
+    // Determine frames per buffer using engine hint
+    extern int16_t BAE_GetMaxSamplePerSlice(void);
+    int16_t maxFrames = BAE_GetMaxSamplePerSlice();
+    if (maxFrames <= 0) maxFrames = 512;
+    g_bufferFrames = maxFrames;
+    int channelsInt = (int)g_os_channels;
+    size_t bufBytes = (size_t)g_bufferFrames * channelsInt * (g_os_bits/8);
+    // allocate two buffers
+    g_audioBufferA = (int16_t*)malloc(bufBytes);
+    g_audioBufferB = (int16_t*)malloc(bufBytes);
+    if (!g_audioBufferA || !g_audioBufferB) {
+        MINI_BAE_LOGE("buffer allocation failed frames=%d bytesPerBuf=%zu", (int)g_bufferFrames, bufBytes);
+        if (g_audioBufferA) free(g_audioBufferA);
+        if (g_audioBufferB) free(g_audioBufferB);
+        return -1;
+    }
+    MINI_BAE_LOGD("allocated two buffers frames=%d bytesPerBuf=%zu", (int)g_bufferFrames, bufBytes);
+    // configure PCM format
+    SLDataLocator_AndroidSimpleBufferQueue loc_bufq = {SL_DATALOCATOR_ANDROIDSIMPLEBUFFERQUEUE, 2};
+    SLDataFormat_PCM format_pcm = {SL_DATAFORMAT_PCM,
+                                   (SLuint32)channelsInt,
+                                   (SLuint32)(g_os_sampleRate * 1000),
+                                   SL_PCMSAMPLEFORMAT_FIXED_16,
+                                   SL_PCMSAMPLEFORMAT_FIXED_16,
+                                   (channelsInt == 2) ? (SL_SPEAKER_FRONT_LEFT | SL_SPEAKER_FRONT_RIGHT) : SL_SPEAKER_FRONT_CENTER,
+                                   SL_BYTEORDER_LITTLEENDIAN};
+    SLDataSource audioSrc = { &loc_bufq, &format_pcm };
+    SLDataLocator_OutputMix loc_outmix = { SL_DATALOCATOR_OUTPUTMIX, gOutputMixObject };
+    SLDataSink audioSnk = { &loc_outmix, NULL };
+    const SLInterfaceID ids[1] = { SL_IID_ANDROIDSIMPLEBUFFERQUEUE };
+    const SLboolean req[1] = { SL_BOOLEAN_TRUE };
+    r = (*gEngineEngine)->CreateAudioPlayer(gEngineEngine, &gPlayerObject, &audioSrc, &audioSnk, 1, ids, req); if (r != SL_RESULT_SUCCESS) { MINI_BAE_LOGE("CreateAudioPlayer failed r=%lu", (unsigned long)r); return -1; }
+    r = (*gPlayerObject)->Realize(gPlayerObject, SL_BOOLEAN_FALSE); if (r != SL_RESULT_SUCCESS) { MINI_BAE_LOGE("Player Realize failed r=%lu", (unsigned long)r); return -1; }
+    r = (*gPlayerObject)->GetInterface(gPlayerObject, SL_IID_PLAY, &gPlayerPlay); if (r != SL_RESULT_SUCCESS) { MINI_BAE_LOGE("GetInterface PLAY failed r=%lu", (unsigned long)r); return -1; }
+    r = (*gPlayerObject)->GetInterface(gPlayerObject, SL_IID_ANDROIDSIMPLEBUFFERQUEUE, &gBufferQueue); if (r != SL_RESULT_SUCCESS) { MINI_BAE_LOGE("GetInterface BUFFERQUEUE failed r=%lu", (unsigned long)r); return -1; }
+    // register callback
+    r = (*gBufferQueue)->RegisterCallback(gBufferQueue, bqPlayerCallback, NULL); if (r != SL_RESULT_SUCCESS) { MINI_BAE_LOGE("RegisterCallback failed r=%lu", (unsigned long)r); return -1; }
+    MINI_BAE_LOGD("AudioPlayer realized; priming buffers");
+    // Prime both buffers
+    g_currentBuffer = 0;
+    bqPlayerCallback(gBufferQueue, NULL);
+    bqPlayerCallback(gBufferQueue, NULL);
+    MINI_BAE_LOGD("primed 2 buffers, setting play state");
+    // Set to playing
+    r = (*gPlayerPlay)->SetPlayState(gPlayerPlay, SL_PLAYSTATE_PLAYING); if (r != SL_RESULT_SUCCESS) { MINI_BAE_LOGE("SetPlayState PLAYING failed r=%lu", (unsigned long)r); return -1; }
+    MINI_BAE_LOGD("successfully started playback (sampleRate=%u ch=%u bits=%u) gPlayerObject=%p", sampleRate, channels, bits, (void*)gPlayerObject);
+    return 0;
+#else
+    return -1;
+#endif
 }
 
 // Release and free audio card.
 // return 0 if ok, -1 if failed.
 int BAE_ReleaseAudioCard(void *threadContext)
 {
-	return -1;
+    (void)threadContext;
+#if defined(__ANDROID__)
+    // Stop player
+    if (gPlayerPlay) { (*gPlayerPlay)->SetPlayState(gPlayerPlay, SL_PLAYSTATE_STOPPED); }
+    if (gPlayerObject) { (*gPlayerObject)->Destroy(gPlayerObject); gPlayerObject = NULL; gPlayerPlay = NULL; gBufferQueue = NULL; }
+    if (gOutputMixObject) { (*gOutputMixObject)->Destroy(gOutputMixObject); gOutputMixObject = NULL; }
+    if (gEngineObject) { (*gEngineObject)->Destroy(gEngineObject); gEngineObject = NULL; gEngineEngine = NULL; }
+    if (g_audioBufferA) { free(g_audioBufferA); g_audioBufferA = NULL; }
+    if (g_audioBufferB) { free(g_audioBufferB); g_audioBufferB = NULL; }
+    g_totalSamplesPlayed = 0;
+    return 0;
+#else
+    return -1;
+#endif
 }
 
 // return device position in samples
 uint32_t BAE_GetDeviceSamplesPlayedPosition(void)
 {
-   return(sHardwareChannel->mSamplesPlayed);
+#if defined(__ANDROID__)
+    return g_totalSamplesPlayed;
+#else
+    return(sHardwareChannel->mSamplesPlayed);
+#endif
 }
 
 
@@ -716,7 +841,7 @@ void BAE_GetDeviceName(int32_t deviceID, char *cName, uint32_t cNameLength)
 {
    static char id[] =
    {
-      "MacOS,Cocoa,AudioQueue"
+      "Android,OpenSLES"
    };
    uint32_t length;
 
@@ -738,3 +863,69 @@ void BAE_GetDeviceName(int32_t deviceID, char *cName, uint32_t cNameLength)
 
 
 // EOF of BAE_API_Android.c
+
+// OpenSL buffer queue callback (file-scoped)
+#if defined(__ANDROID__)
+static void bqPlayerCallback(SLAndroidSimpleBufferQueueItf bq, void *context)
+{
+    (void)context;
+    int channelsInt = (int)g_os_channels;
+    int16_t *buf = g_currentBuffer == 0 ? g_audioBufferA : g_audioBufferB;
+    extern void BAE_BuildMixerSlice(void *threadContext, void *pAudioBuffer, int32_t bufferByteLength, int32_t sampleFrames);
+    int32_t bytes = (int32_t)(g_bufferFrames * channelsInt * (g_os_bits/8));
+    BAE_BuildMixerSlice(NULL, buf, bytes, g_bufferFrames);
+    // Apply software master volume & balance (16-bit only)
+    if (g_os_bits == 16 && g_unscaled_volume < 256) {
+        int16_t vol = g_unscaled_volume;
+        int16_t lbm, rbm;
+        if (g_balance > 0) { lbm = 256 - g_balance; rbm = 256; }
+        else { lbm = 256; rbm = 256 + g_balance; }
+        int32_t lMul = (vol * lbm); // scaled by 256*256
+        int32_t rMul = (vol * rbm);
+        int frames = g_bufferFrames;
+        if (channelsInt == 2) {
+            int16_t *p = buf;
+            for (int i = 0; i < frames; ++i) {
+                int32_t L = (*p * lMul) >> 16; // (>>8 twice equivalent to /256/256)
+                int32_t R = (*(p+1) * rMul) >> 16;
+                if (L > 32767) L = 32767; else if (L < -32768) L = -32768;
+                if (R > 32767) R = 32767; else if (R < -32768) R = -32768;
+                *p++ = (int16_t)L; *p++ = (int16_t)R;
+            }
+        } else { // mono
+            int16_t *p = buf;
+            for (int i = 0; i < frames; ++i) {
+                int32_t S = (*p * vol) >> 8; // single /256
+                if (S > 32767) S = 32767; else if (S < -32768) S = -32768;
+                *p++ = (int16_t)S;
+            }
+        }
+    } else if (g_os_bits == 16 && g_balance != 0) {
+        // Balance only (full volume). This keeps symmetry when volume=256 with balance adjustment.
+        int16_t lbm, rbm;
+        if (g_balance > 0) { lbm = 256 - g_balance; rbm = 256; }
+        else { lbm = 256; rbm = 256 + g_balance; }
+        int32_t lMul = lbm; // scaled by 256
+        int32_t rMul = rbm;
+        if (channelsInt == 2) {
+            int16_t *p = buf;
+            for (int i = 0; i < g_bufferFrames; ++i) {
+                int32_t L = (*p * lMul) >> 8;
+                int32_t R = (*(p+1) * rMul) >> 8;
+                if (L > 32767) L = 32767; else if (L < -32768) L = -32768;
+                if (R > 32767) R = 32767; else if (R < -32768) R = -32768;
+                *p++ = (int16_t)L; *p++ = (int16_t)R;
+            }
+        }
+    }
+    if (gBufferQueue) {
+        (*gBufferQueue)->Enqueue(gBufferQueue, buf, bytes);
+    }
+    g_totalSamplesPlayed += (uint32_t)g_bufferFrames;
+    g_currentBuffer ^= 1;
+    static int cbCount = 0; cbCount++;
+    if ((cbCount & 0xFF) == 0) {
+        __android_log_print(ANDROID_LOG_VERBOSE, "miniBAE", "bqPlayerCallback count=%d totalSamples=%u", cbCount, (unsigned)g_totalSamplesPlayed);
+    }
+}
+#endif

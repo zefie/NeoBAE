@@ -1,0 +1,2437 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="AndroidProjectSystem">
+    <option name="providerId" value="com.android.tools.idea.GradleProjectSystem" />
+  </component>
+  <component name="AppInsightsSettings">
+    <option name="tabSettings">
+      <map>
+        <entry key="Firebase Crashlytics">
+          <value>
+            <InsightsFilterSettings>
+              <option name="connection">
+                <ConnectionSetting>
+                  <option name="appId" value="PLACEHOLDER" />
+                  <option name="mobileSdkAppId" value="" />
+                  <option name="projectId" value="" />
+                  <option name="projectNumber" value="" />
+                </ConnectionSetting>
+              </option>
+              <option name="signal" value="SIGNAL_UNSPECIFIED" />
+              <option name="timeIntervalDays" value="THIRTY_DAYS" />
+              <option name="visibilityType" value="ALL" />
+            </InsightsFilterSettings>
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
+  <component name="CompilerConfiguration">
+    <wildcardResourcePatterns>
+      <entry name="!?*.java" />
+      <entry name="!?*.form" />
+      <entry name="!?*.class" />
+      <entry name="!?*.groovy" />
+      <entry name="!?*.scala" />
+      <entry name="!?*.flex" />
+      <entry name="!?*.kt" />
+      <entry name="!?*.clj" />
+    </wildcardResourcePatterns>
+    <bytecodeTargetLevel target="21" />
+  </component>
+  <component name="CopyrightManager" default="" />
+  <component name="DependencyValidationManager">
+    <option name="SKIP_IMPORT_STATEMENTS" value="false" />
+  </component>
+  <component name="DeviceStreaming">
+    <option name="deviceSelectionList">
+      <list>
+        <PersistentDeviceSelectionData>
+          <option name="api" value="34" />
+          <option name="brand" value="Sony" />
+          <option name="codename" value="A402SO" />
+          <option name="id" value="A402SO" />
+          <option name="labId" value="google" />
+          <option name="manufacturer" value="Sony" />
+          <option name="name" value="Xperia 10" />
+          <option name="screenDensity" value="450" />
+          <option name="screenX" value="1080" />
+          <option name="screenY" value="2520" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="api" value="27" />
+          <option name="brand" value="DOCOMO" />
+          <option name="codename" value="F01L" />
+          <option name="id" value="F01L" />
+          <option name="labId" value="google" />
+          <option name="manufacturer" value="FUJITSU" />
+          <option name="name" value="F-01L" />
+          <option name="screenDensity" value="360" />
+          <option name="screenX" value="720" />
+          <option name="screenY" value="1280" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="api" value="34" />
+          <option name="brand" value="OnePlus" />
+          <option name="codename" value="OP535DL1" />
+          <option name="id" value="OP535DL1" />
+          <option name="labId" value="google" />
+          <option name="manufacturer" value="OnePlus" />
+          <option name="name" value="CPH2409" />
+          <option name="screenDensity" value="401" />
+          <option name="screenX" value="1080" />
+          <option name="screenY" value="2412" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="api" value="34" />
+          <option name="brand" value="OnePlus" />
+          <option name="codename" value="OP5552L1" />
+          <option name="id" value="OP5552L1" />
+          <option name="labId" value="google" />
+          <option name="manufacturer" value="OnePlus" />
+          <option name="name" value="CPH2415" />
+          <option name="screenDensity" value="480" />
+          <option name="screenX" value="1080" />
+          <option name="screenY" value="2412" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="api" value="34" />
+          <option name="brand" value="OPPO" />
+          <option name="codename" value="OP573DL1" />
+          <option name="id" value="OP573DL1" />
+          <option name="labId" value="google" />
+          <option name="manufacturer" value="OPPO" />
+          <option name="name" value="CPH2557" />
+          <option name="screenDensity" value="480" />
+          <option name="screenX" value="1080" />
+          <option name="screenY" value="2400" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="api" value="28" />
+          <option name="brand" value="DOCOMO" />
+          <option name="codename" value="SH-01L" />
+          <option name="id" value="SH-01L" />
+          <option name="labId" value="google" />
+          <option name="manufacturer" value="SHARP" />
+          <option name="name" value="AQUOS sense2 SH-01L" />
+          <option name="screenDensity" value="480" />
+          <option name="screenX" value="1080" />
+          <option name="screenY" value="2160" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="api" value="34" />
+          <option name="brand" value="samsung" />
+          <option name="codename" value="a14m" />
+          <option name="id" value="a14m" />
+          <option name="labId" value="google" />
+          <option name="manufacturer" value="Samsung" />
+          <option name="name" value="SM-A145R" />
+          <option name="screenDensity" value="450" />
+          <option name="screenX" value="1080" />
+          <option name="screenY" value="2408" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="api" value="34" />
+          <option name="brand" value="samsung" />
+          <option name="codename" value="a15" />
+          <option name="id" value="a15" />
+          <option name="labId" value="google" />
+          <option name="manufacturer" value="Samsung" />
+          <option name="name" value="A15" />
+          <option name="screenDensity" value="450" />
+          <option name="screenX" value="1080" />
+          <option name="screenY" value="2340" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="api" value="34" />
+          <option name="brand" value="samsung" />
+          <option name="codename" value="a15x" />
+          <option name="id" value="a15x" />
+          <option name="labId" value="google" />
+          <option name="manufacturer" value="Samsung" />
+          <option name="name" value="A15 5G" />
+          <option name="screenDensity" value="450" />
+          <option name="screenX" value="1080" />
+          <option name="screenY" value="2340" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="api" value="34" />
+          <option name="brand" value="samsung" />
+          <option name="codename" value="a16x" />
+          <option name="id" value="a16x" />
+          <option name="labId" value="google" />
+          <option name="manufacturer" value="Samsung" />
+          <option name="name" value="A16 5G" />
+          <option name="screenDensity" value="450" />
+          <option name="screenX" value="1080" />
+          <option name="screenY" value="2340" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="api" value="34" />
+          <option name="brand" value="samsung" />
+          <option name="codename" value="a35x" />
+          <option name="id" value="a35x" />
+          <option name="labId" value="google" />
+          <option name="manufacturer" value="Samsung" />
+          <option name="name" value="A35" />
+          <option name="screenDensity" value="450" />
+          <option name="screenX" value="1080" />
+          <option name="screenY" value="2340" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="api" value="34" />
+          <option name="brand" value="google" />
+          <option name="codename" value="akita" />
+          <option name="id" value="akita" />
+          <option name="labId" value="google" />
+          <option name="manufacturer" value="Google" />
+          <option name="name" value="Pixel 8a" />
+          <option name="screenDensity" value="420" />
+          <option name="screenX" value="1080" />
+          <option name="screenY" value="2400" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="api" value="35" />
+          <option name="brand" value="google" />
+          <option name="codename" value="akita" />
+          <option name="id" value="akita" />
+          <option name="labId" value="google" />
+          <option name="manufacturer" value="Google" />
+          <option name="name" value="Pixel 8a" />
+          <option name="screenDensity" value="420" />
+          <option name="screenX" value="1080" />
+          <option name="screenY" value="2400" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="api" value="34" />
+          <option name="brand" value="motorola" />
+          <option name="codename" value="arcfox" />
+          <option name="id" value="arcfox" />
+          <option name="labId" value="google" />
+          <option name="manufacturer" value="Motorola" />
+          <option name="name" value="razr plus 2024" />
+          <option name="screenDensity" value="360" />
+          <option name="screenX" value="1080" />
+          <option name="screenY" value="1272" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="api" value="33" />
+          <option name="brand" value="motorola" />
+          <option name="codename" value="austin" />
+          <option name="id" value="austin" />
+          <option name="labId" value="google" />
+          <option name="manufacturer" value="Motorola" />
+          <option name="name" value="moto g 5G (2022)" />
+          <option name="screenDensity" value="280" />
+          <option name="screenX" value="720" />
+          <option name="screenY" value="1600" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="api" value="33" />
+          <option name="brand" value="samsung" />
+          <option name="codename" value="b0q" />
+          <option name="id" value="b0q" />
+          <option name="labId" value="google" />
+          <option name="manufacturer" value="Samsung" />
+          <option name="name" value="Galaxy S22 Ultra" />
+          <option name="screenDensity" value="600" />
+          <option name="screenX" value="1440" />
+          <option name="screenY" value="3088" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="api" value="34" />
+          <option name="brand" value="samsung" />
+          <option name="codename" value="b6q" />
+          <option name="id" value="b6q" />
+          <option name="labId" value="google" />
+          <option name="manufacturer" value="Samsung" />
+          <option name="name" value="Flip 6" />
+          <option name="screenDensity" value="340" />
+          <option name="screenX" value="1080" />
+          <option name="screenY" value="2640" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="api" value="32" />
+          <option name="brand" value="google" />
+          <option name="codename" value="bluejay" />
+          <option name="id" value="bluejay" />
+          <option name="labId" value="google" />
+          <option name="manufacturer" value="Google" />
+          <option name="name" value="Pixel 6a" />
+          <option name="screenDensity" value="420" />
+          <option name="screenX" value="1080" />
+          <option name="screenY" value="2400" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="api" value="34" />
+          <option name="brand" value="google" />
+          <option name="codename" value="caiman" />
+          <option name="id" value="caiman" />
+          <option name="labId" value="google" />
+          <option name="manufacturer" value="Google" />
+          <option name="name" value="Pixel 9 Pro" />
+          <option name="screenDensity" value="360" />
+          <option name="screenX" value="960" />
+          <option name="screenY" value="2142" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="api" value="35" />
+          <option name="brand" value="google" />
+          <option name="codename" value="caiman" />
+          <option name="id" value="caiman" />
+          <option name="labId" value="google" />
+          <option name="manufacturer" value="Google" />
+          <option name="name" value="Pixel 9 Pro" />
+          <option name="screenDensity" value="360" />
+          <option name="screenX" value="960" />
+          <option name="screenY" value="2142" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="api" value="34" />
+          <option name="brand" value="google" />
+          <option name="codename" value="comet" />
+          <option name="default" value="true" />
+          <option name="id" value="comet" />
+          <option name="labId" value="google" />
+          <option name="manufacturer" value="Google" />
+          <option name="name" value="Pixel 9 Pro Fold" />
+          <option name="screenDensity" value="390" />
+          <option name="screenX" value="2076" />
+          <option name="screenY" value="2152" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="api" value="35" />
+          <option name="brand" value="google" />
+          <option name="codename" value="comet" />
+          <option name="default" value="true" />
+          <option name="id" value="comet" />
+          <option name="labId" value="google" />
+          <option name="manufacturer" value="Google" />
+          <option name="name" value="Pixel 9 Pro Fold" />
+          <option name="screenDensity" value="390" />
+          <option name="screenX" value="2076" />
+          <option name="screenY" value="2152" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="api" value="29" />
+          <option name="brand" value="samsung" />
+          <option name="codename" value="crownqlteue" />
+          <option name="id" value="crownqlteue" />
+          <option name="labId" value="google" />
+          <option name="manufacturer" value="Samsung" />
+          <option name="name" value="Galaxy Note9" />
+          <option name="screenDensity" value="420" />
+          <option name="screenX" value="2220" />
+          <option name="screenY" value="1080" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="api" value="34" />
+          <option name="brand" value="samsung" />
+          <option name="codename" value="dm2q" />
+          <option name="id" value="dm2q" />
+          <option name="labId" value="google" />
+          <option name="manufacturer" value="Samsung" />
+          <option name="name" value="S23 Plus" />
+          <option name="screenDensity" value="450" />
+          <option name="screenX" value="1080" />
+          <option name="screenY" value="2340" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="api" value="34" />
+          <option name="brand" value="samsung" />
+          <option name="codename" value="dm3q" />
+          <option name="id" value="dm3q" />
+          <option name="labId" value="google" />
+          <option name="manufacturer" value="Samsung" />
+          <option name="name" value="Galaxy S23 Ultra" />
+          <option name="screenDensity" value="600" />
+          <option name="screenX" value="1440" />
+          <option name="screenY" value="3088" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="api" value="34" />
+          <option name="brand" value="motorola" />
+          <option name="codename" value="dubai" />
+          <option name="id" value="dubai" />
+          <option name="labId" value="google" />
+          <option name="manufacturer" value="Motorola" />
+          <option name="name" value="edge 30" />
+          <option name="screenDensity" value="405" />
+          <option name="screenX" value="1080" />
+          <option name="screenY" value="2400" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="api" value="34" />
+          <option name="brand" value="samsung" />
+          <option name="codename" value="e1q" />
+          <option name="default" value="true" />
+          <option name="id" value="e1q" />
+          <option name="labId" value="google" />
+          <option name="manufacturer" value="Samsung" />
+          <option name="name" value="Galaxy S24" />
+          <option name="screenDensity" value="480" />
+          <option name="screenX" value="1080" />
+          <option name="screenY" value="2340" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="api" value="34" />
+          <option name="brand" value="samsung" />
+          <option name="codename" value="e3q" />
+          <option name="id" value="e3q" />
+          <option name="labId" value="google" />
+          <option name="manufacturer" value="Samsung" />
+          <option name="name" value="Galaxy S24 Ultra" />
+          <option name="screenDensity" value="450" />
+          <option name="screenX" value="1440" />
+          <option name="screenY" value="3120" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="api" value="33" />
+          <option name="brand" value="google" />
+          <option name="codename" value="eos" />
+          <option name="id" value="eos" />
+          <option name="labId" value="google" />
+          <option name="manufacturer" value="Google" />
+          <option name="name" value="Eos" />
+          <option name="screenDensity" value="320" />
+          <option name="screenX" value="384" />
+          <option name="screenY" value="384" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="api" value="35" />
+          <option name="brand" value="motorola" />
+          <option name="codename" value="eqe" />
+          <option name="id" value="eqe" />
+          <option name="labId" value="google" />
+          <option name="manufacturer" value="Motorola" />
+          <option name="name" value="edge 50 pro" />
+          <option name="screenDensity" value="450" />
+          <option name="screenX" value="1220" />
+          <option name="screenY" value="2712" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="api" value="33" />
+          <option name="brand" value="google" />
+          <option name="codename" value="felix" />
+          <option name="id" value="felix" />
+          <option name="labId" value="google" />
+          <option name="manufacturer" value="Google" />
+          <option name="name" value="Pixel Fold" />
+          <option name="screenDensity" value="420" />
+          <option name="screenX" value="2208" />
+          <option name="screenY" value="1840" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="api" value="34" />
+          <option name="brand" value="google" />
+          <option name="codename" value="felix" />
+          <option name="id" value="felix" />
+          <option name="labId" value="google" />
+          <option name="manufacturer" value="Google" />
+          <option name="name" value="Pixel Fold" />
+          <option name="screenDensity" value="420" />
+          <option name="screenX" value="2208" />
+          <option name="screenY" value="1840" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="api" value="33" />
+          <option name="brand" value="google" />
+          <option name="codename" value="felix_camera" />
+          <option name="id" value="felix_camera" />
+          <option name="labId" value="google" />
+          <option name="manufacturer" value="Google" />
+          <option name="name" value="Pixel Fold (Camera-enabled)" />
+          <option name="screenDensity" value="420" />
+          <option name="screenX" value="2208" />
+          <option name="screenY" value="1840" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="api" value="34" />
+          <option name="brand" value="motorola" />
+          <option name="codename" value="fogona" />
+          <option name="id" value="fogona" />
+          <option name="labId" value="google" />
+          <option name="manufacturer" value="Motorola" />
+          <option name="name" value="moto g play - 2024" />
+          <option name="screenDensity" value="280" />
+          <option name="screenX" value="720" />
+          <option name="screenY" value="1600" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="api" value="34" />
+          <option name="brand" value="motorola" />
+          <option name="codename" value="fogos" />
+          <option name="id" value="fogos" />
+          <option name="labId" value="google" />
+          <option name="manufacturer" value="Motorola" />
+          <option name="name" value="moto g34 5G" />
+          <option name="screenDensity" value="280" />
+          <option name="screenX" value="720" />
+          <option name="screenY" value="1600" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="api" value="34" />
+          <option name="brand" value="samsung" />
+          <option name="codename" value="g0q" />
+          <option name="id" value="g0q" />
+          <option name="labId" value="google" />
+          <option name="manufacturer" value="Samsung" />
+          <option name="name" value="SM-S906U1" />
+          <option name="screenDensity" value="450" />
+          <option name="screenX" value="1080" />
+          <option name="screenY" value="2340" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="api" value="34" />
+          <option name="brand" value="samsung" />
+          <option name="codename" value="gta9pwifi" />
+          <option name="id" value="gta9pwifi" />
+          <option name="labId" value="google" />
+          <option name="manufacturer" value="Samsung" />
+          <option name="name" value="SM-X210" />
+          <option name="screenDensity" value="240" />
+          <option name="screenX" value="1200" />
+          <option name="screenY" value="1920" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="api" value="33" />
+          <option name="brand" value="samsung" />
+          <option name="codename" value="gts7lwifi" />
+          <option name="id" value="gts7lwifi" />
+          <option name="labId" value="google" />
+          <option name="manufacturer" value="Samsung" />
+          <option name="name" value="SM-T870" />
+          <option name="screenDensity" value="340" />
+          <option name="screenX" value="1600" />
+          <option name="screenY" value="2560" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="api" value="34" />
+          <option name="brand" value="samsung" />
+          <option name="codename" value="gts7xllite" />
+          <option name="id" value="gts7xllite" />
+          <option name="labId" value="google" />
+          <option name="manufacturer" value="Samsung" />
+          <option name="name" value="SM-T738U" />
+          <option name="screenDensity" value="340" />
+          <option name="screenX" value="1600" />
+          <option name="screenY" value="2560" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="api" value="33" />
+          <option name="brand" value="samsung" />
+          <option name="codename" value="gts8uwifi" />
+          <option name="formFactor" value="Tablet" />
+          <option name="id" value="gts8uwifi" />
+          <option name="labId" value="google" />
+          <option name="manufacturer" value="Samsung" />
+          <option name="name" value="Galaxy Tab S8 Ultra" />
+          <option name="screenDensity" value="320" />
+          <option name="screenX" value="1848" />
+          <option name="screenY" value="2960" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="api" value="34" />
+          <option name="brand" value="samsung" />
+          <option name="codename" value="gts8wifi" />
+          <option name="formFactor" value="Tablet" />
+          <option name="id" value="gts8wifi" />
+          <option name="labId" value="google" />
+          <option name="manufacturer" value="Samsung" />
+          <option name="name" value="Galaxy Tab S8" />
+          <option name="screenDensity" value="274" />
+          <option name="screenX" value="1600" />
+          <option name="screenY" value="2560" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="api" value="34" />
+          <option name="brand" value="samsung" />
+          <option name="codename" value="gts9fe" />
+          <option name="id" value="gts9fe" />
+          <option name="labId" value="google" />
+          <option name="manufacturer" value="Samsung" />
+          <option name="name" value="Galaxy Tab S9 FE 5G" />
+          <option name="screenDensity" value="280" />
+          <option name="screenX" value="1440" />
+          <option name="screenY" value="2304" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="api" value="34" />
+          <option name="brand" value="samsung" />
+          <option name="codename" value="gts9wifi" />
+          <option name="id" value="gts9wifi" />
+          <option name="labId" value="google" />
+          <option name="manufacturer" value="Samsung" />
+          <option name="name" value="SM-X710" />
+          <option name="screenDensity" value="340" />
+          <option name="screenX" value="1600" />
+          <option name="screenY" value="2560" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="api" value="34" />
+          <option name="brand" value="google" />
+          <option name="codename" value="husky" />
+          <option name="id" value="husky" />
+          <option name="labId" value="google" />
+          <option name="manufacturer" value="Google" />
+          <option name="name" value="Pixel 8 Pro" />
+          <option name="screenDensity" value="390" />
+          <option name="screenX" value="1008" />
+          <option name="screenY" value="2244" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="api" value="30" />
+          <option name="brand" value="motorola" />
+          <option name="codename" value="java" />
+          <option name="id" value="java" />
+          <option name="labId" value="google" />
+          <option name="manufacturer" value="Motorola" />
+          <option name="name" value="G20" />
+          <option name="screenDensity" value="280" />
+          <option name="screenX" value="720" />
+          <option name="screenY" value="1600" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="api" value="34" />
+          <option name="brand" value="google" />
+          <option name="codename" value="komodo" />
+          <option name="id" value="komodo" />
+          <option name="labId" value="google" />
+          <option name="manufacturer" value="Google" />
+          <option name="name" value="Pixel 9 Pro XL" />
+          <option name="screenDensity" value="360" />
+          <option name="screenX" value="1008" />
+          <option name="screenY" value="2244" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="api" value="35" />
+          <option name="brand" value="google" />
+          <option name="codename" value="komodo" />
+          <option name="id" value="komodo" />
+          <option name="labId" value="google" />
+          <option name="manufacturer" value="Google" />
+          <option name="name" value="Pixel 9 Pro XL" />
+          <option name="screenDensity" value="360" />
+          <option name="screenX" value="1008" />
+          <option name="screenY" value="2244" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="api" value="34" />
+          <option name="brand" value="motorola" />
+          <option name="codename" value="lion" />
+          <option name="id" value="lion" />
+          <option name="labId" value="google" />
+          <option name="manufacturer" value="Motorola" />
+          <option name="name" value="moto g04" />
+          <option name="screenDensity" value="280" />
+          <option name="screenX" value="720" />
+          <option name="screenY" value="1612" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="api" value="33" />
+          <option name="brand" value="google" />
+          <option name="codename" value="lynx" />
+          <option name="id" value="lynx" />
+          <option name="labId" value="google" />
+          <option name="manufacturer" value="Google" />
+          <option name="name" value="Pixel 7a" />
+          <option name="screenDensity" value="420" />
+          <option name="screenX" value="1080" />
+          <option name="screenY" value="2400" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="api" value="34" />
+          <option name="brand" value="motorola" />
+          <option name="codename" value="lyriq" />
+          <option name="id" value="lyriq" />
+          <option name="labId" value="google" />
+          <option name="manufacturer" value="Motorola" />
+          <option name="name" value="edge 40" />
+          <option name="screenDensity" value="400" />
+          <option name="screenX" value="1080" />
+          <option name="screenY" value="2400" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="api" value="34" />
+          <option name="brand" value="motorola" />
+          <option name="codename" value="manaus" />
+          <option name="id" value="manaus" />
+          <option name="labId" value="google" />
+          <option name="manufacturer" value="Motorola" />
+          <option name="name" value="edge 40 neo" />
+          <option name="screenDensity" value="400" />
+          <option name="screenX" value="1080" />
+          <option name="screenY" value="2400" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="api" value="33" />
+          <option name="brand" value="motorola" />
+          <option name="codename" value="maui" />
+          <option name="id" value="maui" />
+          <option name="labId" value="google" />
+          <option name="manufacturer" value="Motorola" />
+          <option name="name" value="moto g play - 2023" />
+          <option name="screenDensity" value="280" />
+          <option name="screenX" value="720" />
+          <option name="screenY" value="1600" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="api" value="34" />
+          <option name="brand" value="samsung" />
+          <option name="codename" value="o1q" />
+          <option name="id" value="o1q" />
+          <option name="labId" value="google" />
+          <option name="manufacturer" value="Samsung" />
+          <option name="name" value="Galaxy S21" />
+          <option name="screenDensity" value="421" />
+          <option name="screenX" value="1080" />
+          <option name="screenY" value="2400" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="accessStatus">
+            <list>
+              <option value="EULA_NOT_ACCEPTED" />
+            </list>
+          </option>
+          <option name="api" value="34" />
+          <option name="brand" value="OPPO" />
+          <option name="codename" value="oplus_lab_op574fl1" />
+          <option name="id" value="oplus_lab_op574fl1" />
+          <option name="labId" value="oppo" />
+          <option name="manufacturer" value="OPPO" />
+          <option name="name" value="A58" />
+          <option name="screenDensity" value="480" />
+          <option name="screenX" value="1080" />
+          <option name="screenY" value="2400" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="accessStatus">
+            <list>
+              <option value="EULA_NOT_ACCEPTED" />
+            </list>
+          </option>
+          <option name="api" value="35" />
+          <option name="brand" value="OnePlus" />
+          <option name="codename" value="oplus_lab_op5961l1" />
+          <option name="id" value="oplus_lab_op5961l1" />
+          <option name="labId" value="oneplus" />
+          <option name="manufacturer" value="OnePlus" />
+          <option name="name" value="11R 5G" />
+          <option name="screenDensity" value="560" />
+          <option name="screenX" value="1240" />
+          <option name="screenY" value="2772" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="accessStatus">
+            <list>
+              <option value="EULA_NOT_ACCEPTED" />
+            </list>
+          </option>
+          <option name="api" value="34" />
+          <option name="brand" value="OPPO" />
+          <option name="codename" value="oplus_lab_op5abfl1" />
+          <option name="id" value="oplus_lab_op5abfl1" />
+          <option name="labId" value="oppo" />
+          <option name="manufacturer" value="OPPO" />
+          <option name="name" value="Reno11 5G" />
+          <option name="screenDensity" value="480" />
+          <option name="screenX" value="1080" />
+          <option name="screenY" value="2412" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="accessStatus">
+            <list>
+              <option value="EULA_NOT_ACCEPTED" />
+            </list>
+          </option>
+          <option name="api" value="34" />
+          <option name="brand" value="OPPO" />
+          <option name="codename" value="oplus_lab_op5b05l1" />
+          <option name="id" value="oplus_lab_op5b05l1" />
+          <option name="labId" value="oppo" />
+          <option name="manufacturer" value="OPPO" />
+          <option name="name" value="A3 Pro 5G" />
+          <option name="screenDensity" value="320" />
+          <option name="screenX" value="720" />
+          <option name="screenY" value="1604" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="api" value="31" />
+          <option name="brand" value="google" />
+          <option name="codename" value="oriole" />
+          <option name="id" value="oriole" />
+          <option name="labId" value="google" />
+          <option name="manufacturer" value="Google" />
+          <option name="name" value="Pixel 6" />
+          <option name="screenDensity" value="420" />
+          <option name="screenX" value="1080" />
+          <option name="screenY" value="2400" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="api" value="35" />
+          <option name="brand" value="samsung" />
+          <option name="codename" value="pa3q" />
+          <option name="id" value="pa3q" />
+          <option name="labId" value="google" />
+          <option name="manufacturer" value="Samsung" />
+          <option name="name" value="Galaxy S25 Ultra" />
+          <option name="screenDensity" value="600" />
+          <option name="screenX" value="1440" />
+          <option name="screenY" value="3120" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="api" value="33" />
+          <option name="brand" value="google" />
+          <option name="codename" value="panther" />
+          <option name="id" value="panther" />
+          <option name="labId" value="google" />
+          <option name="manufacturer" value="Google" />
+          <option name="name" value="Pixel 7" />
+          <option name="screenDensity" value="420" />
+          <option name="screenX" value="1080" />
+          <option name="screenY" value="2400" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="api" value="34" />
+          <option name="brand" value="samsung" />
+          <option name="codename" value="q5q" />
+          <option name="id" value="q5q" />
+          <option name="labId" value="google" />
+          <option name="manufacturer" value="Samsung" />
+          <option name="name" value="Galaxy Z Fold5" />
+          <option name="screenDensity" value="420" />
+          <option name="screenX" value="1812" />
+          <option name="screenY" value="2176" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="api" value="34" />
+          <option name="brand" value="samsung" />
+          <option name="codename" value="q6q" />
+          <option name="id" value="q6q" />
+          <option name="labId" value="google" />
+          <option name="manufacturer" value="Samsung" />
+          <option name="name" value="Galaxy Z Fold6" />
+          <option name="screenDensity" value="420" />
+          <option name="screenX" value="1856" />
+          <option name="screenY" value="2160" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="api" value="30" />
+          <option name="brand" value="google" />
+          <option name="codename" value="r11" />
+          <option name="formFactor" value="Wear OS" />
+          <option name="id" value="r11" />
+          <option name="labId" value="google" />
+          <option name="manufacturer" value="Google" />
+          <option name="name" value="Pixel Watch" />
+          <option name="screenDensity" value="320" />
+          <option name="screenX" value="384" />
+          <option name="screenY" value="384" />
+          <option name="type" value="WEAR_OS" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="api" value="34" />
+          <option name="brand" value="samsung" />
+          <option name="codename" value="r11q" />
+          <option name="id" value="r11q" />
+          <option name="labId" value="google" />
+          <option name="manufacturer" value="Samsung" />
+          <option name="name" value="SM-S711U" />
+          <option name="screenDensity" value="450" />
+          <option name="screenX" value="1080" />
+          <option name="screenY" value="2340" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="api" value="30" />
+          <option name="brand" value="google" />
+          <option name="codename" value="redfin" />
+          <option name="id" value="redfin" />
+          <option name="labId" value="google" />
+          <option name="manufacturer" value="Google" />
+          <option name="name" value="Pixel 5" />
+          <option name="screenDensity" value="440" />
+          <option name="screenX" value="1080" />
+          <option name="screenY" value="2340" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="accessStatus">
+            <list>
+              <option value="EULA_NOT_ACCEPTED" />
+            </list>
+          </option>
+          <option name="api" value="33" />
+          <option name="brand" value="samsung" />
+          <option name="codename" value="samsung_lab_a13" />
+          <option name="id" value="samsung_lab_a13" />
+          <option name="labId" value="samsung" />
+          <option name="manufacturer" value="Samsung" />
+          <option name="name" value="Galaxy A13" />
+          <option name="screenDensity" value="450" />
+          <option name="screenX" value="1080" />
+          <option name="screenY" value="2408" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="accessStatus">
+            <list>
+              <option value="EULA_NOT_ACCEPTED" />
+            </list>
+          </option>
+          <option name="api" value="34" />
+          <option name="brand" value="samsung" />
+          <option name="codename" value="samsung_lab_b6q" />
+          <option name="id" value="samsung_lab_b6q" />
+          <option name="labId" value="samsung" />
+          <option name="manufacturer" value="Samsung" />
+          <option name="name" value="Galaxy Z Flip6" />
+          <option name="screenDensity" value="480" />
+          <option name="screenX" value="1080" />
+          <option name="screenY" value="2640" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="accessStatus">
+            <list>
+              <option value="EULA_NOT_ACCEPTED" />
+            </list>
+          </option>
+          <option name="api" value="34" />
+          <option name="brand" value="samsung" />
+          <option name="codename" value="samsung_lab_e3q" />
+          <option name="id" value="samsung_lab_e3q" />
+          <option name="labId" value="samsung" />
+          <option name="manufacturer" value="Samsung" />
+          <option name="name" value="Galaxy S24 Ultra" />
+          <option name="screenDensity" value="450" />
+          <option name="screenX" value="1440" />
+          <option name="screenY" value="3120" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="accessStatus">
+            <list>
+              <option value="EULA_NOT_ACCEPTED" />
+            </list>
+          </option>
+          <option name="api" value="33" />
+          <option name="brand" value="samsung" />
+          <option name="codename" value="samsung_lab_gta9p" />
+          <option name="formFactor" value="Tablet" />
+          <option name="id" value="samsung_lab_gta9p" />
+          <option name="labId" value="samsung" />
+          <option name="manufacturer" value="Samsung" />
+          <option name="name" value="Galaxy Tab A9+ 5G" />
+          <option name="screenDensity" value="240" />
+          <option name="screenX" value="1200" />
+          <option name="screenY" value="1920" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="accessStatus">
+            <list>
+              <option value="EULA_NOT_ACCEPTED" />
+            </list>
+          </option>
+          <option name="api" value="34" />
+          <option name="brand" value="samsung" />
+          <option name="codename" value="samsung_lab_gts9" />
+          <option name="formFactor" value="Tablet" />
+          <option name="id" value="samsung_lab_gts9" />
+          <option name="labId" value="samsung" />
+          <option name="manufacturer" value="Samsung" />
+          <option name="name" value="Galaxy Tab S9 5G" />
+          <option name="screenDensity" value="340" />
+          <option name="screenX" value="1600" />
+          <option name="screenY" value="2560" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="accessStatus">
+            <list>
+              <option value="EULA_NOT_ACCEPTED" />
+            </list>
+          </option>
+          <option name="api" value="34" />
+          <option name="brand" value="samsung" />
+          <option name="codename" value="samsung_lab_gts9p" />
+          <option name="formFactor" value="Tablet" />
+          <option name="id" value="samsung_lab_gts9p" />
+          <option name="labId" value="samsung" />
+          <option name="manufacturer" value="Samsung" />
+          <option name="name" value="Galaxy Tab S9+ 5G" />
+          <option name="screenDensity" value="340" />
+          <option name="screenX" value="1752" />
+          <option name="screenY" value="2800" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="accessStatus">
+            <list>
+              <option value="EULA_NOT_ACCEPTED" />
+            </list>
+          </option>
+          <option name="api" value="34" />
+          <option name="brand" value="samsung" />
+          <option name="codename" value="samsung_lab_gts9u" />
+          <option name="formFactor" value="Tablet" />
+          <option name="id" value="samsung_lab_gts9u" />
+          <option name="labId" value="samsung" />
+          <option name="manufacturer" value="Samsung" />
+          <option name="name" value="Galaxy Tab S9 Ultra 5G" />
+          <option name="screenDensity" value="300" />
+          <option name="screenX" value="1848" />
+          <option name="screenY" value="2960" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="accessStatus">
+            <list>
+              <option value="EULA_NOT_ACCEPTED" />
+            </list>
+          </option>
+          <option name="api" value="34" />
+          <option name="brand" value="samsung" />
+          <option name="codename" value="samsung_lab_q6q" />
+          <option name="id" value="samsung_lab_q6q" />
+          <option name="labId" value="samsung" />
+          <option name="manufacturer" value="Samsung" />
+          <option name="name" value="Galaxy Z Fold6" />
+          <option name="screenDensity" value="420" />
+          <option name="screenX" value="1856" />
+          <option name="screenY" value="2160" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="api" value="34" />
+          <option name="brand" value="google" />
+          <option name="codename" value="shiba" />
+          <option name="id" value="shiba" />
+          <option name="labId" value="google" />
+          <option name="manufacturer" value="Google" />
+          <option name="name" value="Pixel 8" />
+          <option name="screenDensity" value="420" />
+          <option name="screenX" value="1080" />
+          <option name="screenY" value="2400" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="api" value="34" />
+          <option name="brand" value="samsung" />
+          <option name="codename" value="t2q" />
+          <option name="id" value="t2q" />
+          <option name="labId" value="google" />
+          <option name="manufacturer" value="Samsung" />
+          <option name="name" value="Galaxy S21 Plus" />
+          <option name="screenDensity" value="394" />
+          <option name="screenX" value="1080" />
+          <option name="screenY" value="2400" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="api" value="33" />
+          <option name="brand" value="google" />
+          <option name="codename" value="tangorpro" />
+          <option name="formFactor" value="Tablet" />
+          <option name="id" value="tangorpro" />
+          <option name="labId" value="google" />
+          <option name="manufacturer" value="Google" />
+          <option name="name" value="Pixel Tablet" />
+          <option name="screenDensity" value="320" />
+          <option name="screenX" value="1600" />
+          <option name="screenY" value="2560" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="api" value="35" />
+          <option name="brand" value="google" />
+          <option name="codename" value="tegu" />
+          <option name="id" value="tegu" />
+          <option name="labId" value="google" />
+          <option name="manufacturer" value="Google" />
+          <option name="name" value="Pixel 9a" />
+          <option name="screenDensity" value="420" />
+          <option name="screenX" value="1080" />
+          <option name="screenY" value="2424" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="api" value="34" />
+          <option name="brand" value="google" />
+          <option name="codename" value="tokay" />
+          <option name="default" value="true" />
+          <option name="id" value="tokay" />
+          <option name="labId" value="google" />
+          <option name="manufacturer" value="Google" />
+          <option name="name" value="Pixel 9" />
+          <option name="screenDensity" value="420" />
+          <option name="screenX" value="1080" />
+          <option name="screenY" value="2424" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="api" value="35" />
+          <option name="brand" value="google" />
+          <option name="codename" value="tokay" />
+          <option name="default" value="true" />
+          <option name="id" value="tokay" />
+          <option name="labId" value="google" />
+          <option name="manufacturer" value="Google" />
+          <option name="name" value="Pixel 9" />
+          <option name="screenDensity" value="420" />
+          <option name="screenX" value="1080" />
+          <option name="screenY" value="2424" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="accessStatus">
+            <list>
+              <option value="EULA_NOT_ACCEPTED" />
+            </list>
+          </option>
+          <option name="api" value="35" />
+          <option name="brand" value="vivo" />
+          <option name="codename" value="vivo_lab_v2342" />
+          <option name="id" value="vivo_lab_v2342" />
+          <option name="labId" value="vivo" />
+          <option name="manufacturer" value="vivo" />
+          <option name="name" value="V40 Lite" />
+          <option name="screenDensity" value="440" />
+          <option name="screenX" value="1080" />
+          <option name="screenY" value="2400" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="accessStatus">
+            <list>
+              <option value="EULA_NOT_ACCEPTED" />
+            </list>
+          </option>
+          <option name="api" value="35" />
+          <option name="brand" value="vivo" />
+          <option name="codename" value="vivo_lab_v2348" />
+          <option name="id" value="vivo_lab_v2348" />
+          <option name="labId" value="vivo" />
+          <option name="manufacturer" value="vivo" />
+          <option name="name" value="V40" />
+          <option name="screenDensity" value="420" />
+          <option name="screenX" value="1080" />
+          <option name="screenY" value="2400" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="api" value="34" />
+          <option name="brand" value="samsung" />
+          <option name="codename" value="xcover7" />
+          <option name="id" value="xcover7" />
+          <option name="labId" value="google" />
+          <option name="manufacturer" value="Samsung" />
+          <option name="name" value="SM-G556B" />
+          <option name="screenDensity" value="450" />
+          <option name="screenX" value="1080" />
+          <option name="screenY" value="2408" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="accessStatus">
+            <list>
+              <option value="EULA_NOT_ACCEPTED" />
+            </list>
+          </option>
+          <option name="api" value="34" />
+          <option name="brand" value="Xiaomi" />
+          <option name="codename" value="xiaomi_lab_garnet" />
+          <option name="id" value="xiaomi_lab_garnet" />
+          <option name="labId" value="xiaomi" />
+          <option name="manufacturer" value="Xiaomi" />
+          <option name="name" value="Redmi Note 13 Pro 5G" />
+          <option name="screenDensity" value="480" />
+          <option name="screenX" value="1220" />
+          <option name="screenY" value="2712" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="accessStatus">
+            <list>
+              <option value="EULA_NOT_ACCEPTED" />
+            </list>
+          </option>
+          <option name="api" value="34" />
+          <option name="brand" value="Xiaomi" />
+          <option name="codename" value="xiaomi_lab_pipa" />
+          <option name="formFactor" value="Tablet" />
+          <option name="id" value="xiaomi_lab_pipa" />
+          <option name="labId" value="xiaomi" />
+          <option name="manufacturer" value="Xiaomi" />
+          <option name="name" value="Pad 6" />
+          <option name="screenDensity" value="480" />
+          <option name="screenX" value="1220" />
+          <option name="screenY" value="2712" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="accessStatus">
+            <list>
+              <option value="EULA_NOT_ACCEPTED" />
+            </list>
+          </option>
+          <option name="api" value="35" />
+          <option name="brand" value="Xiaomi" />
+          <option name="codename" value="xiaomi_lab_ruyi" />
+          <option name="id" value="xiaomi_lab_ruyi" />
+          <option name="labId" value="xiaomi" />
+          <option name="manufacturer" value="Xiaomi" />
+          <option name="name" value="MIX Flip" />
+          <option name="screenDensity" value="520" />
+          <option name="screenX" value="1224" />
+          <option name="screenY" value="2912" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
+          <option name="accessStatus">
+            <list>
+              <option value="EULA_NOT_ACCEPTED" />
+            </list>
+          </option>
+          <option name="api" value="35" />
+          <option name="brand" value="Xiaomi" />
+          <option name="codename" value="xiaomi_lab_sheng" />
+          <option name="formFactor" value="Tablet" />
+          <option name="id" value="xiaomi_lab_sheng" />
+          <option name="labId" value="xiaomi" />
+          <option name="manufacturer" value="Xiaomi" />
+          <option name="name" value="Pad 6S Pro 12.4" />
+          <option name="screenDensity" value="400" />
+          <option name="screenX" value="2032" />
+          <option name="screenY" value="3048" />
+        </PersistentDeviceSelectionData>
+      </list>
+    </option>
+  </component>
+  <component name="ExternalStorageConfigurationManager" enabled="true" />
+  <component name="GradleMigrationSettings" migrationVersion="1" />
+  <component name="GradleSettings">
+    <option name="linkedExternalProjectsSettings">
+      <GradleProjectSettings>
+        <option name="testRunner" value="CHOOSE_PER_TEST" />
+        <option name="externalProjectPath" value="$PROJECT_DIR$" />
+        <option name="gradleJvm" value="#GRADLE_LOCAL_JAVA_HOME" />
+        <option name="modules">
+          <set>
+            <option value="$PROJECT_DIR$" />
+            <option value="$PROJECT_DIR$/app" />
+          </set>
+        </option>
+      </GradleProjectSettings>
+    </option>
+  </component>
+  <component name="InspectionProjectProfileManager">
+    <profile version="1.0">
+      <option name="myName" value="Project Default" />
+    </profile>
+    <version value="1.0" />
+  </component>
+  <component name="Palette2">
+    <group name="Swing">
+      <item class="com.intellij.uiDesigner.HSpacer" tooltip-text="Horizontal Spacer" icon="/com/intellij/uiDesigner/icons/hspacer.png" removable="false" auto-create-binding="false" can-attach-label="false">
+        <default-constraints vsize-policy="1" hsize-policy="6" anchor="0" fill="1" />
+      </item>
+      <item class="com.intellij.uiDesigner.VSpacer" tooltip-text="Vertical Spacer" icon="/com/intellij/uiDesigner/icons/vspacer.png" removable="false" auto-create-binding="false" can-attach-label="false">
+        <default-constraints vsize-policy="6" hsize-policy="1" anchor="0" fill="2" />
+      </item>
+      <item class="javax.swing.JPanel" icon="/com/intellij/uiDesigner/icons/panel.png" removable="false" auto-create-binding="false" can-attach-label="false">
+        <default-constraints vsize-policy="3" hsize-policy="3" anchor="0" fill="3" />
+      </item>
+      <item class="javax.swing.JScrollPane" icon="/com/intellij/uiDesigner/icons/scrollPane.png" removable="false" auto-create-binding="false" can-attach-label="true">
+        <default-constraints vsize-policy="7" hsize-policy="7" anchor="0" fill="3" />
+      </item>
+      <item class="javax.swing.JButton" icon="/com/intellij/uiDesigner/icons/button.png" removable="false" auto-create-binding="true" can-attach-label="false">
+        <default-constraints vsize-policy="0" hsize-policy="3" anchor="0" fill="1" />
+        <initial-values>
+          <property name="text" value="Button" />
+        </initial-values>
+      </item>
+      <item class="javax.swing.JRadioButton" icon="/com/intellij/uiDesigner/icons/radioButton.png" removable="false" auto-create-binding="true" can-attach-label="false">
+        <default-constraints vsize-policy="0" hsize-policy="3" anchor="8" fill="0" />
+        <initial-values>
+          <property name="text" value="RadioButton" />
+        </initial-values>
+      </item>
+      <item class="javax.swing.JCheckBox" icon="/com/intellij/uiDesigner/icons/checkBox.png" removable="false" auto-create-binding="true" can-attach-label="false">
+        <default-constraints vsize-policy="0" hsize-policy="3" anchor="8" fill="0" />
+        <initial-values>
+          <property name="text" value="CheckBox" />
+        </initial-values>
+      </item>
+      <item class="javax.swing.JLabel" icon="/com/intellij/uiDesigner/icons/label.png" removable="false" auto-create-binding="false" can-attach-label="false">
+        <default-constraints vsize-policy="0" hsize-policy="0" anchor="8" fill="0" />
+        <initial-values>
+          <property name="text" value="Label" />
+        </initial-values>
+      </item>
+      <item class="javax.swing.JTextField" icon="/com/intellij/uiDesigner/icons/textField.png" removable="false" auto-create-binding="true" can-attach-label="true">
+        <default-constraints vsize-policy="0" hsize-policy="6" anchor="8" fill="1">
+          <preferred-size width="150" height="-1" />
+        </default-constraints>
+      </item>
+      <item class="javax.swing.JPasswordField" icon="/com/intellij/uiDesigner/icons/passwordField.png" removable="false" auto-create-binding="true" can-attach-label="true">
+        <default-constraints vsize-policy="0" hsize-policy="6" anchor="8" fill="1">
+          <preferred-size width="150" height="-1" />
+        </default-constraints>
+      </item>
+      <item class="javax.swing.JFormattedTextField" icon="/com/intellij/uiDesigner/icons/formattedTextField.png" removable="false" auto-create-binding="true" can-attach-label="true">
+        <default-constraints vsize-policy="0" hsize-policy="6" anchor="8" fill="1">
+          <preferred-size width="150" height="-1" />
+        </default-constraints>
+      </item>
+      <item class="javax.swing.JTextArea" icon="/com/intellij/uiDesigner/icons/textArea.png" removable="false" auto-create-binding="true" can-attach-label="true">
+        <default-constraints vsize-policy="6" hsize-policy="6" anchor="0" fill="3">
+          <preferred-size width="150" height="50" />
+        </default-constraints>
+      </item>
+      <item class="javax.swing.JTextPane" icon="/com/intellij/uiDesigner/icons/textPane.png" removable="false" auto-create-binding="true" can-attach-label="true">
+        <default-constraints vsize-policy="6" hsize-policy="6" anchor="0" fill="3">
+          <preferred-size width="150" height="50" />
+        </default-constraints>
+      </item>
+      <item class="javax.swing.JEditorPane" icon="/com/intellij/uiDesigner/icons/editorPane.png" removable="false" auto-create-binding="true" can-attach-label="true">
+        <default-constraints vsize-policy="6" hsize-policy="6" anchor="0" fill="3">
+          <preferred-size width="150" height="50" />
+        </default-constraints>
+      </item>
+      <item class="javax.swing.JComboBox" icon="/com/intellij/uiDesigner/icons/comboBox.png" removable="false" auto-create-binding="true" can-attach-label="true">
+        <default-constraints vsize-policy="0" hsize-policy="2" anchor="8" fill="1" />
+      </item>
+      <item class="javax.swing.JTable" icon="/com/intellij/uiDesigner/icons/table.png" removable="false" auto-create-binding="true" can-attach-label="false">
+        <default-constraints vsize-policy="6" hsize-policy="6" anchor="0" fill="3">
+          <preferred-size width="150" height="50" />
+        </default-constraints>
+      </item>
+      <item class="javax.swing.JList" icon="/com/intellij/uiDesigner/icons/list.png" removable="false" auto-create-binding="true" can-attach-label="false">
+        <default-constraints vsize-policy="6" hsize-policy="2" anchor="0" fill="3">
+          <preferred-size width="150" height="50" />
+        </default-constraints>
+      </item>
+      <item class="javax.swing.JTree" icon="/com/intellij/uiDesigner/icons/tree.png" removable="false" auto-create-binding="true" can-attach-label="false">
+        <default-constraints vsize-policy="6" hsize-policy="6" anchor="0" fill="3">
+          <preferred-size width="150" height="50" />
+        </default-constraints>
+      </item>
+      <item class="javax.swing.JTabbedPane" icon="/com/intellij/uiDesigner/icons/tabbedPane.png" removable="false" auto-create-binding="true" can-attach-label="false">
+        <default-constraints vsize-policy="3" hsize-policy="3" anchor="0" fill="3">
+          <preferred-size width="200" height="200" />
+        </default-constraints>
+      </item>
+      <item class="javax.swing.JSplitPane" icon="/com/intellij/uiDesigner/icons/splitPane.png" removable="false" auto-create-binding="false" can-attach-label="false">
+        <default-constraints vsize-policy="3" hsize-policy="3" anchor="0" fill="3">
+          <preferred-size width="200" height="200" />
+        </default-constraints>
+      </item>
+      <item class="javax.swing.JSpinner" icon="/com/intellij/uiDesigner/icons/spinner.png" removable="false" auto-create-binding="true" can-attach-label="true">
+        <default-constraints vsize-policy="0" hsize-policy="6" anchor="8" fill="1" />
+      </item>
+      <item class="javax.swing.JSlider" icon="/com/intellij/uiDesigner/icons/slider.png" removable="false" auto-create-binding="true" can-attach-label="false">
+        <default-constraints vsize-policy="0" hsize-policy="6" anchor="8" fill="1" />
+      </item>
+      <item class="javax.swing.JSeparator" icon="/com/intellij/uiDesigner/icons/separator.png" removable="false" auto-create-binding="false" can-attach-label="false">
+        <default-constraints vsize-policy="6" hsize-policy="6" anchor="0" fill="3" />
+      </item>
+      <item class="javax.swing.JProgressBar" icon="/com/intellij/uiDesigner/icons/progressbar.png" removable="false" auto-create-binding="true" can-attach-label="false">
+        <default-constraints vsize-policy="0" hsize-policy="6" anchor="0" fill="1" />
+      </item>
+      <item class="javax.swing.JToolBar" icon="/com/intellij/uiDesigner/icons/toolbar.png" removable="false" auto-create-binding="false" can-attach-label="false">
+        <default-constraints vsize-policy="0" hsize-policy="6" anchor="0" fill="1">
+          <preferred-size width="-1" height="20" />
+        </default-constraints>
+      </item>
+      <item class="javax.swing.JToolBar$Separator" icon="/com/intellij/uiDesigner/icons/toolbarSeparator.png" removable="false" auto-create-binding="false" can-attach-label="false">
+        <default-constraints vsize-policy="0" hsize-policy="0" anchor="0" fill="1" />
+      </item>
+      <item class="javax.swing.JScrollBar" icon="/com/intellij/uiDesigner/icons/scrollbar.png" removable="false" auto-create-binding="true" can-attach-label="false">
+        <default-constraints vsize-policy="6" hsize-policy="0" anchor="0" fill="2" />
+      </item>
+    </group>
+  </component>
+  <component name="ProjectDictionaryState">
+    <dictionary name="steve" />
+    <dictionary name="project">
+      <words>
+        <w>zefie</w>
+      </words>
+    </dictionary>
+  </component>
+  <component name="ProjectMigrations">
+    <option name="MigrateToGradleLocalJavaHome">
+      <set>
+        <option value="$PROJECT_DIR$" />
+      </set>
+    </option>
+  </component>
+  <component name="ProjectModuleManager">
+    <modules>
+      <module fileurl="file://$PROJECT_DIR$/miniBAEDroid.iml" filepath="$PROJECT_DIR$/miniBAEDroid.iml" />
+      <module fileurl="file://$PROJECT_DIR$/app/miniBAEDroid.app.iml" filepath="$PROJECT_DIR$/app/miniBAEDroid.app.iml" />
+      <module fileurl="file://$PROJECT_DIR$/app/miniBAEDroid.app.androidTest.iml" filepath="$PROJECT_DIR$/app/miniBAEDroid.app.androidTest.iml" />
+      <module fileurl="file://$PROJECT_DIR$/app/miniBAEDroid.app.main.iml" filepath="$PROJECT_DIR$/app/miniBAEDroid.app.main.iml" />
+      <module fileurl="file://$PROJECT_DIR$/app/miniBAEDroid.app.unitTest.iml" filepath="$PROJECT_DIR$/app/miniBAEDroid.app.unitTest.iml" />
+    </modules>
+  </component>
+  <component name="ProjectRootManager" version="2" languageLevel="JDK_21" default="true" project-jdk-name="jbr-21" project-jdk-type="JavaSDK">
+    <output url="file://$PROJECT_DIR$/out" />
+  </component>
+  <component name="RunConfigurationProducerService">
+    <option name="ignoredProducers">
+      <set>
+        <option value="com.intellij.execution.junit.AbstractAllInDirectoryConfigurationProducer" />
+        <option value="com.intellij.execution.junit.AllInPackageConfigurationProducer" />
+        <option value="com.intellij.execution.junit.PatternConfigurationProducer" />
+        <option value="com.intellij.execution.junit.TestInClassConfigurationProducer" />
+        <option value="com.intellij.execution.junit.UniqueIdConfigurationProducer" />
+        <option value="com.intellij.execution.junit.testDiscovery.JUnitTestDiscoveryConfigurationProducer" />
+        <option value="org.jetbrains.kotlin.idea.junit.KotlinJUnitRunConfigurationProducer" />
+        <option value="org.jetbrains.kotlin.idea.junit.KotlinPatternConfigurationProducer" />
+      </set>
+    </option>
+  </component>
+  <component name="StudioBotProjectSettings">
+    <option name="shareContext" value="OptedIn" />
+  </component>
+  <component name="SvnConfiguration" maxAnnotateRevisions="500" myUseAcceleration="nothing" myAutoUpdateAfterCommit="false" cleanupOnStartRun="false" SSL_PROTOCOLS="sslv3">
+    <option name="USER" value="" />
+    <option name="PASSWORD" value="" />
+    <option name="mySSHConnectionTimeout" value="30000" />
+    <option name="mySSHReadTimeout" value="30000" />
+    <option name="LAST_MERGED_REVISION" />
+    <option name="MERGE_DRY_RUN" value="false" />
+    <option name="MERGE_DIFF_USE_ANCESTRY" value="true" />
+    <option name="UPDATE_LOCK_ON_DEMAND" value="false" />
+    <option name="IGNORE_SPACES_IN_MERGE" value="false" />
+    <option name="CHECK_NESTED_FOR_QUICK_MERGE" value="false" />
+    <option name="IGNORE_SPACES_IN_ANNOTATE" value="true" />
+    <option name="SHOW_MERGE_SOURCES_IN_ANNOTATE" value="true" />
+    <option name="FORCE_UPDATE" value="false" />
+    <option name="IGNORE_EXTERNALS" value="false" />
+    <myIsUseDefaultProxy>false</myIsUseDefaultProxy>
+  </component>
+  <component name="VcsDirectoryMappings">
+    <mapping directory="" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/../../.." vcs="Git" />
+  </component>
+  <component name="WizardSettings">
+    <option name="children">
+      <map>
+        <entry key="imageWizard">
+          <value>
+            <PersistentState>
+              <option name="children">
+                <map>
+                  <entry key="imageAssetPanel">
+                    <value>
+                      <PersistentState>
+                        <option name="children">
+                          <map>
+                            <entry key="actionbar">
+                              <value>
+                                <PersistentState>
+                                  <option name="children">
+                                    <map>
+                                      <entry key="clipArt">
+                                        <value>
+                                          <PersistentState>
+                                            <option name="values">
+                                              <map>
+                                                <entry key="color" value="000000" />
+                                                <entry key="imagePath" value="C:\Users\zefie\AppData\Local\Temp\ic_android_black_24dp.xml" />
+                                              </map>
+                                            </option>
+                                          </PersistentState>
+                                        </value>
+                                      </entry>
+                                      <entry key="text">
+                                        <value>
+                                          <PersistentState>
+                                            <option name="values">
+                                              <map>
+                                                <entry key="color" value="000000" />
+                                              </map>
+                                            </option>
+                                          </PersistentState>
+                                        </value>
+                                      </entry>
+                                      <entry key="textAsset">
+                                        <value>
+                                          <PersistentState>
+                                            <option name="values">
+                                              <map>
+                                                <entry key="color" value="000000" />
+                                              </map>
+                                            </option>
+                                          </PersistentState>
+                                        </value>
+                                      </entry>
+                                    </map>
+                                  </option>
+                                </PersistentState>
+                              </value>
+                            </entry>
+                            <entry key="launcher">
+                              <value>
+                                <PersistentState>
+                                  <option name="children">
+                                    <map>
+                                      <entry key="foregroundClipArt">
+                                        <value>
+                                          <PersistentState>
+                                            <option name="values">
+                                              <map>
+                                                <entry key="color" value="ffffff" />
+                                                <entry key="imagePath" value="C:\Users\zefie\AppData\Local\Temp\baseline_library_music_24.xml" />
+                                              </map>
+                                            </option>
+                                          </PersistentState>
+                                        </value>
+                                      </entry>
+                                      <entry key="foregroundClipartAsset">
+                                        <value>
+                                          <PersistentState>
+                                            <option name="values">
+                                              <map>
+                                                <entry key="url" value="jar:file:/D:/bin/android/Studio/plugins/android/lib/android.jar!/images/material/icons/materialicons/library_music/baseline_library_music_24.xml" />
+                                              </map>
+                                            </option>
+                                          </PersistentState>
+                                        </value>
+                                      </entry>
+                                      <entry key="foregroundImage">
+                                        <value>
+                                          <PersistentState>
+                                            <option name="values">
+                                              <map>
+                                                <entry key="color" value="000000" />
+                                              </map>
+                                            </option>
+                                          </PersistentState>
+                                        </value>
+                                      </entry>
+                                      <entry key="foregroundText">
+                                        <value>
+                                          <PersistentState>
+                                            <option name="values">
+                                              <map>
+                                                <entry key="color" value="000000" />
+                                              </map>
+                                            </option>
+                                          </PersistentState>
+                                        </value>
+                                      </entry>
+                                      <entry key="foregroundTextAsset">
+                                        <value>
+                                          <PersistentState>
+                                            <option name="values">
+                                              <map>
+                                                <entry key="color" value="000000" />
+                                              </map>
+                                            </option>
+                                          </PersistentState>
+                                        </value>
+                                      </entry>
+                                    </map>
+                                  </option>
+                                  <option name="values">
+                                    <map>
+                                      <entry key="backgroundAssetType" value="COLOR" />
+                                      <entry key="backgroundColor" value="943ddc" />
+                                      <entry key="foregroundAssetType" value="CLIP_ART" />
+                                    </map>
+                                  </option>
+                                </PersistentState>
+                              </value>
+                            </entry>
+                            <entry key="launcherLegacy">
+                              <value>
+                                <PersistentState>
+                                  <option name="children">
+                                    <map>
+                                      <entry key="clipArt">
+                                        <value>
+                                          <PersistentState>
+                                            <option name="values">
+                                              <map>
+                                                <entry key="color" value="000000" />
+                                                <entry key="imagePath" value="C:\Users\zefie\AppData\Local\Temp\ic_android_black_24dp.xml" />
+                                              </map>
+                                            </option>
+                                          </PersistentState>
+                                        </value>
+                                      </entry>
+                                      <entry key="text">
+                                        <value>
+                                          <PersistentState>
+                                            <option name="values">
+                                              <map>
+                                                <entry key="color" value="000000" />
+                                              </map>
+                                            </option>
+                                          </PersistentState>
+                                        </value>
+                                      </entry>
+                                      <entry key="textAsset">
+                                        <value>
+                                          <PersistentState>
+                                            <option name="values">
+                                              <map>
+                                                <entry key="color" value="000000" />
+                                              </map>
+                                            </option>
+                                          </PersistentState>
+                                        </value>
+                                      </entry>
+                                    </map>
+                                  </option>
+                                </PersistentState>
+                              </value>
+                            </entry>
+                            <entry key="notification">
+                              <value>
+                                <PersistentState>
+                                  <option name="children">
+                                    <map>
+                                      <entry key="clipArt">
+                                        <value>
+                                          <PersistentState>
+                                            <option name="values">
+                                              <map>
+                                                <entry key="color" value="000000" />
+                                                <entry key="imagePath" value="C:\Users\zefie\AppData\Local\Temp\ic_android_black_24dp.xml" />
+                                              </map>
+                                            </option>
+                                          </PersistentState>
+                                        </value>
+                                      </entry>
+                                      <entry key="text">
+                                        <value>
+                                          <PersistentState>
+                                            <option name="values">
+                                              <map>
+                                                <entry key="color" value="000000" />
+                                              </map>
+                                            </option>
+                                          </PersistentState>
+                                        </value>
+                                      </entry>
+                                      <entry key="textAsset">
+                                        <value>
+                                          <PersistentState>
+                                            <option name="values">
+                                              <map>
+                                                <entry key="color" value="000000" />
+                                              </map>
+                                            </option>
+                                          </PersistentState>
+                                        </value>
+                                      </entry>
+                                    </map>
+                                  </option>
+                                </PersistentState>
+                              </value>
+                            </entry>
+                            <entry key="tvBanner">
+                              <value>
+                                <PersistentState>
+                                  <option name="children">
+                                    <map>
+                                      <entry key="foregroundText">
+                                        <value>
+                                          <PersistentState>
+                                            <option name="values">
+                                              <map>
+                                                <entry key="color" value="000000" />
+                                              </map>
+                                            </option>
+                                          </PersistentState>
+                                        </value>
+                                      </entry>
+                                    </map>
+                                  </option>
+                                </PersistentState>
+                              </value>
+                            </entry>
+                            <entry key="tvChannel">
+                              <value>
+                                <PersistentState>
+                                  <option name="children">
+                                    <map>
+                                      <entry key="foregroundClipArt">
+                                        <value>
+                                          <PersistentState>
+                                            <option name="values">
+                                              <map>
+                                                <entry key="imagePath" value="C:\Users\zefie\AppData\Local\Temp\ic_android_black_24dp.xml" />
+                                              </map>
+                                            </option>
+                                          </PersistentState>
+                                        </value>
+                                      </entry>
+                                      <entry key="foregroundImage">
+                                        <value>
+                                          <PersistentState>
+                                            <option name="values">
+                                              <map>
+                                                <entry key="color" value="000000" />
+                                              </map>
+                                            </option>
+                                          </PersistentState>
+                                        </value>
+                                      </entry>
+                                      <entry key="foregroundText">
+                                        <value>
+                                          <PersistentState>
+                                            <option name="values">
+                                              <map>
+                                                <entry key="color" value="000000" />
+                                              </map>
+                                            </option>
+                                          </PersistentState>
+                                        </value>
+                                      </entry>
+                                      <entry key="foregroundTextAsset">
+                                        <value>
+                                          <PersistentState>
+                                            <option name="values">
+                                              <map>
+                                                <entry key="color" value="000000" />
+                                              </map>
+                                            </option>
+                                          </PersistentState>
+                                        </value>
+                                      </entry>
+                                    </map>
+                                  </option>
+                                </PersistentState>
+                              </value>
+                            </entry>
+                          </map>
+                        </option>
+                      </PersistentState>
+                    </value>
+                  </entry>
+                </map>
+              </option>
+            </PersistentState>
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
+  <component name="deploymentTargetSelector">
+    <selectionStates>
+      <SelectionState runConfigName="app">
+        <option name="selectionMode" value="DROPDOWN" />
+        <DropdownSelection timestamp="2025-08-19T07:19:43.782578900Z">
+          <Target type="DEFAULT_BOOT">
+            <handle>
+              <DeviceId pluginId="LocalEmulator" identifier="path=C:\Users\zefie\.android\avd\Medium_Phone.avd" />
+            </handle>
+          </Target>
+        </DropdownSelection>
+        <DialogSelection />
+      </SelectionState>
+    </selectionStates>
+  </component>
+  <component name="libraryTable">
+    <library name="Gradle: androidx.activity:activity-compose:1.10.1@aar" external-system-id="GRADLE">
+      <CLASSES>
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/46886f0ed1d89675dbc27b10e455ee18/transformed/activity-compose-1.10.1/AndroidManifest.xml" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/46886f0ed1d89675dbc27b10e455ee18/transformed/activity-compose-1.10.1/res" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/46886f0ed1d89675dbc27b10e455ee18/transformed/activity-compose-1.10.1/jars/classes.jar!/" />
+      </CLASSES>
+      <JAVADOC />
+      <SOURCES>
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.activity/activity-compose/1.10.1/1500484dd23a73adf5694945a21fa50b7a4c9270/activity-compose-1.10.1-sources.jar!/" />
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.activity/activity-compose/1.10.1/47fa378780764e0c90ec26fcf05211137198bb91/activity-compose-1.10.1-samples-sources.jar!/" />
+      </SOURCES>
+    </library>
+    <library name="Gradle: androidx.activity:activity-ktx:1.10.1@aar" external-system-id="GRADLE">
+      <CLASSES>
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/5b0de6796e840329903fe6f6068795a3/transformed/activity-ktx-1.10.1/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/5b0de6796e840329903fe6f6068795a3/transformed/activity-ktx-1.10.1/res" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/5b0de6796e840329903fe6f6068795a3/transformed/activity-ktx-1.10.1/AndroidManifest.xml" />
+      </CLASSES>
+      <JAVADOC />
+      <SOURCES>
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.activity/activity-ktx/1.10.1/a2a09499e03aec3f93ff25a00c3f1ac03014ddee/activity-ktx-1.10.1-sources.jar!/" />
+      </SOURCES>
+    </library>
+    <library name="Gradle: androidx.activity:activity:1.10.1@aar" external-system-id="GRADLE">
+      <CLASSES>
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/69ae46fa8804dd31ca915865e432caa8/transformed/activity-1.10.1/res" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/69ae46fa8804dd31ca915865e432caa8/transformed/activity-1.10.1/AndroidManifest.xml" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/69ae46fa8804dd31ca915865e432caa8/transformed/activity-1.10.1/jars/classes.jar!/" />
+      </CLASSES>
+      <JAVADOC />
+      <SOURCES>
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.activity/activity/1.10.1/2dab2db4576a9f16d32369bd2af0e3e46847bc6c/activity-1.10.1-sources.jar!/" />
+      </SOURCES>
+    </library>
+    <library name="Gradle: androidx.annotation:annotation-experimental:1.4.1@aar" external-system-id="GRADLE">
+      <CLASSES>
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/b0d3f0b3c3bc2d374c61f7fcb3da07cd/transformed/annotation-experimental-1.4.1/res" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/b0d3f0b3c3bc2d374c61f7fcb3da07cd/transformed/annotation-experimental-1.4.1/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/b0d3f0b3c3bc2d374c61f7fcb3da07cd/transformed/annotation-experimental-1.4.1/AndroidManifest.xml" />
+      </CLASSES>
+      <JAVADOC />
+      <SOURCES>
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.annotation/annotation-experimental/1.4.1/4dc003cb3c5ff16a1c3d09f3d1f7ae7b2d14a9c4/annotation-experimental-1.4.1-sources.jar!/" />
+      </SOURCES>
+    </library>
+    <library name="Gradle: androidx.annotation:annotation-jvm:1.9.1" type="java-imported" external-system-id="GRADLE">
+      <properties groupId="androidx.annotation" artifactId="annotation-jvm" version="1.9.1" baseVersion="1.9.1" />
+      <CLASSES>
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.annotation/annotation-jvm/1.9.1/b17951747e38bf3986a24431b9ba0d039958aa5f/annotation-jvm-1.9.1.jar!/" />
+      </CLASSES>
+      <JAVADOC />
+      <SOURCES>
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.annotation/annotation-jvm/1.9.1/865f245e3c1d595a6b9ae80e622a94907abc58d5/annotation-jvm-1.9.1-sources.jar!/" />
+      </SOURCES>
+    </library>
+    <library name="Gradle: androidx.appcompat:appcompat-resources:1.7.1@aar" external-system-id="GRADLE">
+      <CLASSES>
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/d72d8211eeeb09e6f1233f33b99a7602/transformed/appcompat-resources-1.7.1/AndroidManifest.xml" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/d72d8211eeeb09e6f1233f33b99a7602/transformed/appcompat-resources-1.7.1/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/d72d8211eeeb09e6f1233f33b99a7602/transformed/appcompat-resources-1.7.1/res" />
+      </CLASSES>
+      <JAVADOC />
+      <SOURCES>
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.appcompat/appcompat-resources/1.7.1/cb084bf039d2b49e02cb58e0da0044fed264a4fb/appcompat-resources-1.7.1-sources.jar!/" />
+      </SOURCES>
+    </library>
+    <library name="Gradle: androidx.appcompat:appcompat:1.7.1@aar" external-system-id="GRADLE">
+      <ANNOTATIONS>
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/5768592783aa6d232f32536b5138ae90/transformed/appcompat-1.7.1/annotations.zip!/" />
+      </ANNOTATIONS>
+      <CLASSES>
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/5768592783aa6d232f32536b5138ae90/transformed/appcompat-1.7.1/res" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/5768592783aa6d232f32536b5138ae90/transformed/appcompat-1.7.1/AndroidManifest.xml" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/5768592783aa6d232f32536b5138ae90/transformed/appcompat-1.7.1/jars/classes.jar!/" />
+      </CLASSES>
+      <JAVADOC />
+      <SOURCES>
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.appcompat/appcompat/1.7.1/91fc2664fc6ba15f6c431072b24c2133f601383/appcompat-1.7.1-sources.jar!/" />
+      </SOURCES>
+    </library>
+    <library name="Gradle: androidx.arch.core:core-common:2.2.0" type="java-imported" external-system-id="GRADLE">
+      <properties groupId="androidx.arch.core" artifactId="core-common" version="2.2.0" baseVersion="2.2.0" />
+      <CLASSES>
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.arch.core/core-common/2.2.0/5e1b8b81dfd5f52c56a8d53b18ca759c19a301f3/core-common-2.2.0.jar!/" />
+      </CLASSES>
+      <JAVADOC />
+      <SOURCES>
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.arch.core/core-common/2.2.0/f3ac1460fc6844d5441595a34591af7fc04fd2e5/core-common-2.2.0-sources.jar!/" />
+      </SOURCES>
+    </library>
+    <library name="Gradle: androidx.arch.core:core-runtime:2.2.0@aar" external-system-id="GRADLE">
+      <CLASSES>
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/226e2b9bacca5ee49454142021049d57/transformed/core-runtime-2.2.0/res" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/226e2b9bacca5ee49454142021049d57/transformed/core-runtime-2.2.0/AndroidManifest.xml" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/226e2b9bacca5ee49454142021049d57/transformed/core-runtime-2.2.0/jars/classes.jar!/" />
+      </CLASSES>
+      <JAVADOC />
+      <SOURCES>
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.arch.core/core-runtime/2.2.0/48630ad88f438e5a603ae74cf4858203d1a595c5/core-runtime-2.2.0-sources.jar!/" />
+      </SOURCES>
+    </library>
+    <library name="Gradle: androidx.collection:collection-jvm:1.5.0" type="java-imported" external-system-id="GRADLE">
+      <properties groupId="androidx.collection" artifactId="collection-jvm" version="1.5.0" baseVersion="1.5.0" />
+      <CLASSES>
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.collection/collection-jvm/1.5.0/7ba2c69414d46ebc2dd76598bdd0a75c54281a57/collection-jvm-1.5.0.jar!/" />
+      </CLASSES>
+      <JAVADOC />
+      <SOURCES>
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.collection/collection-jvm/1.5.0/cce267e9a52246430f814d9eca61bb4248c9b4bb/collection-jvm-1.5.0-sources.jar!/" />
+      </SOURCES>
+    </library>
+    <library name="Gradle: androidx.compose.animation:animation-android:1.9.0@aar" external-system-id="GRADLE">
+      <CLASSES>
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/d95748e93c4620d9d746dc59989b0146/transformed/animation/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/d95748e93c4620d9d746dc59989b0146/transformed/animation/AndroidManifest.xml" />
+      </CLASSES>
+      <JAVADOC />
+      <SOURCES>
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.compose.animation/animation-android/1.9.0/c1a596ebe804412b7f595522cd9fa51a05cceb42/animation-android-1.9.0-sources.jar!/" />
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.compose.animation/animation-android/1.9.0/923c4b569772330f6c6554bf1b4ec7a9ad0574d4/animation-1.9.0-samples-sources.jar!/" />
+      </SOURCES>
+    </library>
+    <library name="Gradle: androidx.compose.animation:animation-core-android:1.9.0@aar" external-system-id="GRADLE">
+      <CLASSES>
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/4136c8ad3e07e058d66b448b822663b2/transformed/animation-core/AndroidManifest.xml" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/4136c8ad3e07e058d66b448b822663b2/transformed/animation-core/jars/classes.jar!/" />
+      </CLASSES>
+      <JAVADOC />
+      <SOURCES>
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.compose.animation/animation-core-android/1.9.0/2c4fedfaf1679df3feb7bfab4ecb815c84d9585d/animation-core-android-1.9.0-sources.jar!/" />
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.compose.animation/animation-core-android/1.9.0/ae139cc0ab318b5bb8cf986e43f25356bfc126c8/animation-core-1.9.0-samples-sources.jar!/" />
+      </SOURCES>
+    </library>
+    <library name="Gradle: androidx.compose.foundation:foundation-android:1.9.0@aar" external-system-id="GRADLE">
+      <CLASSES>
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/a9b0ea9f39bde8f00e18c39a617844eb/transformed/foundation-release/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/a9b0ea9f39bde8f00e18c39a617844eb/transformed/foundation-release/res" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/a9b0ea9f39bde8f00e18c39a617844eb/transformed/foundation-release/AndroidManifest.xml" />
+      </CLASSES>
+      <JAVADOC />
+      <SOURCES>
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.compose.foundation/foundation-android/1.9.0/927d417e21c50f15cd7f4a7c24433b7688d91f30/foundation-1.9.0-samples-sources.jar!/" />
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.compose.foundation/foundation-android/1.9.0/436659f3a22d079809c2caa3eaac043550e71e15/foundation-android-1.9.0-sources.jar!/" />
+      </SOURCES>
+    </library>
+    <library name="Gradle: androidx.compose.foundation:foundation-layout-android:1.9.0@aar" external-system-id="GRADLE">
+      <CLASSES>
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/ef6d9812b2902b53297da6ea54add7d9/transformed/foundation-layout/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/ef6d9812b2902b53297da6ea54add7d9/transformed/foundation-layout/AndroidManifest.xml" />
+      </CLASSES>
+      <JAVADOC />
+      <SOURCES>
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.compose.foundation/foundation-layout-android/1.9.0/59f899b03e2bc8e62b3d3cdfc1ecffab0efbcba7/foundation-layout-android-1.9.0-sources.jar!/" />
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.compose.foundation/foundation-layout-android/1.9.0/d11ffc32b63523b42e060501814ca1b3c060c9f6/foundation-layout-1.9.0-samples-sources.jar!/" />
+      </SOURCES>
+    </library>
+    <library name="Gradle: androidx.compose.material:material-android:1.9.0@aar" external-system-id="GRADLE">
+      <CLASSES>
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/f536f87e0a9d2cd8251e370dbea46298/transformed/material/res" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/f536f87e0a9d2cd8251e370dbea46298/transformed/material/AndroidManifest.xml" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/f536f87e0a9d2cd8251e370dbea46298/transformed/material/jars/classes.jar!/" />
+      </CLASSES>
+      <JAVADOC />
+      <SOURCES>
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.compose.material/material-android/1.9.0/90099fed914be750a67c71de89efd58f4abc0577/material-android-1.9.0-sources.jar!/" />
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.compose.material/material-android/1.9.0/ae6c47e8a382c31216e73a5e1585d084aa336857/material-1.9.0-samples-sources.jar!/" />
+      </SOURCES>
+    </library>
+    <library name="Gradle: androidx.compose.material:material-icons-core-android:1.7.8@aar" external-system-id="GRADLE">
+      <CLASSES>
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/87856ea10f1774211ac0d34217f2b7a2/transformed/material-icons-core-release/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/87856ea10f1774211ac0d34217f2b7a2/transformed/material-icons-core-release/res" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/87856ea10f1774211ac0d34217f2b7a2/transformed/material-icons-core-release/AndroidManifest.xml" />
+      </CLASSES>
+      <JAVADOC />
+      <SOURCES>
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.compose.material/material-icons-core-android/1.7.8/578ff7394b718fb34c333c24bcfade35ccba41c5/material-icons-core-1.7.8-samples-sources.jar!/" />
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.compose.material/material-icons-core-android/1.7.8/1a531b2b075ae0d42a724108153e0021ebd69f52/material-icons-core-android-1.7.8-sources.jar!/" />
+      </SOURCES>
+    </library>
+    <library name="Gradle: androidx.compose.material:material-icons-extended-android:1.7.8@aar" external-system-id="GRADLE">
+      <CLASSES>
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/570dfdc998da9ddb1b15583819ffde13/transformed/material-icons-extended-release/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/570dfdc998da9ddb1b15583819ffde13/transformed/material-icons-extended-release/res" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/570dfdc998da9ddb1b15583819ffde13/transformed/material-icons-extended-release/AndroidManifest.xml" />
+      </CLASSES>
+      <JAVADOC />
+      <SOURCES>
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.compose.material/material-icons-extended-android/1.7.8/fd5e20a9a49831a8c9ce04b7012d1ea5ff755a7c/material-icons-extended-android-1.7.8-sources.jar!/" />
+      </SOURCES>
+    </library>
+    <library name="Gradle: androidx.compose.material:material-ripple-android:1.9.0@aar" external-system-id="GRADLE">
+      <CLASSES>
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/cdf9e9848e5647cb440c778612c89b9d/transformed/material-ripple/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/cdf9e9848e5647cb440c778612c89b9d/transformed/material-ripple/AndroidManifest.xml" />
+      </CLASSES>
+      <JAVADOC />
+      <SOURCES>
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.compose.material/material-ripple-android/1.9.0/d37b944000427856b3a7213886c940ed285356e3/material-ripple-android-1.9.0-sources.jar!/" />
+      </SOURCES>
+    </library>
+    <library name="Gradle: androidx.compose.runtime:runtime-android:1.9.0@aar" external-system-id="GRADLE">
+      <CLASSES>
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/9ef7bfed0680969d9858db6e2842f75f/transformed/runtime/AndroidManifest.xml" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/9ef7bfed0680969d9858db6e2842f75f/transformed/runtime/jars/classes.jar!/" />
+      </CLASSES>
+      <JAVADOC />
+      <SOURCES>
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.compose.runtime/runtime-android/1.9.0/99e7777e8b9c87f97208bd2bb6e1b742c1ede1be/runtime-android-1.9.0-sources.jar!/" />
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.compose.runtime/runtime-android/1.9.0/da6d01d667cf414414b81bccde6c86c15dc0702/runtime-1.9.0-samples-sources.jar!/" />
+      </SOURCES>
+    </library>
+    <library name="Gradle: androidx.compose.runtime:runtime-annotation-android:1.9.0@aar" external-system-id="GRADLE">
+      <CLASSES>
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/2dec2cfbfd148641c4769488b2c0d4ca/transformed/runtime-annotation/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/2dec2cfbfd148641c4769488b2c0d4ca/transformed/runtime-annotation/AndroidManifest.xml" />
+      </CLASSES>
+      <JAVADOC />
+      <SOURCES>
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.compose.runtime/runtime-annotation-android/1.9.0/93909912f3419b0d21e3f17c8be94a15885d59c2/runtime-annotation-android-1.9.0-sources.jar!/" />
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.compose.runtime/runtime-annotation-android/1.9.0/7f2edc491e066e09b04bcb56725b8eacb21ed045/runtime-annotation-1.9.0-samples-sources.jar!/" />
+      </SOURCES>
+    </library>
+    <library name="Gradle: androidx.compose.runtime:runtime-saveable-android:1.9.0@aar" external-system-id="GRADLE">
+      <CLASSES>
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/73181def3c7dd0bfbd576f5606c92eff/transformed/runtime-saveable/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/73181def3c7dd0bfbd576f5606c92eff/transformed/runtime-saveable/AndroidManifest.xml" />
+      </CLASSES>
+      <JAVADOC />
+      <SOURCES>
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.compose.runtime/runtime-saveable-android/1.9.0/d7fe6f470c9110eb34d232623a77d021923de93b/runtime-saveable-android-1.9.0-sources.jar!/" />
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.compose.runtime/runtime-saveable-android/1.9.0/25057154a62bdfc38f76f025922eb60c146d5f8/runtime-saveable-1.9.0-samples-sources.jar!/" />
+      </SOURCES>
+    </library>
+    <library name="Gradle: androidx.compose.ui:ui-android:1.9.0@aar" external-system-id="GRADLE">
+      <ANNOTATIONS>
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/8f5a6a86b86abc88c9b9cf1d720e58cf/transformed/ui-release/annotations.zip!/" />
+      </ANNOTATIONS>
+      <CLASSES>
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/8f5a6a86b86abc88c9b9cf1d720e58cf/transformed/ui-release/AndroidManifest.xml" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/8f5a6a86b86abc88c9b9cf1d720e58cf/transformed/ui-release/res" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/8f5a6a86b86abc88c9b9cf1d720e58cf/transformed/ui-release/jars/classes.jar!/" />
+      </CLASSES>
+      <JAVADOC />
+      <SOURCES>
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.compose.ui/ui-android/1.9.0/4c5d7fdd28ce46e4a71606e2783d6e3e480ccaed/ui-1.9.0-samples-sources.jar!/" />
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.compose.ui/ui-android/1.9.0/b0c446a3fda4e5dc140e65291139ee82cdba7ae3/ui-android-1.9.0-sources.jar!/" />
+      </SOURCES>
+    </library>
+    <library name="Gradle: androidx.compose.ui:ui-geometry-android:1.9.0@aar" external-system-id="GRADLE">
+      <CLASSES>
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/5157e493e08e878534b9b869ea2e71db/transformed/ui-geometry/AndroidManifest.xml" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/5157e493e08e878534b9b869ea2e71db/transformed/ui-geometry/jars/classes.jar!/" />
+      </CLASSES>
+      <JAVADOC />
+      <SOURCES>
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.compose.ui/ui-geometry-android/1.9.0/6b4cf4eb24212c0a73050aec643c6f27c9ced661/ui-geometry-android-1.9.0-sources.jar!/" />
+      </SOURCES>
+    </library>
+    <library name="Gradle: androidx.compose.ui:ui-graphics-android:1.9.0@aar" external-system-id="GRADLE">
+      <CLASSES>
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/3dbd40a25a75b88e01bd8b7f381eae31/transformed/ui-graphics-release/res" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/3dbd40a25a75b88e01bd8b7f381eae31/transformed/ui-graphics-release/AndroidManifest.xml" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/3dbd40a25a75b88e01bd8b7f381eae31/transformed/ui-graphics-release/jars/classes.jar!/" />
+      </CLASSES>
+      <JAVADOC />
+      <SOURCES>
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.compose.ui/ui-graphics-android/1.9.0/c3ceafbd101db24642260ba6097ae11885384b23/ui-graphics-1.9.0-samples-sources.jar!/" />
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.compose.ui/ui-graphics-android/1.9.0/386c99b478cdab09deba906423fdc0febe9b47a9/ui-graphics-android-1.9.0-sources.jar!/" />
+      </SOURCES>
+    </library>
+    <library name="Gradle: androidx.compose.ui:ui-text-android:1.9.0@aar" external-system-id="GRADLE">
+      <CLASSES>
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/669a5f9a5e1b78e6b3e6b5aba527f38e/transformed/ui-text/AndroidManifest.xml" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/669a5f9a5e1b78e6b3e6b5aba527f38e/transformed/ui-text/jars/classes.jar!/" />
+      </CLASSES>
+      <JAVADOC />
+      <SOURCES>
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.compose.ui/ui-text-android/1.9.0/f592ad9468887fe84a0e4387ff88b00d2dd2c164/ui-text-android-1.9.0-sources.jar!/" />
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.compose.ui/ui-text-android/1.9.0/f2aac6378c5f4803b53e3e352822a0e918457d8b/ui-text-1.9.0-samples-sources.jar!/" />
+      </SOURCES>
+    </library>
+    <library name="Gradle: androidx.compose.ui:ui-tooling-android:1.9.0@aar" external-system-id="GRADLE">
+      <CLASSES>
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/e59b02747f14dc0e8fd43ea3c2b3792b/transformed/ui-tooling/AndroidManifest.xml" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/e59b02747f14dc0e8fd43ea3c2b3792b/transformed/ui-tooling/jars/classes.jar!/" />
+      </CLASSES>
+      <JAVADOC />
+      <SOURCES>
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.compose.ui/ui-tooling-android/1.9.0/7f8ceb75e31cb72f980bdd6dbc514080705d1a93/ui-tooling-android-1.9.0-sources.jar!/" />
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.compose.ui/ui-tooling-android/1.9.0/923c4b569772330f6c6554bf1b4ec7a9ad0574d4/ui-tooling-1.9.0-samples-sources.jar!/" />
+      </SOURCES>
+    </library>
+    <library name="Gradle: androidx.compose.ui:ui-tooling-data-android:1.9.0@aar" external-system-id="GRADLE">
+      <CLASSES>
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/a09592b723e5e0c741d50c707d3f967a/transformed/ui-tooling-data/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/a09592b723e5e0c741d50c707d3f967a/transformed/ui-tooling-data/AndroidManifest.xml" />
+      </CLASSES>
+      <JAVADOC />
+      <SOURCES>
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.compose.ui/ui-tooling-data-android/1.9.0/d8b36363befa89f157c063c1a1e9c5d1b7b5b508/ui-tooling-data-android-1.9.0-sources.jar!/" />
+      </SOURCES>
+    </library>
+    <library name="Gradle: androidx.compose.ui:ui-tooling-preview-android:1.9.0@aar" external-system-id="GRADLE">
+      <CLASSES>
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/0c649acdc425bb36666ddf80a1cfd04f/transformed/ui-tooling-preview/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/0c649acdc425bb36666ddf80a1cfd04f/transformed/ui-tooling-preview/AndroidManifest.xml" />
+      </CLASSES>
+      <JAVADOC />
+      <SOURCES>
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.compose.ui/ui-tooling-preview-android/1.9.0/99ffadd3953961226e1b99295429fed42140bde5/ui-tooling-preview-android-1.9.0-sources.jar!/" />
+      </SOURCES>
+    </library>
+    <library name="Gradle: androidx.compose.ui:ui-unit-android:1.9.0@aar" external-system-id="GRADLE">
+      <CLASSES>
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/d5836b283fc775641850d2d3f852e7de/transformed/ui-unit/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/d5836b283fc775641850d2d3f852e7de/transformed/ui-unit/AndroidManifest.xml" />
+      </CLASSES>
+      <JAVADOC />
+      <SOURCES>
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.compose.ui/ui-unit-android/1.9.0/32b263af634c3f7d452d54bdac301a16f15ba490/ui-unit-android-1.9.0-sources.jar!/" />
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.compose.ui/ui-unit-android/1.9.0/5aa179df451d920e8092d963b62d9a9c6a77789c/ui-unit-1.9.0-samples-sources.jar!/" />
+      </SOURCES>
+    </library>
+    <library name="Gradle: androidx.compose.ui:ui-util-android:1.9.0@aar" external-system-id="GRADLE">
+      <CLASSES>
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/00bc2793800a172cebbc7ee209762d2a/transformed/ui-util/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/00bc2793800a172cebbc7ee209762d2a/transformed/ui-util/AndroidManifest.xml" />
+      </CLASSES>
+      <JAVADOC />
+      <SOURCES>
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.compose.ui/ui-util-android/1.9.0/e5e5851e7762b57052cf0a290d6e286ee7296b45/ui-util-android-1.9.0-sources.jar!/" />
+      </SOURCES>
+    </library>
+    <library name="Gradle: androidx.core:core-ktx:1.13.0@aar" external-system-id="GRADLE">
+      <CLASSES>
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/feaa17a5887068afc3381c9fc585533f/transformed/core-ktx-1.13.0/AndroidManifest.xml" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/feaa17a5887068afc3381c9fc585533f/transformed/core-ktx-1.13.0/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/feaa17a5887068afc3381c9fc585533f/transformed/core-ktx-1.13.0/res" />
+      </CLASSES>
+      <JAVADOC />
+      <SOURCES>
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.core/core-ktx/1.13.0/2ebeecb97d5b1557fc7b3e3758447b8176e322e8/core-ktx-1.13.0-sources.jar!/" />
+      </SOURCES>
+    </library>
+    <library name="Gradle: androidx.core:core-ktx:1.15.0@aar" external-system-id="GRADLE">
+      <CLASSES>
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/d157ae1bff80904949eee8837b4d3206/transformed/core-ktx-1.15.0/AndroidManifest.xml" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/d157ae1bff80904949eee8837b4d3206/transformed/core-ktx-1.15.0/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/d157ae1bff80904949eee8837b4d3206/transformed/core-ktx-1.15.0/res" />
+      </CLASSES>
+      <JAVADOC />
+      <SOURCES>
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.core/core-ktx/1.15.0/e84fc1b64ca760a4fd3af4c7fe30f23b6221b164/core-ktx-1.15.0-sources.jar!/" />
+      </SOURCES>
+    </library>
+    <library name="Gradle: androidx.core:core-viewtree:1.0.0@aar" external-system-id="GRADLE">
+      <CLASSES>
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/9448e7bf14c7386ff80d1a5de9c66edb/transformed/core-viewtree-1.0.0/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/9448e7bf14c7386ff80d1a5de9c66edb/transformed/core-viewtree-1.0.0/res" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/9448e7bf14c7386ff80d1a5de9c66edb/transformed/core-viewtree-1.0.0/AndroidManifest.xml" />
+      </CLASSES>
+      <JAVADOC />
+      <SOURCES>
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.core/core-viewtree/1.0.0/479ee017137f7dbb52f0402e14b0f216e6b02bc6/core-viewtree-1.0.0-sources.jar!/" />
+      </SOURCES>
+    </library>
+    <library name="Gradle: androidx.core:core:1.13.0@aar" external-system-id="GRADLE">
+      <ANNOTATIONS>
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/48b6bc58dad71f8d5e8f6b0a27f4cad0/transformed/core-1.13.0/annotations.zip!/" />
+      </ANNOTATIONS>
+      <CLASSES>
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/48b6bc58dad71f8d5e8f6b0a27f4cad0/transformed/core-1.13.0/AndroidManifest.xml" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/48b6bc58dad71f8d5e8f6b0a27f4cad0/transformed/core-1.13.0/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/48b6bc58dad71f8d5e8f6b0a27f4cad0/transformed/core-1.13.0/res" />
+      </CLASSES>
+      <JAVADOC />
+      <SOURCES>
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.core/core/1.13.0/9ae580505557c829bed91310494b3ccd0a386dfd/core-1.13.0-sources.jar!/" />
+      </SOURCES>
+    </library>
+    <library name="Gradle: androidx.core:core:1.15.0@aar" external-system-id="GRADLE">
+      <ANNOTATIONS>
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/f2345bcb53d566c91111806bd9339be0/transformed/core-1.15.0/annotations.zip!/" />
+      </ANNOTATIONS>
+      <CLASSES>
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/f2345bcb53d566c91111806bd9339be0/transformed/core-1.15.0/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/f2345bcb53d566c91111806bd9339be0/transformed/core-1.15.0/res" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/f2345bcb53d566c91111806bd9339be0/transformed/core-1.15.0/AndroidManifest.xml" />
+      </CLASSES>
+      <JAVADOC />
+      <SOURCES>
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.core/core/1.15.0/4bcb58ebddcaf3068743f5d1141fe5824f3abf5/core-1.15.0-sources.jar!/" />
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.core/core/1.15.0/7a746abb87119c59f68b3274f0692e3a0390a4aa/core-1.15.0-samples-sources.jar!/" />
+      </SOURCES>
+    </library>
+    <library name="Gradle: androidx.cursoradapter:cursoradapter:1.0.0@aar" external-system-id="GRADLE">
+      <CLASSES>
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/ce670565f5f93dcfb907eb7d4e97d6cd/transformed/cursoradapter-1.0.0/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/ce670565f5f93dcfb907eb7d4e97d6cd/transformed/cursoradapter-1.0.0/AndroidManifest.xml" />
+      </CLASSES>
+      <JAVADOC />
+      <SOURCES>
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.cursoradapter/cursoradapter/1.0.0/1e323083b41c31fd4d45510dfce50614963c3c6c/cursoradapter-1.0.0-sources.jar!/" />
+      </SOURCES>
+    </library>
+    <library name="Gradle: androidx.customview:customview:1.0.0@aar" external-system-id="GRADLE">
+      <CLASSES>
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/cbde8faa43f56c1932571f6e5a52491a/transformed/customview-1.0.0/AndroidManifest.xml" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/cbde8faa43f56c1932571f6e5a52491a/transformed/customview-1.0.0/jars/classes.jar!/" />
+      </CLASSES>
+      <JAVADOC />
+      <SOURCES />
+    </library>
+    <library name="Gradle: androidx.documentfile:documentfile:1.1.0@aar" external-system-id="GRADLE">
+      <CLASSES>
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/4b03bb3207d8c2e8c7a146af5537ac21/transformed/documentfile-1.1.0/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/4b03bb3207d8c2e8c7a146af5537ac21/transformed/documentfile-1.1.0/res" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/4b03bb3207d8c2e8c7a146af5537ac21/transformed/documentfile-1.1.0/AndroidManifest.xml" />
+      </CLASSES>
+      <JAVADOC />
+      <SOURCES>
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.documentfile/documentfile/1.1.0/f0ebec491b00ecdf3c02b70be33e38d2f46b0693/documentfile-1.1.0-sources.jar!/" />
+      </SOURCES>
+    </library>
+    <library name="Gradle: androidx.drawerlayout:drawerlayout:1.0.0@aar" external-system-id="GRADLE">
+      <ANNOTATIONS>
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/160b82293b710237f59842f8395325b3/transformed/drawerlayout-1.0.0/annotations.zip!/" />
+      </ANNOTATIONS>
+      <CLASSES>
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/160b82293b710237f59842f8395325b3/transformed/drawerlayout-1.0.0/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/160b82293b710237f59842f8395325b3/transformed/drawerlayout-1.0.0/AndroidManifest.xml" />
+      </CLASSES>
+      <JAVADOC />
+      <SOURCES>
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.drawerlayout/drawerlayout/1.0.0/9ecd4ecb7da215ba4c5c3e00bf8d290dad6f2bc5/drawerlayout-1.0.0-sources.jar!/" />
+      </SOURCES>
+    </library>
+    <library name="Gradle: androidx.fragment:fragment:1.5.4@aar" external-system-id="GRADLE">
+      <ANNOTATIONS>
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/52d7e3cd6cbe67afb2a823f24b705c65/transformed/fragment-1.5.4/annotations.zip!/" />
+      </ANNOTATIONS>
+      <CLASSES>
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/52d7e3cd6cbe67afb2a823f24b705c65/transformed/fragment-1.5.4/res" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/52d7e3cd6cbe67afb2a823f24b705c65/transformed/fragment-1.5.4/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/52d7e3cd6cbe67afb2a823f24b705c65/transformed/fragment-1.5.4/AndroidManifest.xml" />
+      </CLASSES>
+      <JAVADOC />
+      <SOURCES>
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.fragment/fragment/1.5.4/5404b0f8aeccb2fe882bee99ef8843711c01c156/fragment-1.5.4-sources.jar!/" />
+      </SOURCES>
+    </library>
+    <library name="Gradle: androidx.interpolator:interpolator:1.0.0@aar" external-system-id="GRADLE">
+      <CLASSES>
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/9c3923e1a3d13f1da5a88c4b4f4e1fe9/transformed/interpolator-1.0.0/AndroidManifest.xml" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/9c3923e1a3d13f1da5a88c4b4f4e1fe9/transformed/interpolator-1.0.0/jars/classes.jar!/" />
+      </CLASSES>
+      <JAVADOC />
+      <SOURCES />
+    </library>
+    <library name="Gradle: androidx.lifecycle:lifecycle-common-jvm:2.9.0" type="java-imported" external-system-id="GRADLE">
+      <properties groupId="androidx.lifecycle" artifactId="lifecycle-common-jvm" version="2.9.0" baseVersion="2.9.0" />
+      <CLASSES>
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.lifecycle/lifecycle-common-jvm/2.9.0/ab739bccdb3541983385af169565c7c035d897e7/lifecycle-common-jvm-2.9.0.jar!/" />
+      </CLASSES>
+      <JAVADOC />
+      <SOURCES>
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.lifecycle/lifecycle-common-jvm/2.9.0/3f2e64896f4060014ce84c99c8c9b1cb3ebcdb3f/lifecycle-common-jvm-2.9.0-sources.jar!/" />
+      </SOURCES>
+    </library>
+    <library name="Gradle: androidx.lifecycle:lifecycle-livedata-core-ktx:2.9.0@aar" external-system-id="GRADLE">
+      <CLASSES>
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/0f589b7159bd9a65169499b4d63937ba/transformed/lifecycle-livedata-core-ktx-2.9.0/AndroidManifest.xml" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/0f589b7159bd9a65169499b4d63937ba/transformed/lifecycle-livedata-core-ktx-2.9.0/res" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/0f589b7159bd9a65169499b4d63937ba/transformed/lifecycle-livedata-core-ktx-2.9.0/jars/classes.jar!/" />
+      </CLASSES>
+      <JAVADOC />
+      <SOURCES>
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.lifecycle/lifecycle-livedata-core-ktx/2.9.0/22c51b96f46a5a8fdcbd0215ac0f58addab1f33c/lifecycle-livedata-core-ktx-2.9.0-sources.jar!/" />
+      </SOURCES>
+    </library>
+    <library name="Gradle: androidx.lifecycle:lifecycle-livedata-core:2.9.0@aar" external-system-id="GRADLE">
+      <CLASSES>
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/190651f454bbfbb8563b2d5b241e5a07/transformed/lifecycle-livedata-core-2.9.0/AndroidManifest.xml" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/190651f454bbfbb8563b2d5b241e5a07/transformed/lifecycle-livedata-core-2.9.0/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/190651f454bbfbb8563b2d5b241e5a07/transformed/lifecycle-livedata-core-2.9.0/res" />
+      </CLASSES>
+      <JAVADOC />
+      <SOURCES>
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.lifecycle/lifecycle-livedata-core/2.9.0/3fefff17864a312e533e58e161fe36f2b0138a43/lifecycle-livedata-core-2.9.0-sources.jar!/" />
+      </SOURCES>
+    </library>
+    <library name="Gradle: androidx.lifecycle:lifecycle-livedata:2.9.0@aar" external-system-id="GRADLE">
+      <CLASSES>
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/9ccdee8aec25ec9995773123a1d46630/transformed/lifecycle-livedata-2.9.0/res" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/9ccdee8aec25ec9995773123a1d46630/transformed/lifecycle-livedata-2.9.0/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/9ccdee8aec25ec9995773123a1d46630/transformed/lifecycle-livedata-2.9.0/AndroidManifest.xml" />
+      </CLASSES>
+      <JAVADOC />
+      <SOURCES />
+    </library>
+    <library name="Gradle: androidx.lifecycle:lifecycle-runtime-android:2.9.0@aar" external-system-id="GRADLE">
+      <CLASSES>
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/a59287048cd67fbcb798d20c7b9042fd/transformed/lifecycle-runtime-release/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/a59287048cd67fbcb798d20c7b9042fd/transformed/lifecycle-runtime-release/AndroidManifest.xml" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/a59287048cd67fbcb798d20c7b9042fd/transformed/lifecycle-runtime-release/res" />
+      </CLASSES>
+      <JAVADOC />
+      <SOURCES>
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.lifecycle/lifecycle-runtime-android/2.9.0/124547d84780107b6bd19705570767d4040bec02/lifecycle-runtime-android-2.9.0-sources.jar!/" />
+      </SOURCES>
+    </library>
+    <library name="Gradle: androidx.lifecycle:lifecycle-runtime-compose-android:2.9.0@aar" external-system-id="GRADLE">
+      <CLASSES>
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/553686b7c12a897bbf16de808e0a0578/transformed/lifecycle-runtime-compose-release/res" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/553686b7c12a897bbf16de808e0a0578/transformed/lifecycle-runtime-compose-release/AndroidManifest.xml" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/553686b7c12a897bbf16de808e0a0578/transformed/lifecycle-runtime-compose-release/jars/classes.jar!/" />
+      </CLASSES>
+      <JAVADOC />
+      <SOURCES>
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.lifecycle/lifecycle-runtime-compose-android/2.9.0/b104517ec57e29ebaa03a02bfcd18616abbd9b93/lifecycle-runtime-compose-2.9.0-samples-sources.jar!/" />
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.lifecycle/lifecycle-runtime-compose-android/2.9.0/3c7e5a624713441b30cb66c73f8c1b3ecc0f04b2/lifecycle-runtime-compose-android-2.9.0-sources.jar!/" />
+      </SOURCES>
+    </library>
+    <library name="Gradle: androidx.lifecycle:lifecycle-runtime-ktx-android:2.9.0@aar" external-system-id="GRADLE">
+      <CLASSES>
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/0ff6507c5928afceb4bfe88782f0fbab/transformed/lifecycle-runtime-ktx/AndroidManifest.xml" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/0ff6507c5928afceb4bfe88782f0fbab/transformed/lifecycle-runtime-ktx/jars/classes.jar!/" />
+      </CLASSES>
+      <JAVADOC />
+      <SOURCES>
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.lifecycle/lifecycle-runtime-ktx-android/2.9.0/17e8e0f2128f99c4c3543e2c1529d3c75e94eb13/lifecycle-runtime-ktx-android-2.9.0-sources.jar!/" />
+      </SOURCES>
+    </library>
+    <library name="Gradle: androidx.lifecycle:lifecycle-viewmodel-android:2.9.0@aar" external-system-id="GRADLE">
+      <CLASSES>
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/96d392d38dd8f34520bf585a778216ba/transformed/lifecycle-viewmodel-release/res" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/96d392d38dd8f34520bf585a778216ba/transformed/lifecycle-viewmodel-release/AndroidManifest.xml" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/96d392d38dd8f34520bf585a778216ba/transformed/lifecycle-viewmodel-release/jars/classes.jar!/" />
+      </CLASSES>
+      <JAVADOC />
+      <SOURCES>
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.lifecycle/lifecycle-viewmodel-android/2.9.0/b74c76771f782f01d1e51ae8349067133f14fdb5/lifecycle-viewmodel-android-2.9.0-sources.jar!/" />
+      </SOURCES>
+    </library>
+    <library name="Gradle: androidx.lifecycle:lifecycle-viewmodel-ktx:2.9.0@aar" external-system-id="GRADLE">
+      <CLASSES>
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/e630b76de65373081d8841a76cf2d167/transformed/lifecycle-viewmodel-ktx-2.9.0/res" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/e630b76de65373081d8841a76cf2d167/transformed/lifecycle-viewmodel-ktx-2.9.0/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/e630b76de65373081d8841a76cf2d167/transformed/lifecycle-viewmodel-ktx-2.9.0/AndroidManifest.xml" />
+      </CLASSES>
+      <JAVADOC />
+      <SOURCES>
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.lifecycle/lifecycle-viewmodel-ktx/2.9.0/6b61248b684d6cc83a4855ef1b98dd76536d8ec7/lifecycle-viewmodel-ktx-2.9.0-sources.jar!/" />
+      </SOURCES>
+    </library>
+    <library name="Gradle: androidx.lifecycle:lifecycle-viewmodel-savedstate-android:2.9.0@aar" external-system-id="GRADLE">
+      <CLASSES>
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/59285ef1ed73dd42f46057f6de4a3c04/transformed/lifecycle-viewmodel-savedstate-release/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/59285ef1ed73dd42f46057f6de4a3c04/transformed/lifecycle-viewmodel-savedstate-release/AndroidManifest.xml" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/59285ef1ed73dd42f46057f6de4a3c04/transformed/lifecycle-viewmodel-savedstate-release/res" />
+      </CLASSES>
+      <JAVADOC />
+      <SOURCES>
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.lifecycle/lifecycle-viewmodel-savedstate-android/2.9.0/f0e6ff50f158c97ed29349cdb28ca5b372205f46/lifecycle-viewmodel-savedstate-2.9.0-samples-sources.jar!/" />
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.lifecycle/lifecycle-viewmodel-savedstate-android/2.9.0/9e23bb3a3774946c89f253406cf82b6712e7d0c7/lifecycle-viewmodel-savedstate-android-2.9.0-sources.jar!/" />
+      </SOURCES>
+    </library>
+    <library name="Gradle: androidx.loader:loader:1.0.0@aar" external-system-id="GRADLE">
+      <CLASSES>
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/09ebaec1357616817d99e700ff3f712b/transformed/loader-1.0.0/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/09ebaec1357616817d99e700ff3f712b/transformed/loader-1.0.0/AndroidManifest.xml" />
+      </CLASSES>
+      <JAVADOC />
+      <SOURCES>
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.loader/loader/1.0.0/b9ef587f3e46c7fe5b00264989764e43ff45cada/loader-1.0.0-sources.jar!/" />
+      </SOURCES>
+    </library>
+    <library name="Gradle: androidx.savedstate:savedstate-android:1.3.0@aar" external-system-id="GRADLE">
+      <CLASSES>
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/7b76c1e9fb577dbb077a3eec96728262/transformed/savedstate-release/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/7b76c1e9fb577dbb077a3eec96728262/transformed/savedstate-release/AndroidManifest.xml" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/7b76c1e9fb577dbb077a3eec96728262/transformed/savedstate-release/res" />
+      </CLASSES>
+      <JAVADOC />
+      <SOURCES>
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.savedstate/savedstate-android/1.3.0/a5a55eb6311a88e40e1661eeb1e2ee1eec95926f/savedstate-1.3.0-samples-sources.jar!/" />
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.savedstate/savedstate-android/1.3.0/e0fc72ae9d6fc7a2ebb59704075e0593657945a8/savedstate-android-1.3.0-sources.jar!/" />
+      </SOURCES>
+    </library>
+    <library name="Gradle: androidx.savedstate:savedstate-compose-android:1.3.0@aar" external-system-id="GRADLE">
+      <CLASSES>
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/ee2354eb9d16b13b26b1b364ac157443/transformed/savedstate-compose-release/AndroidManifest.xml" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/ee2354eb9d16b13b26b1b364ac157443/transformed/savedstate-compose-release/res" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/ee2354eb9d16b13b26b1b364ac157443/transformed/savedstate-compose-release/jars/classes.jar!/" />
+      </CLASSES>
+      <JAVADOC />
+      <SOURCES>
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.savedstate/savedstate-compose-android/1.3.0/bda74fbdc0e36728f69d223d5ee9c8716e75e8e9/savedstate-compose-1.3.0-samples-sources.jar!/" />
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.savedstate/savedstate-compose-android/1.3.0/f359fa971adbf7a940b4d1222afaf46e9ebc914f/savedstate-compose-android-1.3.0-sources.jar!/" />
+      </SOURCES>
+    </library>
+    <library name="Gradle: androidx.savedstate:savedstate-ktx:1.3.0@aar" external-system-id="GRADLE">
+      <CLASSES>
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/0919b9c2d5af072a5b217ff8f991114b/transformed/savedstate-ktx-1.3.0/res" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/0919b9c2d5af072a5b217ff8f991114b/transformed/savedstate-ktx-1.3.0/AndroidManifest.xml" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/0919b9c2d5af072a5b217ff8f991114b/transformed/savedstate-ktx-1.3.0/jars/classes.jar!/" />
+      </CLASSES>
+      <JAVADOC />
+      <SOURCES>
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.savedstate/savedstate-ktx/1.3.0/d281a4d66d1b5ed25c21373dedb46a67918618d9/savedstate-ktx-1.3.0-sources.jar!/" />
+      </SOURCES>
+    </library>
+    <library name="Gradle: androidx.vectordrawable:vectordrawable-animated:1.1.0@aar" external-system-id="GRADLE">
+      <CLASSES>
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/2936e00c03ae42500cbb5f2230a2ed6c/transformed/vectordrawable-animated-1.1.0/AndroidManifest.xml" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/2936e00c03ae42500cbb5f2230a2ed6c/transformed/vectordrawable-animated-1.1.0/jars/classes.jar!/" />
+      </CLASSES>
+      <JAVADOC />
+      <SOURCES>
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.vectordrawable/vectordrawable-animated/1.1.0/871a7705cd03bc246947638c712cdd11378233ff/vectordrawable-animated-1.1.0-sources.jar!/" />
+      </SOURCES>
+    </library>
+    <library name="Gradle: androidx.vectordrawable:vectordrawable:1.1.0@aar" external-system-id="GRADLE">
+      <CLASSES>
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/496659c8b46c9b1154896d81dbbaae3c/transformed/vectordrawable-1.1.0/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/496659c8b46c9b1154896d81dbbaae3c/transformed/vectordrawable-1.1.0/AndroidManifest.xml" />
+      </CLASSES>
+      <JAVADOC />
+      <SOURCES>
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.vectordrawable/vectordrawable/1.1.0/1e0694477eed874c50c54b547cc3e5a62a57a62b/vectordrawable-1.1.0-sources.jar!/" />
+      </SOURCES>
+    </library>
+    <library name="Gradle: androidx.versionedparcelable:versionedparcelable:1.1.1@aar" external-system-id="GRADLE">
+      <CLASSES>
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/2026713301a52c53c571733afc74f089/transformed/versionedparcelable-1.1.1/AndroidManifest.xml" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/2026713301a52c53c571733afc74f089/transformed/versionedparcelable-1.1.1/jars/classes.jar!/" />
+      </CLASSES>
+      <JAVADOC />
+      <SOURCES>
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.versionedparcelable/versionedparcelable/1.1.1/d9085927216387af679d18b6f472bc0fc5c7cc81/versionedparcelable-1.1.1-sources.jar!/" />
+      </SOURCES>
+    </library>
+    <library name="Gradle: androidx.viewpager:viewpager:1.0.0@aar" external-system-id="GRADLE">
+      <CLASSES>
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/062c1080b7fde4c31320d2a23421294f/transformed/viewpager-1.0.0/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/062c1080b7fde4c31320d2a23421294f/transformed/viewpager-1.0.0/AndroidManifest.xml" />
+      </CLASSES>
+      <JAVADOC />
+      <SOURCES>
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.viewpager/viewpager/1.0.0/db045f92188b9d247d5f556866f8861ab68528f0/viewpager-1.0.0-sources.jar!/" />
+      </SOURCES>
+    </library>
+    <library name="Gradle: org.jetbrains.kotlin:kotlin-stdlib:2.2.10" type="java-imported" external-system-id="GRADLE">
+      <properties groupId="org.jetbrains.kotlin" artifactId="kotlin-stdlib" version="2.2.10" baseVersion="2.2.10" />
+      <CLASSES>
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-stdlib/2.2.10/30de6faa127a4a012db8e71bf1b9c0a99b1402b2/kotlin-stdlib-2.2.10.jar!/" />
+      </CLASSES>
+      <JAVADOC />
+      <SOURCES>
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-stdlib/2.2.10/dda98d7e091155886352a100dbca778315baa0f7/kotlin-stdlib-2.2.10-sources.jar!/" />
+      </SOURCES>
+    </library>
+    <library name="Gradle: org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1" type="java-imported" external-system-id="GRADLE">
+      <properties groupId="org.jetbrains.kotlinx" artifactId="kotlinx-coroutines-android" version="1.8.1" baseVersion="1.8.1" />
+      <CLASSES>
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlinx/kotlinx-coroutines-android/1.8.1/73e2acdd18df99dd4849d99f188dff529fc0afe0/kotlinx-coroutines-android-1.8.1.jar!/" />
+      </CLASSES>
+      <JAVADOC />
+      <SOURCES />
+    </library>
+    <library name="Gradle: org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:1.8.1" type="java-imported" external-system-id="GRADLE">
+      <properties groupId="org.jetbrains.kotlinx" artifactId="kotlinx-coroutines-core-jvm" version="1.8.1" baseVersion="1.8.1" />
+      <CLASSES>
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlinx/kotlinx-coroutines-core-jvm/1.8.1/bb0e192bd7c2b6b8217440d36e9758e377e450/kotlinx-coroutines-core-jvm-1.8.1.jar!/" />
+      </CLASSES>
+      <JAVADOC />
+      <SOURCES>
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlinx/kotlinx-coroutines-core-jvm/1.8.1/de8e46286026b0249acd5db040effcae1188c6e9/kotlinx-coroutines-core-jvm-1.8.1-sources.jar!/" />
+      </SOURCES>
+    </library>
+    <library name="Gradle: org.jetbrains.kotlinx:kotlinx-serialization-core-jvm:1.7.3" type="java-imported" external-system-id="GRADLE">
+      <properties groupId="org.jetbrains.kotlinx" artifactId="kotlinx-serialization-core-jvm" version="1.7.3" baseVersion="1.7.3" />
+      <CLASSES>
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlinx/kotlinx-serialization-core-jvm/1.7.3/1f226780b845ff9206474c05159245d861556249/kotlinx-serialization-core-jvm-1.7.3.jar!/" />
+      </CLASSES>
+      <JAVADOC />
+      <SOURCES>
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlinx/kotlinx-serialization-core-jvm/1.7.3/d98d244410396120780381b8bf6cfc559625417e/kotlinx-serialization-core-jvm-1.7.3-sources.jar!/" />
+      </SOURCES>
+    </library>
+    <library name="Gradle: org.jetbrains:annotations:23.0.0" type="java-imported" external-system-id="GRADLE">
+      <properties groupId="org.jetbrains" artifactId="annotations" version="23.0.0" baseVersion="23.0.0" />
+      <CLASSES>
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/org.jetbrains/annotations/23.0.0/8cc20c07506ec18e0834947b84a864bfc094484e/annotations-23.0.0.jar!/" />
+      </CLASSES>
+      <JAVADOC>
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/org.jetbrains/annotations/23.0.0/41442a550d78cb59a601c1d38603f6ab5497f93c/annotations-23.0.0-javadoc.jar!/" />
+      </JAVADOC>
+      <SOURCES>
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/org.jetbrains/annotations/23.0.0/ca5088d615accaabd2aa956b10b236a4e75cfccb/annotations-23.0.0-sources.jar!/" />
+      </SOURCES>
+    </library>
+    <library name="Gradle: org.jspecify:jspecify:1.0.0" type="java-imported" external-system-id="GRADLE">
+      <properties groupId="org.jspecify" artifactId="jspecify" version="1.0.0" baseVersion="1.0.0" />
+      <CLASSES>
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/org.jspecify/jspecify/1.0.0/7425a601c1c7ec76645a78d22b8c6a627edee507/jspecify-1.0.0.jar!/" />
+      </CLASSES>
+      <JAVADOC>
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/org.jspecify/jspecify/1.0.0/a80803f1ac52db38cf403634542745af80b8868a/jspecify-1.0.0-javadoc.jar!/" />
+      </JAVADOC>
+      <SOURCES>
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/org.jspecify/jspecify/1.0.0/f1a67bbcf2f9f282baf3821046563983f16ca9b2/jspecify-1.0.0-sources.jar!/" />
+      </SOURCES>
+    </library>
+  </component>
+</project>
