@@ -47,6 +47,10 @@ Package names and commands may vary if using a different OS.
 - Using Build:
     - Copy `./bin/minibae_gui.exe` to a Windows system
     - Run `minibae_gui.exe`, or drag a supported file over the exe
+    - Linux:
+        - The program looks for "zenity", "kdialog", or "yad" (in this order) for file browsing.
+        If you do not have these installed, the Open and Export WAV buttons may not function.
+
 
 #### Setup & Compile Emscripten WASM32 build (no sound card support)
 - Install emscripten (one time):
