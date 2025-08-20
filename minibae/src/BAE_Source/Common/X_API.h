@@ -315,6 +315,7 @@
 #define X_MACINTOSH         16      // MacOSX
 #define X_IOS               17      // iOS
 #define X_SDL2              18      // SDL2
+#define X_ANDROID           19      // Android
 
 // types for CPU_TYPE
 #define k68000              0

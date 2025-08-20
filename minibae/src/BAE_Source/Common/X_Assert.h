@@ -133,30 +133,11 @@
     #define BAE_STDERR(...)         fprintf (stderr, __VA_ARGS__)
 #endif
 
-// If building for Android, route stdout/stderr to logcat for easier debugging
-#if defined(__ANDROID__)
-#include <android/log.h>
-#undef BAE_STDOUT
-#undef BAE_STDERR
-#define BAE_STDOUT(...) __android_log_print(ANDROID_LOG_INFO, "miniBAE", __VA_ARGS__)
-#define BAE_STDERR(...) __android_log_print(ANDROID_LOG_ERROR, "miniBAE", __VA_ARGS__)
-
-// Ensure BAE_PRINTF routes to Android logcat when compiling for Android
-#ifdef BAE_PRINTF
-#undef BAE_PRINTF
-#endif
-#ifdef _DEBUG
-    // In debug, send to stderr log level
-    #define BAE_PRINTF(...) BAE_STDERR(__VA_ARGS__)
-#else
-    // In release, send to info
-    #define BAE_PRINTF(...) BAE_STDOUT(__VA_ARGS__)
-#endif
-#endif
-
 #ifndef _DEBUG
     #if (X_PLATFORM == X_WIN95) || (X_PLATFORM == X_WIN_HARDWARE) || (X_PLATFORM == X_MACINTOSH) || (X_PLATFORM == X_IOS) || (X_PLATFORM == X_ANSI) || (X_PLATFORM == X_SDL2)
         #define BAE_PRINTF
+    #elif __ANDROID__
+        #define BAE_PRINTF(...)
     #else
         #define BAE_PRINTF(...)
     #endif
@@ -174,6 +155,11 @@
             #define BAE_VERIFY(exp)     assert(exp)
         #endif
     #else
+        #ifdef  __ANDROID__
+            #define BAE_STDOUT(...) __android_log_print(ANDROID_LOG_INFO, "miniBAE", __VA_ARGS__)
+            #define BAE_STDERR(...) __android_log_print(ANDROID_LOG_ERROR, "miniBAE", __VA_ARGS__)
+            #define BAE_PRINTF(...) BAE_STDOUT(__VA_ARGS__)
+        #endif    
         #include <assert.h>
         #define BAE_ASSERT(exp)     assert(exp)
         #define BAE_VERIFY(exp)     assert(exp)

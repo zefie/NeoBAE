@@ -3406,11 +3406,11 @@ GetMIDIevent:
                                 cbPtr = allocated; // pass copy
                             }
                         }
-                        BAE_STDERR("DEBUG: MIDI Event: Type=0x%02X, Data=%.*s, DataHex=", midi_byte, (int)value, (char *)cbPtr);
+                        BAE_PRINTF("DEBUG: MIDI Event: Type=0x%02X, Data=%.*s, DataHex=", midi_byte, (int)value, (char *)cbPtr);
                         for (int i = 0; i < value; i++) {
-                            BAE_STDERR("%02X ", ((unsigned char *)cbPtr)[i]);
+                            BAE_PRINTF("%02X ", ((unsigned char *)cbPtr)[i]);
                         }
-                        BAE_STDERR("\n");
+                        BAE_PRINTF("\n");
                         PV_CallSongMetaEventCallback(threadContext, pSong, midi_byte, cbPtr, value, (int16_t)currentTrack);
                         if (allocated)
                         {

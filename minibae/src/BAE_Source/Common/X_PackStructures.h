@@ -132,7 +132,7 @@
         #endif
         /* $$kk: pack(4) for solaris x86 */
 
-        #if (CPU_TYPE == k80X86)
+        #if (CPU_TYPE == k80X86 || CPU_TYPE == kARM)
             #if (X_PLATFORM == X_SOLARIS)
                 #pragma pack (4)
             #else
@@ -146,7 +146,7 @@
     #define X_BF_3
     #define X_BF_4
     #define X_BF_5
-    #if (COMPILER_TYPE == GCC_COMPILER)
+    #if (COMPILER_TYPE == GCC_COMPILER) || (__MINGW32__)
 	   #define X_PACKBY1 __attribute__ ((packed))
     #else
 	   #define X_PACKBY1
