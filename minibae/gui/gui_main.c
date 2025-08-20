@@ -934,13 +934,16 @@ static bool g_exportDropdownOpen = false;
 static int  g_exportCodecIndex = 0; // 0 = PCM 16 WAV, 1..6 = MP3 bitrates
 static const char *g_exportCodecNames[] = {
     "PCM 16 WAV",
+#if USE_MPEG_ENCODER != FALSE
     "96kbps MP3",
     "128kbps MP3",
     "160kbps MP3",
     "192kbps MP3",
     "256kbps MP3",
     "320kbps MP3"
+#endif
 };
+#if USE_MPEG_ENCODER != FALSE
 // Direct mapping from dropdown index to BAE compression enum, half bitrate for per channel
 static const BAECompressionType g_exportCompressionMap[] = {
     BAE_COMPRESSION_NONE,
@@ -951,6 +954,7 @@ static const BAECompressionType g_exportCompressionMap[] = {
     BAE_COMPRESSION_MPEG_128,
     BAE_COMPRESSION_MPEG_160
 };
+#endif
 // Deferred bank filename tooltip state
 static bool g_bank_tooltip_visible = false;
 static Rect g_bank_tooltip_rect; // tooltip rectangle
@@ -2806,10 +2810,11 @@ int main(int argc, char *argv[]){
                     // Start export using selected codec mapping
                     // Map our index to BAEMixer compression enums using table
                     BAECompressionType compression = BAE_COMPRESSION_NONE;
+#if USE_MPEG_ENCODER != FALSE                    
                     if(g_exportCodecIndex >= 0 && g_exportCodecIndex < (int)(sizeof(g_exportCompressionMap)/sizeof(g_exportCompressionMap[0]))){
                         compression = g_exportCompressionMap[g_exportCodecIndex];
                     }
-
+#endif
                     // Use BAEMixer_StartOutputToFile directly like bae_start_wav_export but with compression choice
                     if(!g_bae.song_loaded || g_bae.is_audio_file){ set_status_message("Cannot export: No MIDI/RMF loaded"); }
                     else {
@@ -2840,6 +2845,7 @@ int main(int argc, char *argv[]){
                     free(export_file);
                 }
             }
+#if USE_MPEG_ENCODER != FALSE             
             // Export codec indicator is drawn here; the dropdown list itself is rendered later (end-of-frame)
             Rect exportDdRect = { 320 + 86, 215, 120, 22 };
             SDL_Color dd_bg = g_button_base; if(point_in(mx,my,exportDdRect)) dd_bg = g_button_hover; if(g_exportDropdownOpen) dd_bg = g_button_press;
@@ -2847,6 +2853,7 @@ int main(int argc, char *argv[]){
             const char *curName = g_exportCodecNames[g_exportCodecIndex]; draw_text(R, exportDdRect.x+6, exportDdRect.y+6, curName, g_button_text);
             draw_text(R, exportDdRect.x + exportDdRect.w - 16, exportDdRect.y+6, g_exportDropdownOpen?"^":"v", g_button_text);
             if(point_in(mx,my,exportDdRect) && mclick){ g_exportDropdownOpen = !g_exportDropdownOpen; if(g_exportDropdownOpen){ g_volumeCurveDropdownOpen=false; g_sampleRateDropdownOpen=false; }}
+#endif
             // RMF Info button (only for RMF files)
             if(g_bae.is_rmf_file){
                 if(ui_button(R,(Rect){440, 215, 80,22}, "RMF Info", ui_mx,ui_my,ui_mdown) && ui_mclick && !modal_block){
@@ -3514,6 +3521,7 @@ int main(int argc, char *argv[]){
         }
 
     // Render export dropdown list last so it layers above other UI elements
+#if USE_MPEG_ENCODER != FALSE 
     if(g_exportDropdownOpen){
         Rect exportDdRect = { 320 + 86, 215, 120, 22 };
         int codecCount = (int)(sizeof(g_exportCodecNames)/sizeof(g_exportCodecNames[0]));
@@ -3541,6 +3549,7 @@ int main(int argc, char *argv[]){
         // Close dropdown if clicked outside
         if(mclick && !point_in(mx,my,box) && !point_in(mx,my,exportDdRect)) g_exportDropdownOpen = false;
     }
+#endif
 
     SDL_RenderPresent(R);
     SDL_Delay(16);
