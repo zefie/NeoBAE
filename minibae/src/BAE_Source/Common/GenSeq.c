@@ -574,6 +574,8 @@ OPErr PV_ConfigureMusic(GM_Song *pSong)
     XDWORD      lengthToMidiEnd;
 
     theErr = BAD_MIDI_DATA;             // assume the worst
+    // DEBUG: begin MIDI parse of song sequenceData
+    BAE_STDERR("DEBUG: PV_ConfigureMusic: sequenceData=%p size=%u\n", pSong ? pSong->sequenceData : NULL, (unsigned)pSong->sequenceDataSize);
     PV_ConfigureInstruments(pSong);
     pMidiStream = (UBYTE *)pSong->sequenceData;
     lengthToMidiEnd = pSong->sequenceDataSize;
@@ -590,6 +592,7 @@ OPErr PV_ConfigureMusic(GM_Song *pSong)
             if (XGetLong(pMidiStream) == ID_MTHD)
             {
                 safe = TRUE;
+                BAE_STDERR("DEBUG: PV_ConfigureMusic: Found 'MThd' at offset %ld (remaining=%u)\n", (long)(pSong->sequenceDataSize - lengthToMidiEnd), (unsigned)lengthToMidiEnd);
                 break;
             }
             pMidiStream++;
@@ -597,10 +600,14 @@ OPErr PV_ConfigureMusic(GM_Song *pSong)
         }
         if (safe)
         {
-            if (XGetShort(&pMidiStream[8]) < 2)     // only support format 0 and 1 midi files
+            XWORD midiFormat = XGetShort(&pMidiStream[8]);
+            XWORD declaredTracks = XGetShort(&pMidiStream[10]);
+            XWORD ticksPerQN = XGetShort(&pMidiStream[12]);
+            BAE_STDERR("DEBUG: PV_ConfigureMusic: Header format=%u declaredTracks=%u ticksPerQN=%u\n", (unsigned)midiFormat, (unsigned)declaredTracks, (unsigned)ticksPerQN);
+            if (midiFormat < 2)     // only support format 0 and 1 midi files
             {
-                realtracks = XGetShort(&pMidiStream[10]);   // get real tracks and compare with tracks found to determine if corrupt
-                count = XGetShort(&pMidiStream[12]);        // get ticks per quarter note
+                realtracks = declaredTracks;   // get real tracks and compare with tracks found to determine if corrupt
+                count = ticksPerQN;        // get ticks per quarter note
                 pSong->UnscaledMIDIDivision = (UFLOAT)count;
                 PV_ScaleDivision(pSong, pSong->UnscaledMIDIDivision);
                 // search for first midi track
@@ -614,6 +621,7 @@ OPErr PV_ConfigureMusic(GM_Song *pSong)
                     if (XGetLong(pMidiStream) == ID_MTRK)
                     {
                         safe = TRUE;
+                        BAE_STDERR("DEBUG: PV_ConfigureMusic: Found first 'MTrk' at offset %ld (remaining=%u)\n", (long)(pSong->sequenceDataSize - lengthToMidiEnd), (unsigned)lengthToMidiEnd);
                         break;
                     }
                     pMidiStream++;
@@ -632,6 +640,7 @@ OPErr PV_ConfigureMusic(GM_Song *pSong)
                         trackLength = (trackLength << 8) + *pMidiStream++;
                         trackLength = (trackLength << 8) + *pMidiStream++;
                         trackLength = (trackLength << 8) + *pMidiStream++;
+                        BAE_STDERR("DEBUG: PV_ConfigureMusic: Track %u length=%u bytes (absOffset=%ld)\n", (unsigned)numtracks, (unsigned)trackLength, (long)(pSong->sequenceDataSize - lengthToMidiEnd));
                 
                         pSong->ptrack[numtracks] = pMidiStream;
                         pSong->trackstart[numtracks] = pMidiStream;
@@ -644,6 +653,7 @@ OPErr PV_ConfigureMusic(GM_Song *pSong)
                         if (pMidiStream > pMidiEndStream)
                         {
                             // track length must be corrupted! we jumped past the end of our file!
+                            BAE_STDERR("ERROR: PV_ConfigureMusic: Track %u overruns file (trackLength=%u remaining=%u)\n", (unsigned)numtracks, (unsigned)trackLength, (unsigned)(pMidiEndStream - (pMidiStream - trackLength)));
                             numtracks = 0;
                             break;
                         }
@@ -651,14 +661,16 @@ OPErr PV_ConfigureMusic(GM_Song *pSong)
                         // ok before we go on, we need to check for a valid Midi end track
                         if ( (pMidiStream[-2] != 0x2F) && (pMidiStream[-1] != 0x00))
                         {   // no end track marker
+                            BAE_STDERR("ERROR: PV_ConfigureMusic: Track %u missing end-of-track meta (last2=%02X %02X)\n", (unsigned)numtracks, (unsigned)pMidiStream[-2], (unsigned)pMidiStream[-1]);
                             numtracks = 0;
                             break;
                         }
                         numtracks++;
                     }
-                    if (numtracks == realtracks)    // do real tracks match number of found tracks?
+                    if (numtracks == realtracks)    // do real tracks match number of found tracks (or we stopped early in lenient mode)?
                     {
                         theErr = NO_ERR;        // all is well in midi land
+                        BAE_STDERR("DEBUG: PV_ConfigureMusic: Parsed %u tracks successfully.\n", (unsigned)numtracks);
                     }
                     else
                     {
@@ -666,10 +678,31 @@ OPErr PV_ConfigureMusic(GM_Song *pSong)
                         if (realtracks > MAX_TRACKS)
                         {
                             theErr = MAX_TRACKS_EXCEEDED;
+                            BAE_STDERR("ERROR: PV_ConfigureMusic: Declared tracks %u exceeds MAX_TRACKS %u\n", (unsigned)realtracks, (unsigned)MAX_TRACKS);
+                        }
+                        else if (numtracks > realtracks)
+                        {
+                            // Parse extras and succeed.
+                            BAE_STDERR("WARN: PV_ConfigureMusic: Declared %u tracks but found %u. Parsing %u extra track(s).\n", (unsigned)realtracks, (unsigned)numtracks, (unsigned)(numtracks - realtracks));
+                            realtracks = numtracks;
+                            theErr = NO_ERR;
+                        }
+                        else
+                        {
+                            BAE_STDERR("ERROR: PV_ConfigureMusic: Declared %u tracks but parsed %u tracks\n", (unsigned)realtracks, (unsigned)numtracks);
                         }
                     }
                 }
+                else {
+                    BAE_STDERR("ERROR: PV_ConfigureMusic: Could not locate any 'MTrk' chunk after header\n");
+                }
             }
+            else {
+                BAE_STDERR("ERROR: PV_ConfigureMusic: Unsupported MIDI format %u (only 0/1 supported)\n", (unsigned)midiFormat);
+            }
+        }
+        else {
+            BAE_STDERR("ERROR: PV_ConfigureMusic: Could not locate 'MThd' header within initial scan window (%u bytes)\n", (unsigned)pSong->sequenceDataSize);
         }
     }
     return theErr;  
