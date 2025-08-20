@@ -3424,8 +3424,11 @@ GetMIDIevent:
                             XBOOL invoke = FALSE;
                             const char *lyricStr = (const char *)cbPtr; /* NUL terminated */
                             static XBOOL s_seenTrueLyric = FALSE;
-                            if(midi_byte == 0x05) {
+                            static XBOOL s_seenGenericTextLyric = FALSE;
+                            static XBOOL s_seenLyricMeta = FALSE;
+                            if(midi_byte == 0x05 && !s_seenGenericTextLyric) {
                                 s_seenTrueLyric = TRUE;
+                                s_seenLyricMeta = TRUE;
                                 if (lyricStr && lyricStr[0] && lyricStr[0] == '\r') {
                                     /* Translate Carrage Return to newline by sending empty lyric */
                                     uint32_t lyrTimeUs = (uint32_t)pSong->songMicroseconds;
@@ -3434,7 +3437,7 @@ GetMIDIevent:
                                 } else {
                                     invoke = TRUE; /* real lyric */ 
                                 }                                
-                            } else if(midi_byte == 0x01){
+                            } else if(midi_byte == 0x01 && !s_seenLyricMeta){
                                 /* Follow negated form: do NOT treat GenericText starting with '@' as lyric content. */
                                 if(lyricStr && lyricStr[0]=='@'){
                                     /* Control/reset: translate to newline by sending empty lyric */
@@ -3442,6 +3445,7 @@ GetMIDIevent:
                                     char empty[1] = {'\0'};
                                     pSong->lyricCallbackPtr(pSong, empty, lyrTimeUs, pSong->lyricCallbackReference);
                                 } else if (lyricStr && lyricStr[0]=='\\') {
+                                    s_seenGenericTextLyric = TRUE;
                                     s_seenTrueLyric = TRUE;
                                     invoke = TRUE;
                                 } else {
