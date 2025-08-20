@@ -149,6 +149,9 @@
 /*****************************************************************************/
 
 #include "MiniBAE.h"
+#if USE_MPEG_ENCODER != FALSE
+#include "XMPEG_BAE_API.h"  /* for MPG_Encode* encoder API prototypes */
+#endif
 #include "X_API.h"
 #include "GenSnd.h"
 #include "GenPriv.h"
@@ -3172,22 +3175,46 @@ BAEResult BAEMixer_StartOutputToFile(BAEMixer theMixer,
 #if USE_MPEG_ENCODER != FALSE
         case BAE_MPEG_TYPE:
         {
-            if (iModifiers & BAE_USE_16)
+        if (theModifiers & BAE_USE_16)
             {
                 mWritingToFileReference = (void *)XFileOpenForWrite(&theFile, TRUE);
                 if (mWritingToFileReference)
                 {
-                    XDWORD channels = (theModifiers /*iModifiers*/ & BAE_USE_STEREO) ? 2 : 1;
-                    mWritingEncoder = MPG_EncodeNewStream(BAE_TranslateMPEGTypeToBitrate(compressionType),
-                                                          GM_ConvertFromOutputRateToRate(theRate /*iRate*/),
-                                                          channels,
-                                                          mWritingDataBlock,
-                                                          mWritingDataBlockSize / (sizeof(short) * channels));
+            XDWORD channels = (theModifiers & BAE_USE_STEREO) ? 2 : 1;
+            // Preserve original slice size (typically ~11ms worth) to maintain correct sequencing tempo.
+            // The MP3 encoder will internally accumulate multiple slices to reach a full 1152-frame MP3 frame.
+            // helper translates compression enum to per-channel bitrate in bits/sec
+            extern uint32_t BAE_TranslateMPEGTypeToBitrate(BAECompressionType ct);
+            extern XBOOL PV_RefillMPEGEncodeBuffer(void *buffer, void *userRef);
+            mWritingEncoder = MPG_EncodeNewStream(BAE_TranslateMPEGTypeToBitrate(compressionType),
+                              GM_ConvertFromOutputRateToRate(theRate),
+                              channels,
+                              mWritingDataBlock,
+                              (uint32_t)(mWritingDataBlockSize / (sizeof(short) * channels)));
+            if(mWritingEncoder){
+                BAE_PRINTF("audio: MPG_EncodeNewStream ok ch=");
+                char tmp[16]; XLongToStr(tmp,(int32_t)channels); BAE_PRINTF(tmp);
+                BAE_PRINTF(" framesPerCall="); XLongToStr(tmp,(int32_t)(mWritingDataBlockSize / (sizeof(short)*channels))); BAE_PRINTF(tmp);
+                BAE_PRINTF(" rate="); XLongToStr(tmp,(int32_t)GM_ConvertFromOutputRateToRate(theRate)); BAE_PRINTF(tmp); BAE_PRINTF("\n");
+                // Prime first PCM buffer so first service call has audio content
+                PV_RefillMPEGEncodeBuffer(mWritingDataBlock, theMixer);
 
-                    MPG_EncodeSetRefillCallback(mWritingEncoder, PV_RefillMPEGEncodeBuffer, (void*)this);
+                /* Pass mixer as userRef so refill can query modifiers/rate properly */
+                MPG_EncodeSetRefillCallback(mWritingEncoder, PV_RefillMPEGEncodeBuffer, theMixer);
 
-                    GM_StopHardwareSoundManager(NULL);      // disengage from hardware
-                    mWritingToFile = TRUE;
+                GM_StopHardwareSoundManager(NULL);      // disengage from hardware
+                mWritingToFile = TRUE;
+            } else {
+                BAE_STDERR("audio: MPG_EncodeNewStream FAILED\n");
+                /* Treat failure to create encoder as an error so caller can abort gracefully. */
+                theErr = BAD_FILE;
+                /* Close file handle we opened to avoid leaving an open/half-written file. */
+                if (mWritingToFileReference) {
+                    XFileClose((XFILE)mWritingToFileReference);
+                    mWritingToFileReference = NULL;
+                }
+                /* do not set mWritingToFile; cleanup of mWritingDataBlock happens below when theErr != NO_ERR */
+            }
                 }
                 else
                 {
@@ -3335,6 +3362,10 @@ BAEResult BAEMixer_ServiceAudioOutputToFile(BAEMixer theMixer)
     int32_t                        sampleSize, channels;
     OPErr                       theErr;
 
+#ifndef HMP3_ENC_LOG
+#define HMP3_ENC_LOG 0
+#endif
+
 // begin block added for MiniBAE
     BAEAudioModifiers theModifiers;
     BAEMixer_GetModifiers(theMixer, &theModifiers);
@@ -3359,7 +3390,7 @@ BAEResult BAEMixer_ServiceAudioOutputToFile(BAEMixer theMixer)
         sampleSize = (theModifiers /*iModifiers*/ & BAE_USE_16) ? 2 : 1;
         if (mWritingDataBlockSize)
         {
-            if (mWritingDataBlockSize < 8192 && mWritingDataBlock)
+            if (mWritingDataBlockSize && mWritingDataBlock)
             {
 #if DUMP_OUTPUTFILE
 #if DUMP_C_PLUS_PLUS
@@ -3382,17 +3413,26 @@ BAEResult BAEMixer_ServiceAudioOutputToFile(BAEMixer theMixer)
 #if USE_MPEG_ENCODER != FALSE
                     case BAE_MPEG_TYPE:
                     {
+                        static uint32_t g_mpeg_service_calls = 0;
                         XPTR compressedData = NULL;
-                        XDWORD compressedLength = NULL;
-                        XBOOL isDone;
-
-                        MPG_EncodeProcess(mWritingEncoder, &compressedData, &compressedLength, &isDone);
-                        if (compressedLength > 0)
-                        {
-                            if (XFileWrite((XFILE)mWritingToFileReference, compressedData, compressedLength) == -1)
-                            {
-                                theErr = BAD_FILE;
+                        XDWORD compressedLength = 0;
+                        XBOOL isDone = FALSE;
+                            if(!mWritingEncoder){
+                                BAE_PRINTF("audio: MPEG encode service called with NULL encoder (encoder not built?) aborting export.\n");
+                                // Gracefully abort: close file and reset state
+                                mWriteToFileType = 0; // invalid
+                                XFileClose((XFILE)mWritingToFileReference); mWritingToFileReference=NULL;
+                                mWritingToFile = FALSE;
+                                return BAE_GENERAL_ERR;
+                        } else {
+                            MPG_EncodeProcess(mWritingEncoder, &compressedData, &compressedLength, &isDone);
+                            if(compressedLength > 0){
+                                if (XFileWrite((XFILE)mWritingToFileReference, compressedData, compressedLength) == -1){
+                                    theErr = BAD_FILE;
+                                }
                             }
+                            // Do NOT free stream here unless encoder signals done explicitly
+                            if(isDone && mWritingEncoder){ MPG_EncodeFreeStream(mWritingEncoder); mWritingEncoder=NULL; }
                         }
                     } 
                     break;
@@ -3529,7 +3569,7 @@ BAEResult BAESound_Delete(BAESound sound)
     }
     else
     {
-        BAE_STDERR("audio: BAESound_Delete invalid object\n");
+        BAE_PRINTF("audio: BAESound_Delete invalid object\n");
         err = NULL_OBJECT;
     }
     return BAE_TranslateOPErr(err);
@@ -3621,7 +3661,7 @@ static void PV_BAESound_Unload(BAESound sound)
 
     while (GM_IsSampleProcessing(voice))
     {
-//      BAE_STDERR("BAE:deleting sound...\n");
+//      BAE_PRINTF("BAE:deleting sound...\n");
         XWaitMicroseocnds(BAE_GetSliceTimeInMicroseconds());
     }
 
@@ -3630,7 +3670,7 @@ static void PV_BAESound_Unload(BAESound sound)
         GM_FreeWaveform(sound->pWave);
         sound->pWave = NULL;
     }
-//  BAE_STDERR("BAE:deleting sound done\n");
+//  BAE_PRINTF("BAE:deleting sound done\n");
 }
 
 // BAESound_Unload()
@@ -3819,7 +3859,7 @@ BAEResult BAESound_LoadMemorySample(BAESound sound, void *pMemoryFile, uint32_t 
             }
 //          else
 //          {
-//              BAE_STDERR("audio::sound loop start %ld end %ld\n", sound->pWave->startLoop,
+//              BAE_PRINTF("audio::sound loop start %ld end %ld\n", sound->pWave->startLoop,
 //                                                              sound->pWave->endLoop);
 //          }
             BAE_ReleaseMutex(sound->mLock);
@@ -4053,7 +4093,7 @@ static void PV_DefaultSoundDoneCallback(void *reference)
                 }
                 else
                 {
-                    BAE_STDERR("audio:sound not in mixer list, no callback\n");
+                    BAE_PRINTF("audio:sound not in mixer list, no callback\n");
                 }
             }
         }
@@ -4065,7 +4105,7 @@ static void PV_DefaultSoundDoneCallback(void *reference)
     }
     else
     {
-        BAE_STDERR("audio:sound no longer valid, no callback\n");
+        BAE_PRINTF("audio:sound no longer valid, no callback\n");
     }
 }
 
@@ -9138,5 +9178,44 @@ In memory of Jim Nitchals, 1962-1998.  A subtle genius and original thinker."
 };
 
 // EOF MiniBAE.c
+
+#if USE_MPEG_ENCODER != FALSE
+// Translate BAECompressionType (per-channel kbps enum naming) to bits/sec per channel.
+uint32_t BAE_TranslateMPEGTypeToBitrate(BAECompressionType ct) {
+    switch(ct){
+        case BAE_COMPRESSION_MPEG_8: return 8000;
+        case BAE_COMPRESSION_MPEG_16: return 16000;
+        case BAE_COMPRESSION_MPEG_24: return 24000;
+        case BAE_COMPRESSION_MPEG_32: return 32000;
+        case BAE_COMPRESSION_MPEG_40: return 40000;
+        case BAE_COMPRESSION_MPEG_48: return 48000;
+        case BAE_COMPRESSION_MPEG_56: return 56000;
+        case BAE_COMPRESSION_MPEG_64: return 64000;
+        case BAE_COMPRESSION_MPEG_80: return 80000;
+        case BAE_COMPRESSION_MPEG_96: return 96000;
+        case BAE_COMPRESSION_MPEG_112: return 112000;
+        case BAE_COMPRESSION_MPEG_128: return 128000;
+        case BAE_COMPRESSION_MPEG_160: return 160000;
+        case BAE_COMPRESSION_MPEG_192: return 192000;
+        case BAE_COMPRESSION_MPEG_224: return 224000;
+        case BAE_COMPRESSION_MPEG_256: return 256000;
+        case BAE_COMPRESSION_MPEG_320: return 320000;
+        default: return 128000; // safe default
+    }
+}
+
+// Refill callback: build next mixer slice of PCM into provided buffer.
+XBOOL PV_RefillMPEGEncodeBuffer(void *buffer, void *userRef){
+    if(!buffer || !mWritingDataBlock || !mWritingDataBlockSize) return FALSE;
+    BAEMixer mixer = (BAEMixer)userRef;
+    BAEAudioModifiers mods; if(BAEMixer_GetModifiers(mixer, &mods)!=BAE_NO_ERROR){mods = BAE_USE_16;}
+    int channels = (mods & BAE_USE_STEREO)?2:1;
+    int sampleSize = (mods & BAE_USE_16)?2:1;
+    uint32_t frames = (uint32_t)(mWritingDataBlockSize / (sampleSize * channels));
+    // Build directly into destination buffer so encoder reads fresh PCM
+    BAE_BuildMixerSlice(mixer, buffer, mWritingDataBlockSize, frames);
+    return TRUE;
+}
+#endif
 
 

@@ -33,11 +33,20 @@ else
 	vpath	%.c src/playbae
 endif
 
+ifneq ($(MP3_ENC),)
+	vpath	%.c src/thirdparty/hmp3/hmp3/src
+	vpath	%.cpp src/thirdparty/hmp3/hmp3/src
+	vpath	%.cpp src/BAE_MPEG_Source_II
+endif
+
 INC_PATH	:= -Isrc/BAE_Source/Common
 INC_PATH	+= -Isrc/BAE_Source/Platform
 INC_PATH	+= -Isrc/BAE_MPEG_Source_II
 INC_PATH	+= -Isrc/banks/patches111
 INC_PATH	+= -Isrc/thirdparty/minimp3
+ifneq ($(MP3_ENC),)
+	INC_PATH	+= -Isrc/thirdparty/hmp3/hmp3/src/pub
+endif
 
 ### Start configure BAE API
 
@@ -86,7 +95,7 @@ ifeq ($(BAE_BUILT_IN_PATCHES),)
 endif
 
 # Debug
-ifneq (${DEBUG},0)
+ifneq ($(DEBUG),)
 	BAE_FLAGS +=    -D_DEBUG=1
 endif
 
@@ -135,6 +144,46 @@ endif
 # Enable minimp3 wrapper for MPG_* API (decoder only)
 BAE_FLAGS += -DUSE_MINIMP3_WRAPPER=1 -DUSE_MPEG_DECODER=1
 SRC += XMPEG_minimp3_wrapper.c XMPEGFilesSun.c
+
+# Optional MP3 encoder (Helix) integration
+# Enable with make MP3_ENC=1 (or set in environment)
+ifeq ($(MP3_ENC),1)
+	BAE_FLAGS += -DUSE_MPEG_ENCODER=1 -DUSE_HMP3_ENCODER=1 -DIEEE_FLOAT
+	# Helix MP3 encoder sources (C)
+	SRC += \
+		amodini2.c \
+		cnts.c \
+		detect.c \
+		emap.c \
+		l3init.c \
+		l3pack.c \
+		mhead.c \
+		pcmhpm.c \
+		setup.c \
+		spdsmr.c \
+		xhead.c \
+		cnt.c \
+		emdct.c \
+		filter2.c \
+		hwin.c \
+		l3math.c \
+		pow34.c \
+		sbt.c \
+		xhwin.c \
+		xsbt.c
+	# Helix MP3 encoder sources (C++)
+	SRC += \
+		bitallo.cpp \
+		bitallo1.cpp \
+		bitallo3.cpp \
+		bitalloc.cpp \
+		bitallos.cpp \
+		bitallosc.cpp \
+		mp3enc.cpp \
+		srcc.cpp \
+		srccf.cpp \
+		XMPEG_hmp3_encoder.cpp
+endif
 
 # playbae = libMiniBAE srcs + playbae.c
 ifneq ($(BUILD_GUI),)

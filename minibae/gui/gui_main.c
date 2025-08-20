@@ -929,6 +929,28 @@ static bool g_volumeCurveDropdownOpen = false;
 static bool g_stereo_output = true; // checked == stereo (default on)
 static int  g_sample_rate_hz = 44100;       // current selected sample rate
 static bool g_sampleRateDropdownOpen = false; // dropdown open state
+// Export dropdown state: controls encoding choice when exporting
+static bool g_exportDropdownOpen = false;
+static int  g_exportCodecIndex = 0; // 0 = PCM 16 WAV, 1..6 = MP3 bitrates
+static const char *g_exportCodecNames[] = {
+    "PCM 16 WAV",
+    "96kbps MP3",
+    "128kbps MP3",
+    "160kbps MP3",
+    "192kbps MP3",
+    "256kbps MP3",
+    "320kbps MP3"
+};
+// Direct mapping from dropdown index to BAE compression enum, half bitrate for per channel
+static const BAECompressionType g_exportCompressionMap[] = {
+    BAE_COMPRESSION_NONE,
+    BAE_COMPRESSION_MPEG_48,
+    BAE_COMPRESSION_MPEG_64,
+    BAE_COMPRESSION_MPEG_80,
+    BAE_COMPRESSION_MPEG_96,
+    BAE_COMPRESSION_MPEG_128,
+    BAE_COMPRESSION_MPEG_160
+};
 // Deferred bank filename tooltip state
 static bool g_bank_tooltip_visible = false;
 static Rect g_bank_tooltip_rect; // tooltip rectangle
@@ -2001,32 +2023,43 @@ static char *open_file_dialog(){
 #endif
 }
 
-static char *save_wav_dialog(){
+static char *save_export_dialog(bool want_mp3){
 #ifdef _WIN32
-    char fileBuf[1024]={0};
-    OPENFILENAMEA ofn; ZeroMemory(&ofn,sizeof(ofn));
+    char fileBuf[1024] = {0};
+    OPENFILENAMEA ofn; ZeroMemory(&ofn, sizeof(ofn));
     ofn.lStructSize = sizeof(ofn);
     ofn.hwndOwner = NULL;
-    ofn.lpstrFilter = "WAV Files\0*.wav\0All Files\0*.*\0";
+    ofn.lpstrFilter = want_mp3 ? "MP3 Files\0*.mp3\0All Files\0*.*\0" : "WAV Files\0*.wav\0All Files\0*.*\0";
     ofn.lpstrFile = fileBuf; ofn.nMaxFile = sizeof(fileBuf);
-    ofn.Flags = OFN_PATHMUSTEXIST | OFN_OVERWRITEPROMPT; 
-    ofn.lpstrDefExt = "wav";
-    if(GetSaveFileNameA(&ofn)){
-        size_t len = strlen(fileBuf); char *ret = (char*)malloc(len+1); if(ret){ memcpy(ret,fileBuf,len+1);} return ret; }
+    ofn.Flags = OFN_PATHMUSTEXIST | OFN_OVERWRITEPROMPT;
+    ofn.lpstrDefExt = want_mp3 ? "mp3" : "wav";
+    if (GetSaveFileNameA(&ofn)){
+        size_t len = strlen(fileBuf); char *ret = (char*)malloc(len+1); if(ret){ memcpy(ret,fileBuf,len+1);} return ret;
+    }
     return NULL;
 #else
-    const char *cmds[] = {
+    const char *cmds_wav[] = {
         "zenity --file-selection --save --title='Save WAV Export' --file-filter='WAV Files | *.wav' 2>/dev/null",
         "kdialog --getsavefilename . '*.wav' 2>/dev/null",
         "yad --file-selection --save --title='Save WAV Export' 2>/dev/null",
-        NULL};
-    for(int i=0; cmds[i]; ++i){
-        FILE *p = popen(cmds[i], "r");
-        if(!p) continue; char buf[1024]; if(fgets(buf,sizeof(buf),p)){
+        NULL
+    };
+    const char *cmds_mp3[] = {
+        "zenity --file-selection --save --title='Save MP3 Export' --file-filter='MP3 Files | *.mp3' 2>/dev/null",
+        "kdialog --getsavefilename . '*.mp3' 2>/dev/null",
+        "yad --file-selection --save --title='Save MP3 Export' 2>/dev/null",
+        NULL
+    };
+    const char **use_cmds = want_mp3 ? cmds_mp3 : cmds_wav;
+    for(int i=0; use_cmds[i]; ++i){
+        FILE *p = popen(use_cmds[i], "r");
+        if(!p) continue;
+        char buf[1024];
+        if(fgets(buf, sizeof(buf), p)){
             pclose(p);
             // strip newline
-            size_t l=strlen(buf); while(l>0 && (buf[l-1]=='\n' || buf[l-1]=='\r')) buf[--l]='\0';
-            if(l>0){ char *ret=(char*)malloc(l+1); if(ret){ memcpy(ret,buf,l+1);} return ret; }
+            size_t l = strlen(buf); while(l>0 && (buf[l-1]=='\n' || buf[l-1]=='\r')) buf[--l] = '\0';
+            if(l>0){ char *ret = (char*)malloc(l+1); if(ret){ memcpy(ret, buf, l+1); } return ret; }
         } else { pclose(p); }
     }
     BAE_PRINTF("No GUI file chooser available for saving.\n");
@@ -2457,7 +2490,7 @@ int main(int argc, char *argv[]){
         draw_text(R, 20, 20, "MIDI CHANNELS", headerCol);
         
     // Channel toggles in a neat grid (with measured label centering)
-    bool modal_block = g_show_settings_dialog || (g_show_rmf_info_dialog && g_bae.is_rmf_file); // block when any modal dialog open
+    bool modal_block = g_show_settings_dialog || (g_show_rmf_info_dialog && g_bae.is_rmf_file); // block when any modal/dialog open
     // When a modal is active we fully swallow background hover/drag/click by using off-screen, inert inputs
     int ui_mx = mx, ui_my = my; bool ui_mdown = mdown; bool ui_mclick = mclick;
     if(modal_block){ ui_mx = ui_my = -10000; ui_mdown = ui_mclick = false; }
@@ -2749,17 +2782,71 @@ int main(int argc, char *argv[]){
             }
         }
         
-        // WAV Export button (only for MIDI/RMF files)
+        // Export controls (only for MIDI/RMF files)
         if(!g_bae.is_audio_file && g_bae.song_loaded) {
-            if(ui_button(R,(Rect){320, 215, 110,22}, g_exporting ? "Exporting..." : "Export WAV", ui_mx,ui_my,ui_mdown) && ui_mclick && !g_exporting && !modal_block){
-                char *export_file = save_wav_dialog();
+            // Export button
+            if(ui_button(R,(Rect){320, 215, 80,22}, g_exporting ? "Exporting..." : "Export", ui_mx,ui_my,ui_mdown) && ui_mclick && !g_exporting && !modal_block){
+                // When export button clicked, open save dialog using extension depending on codec
+                char *export_file = save_export_dialog(g_exportCodecIndex != 0);
                 if(export_file) {
-                    if(!bae_start_wav_export(export_file)){
-                        // Failed (status already set); keep file chooser result for potential retry not needed
+                    // If user selected MP3 codec, ensure filename ends with .mp3 else .wav
+                    if(g_exportCodecIndex == 0){ // WAV
+                        // ensure .wav extension (basic)
+                        size_t L = strlen(export_file);
+                        if(L < 4 || strcasecmp(export_file + L - 4, ".wav") != 0){
+                            // naive realloc: append .wav
+                            size_t n = L + 5; char *tmp = malloc(n); if(tmp){ snprintf(tmp,n, "%s.wav", export_file); free(export_file); export_file = tmp; }
+                        }
+                    } else {
+                        size_t L = strlen(export_file);
+                        if(L < 4 || strcasecmp(export_file + L - 4, ".mp3") != 0){
+                            size_t n = L + 5; char *tmp = malloc(n); if(tmp){ snprintf(tmp,n, "%s.mp3", export_file); free(export_file); export_file = tmp; }
+                        }
+                    }
+                    // Start export using selected codec mapping
+                    // Map our index to BAEMixer compression enums using table
+                    BAECompressionType compression = BAE_COMPRESSION_NONE;
+                    if(g_exportCodecIndex >= 0 && g_exportCodecIndex < (int)(sizeof(g_exportCompressionMap)/sizeof(g_exportCompressionMap[0]))){
+                        compression = g_exportCompressionMap[g_exportCodecIndex];
+                    }
+
+                    // Use BAEMixer_StartOutputToFile directly like bae_start_wav_export but with compression choice
+                    if(!g_bae.song_loaded || g_bae.is_audio_file){ set_status_message("Cannot export: No MIDI/RMF loaded"); }
+                    else {
+                        // Save current state
+                        uint32_t curPosUs = 0; BAESong_GetMicrosecondPosition(g_bae.song, &curPosUs);
+                        g_bae.position_us_before_export = curPosUs;
+                        g_bae.was_playing_before_export = g_bae.is_playing;
+                        g_bae.loop_was_enabled_before_export = g_bae.loop_enabled_gui;
+                        if(g_bae.is_playing){ BAESong_Stop(g_bae.song, FALSE); g_bae.is_playing = false; }
+                        BAESong_SetMicrosecondPosition(g_bae.song, 0);
+                        BAEResult result = BAEMixer_StartOutputToFile(g_bae.mixer, (BAEPathName)export_file,
+                                                                     (g_exportCodecIndex==0)? BAE_WAVE_TYPE : BAE_MPEG_TYPE,
+                                                                     (BAECompressionType)compression);
+                        if(result != BAE_NO_ERROR){ char msg[128]; snprintf(msg,sizeof(msg),"Export failed to start (%d)", result); set_status_message(msg); }
+                        else {
+                            // Start song to drive export
+                            BAESong_Stop(g_bae.song, FALSE);
+                            BAESong_SetMicrosecondPosition(g_bae.song, 0);
+                            BAESong_Preroll(g_bae.song);
+                            result = BAESong_Start(g_bae.song, 0);
+                            if(result != BAE_NO_ERROR){ BAE_PRINTF("Export: BAESong_Start failed (%d)\n", result); }
+                            else { g_bae.is_playing = true; }
+                            g_exporting = true;
+                            g_export_path[0]=0; strncpy(g_export_path, export_file, sizeof(g_export_path)-1); g_export_path[sizeof(g_export_path)-1]='\0';
+                            set_status_message("Export started");
+                        }
                     }
                     free(export_file);
                 }
             }
+            // Export codec indicator is drawn here; the dropdown list itself is rendered later (end-of-frame)
+            Rect exportDdRect = { 320 + 86, 215, 120, 22 };
+            SDL_Color dd_bg = g_button_base; if(point_in(mx,my,exportDdRect)) dd_bg = g_button_hover; if(g_exportDropdownOpen) dd_bg = g_button_press;
+            draw_rect(R, exportDdRect, dd_bg); draw_frame(R, exportDdRect, g_button_border);
+            const char *curName = g_exportCodecNames[g_exportCodecIndex]; draw_text(R, exportDdRect.x+6, exportDdRect.y+6, curName, g_button_text);
+            draw_text(R, exportDdRect.x + exportDdRect.w - 16, exportDdRect.y+6, g_exportDropdownOpen?"^":"v", g_button_text);
+            if(point_in(mx,my,exportDdRect) && mclick){ g_exportDropdownOpen = !g_exportDropdownOpen; if(g_exportDropdownOpen){ g_volumeCurveDropdownOpen=false; g_sampleRateDropdownOpen=false; }}
             // RMF Info button (only for RMF files)
             if(g_bae.is_rmf_file){
                 if(ui_button(R,(Rect){440, 215, 80,22}, "RMF Info", ui_mx,ui_my,ui_mdown) && ui_mclick && !modal_block){
@@ -3425,6 +3512,35 @@ int main(int argc, char *argv[]){
             // Discard clicks outside dialog (after dropdown so it doesn't immediately close on open)
             if(mclick && !point_in(mx,my,dlg)) { /* swallow */ }
         }
+
+    // Render export dropdown list last so it layers above other UI elements
+    if(g_exportDropdownOpen){
+        Rect exportDdRect = { 320 + 86, 215, 120, 22 };
+        int codecCount = (int)(sizeof(g_exportCodecNames)/sizeof(g_exportCodecNames[0]));
+        int cols = 2;
+        int rows = (codecCount + cols - 1) / cols;
+        int gapX = 6;
+        int itemH = exportDdRect.h;
+        int itemW = exportDdRect.w;
+        int boxW = itemW * cols + gapX * (cols - 1);
+        int boxH = itemH * rows;
+        Rect box = { exportDdRect.x, exportDdRect.y + exportDdRect.h + 1, boxW, boxH };
+        SDL_Color ddBg = g_panel_bg; ddBg.a = 255; Rect shadowRect = {box.x + 2, box.y + 2, box.w, box.h}; SDL_Color shadow = {0,0,0, g_is_dark_mode ? 160 : 120};
+        draw_rect(R, shadowRect, shadow);
+        draw_rect(R, box, ddBg); draw_frame(R, box, g_panel_border);
+        for(int i=0;i<codecCount; ++i){
+            int col = i / rows; int row = i % rows;
+            Rect ir = { box.x + col * (itemW + gapX), box.y + row * itemH, itemW, itemH };
+            bool over = point_in(mx,my,ir);
+            SDL_Color ibg = (i==g_exportCodecIndex)? g_highlight_color : g_panel_bg; if(over) ibg = g_button_hover;
+            draw_rect(R, ir, ibg);
+            if(row < rows - 1){ SDL_SetRenderDrawColor(R, g_panel_border.r, g_panel_border.g, g_panel_border.b, 255); SDL_RenderDrawLine(R, ir.x, ir.y+ir.h, ir.x+ir.w, ir.y+ir.h); }
+            draw_text(R, ir.x+6, ir.y+6, g_exportCodecNames[i], g_button_text);
+            if(over && mclick){ g_exportCodecIndex = i; g_exportDropdownOpen = false; }
+        }
+        // Close dropdown if clicked outside
+        if(mclick && !point_in(mx,my,box) && !point_in(mx,my,exportDdRect)) g_exportDropdownOpen = false;
+    }
 
     SDL_RenderPresent(R);
     SDL_Delay(16);

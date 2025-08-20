@@ -20,7 +20,7 @@ endif
 include inc/Makefile.versioning
 CFLAGS		+= -D_VERSION=\""$(VERSION)"\"
 
-CXXFLAGS 	:= $(CFLAGS)
+
 LDFLAGS		:= $(ARCH) $(OPTI) -s
 
 LIBS	= 	-lpthread -lm -ldl
@@ -55,6 +55,12 @@ else
 		CFLAGS += -I/usr/include/SDL2
 		LIBS := -lSDL2 $(LIBS)
 	endif
+endif
+
+CXXFLAGS 	:= $(CFLAGS)
+ifneq ($(MP3_ENC),)
+    LD := $(CXX)
+    LIBS += -lstdc++ -lsupc++
 endif
 
 all: $(TARGET_LIB).a ${TARGET_LIB}.so $(TARGET_BIN)

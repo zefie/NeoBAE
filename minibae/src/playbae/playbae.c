@@ -49,6 +49,10 @@
 #endif
 
 static int gWriteToFile = FALSE;
+// Track the current output file type when exporting (e.g., WAVE, MPEG)
+static BAEFileType gWriteToFileType = BAE_WAVE_TYPE;
+// Default MP3 export bitrate (total kbps). Adjusted via -b CLI option.
+static int gMP3BitrateKbps = 128;
 
 #ifdef SUPPORT_KARAOKE
 // -----------------------------------------------------------------------------
@@ -274,6 +278,7 @@ char const usageString[] =
    "USAGE:  playbae  -p  {patches.hsb}\n"
    "                 -f  {Play a file (MIDI, RMF, WAV, AIFF, MPEG audio: MP2/MP3)}\n"
    "                 -o  {write output to file}\n"
+   "                 -om {write MP3 output to file (requires MP3 encoder build)}\n"
 #ifdef SUPPORT_KARAOKE
    "                 -k  {enable karaoke lyric display (MIDI/RMF with lyrics)}\n"
 #endif
@@ -285,6 +290,7 @@ char const usageString[] =
    "                 -rv {set default reverb type}\n"
    "                 -nf {disable fade-out when stopping via time limit or CTRL-C}\n"
    "                 -q  {quiet mode}\n"
+   "                 -b  {CBR bitrate kbps for MP3 export (default 128)}\n"
    "                 -h  {displays this message then exits}\n"
    "                 -x  {displays additional lesser-used options}\n"
 };
@@ -350,7 +356,13 @@ static void PV_Idle(BAEMixer theMixer, uint32_t time)
 
    if (gWriteToFile)
    {
-      BAEMixer_ServiceAudioOutputToFile(theMixer);
+      BAEResult serr = BAEMixer_ServiceAudioOutputToFile(theMixer);
+      if (serr != BAE_NO_ERROR) {
+         playbae_printf("MP3 export failed during servicing (BAE Error #%d: %s). Aborting.\n", serr, BAE_GetErrorString(serr));
+         BAEMixer_StopOutputToFile();
+         BAEMixer_Delete(theMixer);
+         exit(1);
+      }
    }
 #ifndef WASM
    else
@@ -636,6 +648,42 @@ static BAEResult PlayMidi(BAEMixer theMixer, char *fileName, BAE_UNSIGNED_FIXED 
          if (err == BAE_NO_ERROR)
          {
 	    BAESong_SetVolume(theSong, calculateVolume(volume, TRUE));
+#ifdef USE_MPEG_ENCODER
+            // When exporting (especially MP3) the song may appear "done" before
+            // the first mixer slices have been serviced. Prime the encoder by
+            // generating several slices up front so sequencer events schedule
+            // and voices start before we enter the main done loop.
+            if(gWriteToFile){
+               for(int prime=0; prime<8; ++prime){
+                  BAEResult serr = BAEMixer_ServiceAudioOutputToFile(theMixer);
+                  if (serr != BAE_NO_ERROR) {
+                     playbae_printf("MP3 export initialization failed (BAE Error #%d: %s). Aborting.\n", serr, BAE_GetErrorString(serr));
+                     BAESong_Stop(theSong, fadeOut);
+                     BAESong_Delete(theSong);
+                     BAEMixer_Delete(theMixer);
+                     return serr;
+                  }
+               }
+               // If song still reports done (no events processed yet), keep priming until active or limit
+               BAE_BOOL preDone=TRUE; int safety=0;
+               while(preDone && safety < 32){
+                  BAESong_IsDone(theSong, &preDone);
+                  if(!preDone) break;
+                  {
+                     BAEResult serr = BAEMixer_ServiceAudioOutputToFile(theMixer);
+                     if (serr != BAE_NO_ERROR) {
+                        playbae_printf("MP3 export initialization failed (BAE Error #%d: %s). Aborting.\n", serr, BAE_GetErrorString(serr));
+                        BAESong_Stop(theSong, fadeOut);
+                        BAESong_Delete(theSong);
+                        BAEMixer_Delete(theMixer);
+                        return serr;
+                     }
+                  }
+                  BAE_WaitMicroseconds(2000);
+                  safety++;
+               }
+            }
+#endif
 #if _DEBUG
             BAESong_SetCallback(theSong, (BAE_SongCallbackPtr)PV_SongCallback, (void *)0x1234);
 	    BAESong_SetMetaEventCallback(theSong, (GM_SongMetaCallbackProcPtr)PV_SongMetaCallback, (void *)0x1235);
@@ -662,16 +710,18 @@ static BAEResult PlayMidi(BAEMixer theMixer, char *fileName, BAE_UNSIGNED_FIXED 
 
             playbae_dprintf("BAE memory used for everything %ld bytes\n\n", BAE_GetSizeOfMemoryUsed());
             done = FALSE;
-            while (done == FALSE)
+               while (done == FALSE)
             {
-	       if (interruptPlayBack) {
-		  playbae_printf("Stop requested... please wait for data flush...\n");
-		  interruptPlayBack = 0;
-		  BAESong_Stop(theSong, fadeOut);
-	       }
-               BAESong_IsDone(theSong, &done);
-	       BAESong_GetMicrosecondPosition(theSong, &currentPosition);
-               currentPosition = currentPosition / 1000;
+                  if (interruptPlayBack) {
+                     playbae_printf("Stop requested... please wait for data flush...\n");
+                     interruptPlayBack = 0;
+                     BAESong_Stop(theSong, fadeOut);
+                  }
+                  // Service encoder/mixer first so new events trigger before done check
+                  if(gWriteToFile){ BAEMixer_ServiceAudioOutputToFile(theMixer); }
+                  BAESong_IsDone(theSong, &done);
+                  BAESong_GetMicrosecondPosition(theSong, &currentPosition);
+                  currentPosition = currentPosition / 1000;
                
                // Detect loop reset - if current position is significantly less than last position
                if (currentPosition < lastPosition && (lastPosition - currentPosition) > 1000) {
@@ -759,6 +809,37 @@ static BAEResult PlayRMF(BAEMixer theMixer, char *fileName, BAE_UNSIGNED_FIXED v
 	    if (verboseMode) {
 	            BAESong_DisplayInfo(theSong);
 	    }
+#ifdef USE_MPEG_ENCODER
+            if(gWriteToFile){
+               for(int prime=0; prime<8; ++prime){
+                  BAEResult serr = BAEMixer_ServiceAudioOutputToFile(theMixer);
+                  if (serr != BAE_NO_ERROR) {
+                     playbae_printf("MP3 export initialization failed (BAE Error #%d: %s). Aborting.\n", serr, BAE_GetErrorString(serr));
+                     BAESong_Stop(theSong, fadeOut);
+                     BAESong_Delete(theSong);
+                     BAEMixer_Delete(theMixer);
+                     return serr;
+                  }
+               }
+               BAE_BOOL preDone=TRUE; int safety=0;
+               while(preDone && safety < 32){
+                  BAESong_IsDone(theSong, &preDone);
+                  if(!preDone) break;
+                  {
+                     BAEResult serr = BAEMixer_ServiceAudioOutputToFile(theMixer);
+                     if (serr != BAE_NO_ERROR) {
+                        playbae_printf("MP3 export initialization failed (BAE Error #%d: %s). Aborting.\n", serr, BAE_GetErrorString(serr));
+                        BAESong_Stop(theSong, fadeOut);
+                        BAESong_Delete(theSong);
+                        BAEMixer_Delete(theMixer);
+                        return serr;
+                     }
+                  }
+                  BAE_WaitMicroseconds(2000);
+                  safety++;
+               }
+            }
+#endif
 
             BAEMixer_SetDefaultReverb(theMixer, (BAEReverbType)reverbType);
             playbae_printf("Reverb Type set to %d\n", reverbType);
@@ -777,16 +858,17 @@ static BAEResult PlayRMF(BAEMixer theMixer, char *fileName, BAE_UNSIGNED_FIXED v
             }
             playbae_dprintf("BAE memory used for everything %ld bytes\n\n", BAE_GetSizeOfMemoryUsed());
             done = FALSE;
-	    while (done == FALSE)
+   	    while (done == FALSE)
             {
-	       if (interruptPlayBack) {
-		  playbae_printf("Stop requested... please wait for data flush...\n");
-		  interruptPlayBack = 0;
-		  BAESong_Stop(theSong, fadeOut);
-	       }
-               BAESong_IsDone(theSong, &done);
-	       BAESong_GetMicrosecondPosition(theSong, &currentPosition);
-               currentPosition = currentPosition / 1000;
+                  if (interruptPlayBack) {
+                     playbae_printf("Stop requested... please wait for data flush...\n");
+                     interruptPlayBack = 0;
+                     BAESong_Stop(theSong, fadeOut);
+                  }
+                  if(gWriteToFile){ BAEMixer_ServiceAudioOutputToFile(theMixer); }
+                  BAESong_IsDone(theSong, &done);
+                  BAESong_GetMicrosecondPosition(theSong, &currentPosition);
+                  currentPosition = currentPosition / 1000;
                
                // Detect loop reset - if current position is significantly less than last position
                if (currentPosition < lastPosition && (lastPosition - currentPosition) > 1000) {
@@ -918,6 +1000,26 @@ int main(int argc, char *argv[])
    {
         silentMode = FALSE;
 	verboseMode = TRUE;
+   }
+
+   /* Parse -b (MP3 bitrate) early; support both '-b 192' and '-b192'. */
+   for(int i=1;i<argc;i++){
+      if(strncmp(argv[i], "-b", 2)==0){
+         const char *val = NULL;
+         if(argv[i][2] != '\0'){
+            val = &argv[i][2]; /* concatenated form */
+         } else if(i+1 < argc){
+            val = argv[i+1];
+         }
+         if(val){
+            int kb = atoi(val);
+            if(kb <= 0){ continue; }
+            /* Clamp total kbps to reasonable MP3 CBR bounds (mono 8..320, stereo 16..640). */
+            if(kb < 16) kb = 16; /* allow low but sane */
+            if(kb > 640) kb = 640;
+            gMP3BitrateKbps = kb;
+         }
+      }
    }
 
 #ifdef SUPPORT_KARAOKE
@@ -1094,8 +1196,8 @@ int main(int argc, char *argv[])
 	 }
          if (PV_ParseCommands(argc, argv, "-o", TRUE, parmFile))
          {
-	    // do not update position timer as often since it will be much faster
-	    positionDisplayMultiplier = 100; // 1 update per second of media
+    	// do not update position timer as often since it will be much faster
+    	positionDisplayMultiplier = 100; // 1 update per second of media
 
             err = BAEMixer_StartOutputToFile(theMixer,
                                              (BAEPathName)parmFile,
@@ -1108,11 +1210,68 @@ int main(int argc, char *argv[])
             else
             {
                gWriteToFile = TRUE;
+               gWriteToFileType = BAE_WAVE_TYPE;
 #ifdef SUPPORT_KARAOKE               
                gEnableKaraoke = 0; // disable karaoke during export
 #endif
                playbae_printf("Writing to file %s\n", parmFile);
             }
+         }
+         if (PV_ParseCommands(argc, argv, "-om", TRUE, parmFile))
+         {
+#if defined(USE_MPEG_ENCODER) && (USE_MPEG_ENCODER!=0)
+            positionDisplayMultiplier = 100;
+            // Map total kbps to per-channel enum
+            BAEAudioModifiers modsTmp; BAEMixer_GetModifiers(theMixer, &modsTmp);
+            int channels = (modsTmp & BAE_USE_STEREO)?2:1;
+         /* -b specifies TOTAL kbps. Derive per-channel for enum selection. */
+            int totalReq = gMP3BitrateKbps;
+            /* Enforce a sane minimum: historically very low total bitrates (eg. 32/56)
+            * can cause the encoder to fail to initialize. Require >=64 kbps. */
+            if(totalReq < 96 && (rate == BAE_RATE_32K || rate == BAE_RATE_44K)) {
+               playbae_printf("MP3 export requires a minimum total bitrate of 96kbps at 44100hz; requested %dkbps. Aborting MP3 export.\n", totalReq);
+               BAEMixer_Delete(theMixer);
+               return 1;
+            } else if (totalReq < 24) {
+               playbae_printf("MP3 export requires a minimum total bitrate of 24kbps at %dhz; requested %dkbps. Aborting MP3 export.\n", rate, totalReq);
+               BAEMixer_Delete(theMixer);
+               return 1;
+            }
+            if(totalReq > 320) totalReq = 320; /* MP3 Layer III practical max total */
+               int perChan = totalReq / channels;
+               if(perChan < 8) perChan = 8;
+               if(perChan > 320) perChan = 320;
+            BAECompressionType cType = BAE_COMPRESSION_MPEG_128; // default
+            struct {int rate; BAECompressionType ct;} mapTbl[] = {
+                {8,BAE_COMPRESSION_MPEG_8},{16,BAE_COMPRESSION_MPEG_16},{24,BAE_COMPRESSION_MPEG_24},
+                {32,BAE_COMPRESSION_MPEG_32},{40,BAE_COMPRESSION_MPEG_40},{48,BAE_COMPRESSION_MPEG_48},{56,BAE_COMPRESSION_MPEG_56},
+                {64,BAE_COMPRESSION_MPEG_64},{80,BAE_COMPRESSION_MPEG_80},{96,BAE_COMPRESSION_MPEG_96},{112,BAE_COMPRESSION_MPEG_112},
+                {128,BAE_COMPRESSION_MPEG_128},{160,BAE_COMPRESSION_MPEG_160},{192,BAE_COMPRESSION_MPEG_192},{224,BAE_COMPRESSION_MPEG_224},
+                {256,BAE_COMPRESSION_MPEG_256},{320,BAE_COMPRESSION_MPEG_320}
+            };
+            /* Choose closest match based on per-channel kbps so '-b' remains a TOTAL kbps argument. */
+            int bestDiff = 1000; for(size_t i=0;i<sizeof(mapTbl)/sizeof(mapTbl[0]);++i){int d=abs(mapTbl[i].rate - perChan); if(d<bestDiff){bestDiff=d; cType=mapTbl[i].ct;}}
+            err = BAEMixer_StartOutputToFile(theMixer,(BAEPathName)parmFile, BAE_MPEG_TYPE, cType);
+            if(err){
+               playbae_printf("Error %d starting MP3 export: %s\n", err, parmFile);
+               /* Fail fast: user explicitly requested MP3 export, so do not fall back to playback. */
+               BAEMixer_Delete(theMixer);
+               return 1;
+            } else {
+            gWriteToFile=TRUE; gWriteToFileType = BAE_MPEG_TYPE;
+            int total = totalReq;
+            if(channels > 1){
+               playbae_printf("Writing MP3 (CBR %d kbps total, %d ch @ %d kbps/ch) to %s\n", total, channels, perChan, parmFile);
+            } else {
+               playbae_printf("Writing MP3 (CBR %d kbps, mono) to %s\n", total, parmFile);
+            }
+            }
+#else
+            playbae_printf("MP3 encoder not built. Rebuild with MP3_ENC=1, e.g.: make clean && make MP3_ENC=1\n");
+            /* User explicitly requested MP3 export; fail rather than continuing to playback. */
+            BAEMixer_Delete(theMixer);
+            return 1;
+#endif
          }
 
          if (argc > 1 && argv[1][0] != (char)'-') {
@@ -1173,7 +1332,26 @@ int main(int argc, char *argv[])
 
          if (gWriteToFile)
          {
-            BAEMixer_StopOutputToFile();
+         // If MP3 export, run dedicated service loop until song/sound done
+#if defined(USE_MPEG_ENCODER) && (USE_MPEG_ENCODER!=0)
+       if(gWriteToFileType == BAE_MPEG_TYPE){
+         /* Service until mixer reports inactivity.
+          * We approximate activity by observing samplesWritten delta across passes. */
+         uint32_t lastSamples = 0; uint32_t stableLoops = 0; const uint32_t stableThreshold = 8;
+         while(stableLoops < stableThreshold){
+            BAEMixer_ServiceAudioOutputToFile(theMixer);
+            // Sleep roughly one engine slice (11ms) to avoid over-producing
+            BAE_WaitMicroseconds(11000);
+                uint32_t curSamples = BAE_GetDeviceSamplesPlayedPosition();
+            if(curSamples == lastSamples){
+               stableLoops++;
+            } else {
+               stableLoops = 0; lastSamples = curSamples;
+            }
+         }
+       }
+#endif
+         BAEMixer_StopOutputToFile();
          }
       }
       else

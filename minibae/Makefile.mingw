@@ -43,8 +43,6 @@ endif
 
 include inc/Makefile.versioning
 CFLAGS		+= -D_VERSION=\""$(VERSION)"\"
-
-CXXFLAGS 	:= $(CFLAGS)
 LDFLAGS		:= $(ARCH) $(OPTI) -s -mconsole 
 
 
@@ -65,12 +63,12 @@ LIBS   = \
 
 ifneq ($(USE_SDL),)
     ifeq ($(BITS),32)
-        CFLAGS  += -I../SDL2-2.32.8/i686-w64-mingw32/include/SDL2
-        LDFLAGS += -L../SDL2-2.32.8/i686-w64-mingw32/lib
+        CFLAGS   += -I../SDL2-2.32.8/i686-w64-mingw32/include/SDL2
+        LDFLAGS  += -L../SDL2-2.32.8/i686-w64-mingw32/lib
         TARGET_NAME := playbae_sdl2_x32.exe
     else
-        CFLAGS  += -I../SDL2-2.32.8/x86_64-w64-mingw32/include/SDL2
-        LDFLAGS += -L../SDL2-2.32.8/x86_64-w64-mingw32/lib
+        CFLAGS    += -I../SDL2-2.32.8/x86_64-w64-mingw32/include/SDL2
+        LDFLAGS   += -L../SDL2-2.32.8/x86_64-w64-mingw32/lib
         TARGET_NAME := playbae_sdl2_x64.exe
     endif
     # Override LIBS completely for SDL build to enforce correct ordering
@@ -99,6 +97,15 @@ ifneq ($(USE_SDL),)
                 -lodbc32 \
                 -lodbccp32
 endif
+
+
+# If MP3 encoder (Helix, C++) is enabled, link with C++ linker to pull in libstdc++
+ifeq ($(MP3_ENC),1)
+    LD := $(CXX)
+    LIBS += -lstdc++ -lsupc++
+endif
+
+CXXFLAGS 	:= $(CFLAGS)
 
 all: $(TARGET_LIB).a ${TARGET_LIB}.dll $(TARGET_BIN)
 

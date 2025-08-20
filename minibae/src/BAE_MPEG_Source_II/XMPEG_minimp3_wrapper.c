@@ -194,13 +194,15 @@ uint32_t MPG_GetSizeInBytes(void *reference){ Minimp3Stream *s=(Minimp3Stream*)r
 uint32_t MPG_GetNumberOfSamples(void *reference){ uint32_t bytes=MPG_GetSizeInBytes(reference); int ch=MPG_GetChannels(reference); return ch? bytes/ (ch*2):0; }
 int MPG_SeekStream(void *reference, uint32_t newPos){ Minimp3Stream *s=(Minimp3Stream*)reference; if(!s) return -1; if(s->readMode!=MM_READ_MEMORY) return -1; if(newPos>=s->mem_size) newPos = (uint32_t)s->mem_size; s->raw_offset=newPos; mp3dec_init(&s->dec); return 0; }
 
-/* Stubs for encoder side to satisfy linkage if old code compiled with USE_MPEG_ENCODER=0 */
+/* Encoder stub functions: only compile when encoder support is NOT enabled */
+#if !defined(USE_MPEG_ENCODER) || (USE_MPEG_ENCODER==0)
 void * MPG_EncodeNewStream(uint32_t a,uint32_t b,uint32_t c,XPTR d,uint32_t e){(void)a;(void)b;(void)c;(void)d;(void)e;return NULL;}
 int MPG_EncodeProcess(void *s, XPTR *b, uint32_t *sz, XBOOL *last){(void)s;(void)b;(void)sz;(void)last;return 0;}
 void MPG_EncodeFreeStream(void *s){(void)s;}
 uint32_t MPG_EncodeMaxFrames(void *s){(void)s; return 0;}
 uint32_t MPG_EncodeMaxFrameSize(void *s){(void)s; return 0;}
 void MPG_EncodeSetRefillCallback(void *s, MPEGFillBufferFn cb, void *r){(void)s;(void)cb;(void)r;}
+#endif
 
 XMPEGEncodeRate XGetMPEGEncodeRate(SndCompressionType type){(void)type;return (XMPEGEncodeRate)0;}
 SndCompressionType XGetMPEGCompressionType(XMPEGEncodeRate rate){(void)rate;return (SndCompressionType)0;}
