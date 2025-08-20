@@ -3406,6 +3406,11 @@ GetMIDIevent:
                                 cbPtr = allocated; // pass copy
                             }
                         }
+                        BAE_STDERR("DEBUG: MIDI Event: Type=0x%02X, Data=%.*s, DataHex=", midi_byte, (int)value, (char *)cbPtr);
+                        for (int i = 0; i < value; i++) {
+                            BAE_STDERR("%02X ", ((unsigned char *)cbPtr)[i]);
+                        }
+                        BAE_STDERR("\n");
                         PV_CallSongMetaEventCallback(threadContext, pSong, midi_byte, cbPtr, value, (int16_t)currentTrack);
                         if (allocated)
                         {
@@ -3419,8 +3424,16 @@ GetMIDIevent:
                             XBOOL invoke = FALSE;
                             const char *lyricStr = (const char *)cbPtr; /* NUL terminated */
                             static XBOOL s_seenTrueLyric = FALSE;
-                            if(midi_byte == 0x05){
-                                invoke = TRUE; s_seenTrueLyric =  TRUE; /* real lyric */
+                            if(midi_byte == 0x05) {
+                                s_seenTrueLyric = TRUE;
+                                if (lyricStr && lyricStr[0] && lyricStr[0] == '\r') {
+                                    /* Translate Carrage Return to newline by sending empty lyric */
+                                    uint32_t lyrTimeUs = (uint32_t)pSong->songMicroseconds;
+                                    char empty[1] = {'\0'};
+                                    pSong->lyricCallbackPtr(pSong, empty, lyrTimeUs, pSong->lyricCallbackReference);
+                                } else {
+                                    invoke = TRUE; /* real lyric */ 
+                                }                                
                             } else if(midi_byte == 0x01){
                                 /* Follow negated form: do NOT treat GenericText starting with '@' as lyric content. */
                                 if(lyricStr && lyricStr[0]=='@'){
@@ -3428,8 +3441,11 @@ GetMIDIevent:
                                     uint32_t lyrTimeUs = (uint32_t)pSong->songMicroseconds;
                                     char empty[1] = {'\0'};
                                     pSong->lyricCallbackPtr(pSong, empty, lyrTimeUs, pSong->lyricCallbackReference);
+                                } else if (lyricStr && lyricStr[0]=='\\') {
+                                    s_seenTrueLyric = TRUE;
+                                    invoke = TRUE;
                                 } else {
-                                    if(!s_seenTrueLyric){ invoke = TRUE; }
+                                    if(s_seenTrueLyric){ invoke = TRUE; }
                                 }
                             }
                             if(invoke && lyricStr && lyricStr[0]){
