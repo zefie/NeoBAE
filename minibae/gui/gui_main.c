@@ -314,7 +314,6 @@ typedef struct {
     char src[128];
     char name[128];
     char sha1[48];
-    bool is_default;
 } BankEntry;
 static BankEntry banks[32]; // Static array for simplicity
 static int bank_count = 0;
@@ -326,17 +325,16 @@ static int g_window_h = WINDOW_BASE_H; // dynamic height (expands when karaoke v
 static void load_bankinfo() {
     // Replaced XML parsing with embedded metadata from bankinfo.h
     bank_count = 0;
-    for(int i=0; i<kEmbeddedBankCount && i<32; ++i){
-        const EmbeddedBankInfo *eb = &kEmbeddedBanks[i];
+    for(int i=0; i<kBankCount && i<32; ++i){
+        const BankInfo *eb = &kBanks[i];
         BankEntry *be = &banks[bank_count];
         memset(be,0,sizeof(*be));
         // src now unknown until user loads; retain legacy src field only for UI display when known
         strncpy(be->name, eb->name, sizeof(be->name)-1);
         strncpy(be->sha1, eb->sha1, sizeof(be->sha1)-1);
-        be->is_default = eb->is_default ? true : false;
         bank_count++;
     }
-    BAE_PRINTF("Loaded %d embedded banks (no XML IO)\n", bank_count);
+    BAE_PRINTF("Loaded info about %d banks\n", bank_count);
 }
 
 // -------- Text rendering abstraction --------
@@ -1639,26 +1637,7 @@ static bool load_bank_simple(const char *path, bool save_to_settings, int reverb
     if (!path) {
         BAE_PRINTF("No bank specified, trying fallback discovery\n");
         
-        // First try banks from XML database with default flag
-        for(int i=0; i<bank_count && !g_bae.bank_loaded; ++i){
-            if(banks[i].is_default) {
-                char bank_path[512];
-                snprintf(bank_path, sizeof(bank_path), "Banks/%s", banks[i].src);
-                BAE_PRINTF("Trying fallback bank: %s\n", bank_path);
-                if(load_bank(bank_path, false, 0, 100, 75, loop_enabled, reverb_type, dummy_ch, false)) {
-                    BAE_PRINTF("Fallback bank loaded successfully: %s\n", bank_path);
-                    return true;
-                }
-                // Try without Banks/ prefix
-                BAE_PRINTF("Trying fallback bank without prefix: %s\n", banks[i].src);
-                if(load_bank(banks[i].src, false, 0, 100, 75, loop_enabled, reverb_type, dummy_ch, false)) {
-                    BAE_PRINTF("Fallback bank loaded successfully: %s\n", banks[i].src);
-                    return true;
-                }
-            }
-        }
-        
-        // Then try traditional auto bank discovery
+        // Try traditional auto bank discovery
         const char *autoBanks[] = {
 #ifdef _BUILT_IN_PATCHES
             "__builtin__",

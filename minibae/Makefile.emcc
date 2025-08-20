@@ -10,7 +10,9 @@ include inc/Makefile.common
 
 EXTRA_FILES		:= \
 			src/playbae/minibae-audio.htm \
-			src/playbae/minibae-audio.js
+			src/playbae/minibae-audio.js \
+			src/banks/WTVBanks/wpatches-classic.hsb \
+			src/TestSuite/world1.mid
 
 ARCH		:= -static
 CC		:= emcc

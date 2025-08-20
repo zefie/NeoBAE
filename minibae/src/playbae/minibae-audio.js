@@ -11,23 +11,48 @@ const TYPE_TO_CMD = {
 function initAndResumeAudioContext() {
     const audioContext = new AudioContext();
 
-    // Function to resume AudioContext
-    const resumeAudioContext = () => {
-        if (audioContext.state === 'suspended') {
-            audioContext.resume().then(() => {
-                console.log('AudioContext resumed');
-            }).catch((err) => {
-                console.error('Failed to resume AudioContext:', err);
-            });
+    // Return a promise that resolves when the AudioContext is running (resumed).
+    return new Promise((resolve, reject) => {
+        // If already running, resolve immediately
+        if (audioContext.state === 'running') {
+            resolve(audioContext);
+            return;
         }
-    };
 
-    // Attach the resume function to user interaction events
-    document.addEventListener('click', resumeAudioContext, { once: true });
-    document.addEventListener('keydown', resumeAudioContext, { once: true });
-    document.addEventListener('touchstart', resumeAudioContext, { once: true });
+        const cleanup = () => {
+            document.removeEventListener('click', onInteraction);
+            document.removeEventListener('keydown', onInteraction);
+            document.removeEventListener('touchstart', onInteraction);
+            audioContext.onstatechange = null;
+        };
 
-    return audioContext;
+        const onInteraction = () => {
+            if (audioContext.state === 'suspended') {
+                audioContext.resume().then(() => {
+                    console.log('AudioContext resumed');
+                    cleanup();
+                    resolve(audioContext);
+                }).catch((err) => {
+                    console.error('Failed to resume AudioContext:', err);
+                    cleanup();
+                    reject(err);
+                });
+            }
+        };
+
+        // Attach a single-use listener to user interaction events to attempt resume
+        document.addEventListener('click', onInteraction, { once: true });
+        document.addEventListener('keydown', onInteraction, { once: true });
+        document.addEventListener('touchstart', onInteraction, { once: true });
+
+        // Also watch for state changes (some browsers may change state without an explicit resume call)
+        audioContext.onstatechange = () => {
+            if (audioContext.state === 'running') {
+                cleanup();
+                resolve(audioContext);
+            }
+        };
+    });
 }
 
 
@@ -90,34 +115,55 @@ class MiniBAEAudio extends HTMLAudioElement {
     constructor() {
         super();
         window.miniBAEInstance = this;
-        this.initBAE();       
-        this.audioContext = new initAndResumeAudioContext();
-        this.sampleRate = 44100; // Set the sample rate for your audio
-        this.bufferManager = new AudioBufferManager(this.audioContext, this.sampleRate);
+        // Defer async initialization to avoid making the constructor async
+        this.audioContext = null;
+        this.sampleRate = 44100; // default until we get the real context sampleRate
+        this.bufferManager = null;
+        this.postAudioData = null;
+
+        // kick off async setup that will await AudioContext and then init BAE
+        this._setup();
+    }
+
+    async _setup() {
+        try {
+                this.audioContext = await initAndResumeAudioContext();
+                // Keep `this.sampleRate` as the source/sample rate produced by PlayBAE (default 44100).
+                // Let the browser resample the buffer to the AudioContext's playback rate so pitch stays correct.
+                this.bufferManager = new AudioBufferManager(this.audioContext, this.sampleRate);
+            await this.initBAE();
+        } catch (err) {
+            console.error('Failed to initialize audio context or BAE:', err);
+        }
     }
 
     async playAudioData(leftChannel, rightChannel) {
         
+        // Ensure audioContext is available
+        if (!this.audioContext) {
+            console.warn('playAudioData called before audioContext was ready');
+            return;
+        }
 
         // Create a new AudioBuffer with 2 channels (stereo), matching sample rate and data length
-        const audioBuffer = audioContext.createBuffer(2, leftChannel.length, audioContext.sampleRate);
-    
+        const audioBuffer = this.audioContext.createBuffer(2, leftChannel.length, this.audioContext.sampleRate);
+
         // Copy the left and right channels into the AudioBuffer
         audioBuffer.copyToChannel(leftChannel, 0); // Left channel
         audioBuffer.copyToChannel(rightChannel, 1); // Right channel
-    
+
         // Create a new AudioBufferSourceNode
-        const sourceNode = audioContext.createBufferSource();
+        const sourceNode = this.audioContext.createBufferSource();
         sourceNode.buffer = audioBuffer;
-    
+
         // Connect the source node to the audio context's destination
-        sourceNode.connect(audioContext.destination);
-    
+        sourceNode.connect(this.audioContext.destination);
+
         // Start playback
-        sourceNode.start();  // This should now work if `sourceNode` is valid
-        console.log("AudioContext state:", audioContext.state);
-        console.log("AudioBuffer channels:", audioBuffer.numberOfChannels);
-        console.log("AudioBuffer sampleRate:", audioBuffer.sampleRate);
+        sourceNode.start();
+        console.log('AudioContext state:', this.audioContext.state);
+        console.log('AudioBuffer channels:', audioBuffer.numberOfChannels);
+        console.log('AudioBuffer sampleRate:', audioBuffer.sampleRate);
     }
 
     async initBAE() {

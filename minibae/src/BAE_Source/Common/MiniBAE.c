@@ -232,7 +232,13 @@ const char* BAE_GetVersion()
 const char* BAE_GetCompileInfo() {
 	size_t maxStrSize = 128;
 	char *versionString = (char *)malloc(sizeof (char) * maxStrSize);
-	#ifdef __clang_major_
+    #ifdef __EMSCRIPTEN__
+		#ifdef __cplusplus
+			snprintf(versionString, maxStrSize, "clang++ v%d.%d, emscripten v%d.%d", __clang_major__, __clang_minor__, __EMSCRIPTEN_major__, __EMSCRIPTEN_minor__);
+		#else
+			snprintf(versionString, maxStrSize, "clang v%d.%d, emscripten v%d.%d", __clang_major__, __clang_minor__, __EMSCRIPTEN_major__, __EMSCRIPTEN_minor__);
+		#endif
+	#elif __clang_major_
 		#ifdef __cplusplus
 			snprintf(versionString, maxStrSize, "clang++ v%d.%d", __clang_major__, __clang_minor__);
 		#else
@@ -250,7 +256,7 @@ const char* BAE_GetCompileInfo() {
 		#else
 			snprintf(versionString, maxStrSize, "gcc v%d.%d", __GNUC__, __GNUC_MINOR__);
 		#endif
-	#else
+    #else
 		snprintf(versionString, maxStrSize, "UNKNOWN");
 	#endif
         return versionString;
@@ -305,6 +311,8 @@ const char *BAE_GetCurrentCPUArchitecture() { // Get current architecture, detec
         return "SPARC" BAE_SDL_SUFFIX;
     #elif defined(__m68k__)
         return "M68K" BAE_SDL_SUFFIX;
+    #elif defined(WASM)
+        return "WASM" BAE_SDL_SUFFIX;
     #else
         return "UNKNOWN" BAE_SDL_SUFFIX;
     #endif
@@ -452,8 +460,8 @@ static void PV_RegisterBankFriendly(BAEBankToken token, const char *sha1Hex){
     e->token = token;
     strncpy(e->sha1, sha1Hex, 40); e->sha1[40]='\0';
     e->friendly = NULL;
-    for(int i=0;i<kEmbeddedBankCount;i++){
-        if(strcmp(sha1Hex, kEmbeddedBanks[i].sha1)==0){ e->friendly = kEmbeddedBanks[i].name; break; }
+    for(int i=0;i<kBankCount;i++){
+        if(strcmp(sha1Hex, kBanks[i].sha1)==0){ e->friendly = kBanks[i].name; break; }
     }
     g_bankFriendlyCacheCount++;
 }
@@ -3335,8 +3343,6 @@ BAEResult BAEMixer_ServiceAudioOutputToFile(BAEMixer theMixer)
     theErr = NO_ERR;
 
 #ifdef WASM
-    // FIX: previous code used bitwise NOT (~BAE_USE_STEREO) producing almost always non-zero
-    // which forced channels=2 and led to incorrect header parameters. Correct test below.
     channels = (theModifiers & BAE_USE_STEREO) ? 2 : 1;
     sampleSize = (theModifiers /*iModifiers*/ & BAE_USE_16) ? 2 : 1;
     uint32_t numSamples = (uint32_t)(mWritingDataBlockSize / sampleSize / channels);
@@ -3345,8 +3351,6 @@ BAEResult BAEMixer_ServiceAudioOutputToFile(BAEMixer theMixer)
     process_and_send_audio(mWritingDataBlock, numSamples);
     return BAE_TranslateOPErr(theErr);
 #endif
-
-
 
     if (mWritingToFile && mWritingToFileReference)
     {
