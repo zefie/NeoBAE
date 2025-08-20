@@ -2,6 +2,7 @@ BUILD_DIR	:= build/
 TEST_OUT_DIR	:= tests/
 TARGET_OUT	:= bin/
 BAE_FLAGS	:=
+MP3_ENC := 1
 
 # Begin Allow Overrides
 ifeq ($(TARGET_LIB),)
