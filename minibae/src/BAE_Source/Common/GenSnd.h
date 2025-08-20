@@ -1193,6 +1193,10 @@ struct GM_Song
     XSBYTE              channelBank[MAX_CHANNELS];                      // current bank
     XSWORD              channelStereoPosition[MAX_CHANNELS];            // current channel stereo position
 
+    // Realtime note activity tracking for GUI virtual keyboard.
+    // Stores current velocity (>0) for active notes per channel; 0 means off.
+    XBYTE               channelActiveNotes[16][128];
+
 // mute controls for tracks, channels, and solos
 // NOTE: Do not access these directly. Use XSetBit & XClearBit & XTestBit
     XDWORD              trackMuted[(MAX_TRACKS / 32) + 1];          // track mute control bits 

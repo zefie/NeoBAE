@@ -5898,6 +5898,9 @@ BAESong BAESong_New(BAEMixer mixer)
                     song->mValid = 1;
 #endif
                     song->mID = OBJECT_ID;
+                    if(song->pSong){
+                        memset(song->pSong->channelActiveNotes, 0, sizeof(song->pSong->channelActiveNotes));
+                    }
                 }
     
                 if (result)
@@ -7080,6 +7083,40 @@ BAEResult BAESong_GetChannelSoloStatus(BAESong song, BAE_BOOL *outChannels)
         {
             BAE_AcquireMutex(song->mLock);
             GM_GetChannelSoloStatus(song->pSong, outChannels);
+            BAE_ReleaseMutex(song->mLock);
+        }
+        else
+        {
+            err = PARAM_ERR;
+        }
+    }
+    else
+    {
+        err = NULL_OBJECT;
+    }
+    return BAE_TranslateOPErr(err);
+}
+
+// BAESong_GetActiveNotes()
+// --------------------------------------
+// Thread-safe copy of current active note velocities for a channel.
+BAEResult BAESong_GetActiveNotes(BAESong song, unsigned char channel, unsigned char *outNotes)
+{
+    OPErr err = NO_ERR;
+    if( (song) && (song->mID == OBJECT_ID) )
+    {
+        if(outNotes && channel < 16)
+        {
+            memset(outNotes, 0, 128);
+            BAE_AcquireMutex(song->mLock);
+            if(song->pSong)
+            {
+                memcpy(outNotes, song->pSong->channelActiveNotes[channel], 128);
+            }
+            else
+            {
+                err = NOT_SETUP;
+            }
             BAE_ReleaseMutex(song->mLock);
         }
         else

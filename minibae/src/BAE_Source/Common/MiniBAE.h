@@ -1971,6 +1971,15 @@ BAEResult           BAESong_UnSoloChannel(BAESong song,
 BAEResult           BAESong_GetChannelSoloStatus(BAESong song,
                             BAE_BOOL *outChannels);
 
+// BAESong_GetActiveNotes()
+// --------------------------------------
+// Copies the current velocity (1..127) for each MIDI note (0..127) on the
+// specified channel into outNotes (array of 128 bytes). 0 indicates the note
+// is not currently sounding. Returns BAE_NO_ERROR on success.
+BAEResult           BAESong_GetActiveNotes(BAESong song,
+                            unsigned char channel,
+                            unsigned char *outNotes /* 128 bytes */);
+
 
 // BAESong_LoadInstrument()
 // --------------------------------------

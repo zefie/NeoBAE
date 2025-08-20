@@ -739,6 +739,12 @@ typedef struct {
 
 static BAEGUI g_bae = {0};
 static bool g_reverbDropdownOpen = false;
+// Virtual MIDI Keyboard panel state
+static int g_keyboard_channel = 0; // 0..15
+static bool g_keyboard_channel_dd_open = false;
+static unsigned char g_keyboard_active_notes[128]; // temp buffer each frame
+static bool g_show_virtual_keyboard = false; // user toggle (default off)
+static int g_keyboard_mouse_note = -1; // currently held note by mouse, -1 if none
 #ifdef SUPPORT_KARAOKE
 // Karaoke / lyric display state
 static bool g_karaoke_enabled = true; // simple always-on toggle (future: UI setting)
@@ -1029,6 +1035,8 @@ typedef struct {
     bool stereo_output;
     bool has_sample_rate;
     int sample_rate_hz;
+    bool has_show_keyboard;
+    bool show_keyboard;
 } Settings;
 
 static void save_settings(const char* last_bank_path, int reverb_type, bool loop_enabled) {
@@ -1069,6 +1077,7 @@ static void save_settings(const char* last_bank_path, int reverb_type, bool loop
         fprintf(f, "volume_curve=%d\n", g_volume_curve);
         fprintf(f, "stereo_output=%d\n", g_stereo_output ? 1 : 0);
         fprintf(f, "sample_rate=%d\n", g_sample_rate_hz);
+    fprintf(f, "show_keyboard=%d\n", g_show_virtual_keyboard ? 1 : 0);
         BAE_PRINTF("Saved settings: last_bank=%s reverb=%d loop=%d volCurve=%d stereo=%d rate=%d\n", 
             path_to_save ? path_to_save : "", reverb_type, loop_enabled ? 1 : 0, g_volume_curve, g_stereo_output?1:0, g_sample_rate_hz);
         fclose(f);
@@ -1090,6 +1099,7 @@ static Settings load_settings() {
     settings.has_volume_curve = false; settings.volume_curve = 0;
     settings.has_stereo = false; settings.stereo_output = true;
     settings.has_sample_rate = false; settings.sample_rate_hz = 44100;
+    settings.has_show_keyboard = false; settings.show_keyboard = false;
     
     // Build path to settings file in executable directory
     char settings_path[768];
@@ -1144,6 +1154,10 @@ static Settings load_settings() {
             if(settings.sample_rate_hz < 7000 || settings.sample_rate_hz > 50000){ settings.sample_rate_hz = 44100; }
             settings.has_sample_rate = true;
             BAE_PRINTF("Loaded sample rate: %d\n", settings.sample_rate_hz);
+        } else if (strncmp(line, "show_keyboard=", 14) == 0) {
+            settings.show_keyboard = (atoi(line + 14) != 0);
+            settings.has_show_keyboard = true;
+            BAE_PRINTF("Loaded show keyboard: %d\n", settings.show_keyboard?1:0);
         }
     }
     
@@ -2139,6 +2153,7 @@ int main(int argc, char *argv[]){
     if (settings.has_volume_curve) { g_volume_curve = (settings.volume_curve>=0 && settings.volume_curve<=4)?settings.volume_curve:0; }
     if (settings.has_stereo) { g_stereo_output = settings.stereo_output; }
     if (settings.has_sample_rate) { g_sample_rate_hz = settings.sample_rate_hz; }
+    if (settings.has_show_keyboard) { g_show_virtual_keyboard = settings.show_keyboard; }
     // Apply stored default velocity (aka volume) curve to global engine setting so new songs adopt it
     if (settings.has_volume_curve) {
         BAE_SetDefaultVelocityCurve(g_volume_curve);
@@ -2406,9 +2421,12 @@ int main(int argc, char *argv[]){
     SDL_Color panelBorder = g_panel_border;
         
         // Draw main panels
-        Rect channelPanel = {10, 10, 380, 140};
-        Rect controlPanel = {400, 10, 490, 140};
-        Rect transportPanel = {10, 160, 880, 80};
+    Rect channelPanel = {10, 10, 380, 140};
+    Rect controlPanel = {400, 10, 490, 140};
+    Rect transportPanel = {10, 160, 880, 80};
+    int keyboardPanelY = transportPanel.y + transportPanel.h + 10;
+    Rect keyboardPanel = {10, keyboardPanelY, 880, 110};
+    bool showKeyboard = g_show_virtual_keyboard && g_bae.song_loaded && !g_bae.is_audio_file;
 #ifdef SUPPORT_KARAOKE
     // Insert karaoke panel (if active) above status panel; dynamic window height
     int karaokePanelHeight = 40;    
@@ -2420,13 +2438,13 @@ int main(int argc, char *argv[]){
     bool showKaraoke = g_karaoke_enabled && !g_karaoke_suspended &&
         (g_lyric_count > 0 || g_karaoke_line_current[0] || g_karaoke_line_previous[0]) &&
         g_bae.song_loaded && !g_bae.is_audio_file;
-    Rect karaokePanel = {10, 250, 880, karaokePanelHeight};
-    int statusY = 250;
-    int neededH = WINDOW_BASE_H;
+    // Karaoke now appears after keyboard panel
+    Rect karaokePanel = {10, (showKeyboard? (keyboardPanel.y + keyboardPanel.h + 10):(transportPanel.y + transportPanel.h + 10)), 880, karaokePanelHeight};
+    int statusY = (showKeyboard? (keyboardPanel.y + keyboardPanel.h + 10):(transportPanel.y + transportPanel.h + 10));
     if(showKaraoke){
-        statusY = karaokePanel.y + karaokePanelHeight + 5;
-        neededH = statusY + 110; // status panel + some bottom padding
+        statusY = karaokePanel.y + karaokePanel.h + 5;
     }
+    int neededH = statusY + 120; // status panel + bottom padding
     if(neededH != g_window_h){
         g_window_h = neededH;
         SDL_SetWindowSize(win, WINDOW_W, g_window_h);
@@ -2522,7 +2540,7 @@ int main(int argc, char *argv[]){
         char vbuf[32]; snprintf(vbuf,sizeof(vbuf),"%d%%", volume); 
         draw_text(R,690,115,vbuf,labelCol);
 
-        // Transport panel
+    // Transport panel
         draw_rect(R, transportPanel, panelBg);
         draw_frame(R, transportPanel, panelBorder);
         draw_text(R, 20, 170, "TRANSPORT & PROGRESS", headerCol);
@@ -2587,6 +2605,120 @@ int main(int argc, char *argv[]){
             // Also stop export if active
             if(g_exporting) {
                 bae_stop_wav_export();
+            }
+        }
+
+        // Virtual MIDI Keyboard Panel (always shown for songs, hidden for audio files)
+    if(showKeyboard){
+            draw_rect(R, keyboardPanel, panelBg);
+            draw_frame(R, keyboardPanel, panelBorder);
+            draw_text(R, keyboardPanel.x + 10, keyboardPanel.y + 8, "VIRTUAL MIDI KEYBOARD", headerCol);
+            // Channel dropdown
+            const char *chanItems[16];
+            char chanBuf[16][8];
+            for(int i=0;i<16;i++){ snprintf(chanBuf[i],sizeof(chanBuf[i]),"Ch %d", i+1); chanItems[i]=chanBuf[i]; }
+            Rect chanDD = {keyboardPanel.x + 10, keyboardPanel.y + 28, 90, 22};
+            // Render main dropdown box
+            SDL_Color ddBg = g_button_base; SDL_Color ddTxt = g_button_text; SDL_Color ddFrame = g_button_border;
+            bool overDD = point_in(ui_mx,ui_my,chanDD);
+            if(overDD) ddBg = g_button_hover;
+            draw_rect(R, chanDD, ddBg); draw_frame(R, chanDD, ddFrame);
+            draw_text(R, chanDD.x + 6, chanDD.y + 4, chanItems[g_keyboard_channel], ddTxt);
+            draw_text(R, chanDD.x + chanDD.w - 16, chanDD.y + 4, g_keyboard_channel_dd_open?"^":"v", ddTxt);
+            if(!modal_block && ui_mclick && overDD){ g_keyboard_channel_dd_open = !g_keyboard_channel_dd_open; }
+            // (Dropdown list itself drawn later for proper z-order)
+            if(!g_keyboard_channel_dd_open && ui_mclick && !overDD){ /* no-op */ }
+            // Fetch active notes
+            memset(g_keyboard_active_notes,0,sizeof(g_keyboard_active_notes));
+            if(g_bae.song){ BAESong_GetActiveNotes(g_bae.song, (unsigned char)g_keyboard_channel, g_keyboard_active_notes); }
+            // Keyboard drawing region
+            int kbX = keyboardPanel.x + 110; int kbY = keyboardPanel.y + 28; int kbW = keyboardPanel.w - 120; int kbH = keyboardPanel.h - 38;
+            // Define note range (61-key C2..C7)
+            int firstNote = 36; int lastNote = 96; // inclusive
+            // Count white keys
+            int whiteCount=0; for(int n=firstNote;n<=lastNote;n++){ int m=n%12; if(m==0||m==2||m==4||m==5||m==7||m==9||m==11) whiteCount++; }
+            if(whiteCount<1) whiteCount=1; float whiteWf = (float)kbW/whiteCount; int whiteW = (int)whiteWf; float accum=0;
+            // First pass draw white keys
+            int wIndex=0; int whiteX=kbX;
+        int mouseNoteCandidateWhite = -1; int mouseNoteCandidateBlack = -1; // track hover note (black wins)
+            for(int n=firstNote;n<=lastNote;n++){
+                int m=n%12; bool isWhite = (m==0||m==2||m==4||m==5||m==7||m==9||m==11);
+                if(isWhite){
+                    int x = kbX + (int)(wIndex*whiteWf);
+                    int nextX = kbX + (int)((wIndex+1)*whiteWf);
+                    int w = nextX - x - 1; if(w<4) w=4;
+                    SDL_Color keyCol = g_is_dark_mode ? (SDL_Color){200,200,205,255} : (SDL_Color){245,245,245,255};
+                    if(g_keyboard_active_notes[n]) keyCol = g_accent_color;
+            if(g_keyboard_mouse_note == n) keyCol = g_highlight_color; // mouse-held note priority
+                    draw_rect(R,(Rect){x,kbY,w,kbH}, keyCol);
+                    draw_frame(R,(Rect){x,kbY,w,kbH}, g_panel_border);
+                    // Optional note name for C notes
+                    if(m==0){ char nb[8]; int octave = (n/12)-1; snprintf(nb,sizeof(nb),"C%d", octave); int tw,th; measure_text(nb,&tw,&th); draw_text(R,x+2,kbY+kbH- (th+2), nb, g_is_dark_mode ? (SDL_Color){20,20,25,255} : (SDL_Color){30,30,30,255}); }
+            if(!g_keyboard_channel_dd_open && !modal_block && ui_mx>=x && ui_mx < x+w && ui_my>=kbY && ui_my < kbY+kbH){ mouseNoteCandidateWhite = n; }
+                    wIndex++;
+                }
+            }
+            // Second pass draw black keys
+            wIndex=0; // re-evaluate positions
+            // Build array mapping note->x base for white key underneath
+            int whitePos[128]; memset(whitePos,0,sizeof(whitePos));
+            for(int n=firstNote;n<=lastNote;n++){ int m=n%12; bool isWhite=(m==0||m==2||m==4||m==5||m==7||m==9||m==11); if(isWhite){ whitePos[n]=kbX + (int)(wIndex*whiteWf); wIndex++; } }
+            for(int n=firstNote;n<=lastNote;n++){
+                int m=n%12; bool isBlack = (m==1||m==3||m==6||m==8||m==10);
+                if(isBlack){
+                    // position relative to previous white key
+                    int prevWhite = n-1; while(prevWhite>=firstNote){ int mm=prevWhite%12; if(mm==0||mm==2||mm==4||mm==5||mm==7||mm==9||mm==11) break; prevWhite--; }
+                    if(prevWhite < firstNote) continue; int wx = whitePos[prevWhite]; int wxNext = wx + (int)whiteWf; int bx = wx + (int)(whiteWf*0.66f); int bw = (int)(whiteWf*0.6f); if(bw<4) bw=4; if(bx + bw > wxNext -2) bx = wxNext -2 - bw;
+                    int bh = (int)(kbH*0.62f);
+                    SDL_Color keyCol = g_is_dark_mode ? (SDL_Color){40,40,45,255} : (SDL_Color){50,50,60,255};
+                    if(g_keyboard_active_notes[n]) keyCol = g_highlight_color;
+                    if(g_keyboard_mouse_note == n) keyCol = g_accent_color; // invert colors for contrast
+                    draw_rect(R,(Rect){bx,kbY,bw,bh}, keyCol);
+                    draw_frame(R,(Rect){bx,kbY,bw,bh}, g_panel_border);
+                    if(!g_keyboard_channel_dd_open && !modal_block && ui_mx>=bx && ui_mx < bx + bw && ui_my>=kbY && ui_my < kbY+bh){ mouseNoteCandidateBlack = n; }
+                }
+            }
+            // Determine hovered note (black takes precedence over white)
+            int mouseNote = (mouseNoteCandidateBlack != -1) ? mouseNoteCandidateBlack : mouseNoteCandidateWhite;
+            // Interaction: monophonic click-n-drag play (velocity varies by vertical position)
+            if(!modal_block && !g_keyboard_channel_dd_open){
+                if(ui_mdown){
+                    if(mouseNote != -1 && mouseNote != g_keyboard_mouse_note){
+                        // Release previous
+                        if(g_keyboard_mouse_note != -1 && g_bae.song){ BAESong_NoteOff(g_bae.song,(unsigned char)g_keyboard_channel,(unsigned char)g_keyboard_mouse_note,0,0); }
+                        // Compute velocity based on Y position inside the key: quiet near top, loud near bottom.
+                        // Bottom 15 pixels always map to max velocity (127).
+                        int keyHeight = kbH; // default white key height
+                        int mod = mouseNote % 12;
+                        bool isBlack = (mod==1||mod==3||mod==6||mod==8||mod==10);
+                        if(isBlack){ keyHeight = (int)(kbH*0.62f); }
+                        int relY = ui_my - kbY; if(relY < 0) relY = 0; if(relY >= keyHeight) relY = keyHeight-1;
+                        int fromBottom = keyHeight - 1 - relY;
+                        int vel;
+                        if(fromBottom < 15){
+                            vel = 127; // bottom 15px -> max
+                        } else {
+                            int effectiveRange = keyHeight - 15; if(effectiveRange < 1) effectiveRange = 1;
+                            float t = (float)relY / (float)effectiveRange; // 0 (top) .. 1 (just above bottom zone)
+                            if(t < 0.f) t = 0.f; if(t > 1.f) t = 1.f;
+                            vel = (int)(t * 112.0f); // map into 0..112
+                            if(vel < 8) vel = 8; // floor so very top still audible
+                            if(vel > 112) vel = 112;
+                        }
+                        if(g_bae.song){ BAESong_NoteOnWithLoad(g_bae.song,(unsigned char)g_keyboard_channel,(unsigned char)mouseNote,(unsigned char)vel,0); }
+                        g_keyboard_mouse_note = mouseNote;
+                    } else if(mouseNote == -1 && g_keyboard_mouse_note != -1){
+                        // Dragged outside – stop sounding note
+                        if(g_bae.song){ BAESong_NoteOff(g_bae.song,(unsigned char)g_keyboard_channel,(unsigned char)g_keyboard_mouse_note,0,0); }
+                        g_keyboard_mouse_note = -1;
+                    }
+                } else {
+                    // Mouse released anywhere
+                    if(g_keyboard_mouse_note != -1){ if(g_bae.song){ BAESong_NoteOff(g_bae.song,(unsigned char)g_keyboard_channel,(unsigned char)g_keyboard_mouse_note,0,0); } g_keyboard_mouse_note = -1; }
+                }
+            } else {
+                // If dropdown/modal opens while holding a note, release it
+                if(g_keyboard_mouse_note != -1){ if(g_bae.song){ BAESong_NoteOff(g_bae.song,(unsigned char)g_keyboard_channel,(unsigned char)g_keyboard_mouse_note,0,0); } g_keyboard_mouse_note = -1; }
             }
         }
     if(ui_toggle(R,(Rect){160, 215, 20,20}, &loopPlay, "Loop", ui_mx,ui_my,ui_mclick && !modal_block)) { 
@@ -2696,7 +2828,7 @@ int main(int argc, char *argv[]){
         // Tooltip hover region approximate width (mono 8px * len) like bank tooltip
         int textLen = (int)strlen(base); if(textLen<1) textLen=1; int approxW = textLen * 8; if(approxW>480) approxW=480;
         Rect fileTextRect = {60, lineY1, approxW, 16};
-        if(point_in(ui_mx,ui_my,fileTextRect)){
+        if(!g_keyboard_channel_dd_open && point_in(ui_mx,ui_my,fileTextRect)){
             // Use full path as tooltip; if path equals base then show clarifying label
             char tip[512];
             if(strcmp(base, fn)==0){ snprintf(tip,sizeof(tip),"File: %s", fn); }
@@ -2731,7 +2863,7 @@ int main(int argc, char *argv[]){
             int approxW = textLen * 8; if(approxW < 8) approxW = 8; if(approxW > 400) approxW = 400; // crude clamp
             Rect bankTextRect = {60, lineY2, approxW, 16};
             // Prepare deferred tooltip drawing at end of frame (post status text)
-            if(point_in(ui_mx,ui_my,bankTextRect)){
+            if(!g_keyboard_channel_dd_open && point_in(ui_mx,ui_my,bankTextRect)){
                 char tip[512];
                 if(friendly_name && friendly_name[0] && strcmp(friendly_name, base) != 0){
                     snprintf(tip,sizeof(tip),"%s", g_bae.bank_name);
@@ -2898,7 +3030,7 @@ int main(int argc, char *argv[]){
             draw_text(R, tipRect.x + 4, tipRect.y + 4, g_bank_tooltip_text, tfg);
         }
 
-        // Render dropdown list on top of everything else if open
+    // Render dropdown list on top of everything else if open
         if(g_reverbDropdownOpen) {
             static const char *reverbNames[] = {"None","Igor's Closet","Igor's Garage","Igor's Acoustic Lab","Igor's Cavern","Igor's Dungeon","Small Reflections","Early Reflections","Basement","Banquet Hall","Catacombs"};
             int reverbCount = (int)(sizeof(reverbNames)/sizeof(reverbNames[0]));
@@ -2943,6 +3075,45 @@ int main(int argc, char *argv[]){
             if(mclick && !point_in(mx,my,ddRect) && !point_in(mx,my,box)){ 
                 g_reverbDropdownOpen=false; 
             }
+        }
+
+        // Render keyboard channel dropdown list last so it appears above status panel
+        if(g_reverbDropdownOpen){ g_keyboard_channel_dd_open = false; }
+        if(g_keyboard_channel_dd_open && showKeyboard){
+            // Reconstruct minimal needed rect & dropdown trigger
+            Rect transportPanel_tmp = (Rect){10,160,880,80};
+            int keyboardPanelY_tmp = transportPanel_tmp.y + transportPanel_tmp.h + 10;
+            Rect keyboardPanel_tmp2 = (Rect){10, keyboardPanelY_tmp, 880, 110};
+            Rect chanDD = {keyboardPanel_tmp2.x + 10, keyboardPanel_tmp2.y + 28, 90, 22};
+            // Layout: 2 columns x 8 rows (channels 1-8 left, 9-16 right)
+            int columns = 2;
+            int rows = 8; // 16 / 2
+            int itemW = chanDD.w; // reuse base width per column
+            int itemH = chanDD.h;
+            int gapX = 6; // spacing between columns
+            int boxW = columns * itemW + (columns-1)*gapX;
+            int boxH = rows * itemH;
+            Rect box = {chanDD.x, chanDD.y + chanDD.h + 1, boxW, boxH};
+            // Ensure box stays on screen horizontally
+            if(box.x + box.w > WINDOW_W - 10){ box.x = WINDOW_W - 10 - box.w; }
+            draw_rect(R, box, g_panel_bg);
+            draw_frame(R, box, g_panel_border);
+            char chanBuf[16][8];
+            for(int i=0;i<16;i++){ snprintf(chanBuf[i],sizeof(chanBuf[i]),"Ch %d", i+1); }
+            for(int i=0;i<16;i++){
+                int col = i/rows; // 0 or 1
+                int row = i%rows;
+                Rect ir = { box.x + col*(itemW + gapX), box.y + row*itemH, itemW, itemH };
+                bool over = point_in(mx,my,ir);
+                SDL_Color ibg = (i==g_keyboard_channel)? g_highlight_color : g_panel_bg; if(over) ibg = g_button_hover;
+                draw_rect(R, ir, ibg);
+                SDL_Color itxt = (i==g_keyboard_channel || over)? g_button_text : g_text_color;
+                draw_text(R, ir.x+6, ir.y+4, chanBuf[i], itxt);
+                if(mclick && over){
+                    if(g_keyboard_mouse_note != -1 && g_bae.song){ BAESong_NoteOff(g_bae.song,(unsigned char)g_keyboard_channel,(unsigned char)g_keyboard_mouse_note,0,0); g_keyboard_mouse_note = -1; }
+                    g_keyboard_channel = i; g_keyboard_channel_dd_open=false; }
+            }
+            if(mclick && !point_in(mx,my,box) && !point_in(mx,my,chanDD)){ g_keyboard_channel_dd_open=false; }
         }
 
         // RMF Info dialog (modal overlay with dimming)
@@ -3045,7 +3216,7 @@ int main(int argc, char *argv[]){
             // Dim background
             SDL_Color dim = g_is_dark_mode ? (SDL_Color){0,0,0,120} : (SDL_Color){0,0,0,90};
             draw_rect(R,(Rect){0,0,WINDOW_W,g_window_h}, dim);
-            int dlgW = 360; int dlgH = 200; int pad = 10; // +6 height so descenders (e.g., 'y') are not clipped
+            int dlgW = 360; int dlgH = 220; int pad = 10; // increased height to fit keyboard toggle
             Rect dlg = { (WINDOW_W - dlgW)/2, (g_window_h - dlgH)/2, dlgW, dlgH };
             SDL_Color dlgBg = g_panel_bg; dlgBg.a = 240;
             SDL_Color dlgFrame = g_panel_border;
@@ -3115,6 +3286,15 @@ int main(int argc, char *argv[]){
                     }
                 }
                 save_settings(g_current_bank_path[0]?g_current_bank_path:NULL, reverbType, loopPlay);
+            }
+
+            // Virtual keyboard toggle
+            Rect kbRect = { dlg.x + pad, dlg.y + 132, 18, 18 };
+            if(ui_toggle(R, kbRect, &g_show_virtual_keyboard, "Show Virtual Keyboard", mx,my,mclick)){
+                // Persist immediately
+                save_settings(g_current_bank_path[0]?g_current_bank_path:NULL, reverbType, loopPlay);
+                // Close dropdown if hiding keyboard
+                if(!g_show_virtual_keyboard) g_keyboard_channel_dd_open=false;
             }
 
             // Footer help + version + compile info (shifted up one row for extra line)

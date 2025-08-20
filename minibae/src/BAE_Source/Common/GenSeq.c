@@ -1732,6 +1732,9 @@ static void PV_ProcessNoteOff(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTr
 
     if (PV_IsMuted(pSong, MIDIChannel, currentTrack) == FALSE)
     {
+        if(MIDIChannel >=0 && MIDIChannel < 16 && note >=0 && note < 128){
+            pSong->channelActiveNotes[MIDIChannel][note] = 0; // mark off
+        }
         if (pSong->AnalyzeMode == SCAN_NORMAL)
         {
             if (GM_DoesChannelAllowPitchOffset(pSong, (unsigned short)MIDIChannel))
@@ -1771,6 +1774,9 @@ static void PV_ProcessNoteOn(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTra
     {
         if (volume)
         {   
+            if(MIDIChannel >=0 && MIDIChannel < 16 && note >=0 && note < 128){
+                pSong->channelActiveNotes[MIDIChannel][note] = (XBYTE)volume; // store velocity
+            }
             if (pSong->AnalyzeMode == SCAN_NORMAL)
             {
                 if (GM_DoesChannelAllowPitchOffset(pSong, (unsigned short)MIDIChannel))
@@ -1814,6 +1820,10 @@ static void PV_ProcessNoteOn(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTra
         }
         else
         {
+            // velocity 0 interpreted as note off
+            if(MIDIChannel >=0 && MIDIChannel < 16 && note >=0 && note < 128){
+                pSong->channelActiveNotes[MIDIChannel][note] = 0;
+            }
             PV_ProcessNoteOff(pSong, MIDIChannel, currentTrack, note, volume);
         }
     }
