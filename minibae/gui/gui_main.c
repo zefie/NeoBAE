@@ -1652,6 +1652,20 @@ static bool recreate_mixer_and_restore(int sampleRateHz, bool stereo, int reverb
     BAEMixer_SetDefaultReverb(g_bae.mixer, (BAEReverbType)reverbType);
     BAEMixer_SetMasterVolume(g_bae.mixer, FLOAT_TO_UNSIGNED_FIXED(1.0));
 
+    // Ensure the lightweight live song is recreated so external MIDI
+    // input continues to route into the new mixer. If a previous
+    // g_live_song exists it referenced the old mixer and must be
+    // deleted before creating a new one bound to the new mixer.
+    if(g_live_song){
+        BAESong_Stop(g_live_song, FALSE);
+        BAESong_Delete(g_live_song);
+        g_live_song = NULL;
+    }
+    g_live_song = BAESong_New(g_bae.mixer);
+    if(g_live_song){
+        BAESong_Preroll(g_live_song);
+    }
+
     // Reload bank if we had one recorded
     if(g_current_bank_path[0]){
         bool dummy_play=false;
@@ -4255,6 +4269,17 @@ int main(int argc, char *argv[]){
                 if(recreate_mixer_and_restore(g_sample_rate_hz, g_stereo_output, reverbType, transpose, tempo, volume, loopPlay, ch_enable)){
                     if(wasPlayingBefore){ progress = bae_get_pos_ms(); duration = bae_get_len_ms(); }
                     else { if(prePosMs > 0){ bae_seek_ms(prePosMs); progress = prePosMs; duration = bae_get_len_ms(); } else { progress = 0; duration = bae_get_len_ms(); } playing=false; }
+                    // If MIDI input was active, reinitialize it so hardware stays in a consistent state
+                    if(g_midi_input_enabled){
+                        midi_input_shutdown();
+                        if(g_midi_input_device_index >= 0 && g_midi_input_device_index < g_midi_input_device_count){
+                            int api = g_midi_device_api[g_midi_input_device_index];
+                            int port = g_midi_device_port[g_midi_input_device_index];
+                            midi_input_init("miniBAE", api, port);
+                        } else {
+                            midi_input_init("miniBAE", -1, -1);
+                        }
+                    }
                 }
                 save_settings(g_current_bank_path[0]?g_current_bank_path:NULL, reverbType, loopPlay);
             }
@@ -4343,7 +4368,19 @@ int main(int argc, char *argv[]){
                     if(i < sampleRateCount-1){ SDL_Color sep = g_panel_border; SDL_SetRenderDrawColor(R, sep.r, sep.g, sep.b, 255); SDL_RenderDrawLine(R, ir.x, ir.y+ir.h, ir.x+ir.w, ir.y+ir.h); }
                     char txt[32]; snprintf(txt,sizeof(txt),"%d Hz", r);
                     SDL_Color itxt = (selected||over)? g_button_text : g_text_color; draw_text(R, ir.x+6, ir.y+6, txt, itxt);
-                    if(over && mclick){ bool changed = (g_sample_rate_hz != r); g_sample_rate_hz = r; g_sampleRateDropdownOpen=false; if(changed){ int prePosMs = bae_get_pos_ms(); bool wasPlayingBefore = g_bae.is_playing; if(recreate_mixer_and_restore(g_sample_rate_hz, g_stereo_output, reverbType, transpose, tempo, volume, loopPlay, ch_enable)){ if(wasPlayingBefore){ progress = bae_get_pos_ms(); duration = bae_get_len_ms(); } else if(prePosMs > 0){ bae_seek_ms(prePosMs); progress=prePosMs; duration=bae_get_len_ms(); playing=false; } else { progress=0; duration=bae_get_len_ms(); playing=false; } save_settings(g_current_bank_path[0]?g_current_bank_path:NULL, reverbType, loopPlay); } } }
+                    if(over && mclick){ bool changed = (g_sample_rate_hz != r); g_sample_rate_hz = r; g_sampleRateDropdownOpen=false; if(changed){ int prePosMs = bae_get_pos_ms(); bool wasPlayingBefore = g_bae.is_playing; if(recreate_mixer_and_restore(g_sample_rate_hz, g_stereo_output, reverbType, transpose, tempo, volume, loopPlay, ch_enable)){ if(wasPlayingBefore){ progress = bae_get_pos_ms(); duration = bae_get_len_ms(); } else if(prePosMs > 0){ bae_seek_ms(prePosMs); progress=prePosMs; duration=bae_get_len_ms(); playing=false; } else { progress=0; duration=bae_get_len_ms(); playing=false; }
+                                    // If MIDI input was active when we changed sample rate, reinit MIDI hardware so it stays connected
+                                    if(g_midi_input_enabled){
+                                        midi_input_shutdown();
+                                        if(g_midi_input_device_index >= 0 && g_midi_input_device_index < g_midi_input_device_count){
+                                            int api = g_midi_device_api[g_midi_input_device_index];
+                                            int port = g_midi_device_port[g_midi_input_device_index];
+                                            midi_input_init("miniBAE", api, port);
+                                        } else {
+                                            midi_input_init("miniBAE", -1, -1);
+                                        }
+                                    }
+                                    save_settings(g_current_bank_path[0]?g_current_bank_path:NULL, reverbType, loopPlay); } } }
                 }
                 if(mclick && !point_in(mx,my,srRect) && !point_in(mx,my,box)) g_sampleRateDropdownOpen=false;
             }
