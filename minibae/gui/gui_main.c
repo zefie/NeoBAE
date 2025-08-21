@@ -766,6 +766,8 @@ static bool g_midi_device_dd_open = false; // dropdown open state
 static int g_midi_device_count = 0; // cached device count
 // We'll fetch device names on demand; keep a small cache
 static char g_midi_device_name_cache[32][128];
+static int  g_midi_device_api[32];
+static int  g_midi_device_port[32];
 #ifdef SUPPORT_KARAOKE
 // Karaoke / lyric display state
 static bool g_karaoke_enabled = true; // simple always-on toggle (future: UI setting)
@@ -2552,6 +2554,41 @@ int main(int argc, char *argv[]){
         BAEMixer_Idle(g_bae.mixer); // ensure processing if needed
         bae_update_channel_mutes(ch_enable);
 
+        // Poll MIDI input and route Note On/Off to the virtual keyboard channel.
+        // We do not directly toggle g_keyboard_active_notes here because the
+        // keyboard drawing code queries the engine via BAESong_GetActiveNotes
+        // later each frame; sending events to the engine is sufficient.
+        if (g_midi_input_enabled && g_bae.song && !g_bae.is_audio_file) {
+            unsigned char midi_buf[1024]; unsigned int midi_sz = 0; double midi_ts = 0.0;
+            while (midi_input_poll(midi_buf, &midi_sz, &midi_ts)) {
+                if (midi_sz < 1) continue;
+                unsigned char status = midi_buf[0];
+                unsigned char mtype = status & 0xF0;
+                // unsigned char mch = status & 0x0F; // incoming channel (ignored)
+                if (mtype == 0x90 || mtype == 0x80) {
+                    if (midi_sz >= 3) {
+                        unsigned char note = midi_buf[1];
+                        unsigned char vel = midi_buf[2];
+                        if (mtype == 0x90 && vel != 0) {
+                            // Note On -> force to virtual keyboard channel
+                            BAESong_NoteOnWithLoad(g_bae.song, (unsigned char)g_keyboard_channel, note, vel, 0);
+                            // Also mark active immediately so the virtual keyboard lights up
+                            // even when engine playback isn't running (consistent with QWERTY handler).
+                            g_keyboard_active_notes[note] = 1;
+                        } else {
+                            // Note Off (or Note On with vel==0)
+                            BAESong_NoteOff(g_bae.song, (unsigned char)g_keyboard_channel, note, 0, 0);
+                            // Clear UI active state immediately as well
+                            g_keyboard_active_notes[note] = 0;
+                        }
+                    }
+                } else if (mtype == 0xB0) {
+                    // Controller messages (e.g., sustain) - currently ignored
+                    // Could be handled later if needed (CC 64 = sustain pedal)
+                }
+            }
+        }
+
         // Check for end-of-playback to update UI state correctly. We removed the
         // previous "force restart" block; looping is now handled entirely by
         // the engine via BAESong_SetLoops. If loops are set >0 the song should
@@ -3744,7 +3781,7 @@ int main(int argc, char *argv[]){
             if(ui_toggle(R, midiEnRect, &g_midi_input_enabled, "Enable MIDI Input", mx,my,mclick)){
                 // initialize or shutdown midi input as requested
                 if(g_midi_input_enabled){
-                    midi_input_init("miniBAE");
+                    midi_input_init("miniBAE", -1, -1);
                 } else {
                     midi_input_shutdown();
                 }
@@ -3755,14 +3792,37 @@ int main(int argc, char *argv[]){
             Rect midiDevRect = { controlRightX, dlg.y + 136, controlW, 24 };
             // populate device list lazily when dropdown opened
             if(g_midi_device_dd_open){
-                // query RtMidi for device names
-                RtMidiInPtr r = rtmidi_in_create_default();
-                if(r){
+                // Enumerate compiled RtMidi APIs and collect input ports from each API
+                g_midi_device_count = 0;
+                enum RtMidiApi apis[16];
+                int apiCount = rtmidi_get_compiled_api(apis, (unsigned int)(sizeof(apis)/sizeof(apis[0])));
+                if(apiCount <= 0) apiCount = 0;
+                const char *dbg = getenv("MINIBAE_DEBUG_MIDI");
+                for(int ai=0; ai<apiCount && g_midi_device_count < 32; ++ai){
+                    RtMidiInPtr r = rtmidi_in_create(apis[ai], "miniBAE_enum", 1000);
+                    if(!r) continue;
                     unsigned int cnt = rtmidi_get_port_count(r);
-                    g_midi_device_count = (int)cnt;
-                    for(unsigned int di=0; di<cnt && di<32; ++di){
+                    if(dbg){ const char *an = rtmidi_api_name(apis[ai]); fprintf(stderr, "[MIDI ENUM] API %d (%s): ok=%d msg='%s' ports=%u\n", ai, an?an:"?", r->ok, r->msg?r->msg:"", cnt); }
+                    for(unsigned int di=0; di<cnt && g_midi_device_count < 32; ++di){
                         int needed = 0; rtmidi_get_port_name(r, di, NULL, &needed);
-                        if(needed > 0 && needed < 128){ char buf[128]; rtmidi_get_port_name(r, di, buf, &needed); strncpy(g_midi_device_name_cache[di], buf, sizeof(g_midi_device_name_cache[di])-1); g_midi_device_name_cache[di][sizeof(g_midi_device_name_cache[di])-1]='\0'; }
+                        if(needed > 0){
+                            int bufLen = needed < 128 ? needed : 128;
+                            char buf[128]; buf[0]='\0';
+                            if(rtmidi_get_port_name(r, di, buf, &bufLen) >= 0){
+                                // Prefix with API name so identical port names from different backends are distinguishable
+                                const char *apiName = rtmidi_api_name(apis[ai]);
+                                if(apiName && apiName[0]){
+                                    char full[192]; snprintf(full, sizeof(full), "%s: %s", apiName, buf);
+                                    strncpy(g_midi_device_name_cache[g_midi_device_count], full, sizeof(g_midi_device_name_cache[g_midi_device_count])-1);
+                                } else {
+                                    strncpy(g_midi_device_name_cache[g_midi_device_count], buf, sizeof(g_midi_device_name_cache[g_midi_device_count])-1);
+                                }
+                                g_midi_device_name_cache[g_midi_device_count][sizeof(g_midi_device_name_cache[g_midi_device_count])-1] = '\0';
+                                g_midi_device_api[g_midi_device_count] = ai;
+                                g_midi_device_port[g_midi_device_count] = (int)di;
+                                ++g_midi_device_count;
+                            }
+                        }
                     }
                     rtmidi_in_free(r);
                 }
@@ -3895,7 +3955,7 @@ int main(int argc, char *argv[]){
                         if(i < g_midi_device_count-1){ SDL_SetRenderDrawColor(R, g_panel_border.r, g_panel_border.g, g_panel_border.b, 255); SDL_RenderDrawLine(R, ir.x, ir.y+ir.h, ir.x+ir.w, ir.y+ir.h); }
                         draw_text(R, ir.x+6, ir.y+6, g_midi_device_name_cache[i], g_button_text);
                         if(over && mclick){ g_midi_device_index = i; g_midi_device_dd_open = false; // reopen midi input with chosen device
-                            midi_input_shutdown(); midi_input_init("miniBAE"); save_settings(g_current_bank_path[0]?g_current_bank_path:NULL, reverbType, loopPlay);
+                            midi_input_shutdown(); midi_input_init("miniBAE", g_midi_device_api[i], g_midi_device_port[i]); save_settings(g_current_bank_path[0]?g_current_bank_path:NULL, reverbType, loopPlay);
                         }
                     }
                 }
