@@ -751,6 +751,12 @@ static bool g_show_virtual_keyboard = false; // user toggle (default off)
 static int g_keyboard_mouse_note = -1; // currently held note by mouse, -1 if none
 // Suppress engine-driven active-note queries for a short time after user Stop/Pause
 static Uint32 g_keyboard_suppress_until = 0;
+// Computer-keyboard mapping state: scancode -> currently held MIDI note (-1 if none)
+static int g_keyboard_pressed_note[SDL_NUM_SCANCODES];
+// Base octave for the mapping (C4 == octave 4 -> MIDI note 60)
+static int g_keyboard_base_octave = 4;
+// Lazy init flag for pressed-note array
+static bool g_keyboard_map_initialized = false;
 #ifdef SUPPORT_KARAOKE
 // Karaoke / lyric display state
 static bool g_karaoke_enabled = true; // simple always-on toggle (future: UI setting)
@@ -2401,8 +2407,73 @@ int main(int argc, char *argv[]){
                     } }
                     break;
                 case SDL_KEYDOWN:
-                    if(e.key.keysym.sym==SDLK_ESCAPE) running=false;
-                    break;
+                case SDL_KEYUP: {
+                    bool isDown = (e.type == SDL_KEYDOWN);
+                    SDL_Keycode sym = e.key.keysym.sym;
+                    // Initialize mapping table once
+                    if(!g_keyboard_map_initialized){
+                        for(int i=0;i<SDL_NUM_SCANCODES;i++) g_keyboard_pressed_note[i] = -1;
+                        g_keyboard_map_initialized = true;
+                    }
+
+                    // Octave shift: ',' -> down, '.' -> up (on keydown only)
+                    if(isDown){
+                        if(sym == SDLK_COMMA){ g_keyboard_base_octave = MAX(0, g_keyboard_base_octave - 1); }
+                        else if(sym == SDLK_PERIOD){ g_keyboard_base_octave = MIN(8, g_keyboard_base_octave + 1); }
+                    }
+
+                    // Map requested qwerty-friendly sequence to MIDI notes starting at C4.
+                    // Sequence (chromatic including black keys):
+                    // a w s e d f t g y h u j k o
+                    // Mapping: a=C, w=C#, s=D, e=D#, d=E, f=F, t=F#, g=G, y=G#, h=A, u=A#, j=B,
+                    // k=C (next octave), o=C#
+                    int sc = e.key.keysym.scancode;
+                    int note = -1;
+                    if(sym == SDLK_a) note = 0;   // C
+                    else if(sym == SDLK_w) note = 1; // C#
+                    else if(sym == SDLK_s) note = 2; // D
+                    else if(sym == SDLK_e) note = 3; // D#
+                    else if(sym == SDLK_d) note = 4; // E
+                    else if(sym == SDLK_f) note = 5; // F
+                    else if(sym == SDLK_t) note = 6; // F#
+                    else if(sym == SDLK_g) note = 7; // G
+                    else if(sym == SDLK_y) note = 8; // G#
+                    else if(sym == SDLK_h) note = 9; // A
+                    else if(sym == SDLK_u) note = 10; // A#
+                    else if(sym == SDLK_j) note = 11; // B
+                    else if(sym == SDLK_k) note = 12; // C (next octave)
+                    else if(sym == SDLK_o) note = 13; // C#
+
+                    if(note != -1){
+                        // Compute MIDI note number: C4 = 60
+                        int midi = 60 + (g_keyboard_base_octave - 4) * 12 + note;
+                        if(midi < 0) midi = 0; if(midi > 127) midi = 127;
+                        if(isDown){
+                            // Avoid retrigger if already held by keyboard
+                            if(g_keyboard_pressed_note[sc] == midi) break;
+                            g_keyboard_pressed_note[sc] = midi;
+                            if(g_show_virtual_keyboard && g_bae.song){
+                                BAESong_NoteOnWithLoad(g_bae.song, (unsigned char)g_keyboard_channel, (unsigned char)midi, 100, 0);
+                                // Mark active in UI array so key lights up immediately
+                                g_keyboard_active_notes[midi] = 1;
+                            }
+                        } else {
+                            // Key up: send note off if we had recorded it
+                            if(g_keyboard_pressed_note[sc] != -1){
+                                int heldMidi = g_keyboard_pressed_note[sc];
+                                g_keyboard_pressed_note[sc] = -1;
+                                if(g_show_virtual_keyboard && g_bae.song){
+                                    BAESong_NoteOff(g_bae.song, (unsigned char)g_keyboard_channel, (unsigned char)heldMidi, 0, 0);
+                                    g_keyboard_active_notes[heldMidi] = 0;
+                                }
+                            }
+                        }
+                        break;
+                    }
+
+                    // Escape still quits
+                    if(sym==SDLK_ESCAPE) running=false;
+                } break;
             }
         }
 
