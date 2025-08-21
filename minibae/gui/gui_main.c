@@ -3654,12 +3654,12 @@ int main(int argc, char *argv[]){
             if((mclick || mdown) && !point_in(mx,my,dlg)) { /* swallowed */ }
         }
 
-        // Settings dialog (modal overlay)
+        // Settings dialog (modal overlay) - two-column layout
         if(g_show_settings_dialog){
             // Dim background
             SDL_Color dim = g_is_dark_mode ? (SDL_Color){0,0,0,120} : (SDL_Color){0,0,0,90};
             draw_rect(R,(Rect){0,0,WINDOW_W,g_window_h}, dim);
-            int dlgW = 360; int dlgH = 280; int pad = 10; // increased height to fit all controls
+            int dlgW = 560; int dlgH = 280; int pad = 10; // dialog size (wider two-column)
             Rect dlg = { (WINDOW_W - dlgW)/2, (g_window_h - dlgH)/2, dlgW, dlgH };
             SDL_Color dlgBg = g_panel_bg; dlgBg.a = 240;
             SDL_Color dlgFrame = g_panel_border;
@@ -3674,14 +3674,20 @@ int main(int argc, char *argv[]){
             draw_frame(R, closeBtn, g_button_border);
             draw_text(R, closeBtn.x+3, closeBtn.y+1, "X", g_button_text);
             if(mclick && overClose){ g_show_settings_dialog = false; g_volumeCurveDropdownOpen = false; }
-            if(mclick && overClose){ g_show_settings_dialog = false; g_volumeCurveDropdownOpen = false; }
 
+            // Two-column geometry
+            int colW = (dlg.w - pad*3) / 2; // two columns with padding between
+            int leftX = dlg.x + pad;
+            int rightX = dlg.x + pad*2 + colW;
+            int controlW = 150;
+            int controlRightX = leftX + colW - controlW; // dropdowns right-aligned in left column
+
+            // Left column controls (stacked)
             // Volume Curve selector
-            draw_text(R, dlg.x + pad, dlg.y + 36, "Volume Curve:", g_text_color);
+            draw_text(R, leftX, dlg.y + 36, "Volume Curve:", g_text_color);
             const char *volumeCurveNames[] = { "Default S Curve", "Peaky S Curve", "WebTV Curve", "2x Exponential", "2x Linear" };
             int vcCount = 5;
-            Rect vcRect = { dlg.x + dlg.w - 170, dlg.y + 32, 150, 24 };
-            // Dropdown main
+            Rect vcRect = { controlRightX, dlg.y + 32, controlW, 24 };
             SDL_Color dd_bg = g_button_base; SDL_Color dd_txt = g_button_text; SDL_Color dd_frame = g_button_border;
             if(point_in(mx,my,vcRect)) dd_bg = g_button_hover;
             draw_rect(R, vcRect, dd_bg); draw_frame(R, vcRect, dd_frame);
@@ -3690,132 +3696,88 @@ int main(int argc, char *argv[]){
             draw_text(R, vcRect.x + vcRect.w - 16, vcRect.y + 6, g_volumeCurveDropdownOpen?"^":"v", dd_txt);
             if(point_in(mx,my,vcRect) && mclick){ 
                 g_volumeCurveDropdownOpen = !g_volumeCurveDropdownOpen; 
-                if(g_volumeCurveDropdownOpen){ 
-                    // Ensure only one dropdown active; disable sample rate and export menus while volume curve is open
-                    g_sampleRateDropdownOpen = false; 
-                    g_exportDropdownOpen = false;
-                }
+                if(g_volumeCurveDropdownOpen){ g_sampleRateDropdownOpen = false; g_exportDropdownOpen = false; }
             }
 
             // Sample Rate selector
-            draw_text(R, dlg.x + pad, dlg.y + 72, "Sample Rate:", g_text_color);
+            draw_text(R, leftX, dlg.y + 72, "Sample Rate:", g_text_color);
             const int sampleRates[] = {8000,11025,16000,22050,32000,44100,48000};
             const int sampleRateCount = (int)(sizeof(sampleRates)/sizeof(sampleRates[0]));
-            // Validate current selection belongs to list (snap to closest if not)
             int curR = g_sample_rate_hz; int best = sampleRates[0]; int bestDiff = abs(curR - best); bool exact=false;
             for(int i=0;i<sampleRateCount;i++){ if(sampleRates[i]==curR){ exact=true; break; } int d = abs(curR - sampleRates[i]); if(d < bestDiff){ bestDiff=d; best=sampleRates[i]; } }
             if(!exact){ g_sample_rate_hz = best; }
             char srLabel[32]; snprintf(srLabel,sizeof(srLabel),"%d Hz", g_sample_rate_hz);
-            Rect srRect = { dlg.x + dlg.w - 170, dlg.y + 68, 150, 24 };
-            bool sampleRateEnabled = !g_volumeCurveDropdownOpen; // disable while volume curve menu open
-            SDL_Color sr_bg = g_button_base; 
-            if(!sampleRateEnabled){ sr_bg.a = 180; }
-            else if(point_in(mx,my,srRect)) sr_bg = g_button_hover;
+            Rect srRect = { controlRightX, dlg.y + 68, controlW, 24 };
+            bool sampleRateEnabled = !g_volumeCurveDropdownOpen;
+            SDL_Color sr_bg = g_button_base; if(!sampleRateEnabled){ sr_bg.a = 180; } else if(point_in(mx,my,srRect)) sr_bg = g_button_hover;
             draw_rect(R, srRect, sr_bg); draw_frame(R, srRect, g_button_border);
             SDL_Color sr_text_col = g_button_text; if(!sampleRateEnabled){ sr_text_col.a = 180; }
             draw_text(R, srRect.x + 6, srRect.y + 6, srLabel, sr_text_col);
             draw_text(R, srRect.x + srRect.w - 16, srRect.y + 6, g_sampleRateDropdownOpen?"^":"v", sr_text_col);
-            if(sampleRateEnabled && point_in(mx,my,srRect) && mclick){ 
-                g_sampleRateDropdownOpen = !g_sampleRateDropdownOpen; 
-                if(g_sampleRateDropdownOpen){ 
-                    // Close export dropdown when sample rate menu opens
-                    g_exportDropdownOpen = false; 
-                }
-            }
+            if(sampleRateEnabled && point_in(mx,my,srRect) && mclick){ g_sampleRateDropdownOpen = !g_sampleRateDropdownOpen; if(g_sampleRateDropdownOpen){ g_exportDropdownOpen = false; } }
 
-            // Stereo checkbox now placed below Export Codec (moved export above checkboxes)
-            Rect cbRect = { dlg.x + pad, dlg.y + 140, 18, 18 };
-            if(ui_toggle(R, cbRect, &g_stereo_output, "Stereo Output", mx,my,mclick)){
-                int prePosMs = bae_get_pos_ms(); bool wasPlayingBefore = g_bae.is_playing;
-                if(recreate_mixer_and_restore(g_sample_rate_hz, g_stereo_output, reverbType, transpose, tempo, volume, loopPlay, ch_enable)){
-                    if(wasPlayingBefore){ progress = bae_get_pos_ms(); duration = bae_get_len_ms(); }
-                    else {
-                        if(prePosMs > 0){ bae_seek_ms(prePosMs); progress = prePosMs; duration = bae_get_len_ms(); }
-                        else { progress = 0; duration = bae_get_len_ms(); }
-                        playing=false;
-                    }
-                }
-                save_settings(g_current_bank_path[0]?g_current_bank_path:NULL, reverbType, loopPlay);
-            }
-
-            // Virtual keyboard toggle (moved down)
-            Rect kbRect = { dlg.x + pad, dlg.y + 166, 18, 18 };
-            if(ui_toggle(R, kbRect, &g_show_virtual_keyboard, "Show Virtual Keyboard", mx,my,mclick)){
-                // Persist immediately
-                save_settings(g_current_bank_path[0]?g_current_bank_path:NULL, reverbType, loopPlay);
-                // Close dropdown if hiding keyboard
-                if(!g_show_virtual_keyboard) g_keyboard_channel_dd_open=false;
-            }
-
-            // WebTV-style progress bar toggle (stored as disable flag internally)
-            Rect wtvRect = { dlg.x + pad, dlg.y + 192, 18, 18 };
-            // ui_toggle expects a bool* for the visible checked state. Present a
-            // temporary that represents the positive meaning (WebTV enabled).
-            bool webtv_enabled = !g_disable_webtv_progress_bar;
-            if(ui_toggle(R, wtvRect, &webtv_enabled, "WebTV Style Bar", mx,my,mclick)){
-                // Update internal inverted flag and persist
-                g_disable_webtv_progress_bar = !webtv_enabled;
-                save_settings(g_current_bank_path[0]?g_current_bank_path:NULL, reverbType, loopPlay);
-            }
-
-            // Export codec selector (moved from main UI into Settings dialog)
+            // Export codec selector (left column, below sample rate)
 #if USE_MPEG_ENCODER != FALSE
-            // Position export codec above the stereo/keyboard checkboxes
-            // Nudge down slightly for uniform spacing with other controls
-            Rect expRect = { dlg.x + dlg.w - 170, dlg.y + 104, 150, 24 };
-            draw_text(R, dlg.x + pad, dlg.y + 108, "Export Codec:", g_text_color);
-            // Disable export control while other dropdowns are open to avoid conflicts
+            Rect expRect = { controlRightX, dlg.y + 104, controlW, 24 };
+            draw_text(R, leftX, dlg.y + 108, "Export Codec:", g_text_color);
             bool exportEnabled = !g_volumeCurveDropdownOpen && !g_sampleRateDropdownOpen;
-            // Show current codec name
             SDL_Color exp_bg = g_button_base; SDL_Color exp_txt = g_button_text;
             if(!exportEnabled){ exp_bg.a = 180; exp_txt.a = 180; }
             else { if(point_in(mx,my,expRect)) exp_bg = g_button_hover; if(g_exportDropdownOpen) exp_bg = g_button_press; }
             draw_rect(R, expRect, exp_bg); draw_frame(R, expRect, g_button_border);
             const char *expName = g_exportCodecNames[g_exportCodecIndex]; draw_text(R, expRect.x + 6, expRect.y + 6, expName, exp_txt);
             draw_text(R, expRect.x + expRect.w - 16, expRect.y + 6, g_exportDropdownOpen?"^":"v", exp_txt);
-            if(exportEnabled && point_in(mx,my,expRect) && mclick){
-                g_exportDropdownOpen = !g_exportDropdownOpen;
-                if(g_exportDropdownOpen){
-                    // Ensure only one dropdown is active at a time
-                    g_volumeCurveDropdownOpen = false; g_sampleRateDropdownOpen = false;
-                }
-            }
+            if(exportEnabled && point_in(mx,my,expRect) && mclick){ g_exportDropdownOpen = !g_exportDropdownOpen; if(g_exportDropdownOpen){ g_volumeCurveDropdownOpen = false; g_sampleRateDropdownOpen = false; } }
 #endif
 
-            // Footer help + version + compile info (shifted up one row for extra line)
+            // Right column controls (checkboxes)
+            Rect cbRect = { rightX, dlg.y + 36, 18, 18 };
+            if(ui_toggle(R, cbRect, &g_stereo_output, "Stereo Output", mx,my,mclick)){
+                int prePosMs = bae_get_pos_ms(); bool wasPlayingBefore = g_bae.is_playing;
+                if(recreate_mixer_and_restore(g_sample_rate_hz, g_stereo_output, reverbType, transpose, tempo, volume, loopPlay, ch_enable)){
+                    if(wasPlayingBefore){ progress = bae_get_pos_ms(); duration = bae_get_len_ms(); }
+                    else { if(prePosMs > 0){ bae_seek_ms(prePosMs); progress = prePosMs; duration = bae_get_len_ms(); } else { progress = 0; duration = bae_get_len_ms(); } playing=false; }
+                }
+                save_settings(g_current_bank_path[0]?g_current_bank_path:NULL, reverbType, loopPlay);
+            }
+
+            Rect kbRect = { rightX, dlg.y + 72, 18, 18 };
+            if(ui_toggle(R, kbRect, &g_show_virtual_keyboard, "Show Virtual Keyboard", mx,my,mclick)){
+                save_settings(g_current_bank_path[0]?g_current_bank_path:NULL, reverbType, loopPlay);
+                if(!g_show_virtual_keyboard) g_keyboard_channel_dd_open=false;
+            }
+
+            Rect wtvRect = { rightX, dlg.y + 108, 18, 18 };
+            bool webtv_enabled = !g_disable_webtv_progress_bar;
+            if(ui_toggle(R, wtvRect, &webtv_enabled, "WebTV Style Bar", mx,my,mclick)){
+                g_disable_webtv_progress_bar = !webtv_enabled;
+                save_settings(g_current_bank_path[0]?g_current_bank_path:NULL, reverbType, loopPlay);
+            }
+
+            // Footer help + version + compile info
             SDL_Color help = g_is_dark_mode ? (SDL_Color){180,180,190,255} : (SDL_Color){80,80,80,255};
-            int lineHelpY = dlg.y + dlg.h - 54;   // moved up
-            int lineVerY  = dlg.y + dlg.h - 40;   // moved up
-            int lineCompY = dlg.y + dlg.h - 26;   // original version slot
+            int lineHelpY = dlg.y + dlg.h - 54;
+            int lineVerY  = dlg.y + dlg.h - 40;
+            int lineCompY = dlg.y + dlg.h - 26;
             draw_text(R, dlg.x + pad, lineHelpY, "Settings persist to minibae.ini.", help);
             {
-                char ver[160];
-                char ver2[160];
+                char ver[160]; char ver2[160];
                 char *compInfo = (char*)BAE_GetCompileInfo();
-                if (compInfo) {
-                    snprintf(ver, sizeof(ver), "libminiBAE %s", _VERSION);
-                    snprintf(ver2, sizeof(ver2), "built with %s", compInfo);
-                    free(compInfo);
-                } else {
-                    snprintf(ver, sizeof(ver), "libminiBAE %s", _VERSION);
-                    ver2[0] = '\0';
-                }
+                if (compInfo) { snprintf(ver, sizeof(ver), "libminiBAE %s", _VERSION); snprintf(ver2, sizeof(ver2), "built with %s", compInfo); free(compInfo); }
+                else { snprintf(ver, sizeof(ver), "libminiBAE %s", _VERSION); ver2[0] = '\0'; }
                 int vw=0,vh=0; measure_text(ver,&vw,&vh);
                 Rect verRect = { dlg.x + pad, lineVerY, vw, vh>0?vh:14 };
                 bool dropdownActive = g_sampleRateDropdownOpen || g_volumeCurveDropdownOpen;
                 bool overVer = !dropdownActive && point_in(mx,my,verRect);
                 SDL_Color verColor = overVer ? g_accent_color : help;
                 draw_text(R, verRect.x, verRect.y, ver, verColor);
-                if(overVer && !dropdownActive){
-                    SDL_SetRenderDrawColor(R, verColor.r, verColor.g, verColor.b, verColor.a);
-                    SDL_RenderDrawLine(R, verRect.x, verRect.y + verRect.h - 2, verRect.x + verRect.w, verRect.y + verRect.h - 2);
-                }
+                if(overVer && !dropdownActive){ SDL_SetRenderDrawColor(R, verColor.r, verColor.g, verColor.b, verColor.a); SDL_RenderDrawLine(R, verRect.x, verRect.y + verRect.h - 2, verRect.x + verRect.w, verRect.y + verRect.h - 2); }
                 if(mclick && overVer && !dropdownActive){
                     const char *raw = _VERSION;
                     char url[256]; url[0]='\0';
                     if (strstr(raw, "-dirty")) {
                         size_t len = strlen(raw);
-                        if (len > 6) { // Ensure "-dirty" can be safely removed
+                        if (len > 6) {
                             strncpy(url, raw, len - 6);
                             url[len - 6] = '\0';
                         } else {
@@ -3825,8 +3787,10 @@ int main(int argc, char *argv[]){
                         snprintf(url, sizeof(url), "%s", raw);
                     }
                     if(strncmp(raw,"git-",4)==0){
-                        const char *sha = raw+4; 
-                        char shortSha[64]; int i=0; while(sha[i] && sha[i] != '-' && i < (int)sizeof(shortSha)-1){ shortSha[i]=sha[i]; i++; } shortSha[i]='\0';
+                        const char *sha = raw+4;
+                        char shortSha[64]; int i=0;
+                        while(sha[i] && sha[i] != '-' && i < (int)sizeof(shortSha)-1){ shortSha[i]=sha[i]; i++; }
+                        shortSha[i]='\0';
                         snprintf(url,sizeof(url),"https://github.com/zefie/miniBAE/commit/%s", shortSha);
                     } else {
                         snprintf(url,sizeof(url),"https://github.com/zefie/miniBAE/tree/%s", raw);
@@ -3843,16 +3807,13 @@ int main(int argc, char *argv[]){
                 }
                 if(ver2[0]){ draw_text(R, dlg.x + pad, lineCompY, ver2, help); }
             }
+
             // Render dropdown lists LAST so they layer over footer text
-            // Only render sample rate dropdown if enabled (not while volume curve dropdown is open)
             if(g_sampleRateDropdownOpen && !g_volumeCurveDropdownOpen){
-                int itemH = 24; // consistent with control height
-                Rect srRect = { dlg.x + dlg.w - 170, dlg.y + 68, 150, 24 }; // recompute (same as above)
-                int sampleRateCount = 7; const int sampleRates[7] = {8000,11025,16000,22050,32000,44100,48000};
-                Rect box = {srRect.x, srRect.y + srRect.h + 1, srRect.w, itemH * sampleRateCount};
+                int itemH = 24;
+                Rect box = { srRect.x, srRect.y + srRect.h + 1, srRect.w, itemH * sampleRateCount };
                 SDL_Color ddBg = g_panel_bg; ddBg.a = 255; SDL_Color shadow = {0,0,0, g_is_dark_mode ? 120 : 90};
-                Rect shadowRect = {box.x + 2, box.y + 2, box.w, box.h};
-                draw_rect(R, shadowRect, shadow);
+                Rect shadowRect = {box.x + 2, box.y + 2, box.w, box.h}; draw_rect(R, shadowRect, shadow);
                 draw_rect(R, box, ddBg); draw_frame(R, box, g_panel_border);
                 for(int i=0;i<sampleRateCount;i++){
                     Rect ir = {box.x, box.y + i*itemH, box.w, itemH}; bool over = point_in(mx,my,ir);
@@ -3862,48 +3823,14 @@ int main(int argc, char *argv[]){
                     if(i < sampleRateCount-1){ SDL_Color sep = g_panel_border; SDL_SetRenderDrawColor(R, sep.r, sep.g, sep.b, 255); SDL_RenderDrawLine(R, ir.x, ir.y+ir.h, ir.x+ir.w, ir.y+ir.h); }
                     char txt[32]; snprintf(txt,sizeof(txt),"%d Hz", r);
                     SDL_Color itxt = (selected||over)? g_button_text : g_text_color; draw_text(R, ir.x+6, ir.y+6, txt, itxt);
-                    if(over && mclick){
-                        bool changed = (g_sample_rate_hz != r);
-                        g_sample_rate_hz = r; g_sampleRateDropdownOpen=false;
-                        if(changed){
-                            int prePosMs = bae_get_pos_ms(); bool wasPlayingBefore = g_bae.is_playing;
-                            if(recreate_mixer_and_restore(g_sample_rate_hz, g_stereo_output, reverbType, transpose, tempo, volume, loopPlay, ch_enable)){
-                                if(wasPlayingBefore){ progress = bae_get_pos_ms(); duration = bae_get_len_ms(); }
-                                else if(prePosMs > 0){ bae_seek_ms(prePosMs); progress=prePosMs; duration=bae_get_len_ms(); playing=false; }
-                                else { progress=0; duration=bae_get_len_ms(); playing=false; }
-                                save_settings(g_current_bank_path[0]?g_current_bank_path:NULL, reverbType, loopPlay);
-                            }
-                        }
-                    }
+                    if(over && mclick){ bool changed = (g_sample_rate_hz != r); g_sample_rate_hz = r; g_sampleRateDropdownOpen=false; if(changed){ int prePosMs = bae_get_pos_ms(); bool wasPlayingBefore = g_bae.is_playing; if(recreate_mixer_and_restore(g_sample_rate_hz, g_stereo_output, reverbType, transpose, tempo, volume, loopPlay, ch_enable)){ if(wasPlayingBefore){ progress = bae_get_pos_ms(); duration = bae_get_len_ms(); } else if(prePosMs > 0){ bae_seek_ms(prePosMs); progress=prePosMs; duration=bae_get_len_ms(); playing=false; } else { progress=0; duration=bae_get_len_ms(); playing=false; } save_settings(g_current_bank_path[0]?g_current_bank_path:NULL, reverbType, loopPlay); } } }
                 }
                 if(mclick && !point_in(mx,my,srRect) && !point_in(mx,my,box)) g_sampleRateDropdownOpen=false;
             }
-            // Volume curve dropdown (after sample rate list so each layers independently)
             if(g_volumeCurveDropdownOpen){
                 int itemH = vcRect.h; int totalH = itemH * vcCount; Rect box = {vcRect.x, vcRect.y + vcRect.h + 1, vcRect.w, totalH};
-                SDL_Color ddBg = g_panel_bg; ddBg.a = 255; 
-                SDL_Color shadow = {0,0,0, g_is_dark_mode ? 120 : 90};
-                Rect shadowRect = {box.x + 2, box.y + 2, box.w, box.h};
-                draw_rect(R, shadowRect, shadow);
-                draw_rect(R, box, ddBg); 
-                draw_frame(R, box, g_panel_border);
-                for(int i=0;i<vcCount;i++){
-                    Rect ir = {box.x, box.y + i*itemH, box.w, itemH}; bool over = point_in(mx,my,ir);
-                    SDL_Color ibg = (i==g_volume_curve)? g_highlight_color : g_panel_bg; if(over) ibg = g_button_hover;
-                    draw_rect(R, ir, ibg);
-                    if(i < vcCount-1){ SDL_Color sep = g_panel_border; SDL_SetRenderDrawColor(R, sep.r, sep.g, sep.b, 255); SDL_RenderDrawLine(R, ir.x, ir.y+ir.h, ir.x+ir.w, ir.y+ir.h); }
-                    SDL_Color itxt = (i==g_volume_curve || over) ? g_button_text : g_text_color;
-                    draw_text(R, ir.x+6, ir.y+6, volumeCurveNames[i], itxt);
-                    if(over && mclick){ 
-                        g_volume_curve = i; 
-                        g_volumeCurveDropdownOpen = false; 
-                        BAE_SetDefaultVelocityCurve(g_volume_curve);
-                        if (g_bae.song && !g_bae.is_audio_file) {
-                            BAESong_SetVelocityCurve(g_bae.song, g_volume_curve);
-                        }
-                        save_settings(g_current_bank_path[0]?g_current_bank_path:NULL, reverbType, loopPlay);
-                    }
-                }
+                SDL_Color ddBg = g_panel_bg; ddBg.a = 255; SDL_Color shadow = {0,0,0, g_is_dark_mode ? 120 : 90}; Rect shadowRect = {box.x + 2, box.y + 2, box.w, box.h}; draw_rect(R, shadowRect, shadow); draw_rect(R, box, ddBg); draw_frame(R, box, g_panel_border);
+                for(int i=0;i<vcCount;i++){ Rect ir = {box.x, box.y + i*itemH, box.w, itemH}; bool over = point_in(mx,my,ir); SDL_Color ibg = (i==g_volume_curve)? g_highlight_color : g_panel_bg; if(over) ibg = g_button_hover; draw_rect(R, ir, ibg); if(i < vcCount-1){ SDL_Color sep = g_panel_border; SDL_SetRenderDrawColor(R, sep.r, sep.g, sep.b, 255); SDL_RenderDrawLine(R, ir.x, ir.y+ir.h, ir.x+ir.w, ir.y+ir.h); } SDL_Color itxt = (i==g_volume_curve || over) ? g_button_text : g_text_color; draw_text(R, ir.x+6, ir.y+6, volumeCurveNames[i], itxt); if(over && mclick){ g_volume_curve = i; g_volumeCurveDropdownOpen = false; BAE_SetDefaultVelocityCurve(g_volume_curve); if (g_bae.song && !g_bae.is_audio_file) { BAESong_SetVelocityCurve(g_bae.song, g_volume_curve); } save_settings(g_current_bank_path[0]?g_current_bank_path:NULL, reverbType, loopPlay); } }
                 if(mclick && !point_in(mx,my,vcRect) && !point_in(mx,my,box)) g_volumeCurveDropdownOpen = false;
             }
 
@@ -3916,7 +3843,7 @@ int main(int argc, char *argv[]){
     if(g_show_settings_dialog && g_exportDropdownOpen){
         // expRect defined in settings dialog: position dropdown beneath it
         // Use same dlgW/dlgH as settings dialog so dropdown aligns with moved control
-        int dlgW = 360; int dlgH = 280; // must match settings dialog above
+    int dlgW = 560; int dlgH = 280; // must match settings dialog above (wider)
     Rect expRect = { (WINDOW_W - dlgW)/2 + dlgW - 170, (g_window_h - dlgH)/2 + 104, 150, 24 };
         int codecCount = (int)(sizeof(g_exportCodecNames)/sizeof(g_exportCodecNames[0]));
         int cols = 2;
