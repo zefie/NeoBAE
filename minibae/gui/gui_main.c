@@ -842,6 +842,15 @@ static float g_channel_peak_level[16] = {0.0f};
 static Uint32 g_channel_peak_hold_until[16] = {0};
 static int g_channel_peak_hold_ms = 600; // how long to hold peak in ms
 
+// VU smoothing configuration
+// MAIN_VU_ALPHA: lower = smoother (slower response). CHANNEL_VU_ALPHA: higher = more responsive.
+static const float MAIN_VU_ALPHA = 0.12f;    // main/master VU smoother
+// Make per-channel VUs snappier: higher alpha (faster attack) and faster activity decay
+static const float CHANNEL_VU_ALPHA = 0.85f; // per-channel VU very responsive
+// Activity/decay tuning for the activity-driven channel VU path
+static const float CHANNEL_ACTIVITY_DECAY = 0.60f; // lower -> faster decay (more responsive)
+
+
 // Helper: commit previous line and shift current -> previous (newline behavior)
 static void karaoke_newline(uint32_t t_us){
     // Finish the current line: commit it, shift to previous display line, clear current.
@@ -3017,7 +3026,8 @@ int main(int argc, char *argv[]){
                 // the previous activity-driven heuristic (incoming MIDI or engine active notes).
                 if(have_realtime_levels){
                     float lvl = realtime_channel_level[i]; if(lvl < 0.f) lvl = 0.f; if(lvl > 1.f) lvl = 1.f;
-                    const float alpha = 0.35f; // smoothing (attack/decay)
+                    // Use a higher alpha for per-channel meters so they respond quickly to changes
+                    const float alpha = CHANNEL_VU_ALPHA; // more responsive
                     g_channel_vu[i] = g_channel_vu[i] * (1.0f - alpha) + lvl * alpha;
                     // update peak from realtime level
                     if(lvl > g_channel_peak_level[i]){ g_channel_peak_level[i] = lvl; g_channel_peak_hold_until[i] = SDL_GetTicks() + g_channel_peak_hold_ms; }
@@ -3040,7 +3050,7 @@ int main(int argc, char *argv[]){
                     }
                     // Update channel VU with simple attack/decay
                     if(active){ g_channel_vu[i] = 1.0f; }
-                    else { g_channel_vu[i] *= 0.86f; if(g_channel_vu[i] < 0.005f) g_channel_vu[i] = 0.0f; }
+                    else { g_channel_vu[i] *= CHANNEL_ACTIVITY_DECAY; if(g_channel_vu[i] < 0.005f) g_channel_vu[i] = 0.0f; }
                 }
 
                 // Fill level from bottom using per-channel VU value (clamped)
@@ -3076,7 +3086,7 @@ int main(int argc, char *argv[]){
                     }
                 }
                 // Channel peak markers intentionally removed — we only draw the realtime fill.
-                // Decay the realtime meter value gradually
+                // Decay the realtime meter value gradually (small additional smoothing pass)
                 g_channel_vu[i] *= 0.92f; if(g_channel_vu[i] < 0.0005f) g_channel_vu[i] = 0.0f;
         }
 
@@ -3826,7 +3836,7 @@ int main(int argc, char *argv[]){
                     if(!g_stereo_output){
                         float mono = (fabsf((float)sL) + fabsf((float)sR)) * 0.5f / 32768.0f * g_vu_gain;
                         float v = sqrtf(MIN(1.0f, mono));
-                        const float alpha = 0.35f;
+                        const float alpha = MAIN_VU_ALPHA;
                         g_vu_left_level = g_vu_left_level*(1.0f-alpha) + v*alpha;
                         g_vu_right_level = g_vu_right_level*(1.0f-alpha) + v*alpha;
                         Uint32 now = SDL_GetTicks(); int iv = (int)(v*100.0f);
@@ -3838,7 +3848,7 @@ int main(int argc, char *argv[]){
                         float rawR = fabsf((float)sR) / 32768.0f * g_vu_gain;
                         float fL = sqrtf(MIN(1.0f, rawL));
                         float fR = sqrtf(MIN(1.0f, rawR));
-                        const float alpha = 0.35f;
+                        const float alpha = MAIN_VU_ALPHA;
                         g_vu_left_level = g_vu_left_level*(1.0f-alpha) + fL*alpha;
                         g_vu_right_level = g_vu_right_level*(1.0f-alpha) + fR*alpha;
                         Uint32 now = SDL_GetTicks(); int il = (int)(g_vu_left_level*100.0f); int ir = (int)(g_vu_right_level*100.0f);
@@ -3848,7 +3858,7 @@ int main(int argc, char *argv[]){
                     }
                 }
             } else if(g_exporting){
-                const float decay = 0.15f;
+                const float decay = (1.0f - MAIN_VU_ALPHA); // keep exporting decay consistent with main smoothing (smoother)
                 g_vu_left_level = g_vu_left_level * (1.0f - decay);
                 g_vu_right_level = g_vu_right_level * (1.0f - decay);
                 if(g_vu_left_level < 0.001f) g_vu_left_level = 0.0f;
@@ -4052,7 +4062,7 @@ int main(int argc, char *argv[]){
         // show when the virtual keyboard is visible.
         if(showKeyboard){
             {
-                Rect allR = {20, 40 + 280, 16, 16}; // chStartX=20, chStartY=40, y offset +200
+                Rect allR = {20, 332, 16, 16}; // chStartX=20, chStartY=40, y offset +200
                 bool allHover = point_in(ui_mx, ui_my, allR);
                 bool allClickable = (!g_keyboard_channel_dd_open && !modal_block);
                 if(allClickable && ui_mclick && allHover){ g_keyboard_show_all_channels = !g_keyboard_show_all_channels; }
