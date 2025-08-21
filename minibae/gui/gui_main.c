@@ -746,6 +746,10 @@ typedef struct {
 
 static BAEGUI g_bae = {0};
 static bool g_reverbDropdownOpen = false;
+// A lightweight 'live' BAESong used to accept external MIDI/virtual keyboard
+// input when no file-based song is loaded. This lets the app respond to
+// incoming MIDI even while stopped or before the user opens a MIDI/RMF file.
+static BAESong g_live_song = NULL;
 // Virtual MIDI Keyboard panel state
 static int g_keyboard_channel = 0; // 0..15
 static bool g_keyboard_channel_dd_open = false;
@@ -765,6 +769,9 @@ static bool g_midi_input_enabled = false; // enable external MIDI input keyboard
 static int g_midi_input_device_index = 0; // selected input device index
 static bool g_midi_input_device_dd_open = false; // dropdown open state
 static int g_midi_input_device_count = 0; // cached input device count
+// Per-channel bank MSB/LSB tracking so Program Bank changes can be applied
+static unsigned char g_midi_bank_msb[16] = {0};
+static unsigned char g_midi_bank_lsb[16] = {0};
 // MIDI output settings
 static bool g_midi_output_enabled = false; // enable external MIDI output
 static int g_midi_output_device_index = 0; // selected output device index
@@ -1353,7 +1360,7 @@ static bool bae_start_wav_export(const char* output_file) {
 #if 1
     // Ensure virtual keyboard is reset and any held note is released when export starts
     if(g_show_virtual_keyboard){
-        if(g_keyboard_mouse_note != -1){ if(g_bae.song) BAESong_NoteOff(g_bae.song,(unsigned char)g_keyboard_channel,(unsigned char)g_keyboard_mouse_note,0,0); g_keyboard_mouse_note = -1; }
+    if(g_keyboard_mouse_note != -1){ BAESong target = g_bae.song ? g_bae.song : g_live_song; if(target) BAESong_NoteOff(target,(unsigned char)g_keyboard_channel,(unsigned char)g_keyboard_mouse_note,0,0); g_keyboard_mouse_note = -1; }
         memset(g_keyboard_active_notes, 0, sizeof(g_keyboard_active_notes));
     }
 #endif
@@ -1553,6 +1560,15 @@ static bool bae_init(int sampleRateHz, bool stereo){
     BAEMixer_ReengageAudio(g_bae.mixer); // ensure audio starts
     BAEMixer_SetDefaultReverb(g_bae.mixer, BAE_REVERB_NONE);
     BAEMixer_SetMasterVolume(g_bae.mixer, FLOAT_TO_UNSIGNED_FIXED(1.0));
+    // Create a lightweight live song to allow external MIDI/virtual keyboard
+    // input even when no file is loaded or when playback is stopped.
+    if(!g_live_song){
+        g_live_song = BAESong_New(g_bae.mixer);
+        if(g_live_song){
+            // Prepare voices so NoteOn/NoteOff can be serviced immediately
+            BAESong_Preroll(g_live_song);
+        }
+    }
     return true;
 }
 
@@ -1791,6 +1807,7 @@ static void bae_shutdown(){
     if(g_bae.song){ BAESong_Stop(g_bae.song,FALSE); BAESong_Delete(g_bae.song); g_bae.song=NULL; }
     if(g_bae.sound){ BAESound_Stop(g_bae.sound,FALSE); BAESound_Delete(g_bae.sound); g_bae.sound=NULL; }
     if(g_bae.mixer){ BAEMixer_Close(g_bae.mixer); BAEMixer_Delete(g_bae.mixer); g_bae.mixer=NULL; }
+    if(g_live_song){ BAESong_Stop(g_live_song, FALSE); BAESong_Delete(g_live_song); g_live_song = NULL; }
 }
 
 // Load a song (MIDI/RMF or audio) by path
@@ -1919,7 +1936,8 @@ static void bae_seek_ms(int ms){
     // Reset virtual keyboard UI and release any held virtual note when seeking
     if(g_show_virtual_keyboard) {
         if(g_keyboard_mouse_note != -1) {
-            if(g_bae.song) BAESong_NoteOff(g_bae.song,(unsigned char)g_keyboard_channel,(unsigned char)g_keyboard_mouse_note,0,0);
+            BAESong target = g_bae.song ? g_bae.song : g_live_song;
+            if(target) BAESong_NoteOff(target,(unsigned char)g_keyboard_channel,(unsigned char)g_keyboard_mouse_note,0,0);
             g_keyboard_mouse_note = -1;
         }
         memset(g_keyboard_active_notes, 0, sizeof(g_keyboard_active_notes));
@@ -2080,9 +2098,12 @@ static bool bae_play(bool *playing){
             // Ensure external MIDI devices are silenced on pause
             if(g_midi_output_enabled){ midi_output_send_all_notes_off(); }
             // Release any held virtual keyboard notes and clear keyboard UI state on pause
-            if(g_show_virtual_keyboard && g_bae.song){
-                for(int n=0;n<128;n++){
-                    BAESong_NoteOff(g_bae.song, (unsigned char)g_keyboard_channel, (unsigned char)n, 0, 0);
+            if(g_show_virtual_keyboard){
+                BAESong target = g_bae.song ? g_bae.song : g_live_song;
+                if(target){
+                    for(int n=0;n<128;n++){
+                        BAESong_NoteOff(target, (unsigned char)g_keyboard_channel, (unsigned char)n, 0, 0);
+                    }
                 }
                 g_keyboard_mouse_note = -1;
                 memset(g_keyboard_active_notes, 0, sizeof(g_keyboard_active_notes));
@@ -2108,10 +2129,9 @@ static void bae_stop(bool *playing,int *progress){
         g_bae.is_playing = false;
     }
     // Always reset virtual keyboard UI and release any held virtual notes when stopping
-    if(g_show_virtual_keyboard && g_bae.song){
-        for(int n=0;n<128;n++){
-            BAESong_NoteOff(g_bae.song, (unsigned char)g_keyboard_channel, (unsigned char)n, 0, 0);
-        }
+    if(g_show_virtual_keyboard){
+        BAESong target = g_bae.song ? g_bae.song : g_live_song;
+        if(target){ for(int n=0;n<128;n++){ BAESong_NoteOff(target, (unsigned char)g_keyboard_channel, (unsigned char)n, 0, 0); } }
         g_keyboard_mouse_note = -1;
         memset(g_keyboard_active_notes, 0, sizeof(g_keyboard_active_notes));
     }
@@ -2519,8 +2539,9 @@ int main(int argc, char *argv[]){
                             // Avoid retrigger if already held by keyboard
                             if(g_keyboard_pressed_note[sc] == midi) break;
                             g_keyboard_pressed_note[sc] = midi;
-                            if(g_show_virtual_keyboard && g_bae.song){
-                                BAESong_NoteOnWithLoad(g_bae.song, (unsigned char)g_keyboard_channel, (unsigned char)midi, 100, 0);
+                            if(g_show_virtual_keyboard){
+                                BAESong target = g_bae.song ? g_bae.song : g_live_song;
+                                if(target) BAESong_NoteOnWithLoad(target, (unsigned char)g_keyboard_channel, (unsigned char)midi, 100, 0);
                                 if(g_midi_output_enabled){ unsigned char mmsg[3]; mmsg[0] = (unsigned char)(0x90 | (g_keyboard_channel & 0x0F)); mmsg[1] = (unsigned char)midi; mmsg[2] = 100; midi_output_send(mmsg,3); }
                                 // Mark active in UI array so key lights up immediately
                                 g_keyboard_active_notes[midi] = 1;
@@ -2530,8 +2551,9 @@ int main(int argc, char *argv[]){
                             if(g_keyboard_pressed_note[sc] != -1){
                                 int heldMidi = g_keyboard_pressed_note[sc];
                                 g_keyboard_pressed_note[sc] = -1;
-                                if(g_show_virtual_keyboard && g_bae.song){
-                                    BAESong_NoteOff(g_bae.song, (unsigned char)g_keyboard_channel, (unsigned char)heldMidi, 0, 0);
+                                if(g_show_virtual_keyboard){
+                                    BAESong target = g_bae.song ? g_bae.song : g_live_song;
+                                    if(target) BAESong_NoteOff(target, (unsigned char)g_keyboard_channel, (unsigned char)heldMidi, 0, 0);
                                     if(g_midi_output_enabled){ unsigned char mmsg[3]; mmsg[0] = (unsigned char)(0x80 | (g_keyboard_channel & 0x0F)); mmsg[1] = (unsigned char)heldMidi; mmsg[2] = 0; midi_output_send(mmsg,3); }
                                     g_keyboard_active_notes[heldMidi] = 0;
                                 }
@@ -2588,36 +2610,112 @@ int main(int argc, char *argv[]){
         // We do not directly toggle g_keyboard_active_notes here because the
         // keyboard drawing code queries the engine via BAESong_GetActiveNotes
         // later each frame; sending events to the engine is sufficient.
-        if (g_midi_input_enabled && g_bae.song && !g_bae.is_audio_file) {
+    if (g_midi_input_enabled && (g_bae.song || g_live_song)) {
             unsigned char midi_buf[1024]; unsigned int midi_sz = 0; double midi_ts = 0.0;
             while (midi_input_poll(midi_buf, &midi_sz, &midi_ts)) {
                 if (midi_sz < 1) continue;
                 unsigned char status = midi_buf[0];
                 unsigned char mtype = status & 0xF0;
-                // unsigned char mch = status & 0x0F; // incoming channel (ignored)
-                if (mtype == 0x90 || mtype == 0x80) {
-                    if (midi_sz >= 3) {
-                        unsigned char note = midi_buf[1];
-                        unsigned char vel = midi_buf[2];
-                        if (mtype == 0x90 && vel != 0) {
-                            // Note On -> force to virtual keyboard channel
-                            BAESong_NoteOnWithLoad(g_bae.song, (unsigned char)g_keyboard_channel, note, vel, 0);
-                            if(g_midi_output_enabled){ unsigned char mmsg[3]; mmsg[0]=(unsigned char)(0x90 | (g_keyboard_channel & 0x0F)); mmsg[1]=note; mmsg[2]=vel; midi_output_send(mmsg,3); }
-                            // Also mark active immediately so the virtual keyboard lights up
-                            // even when engine playback isn't running (consistent with QWERTY handler).
-                            g_keyboard_active_notes[note] = 1;
-                        } else {
-                            // Note Off (or Note On with vel==0)
-                            BAESong_NoteOff(g_bae.song, (unsigned char)g_keyboard_channel, note, 0, 0);
-                            if(g_midi_output_enabled){ unsigned char mmsg[3]; mmsg[0]=(unsigned char)(0x80 | (g_keyboard_channel & 0x0F)); mmsg[1]=note; mmsg[2]=0; midi_output_send(mmsg,3); }
-                            // Clear UI active state immediately as well
+                unsigned char mch = status & 0x0F; // incoming channel
+
+        BAESong target = g_bae.song ? g_bae.song : g_live_song;
+        if(!target) continue;
+
+                // Helper lambda-style macros to forward to optional MIDI out
+#define FORWARD_OUT(buf, len) do { if(g_midi_output_enabled) midi_output_send((buf),(len)); } while(0)
+
+                switch (mtype) {
+                    case 0x80: // Note Off
+                        if (midi_sz >= 3) {
+                            unsigned char note = midi_buf[1];
+                            unsigned char vel = midi_buf[2];
+                            unsigned char target_ch = (unsigned char)mch;
+                            if(target) BAESong_NoteOff(target, target_ch, note, 0, 0);
+                            unsigned char out[3] = {(unsigned char)(0x80 | (mch & 0x0F)), note, vel}; FORWARD_OUT(out,3);
                             g_keyboard_active_notes[note] = 0;
                         }
-                    }
-                } else if (mtype == 0xB0) {
-                    // Controller messages (e.g., sustain) - currently ignored
-                    // Could be handled later if needed (CC 64 = sustain pedal)
+                        break;
+                    case 0x90: // Note On
+                        if (midi_sz >= 3) {
+                            unsigned char note = midi_buf[1];
+                            unsigned char vel = midi_buf[2];
+                            if (vel != 0) {
+                                unsigned char target_ch = (unsigned char)mch;
+                                if(target) BAESong_NoteOnWithLoad(target, target_ch, note, vel, 0);
+                                unsigned char out[3] = {(unsigned char)(0x90 | (mch & 0x0F)), note, vel}; FORWARD_OUT(out,3);
+                                g_keyboard_active_notes[note] = 1;
+                            } else {
+                                // Note On with velocity 0 == Note Off
+                                unsigned char target_ch = (unsigned char)mch;
+                                if(target) BAESong_NoteOff(target, target_ch, note, 0, 0);
+                                unsigned char out[3] = {(unsigned char)(0x80 | (mch & 0x0F)), note, 0}; FORWARD_OUT(out,3);
+                                g_keyboard_active_notes[note] = 0;
+                            }
+                        }
+                        break;
+                    case 0xA0: // Polyphonic Key Pressure (Aftertouch)
+                        if (midi_sz >= 3) {
+                            unsigned char note = midi_buf[1];
+                            unsigned char pressure = midi_buf[2];
+                            if(target) BAESong_KeyPressure(target, (unsigned char)mch, note, pressure, 0);
+                            unsigned char out[3] = {(unsigned char)(0xA0 | (mch & 0x0F)), note, pressure}; FORWARD_OUT(out,3);
+                        }
+                        break;
+                    case 0xB0: // Control Change
+                        if (midi_sz >= 3) {
+                            unsigned char cc = midi_buf[1];
+                            unsigned char val = midi_buf[2];
+                            // Track Bank Select MSB/LSB (CC 0 and 32)
+                            if (cc == 0) { g_midi_bank_msb[mch] = val; }
+                            else if (cc == 32) { g_midi_bank_lsb[mch] = val; }
+                            {
+                                unsigned char target_ch = (unsigned char)mch;
+                                if(target) BAESong_ControlChange(target, target_ch, cc, val, 0);
+                            }
+                            unsigned char out[3] = {(unsigned char)(0xB0 | (mch & 0x0F)), cc, val}; FORWARD_OUT(out,3);
+
+                            // MIDI All Notes Off (CC 123) or All Sound Off (120)
+                            if (cc == 123 || cc == 120) {
+                                if(target) BAESong_AllNotesOff(target, 0);
+                            }
+                        }
+                        break;
+                    case 0xC0: // Program Change
+                        if (midi_sz >= 2) {
+                            unsigned char program = midi_buf[1];
+                            unsigned char bank = g_midi_bank_msb[mch];
+                            // Apply bank/program to song (respect stopped -> keyboard channel)
+                            {
+                                unsigned char target_ch = (unsigned char)mch;
+                                if(target){ BAESong_ProgramBankChange(target, target_ch, program, bank, 0); BAESong_ProgramChange(target, target_ch, program, 0); }
+                            }
+                            unsigned char out[2] = {(unsigned char)(0xC0 | (mch & 0x0F)), program}; FORWARD_OUT(out,2);
+                        }
+                        break;
+                    case 0xD0: // Channel Pressure (Aftertouch)
+                        if (midi_sz >= 2) {
+                            unsigned char pressure = midi_buf[1];
+                            if(target) BAESong_ChannelPressure(target, (unsigned char)mch, pressure, 0);
+                            unsigned char out[2] = {(unsigned char)(0xD0 | (mch & 0x0F)), pressure}; FORWARD_OUT(out,2);
+                        }
+                        break;
+                    case 0xE0: // Pitch Bend (14-bit LSB + MSB)
+                        if (midi_sz >= 3) {
+                            unsigned char lsb = midi_buf[1];
+                            unsigned char msb = midi_buf[2];
+                            if(target) BAESong_PitchBend(target, (unsigned char)mch, lsb, msb, 0);
+                            unsigned char out[3] = {(unsigned char)(0xE0 | (mch & 0x0F)), lsb, msb}; FORWARD_OUT(out,3);
+                        }
+                        break;
+                    case 0xF0: // System messages - ignore or handle SysEx if needed
+                        // Currently ignore system realtime and sysex messages from input
+                        break;
+                    default:
+                        // Unhandled type
+                        break;
                 }
+
+#undef FORWARD_OUT
             }
         }
 
@@ -2698,7 +2796,7 @@ int main(int argc, char *argv[]){
     Rect transportPanel = {10, 160, 880, 80};
     int keyboardPanelY = transportPanel.y + transportPanel.h + 10;
     Rect keyboardPanel = {10, keyboardPanelY, 880, 110};
-    bool showKeyboard = g_show_virtual_keyboard && g_bae.song_loaded && !g_bae.is_audio_file;
+    bool showKeyboard = g_show_virtual_keyboard && (g_midi_input_enabled || (g_bae.song_loaded && !g_bae.is_audio_file));
 #ifdef SUPPORT_KARAOKE
     // Insert karaoke panel (if active) above status panel; dynamic window height
     int karaokePanelHeight = 40;    
@@ -2963,18 +3061,25 @@ int main(int argc, char *argv[]){
             if(bae_play(&playing)){
                 // If the play call resulted in a pause (playing==false), clear visible notes on the virtual keyboard
                 if(!playing){
-                    if(g_keyboard_mouse_note != -1){ if(g_bae.song) BAESong_NoteOff(g_bae.song,(unsigned char)g_keyboard_channel,(unsigned char)g_keyboard_mouse_note,0,0); g_keyboard_mouse_note = -1; }
+                    if(g_keyboard_mouse_note != -1){ BAESong target = g_bae.song ? g_bae.song : g_live_song; if(target) BAESong_NoteOff(target,(unsigned char)g_keyboard_channel,(unsigned char)g_keyboard_mouse_note,0,0); g_keyboard_mouse_note = -1; }
                     memset(g_keyboard_active_notes, 0, sizeof(g_keyboard_active_notes));
                 }
             }
         }
     if(ui_button(R,(Rect){90, 215, 60,22}, "Stop", ui_mx,ui_my,ui_mdown) && ui_mclick && !modal_block){ 
             bae_stop(&playing,&progress);
+            // Ensure engine releases any held notes when user stops playback
+            if(g_bae.song){ BAESong_AllNotesOff(g_bae.song, 0); }
+            if(g_live_song){ BAESong_AllNotesOff(g_live_song, 0); }
             // Reset total-play timer on user Stop
             g_total_play_ms = 0;
             g_last_engine_pos_ms = 0;
-            // Clear visible virtual keyboard notes on Stop
-        if(g_show_virtual_keyboard && g_bae.song){ for(int n=0;n<128;n++){ BAESong_NoteOff(g_bae.song,(unsigned char)g_keyboard_channel,(unsigned char)n,0,0); } g_keyboard_mouse_note = -1; memset(g_keyboard_active_notes, 0, sizeof(g_keyboard_active_notes)); g_keyboard_suppress_until = SDL_GetTicks() + 250; }
+            // Clear visible virtual keyboard notes on Stop (use live song fallback)
+            if(g_show_virtual_keyboard){
+                BAESong target = g_bae.song ? g_bae.song : g_live_song;
+                if(target){ for(int n=0;n<128;n++){ BAESong_NoteOff(target,(unsigned char)g_keyboard_channel,(unsigned char)n,0,0); } }
+                g_keyboard_mouse_note = -1; memset(g_keyboard_active_notes, 0, sizeof(g_keyboard_active_notes)); g_keyboard_suppress_until = SDL_GetTicks() + 250;
+            }
             // Also stop export if active
             if(g_exporting) {
                 bae_stop_wav_export();
@@ -3005,10 +3110,13 @@ int main(int argc, char *argv[]){
             // or immediately after a user-driven Stop/Pause so the UI doesn't
             // immediately relight notes before the engine processes NoteOffs).
             memset(g_keyboard_active_notes,0,sizeof(g_keyboard_active_notes));
-            if(!g_exporting && g_bae.song && g_bae.is_playing){
-                Uint32 nowms = SDL_GetTicks();
-                if(nowms >= g_keyboard_suppress_until){
-                    BAESong_GetActiveNotes(g_bae.song, (unsigned char)g_keyboard_channel, g_keyboard_active_notes);
+            if(!g_exporting){
+                BAESong target = g_bae.song ? g_bae.song : g_live_song;
+                if(target && g_bae.is_playing){
+                    Uint32 nowms = SDL_GetTicks();
+                    if(nowms >= g_keyboard_suppress_until){
+                        BAESong_GetActiveNotes(target, (unsigned char)g_keyboard_channel, g_keyboard_active_notes);
+                    }
                 }
             }
             // Keyboard drawing region
@@ -3065,7 +3173,7 @@ int main(int argc, char *argv[]){
                 if(ui_mdown){
                     if(mouseNote != -1 && mouseNote != g_keyboard_mouse_note){
                         // Release previous
-                        if(g_keyboard_mouse_note != -1 && g_bae.song){ BAESong_NoteOff(g_bae.song,(unsigned char)g_keyboard_channel,(unsigned char)g_keyboard_mouse_note,0,0); }
+                        if(g_keyboard_mouse_note != -1){ BAESong target = g_bae.song ? g_bae.song : g_live_song; if(target){ BAESong_NoteOff(target,(unsigned char)g_keyboard_channel,(unsigned char)g_keyboard_mouse_note,0,0); } }
                         // Compute velocity based on Y position inside the key: quiet near top, loud near bottom.
                         // Bottom 15 pixels always map to max velocity (127).
                         int keyHeight = kbH; // default white key height
@@ -3085,22 +3193,22 @@ int main(int argc, char *argv[]){
                             if(vel < 8) vel = 8; // floor so very top still audible
                             if(vel > 112) vel = 112;
                         }
-                        if(g_bae.song){ BAESong_NoteOnWithLoad(g_bae.song,(unsigned char)g_keyboard_channel,(unsigned char)mouseNote,(unsigned char)vel,0); }
+                        { BAESong target = g_bae.song ? g_bae.song : g_live_song; if(target){ BAESong_NoteOnWithLoad(target,(unsigned char)g_keyboard_channel,(unsigned char)mouseNote,(unsigned char)vel,0); } }
                         if(g_midi_output_enabled){ unsigned char m[3]; m[0] = (unsigned char)(0x90 | (g_keyboard_channel & 0x0F)); m[1] = (unsigned char)mouseNote; m[2] = (unsigned char)vel; midi_output_send(m,3); }
                         g_keyboard_mouse_note = mouseNote;
                     } else if(mouseNote == -1 && g_keyboard_mouse_note != -1){
                         // Dragged outside – stop sounding note
-                        if(g_bae.song){ BAESong_NoteOff(g_bae.song,(unsigned char)g_keyboard_channel,(unsigned char)g_keyboard_mouse_note,0,0); }
+                        { BAESong target = g_bae.song ? g_bae.song : g_live_song; if(target){ BAESong_NoteOff(target,(unsigned char)g_keyboard_channel,(unsigned char)g_keyboard_mouse_note,0,0); } }
                         if(g_midi_output_enabled && g_keyboard_mouse_note != -1){ unsigned char m[3]; m[0] = (unsigned char)(0x80 | (g_keyboard_channel & 0x0F)); m[1] = (unsigned char)g_keyboard_mouse_note; m[2] = 0; midi_output_send(m,3); }
                         g_keyboard_mouse_note = -1;
                     }
                 } else {
                     // Mouse released anywhere
-                    if(g_keyboard_mouse_note != -1){ if(g_bae.song){ BAESong_NoteOff(g_bae.song,(unsigned char)g_keyboard_channel,(unsigned char)g_keyboard_mouse_note,0,0); } if(g_midi_output_enabled){ unsigned char m[3]; m[0]=(unsigned char)(0x80 | (g_keyboard_channel & 0x0F)); m[1]=(unsigned char)g_keyboard_mouse_note; m[2]=0; midi_output_send(m,3);} g_keyboard_mouse_note = -1; }
+                    if(g_keyboard_mouse_note != -1){ BAESong target = g_bae.song ? g_bae.song : g_live_song; if(target){ BAESong_NoteOff(target,(unsigned char)g_keyboard_channel,(unsigned char)g_keyboard_mouse_note,0,0); } if(g_midi_output_enabled){ unsigned char m[3]; m[0]=(unsigned char)(0x80 | (g_keyboard_channel & 0x0F)); m[1]=(unsigned char)g_keyboard_mouse_note; m[2]=0; midi_output_send(m,3);} g_keyboard_mouse_note = -1; }
                 }
             } else {
                 // If dropdown/modal opens while holding a note, release it
-                if(g_keyboard_mouse_note != -1){ if(g_bae.song){ BAESong_NoteOff(g_bae.song,(unsigned char)g_keyboard_channel,(unsigned char)g_keyboard_mouse_note,0,0); } if(g_midi_output_enabled){ unsigned char m[3]; m[0]=(unsigned char)(0x80 | (g_keyboard_channel & 0x0F)); m[1]=(unsigned char)g_keyboard_mouse_note; m[2]=0; midi_output_send(m,3);} g_keyboard_mouse_note = -1; }
+                if(g_keyboard_mouse_note != -1){ BAESong target = g_bae.song ? g_bae.song : g_live_song; if(target){ BAESong_NoteOff(target,(unsigned char)g_keyboard_channel,(unsigned char)g_keyboard_mouse_note,0,0); } if(g_midi_output_enabled){ unsigned char m[3]; m[0]=(unsigned char)(0x80 | (g_keyboard_channel & 0x0F)); m[1]=(unsigned char)g_keyboard_mouse_note; m[2]=0; midi_output_send(m,3);} g_keyboard_mouse_note = -1; }
             }
         }
     {
@@ -3190,7 +3298,8 @@ int main(int argc, char *argv[]){
                         else {
                             // Reset virtual keyboard so no keys remain active during export
                             if(g_show_virtual_keyboard){
-                                if(g_keyboard_mouse_note != -1){ if(g_bae.song) BAESong_NoteOff(g_bae.song,(unsigned char)g_keyboard_channel,(unsigned char)g_keyboard_mouse_note,0,0); g_keyboard_mouse_note = -1; }
+                                BAESong target = g_bae.song ? g_bae.song : g_live_song;
+                                if(g_keyboard_mouse_note != -1){ if(target) BAESong_NoteOff(target,(unsigned char)g_keyboard_channel,(unsigned char)g_keyboard_mouse_note,0,0); g_keyboard_mouse_note = -1; }
                                 memset(g_keyboard_active_notes, 0, sizeof(g_keyboard_active_notes));
                             }
                             // Start song to drive export
@@ -4194,7 +4303,7 @@ int main(int argc, char *argv[]){
         }
 
     // Clear visible virtual keyboard notes when stopping from export overlay too
-    if(g_show_virtual_keyboard && g_bae.song){ for(int n=0;n<128;n++){ BAESong_NoteOff(g_bae.song,(unsigned char)g_keyboard_channel,(unsigned char)n,0,0); } g_keyboard_mouse_note = -1; memset(g_keyboard_active_notes, 0, sizeof(g_keyboard_active_notes)); g_keyboard_suppress_until = SDL_GetTicks() + 250; }
+    if(g_show_virtual_keyboard){ BAESong target = g_bae.song ? g_bae.song : g_live_song; if(target){ for(int n=0;n<128;n++){ BAESong_NoteOff(target,(unsigned char)g_keyboard_channel,(unsigned char)n,0,0); } } g_keyboard_mouse_note = -1; memset(g_keyboard_active_notes, 0, sizeof(g_keyboard_active_notes)); g_keyboard_suppress_until = SDL_GetTicks() + 250; }
     }
     SDL_RenderPresent(R);
     SDL_Delay(16);
