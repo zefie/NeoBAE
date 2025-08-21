@@ -2506,12 +2506,18 @@ int main(int argc, char *argv[]){
                                 set_status_message("Failed to load external bank file");
                             }
                         } else {
-                            if(bae_load_song_with_settings(incoming, transpose, tempo, volume, loopPlay, reverbType, ch_enable)) {
-                                duration = bae_get_len_ms(); progress=0; 
-                                playing = false;
-                                bae_play(&playing);
+                            // If MIDI input is enabled we must ignore external IPC open requests for media
+                            if (g_midi_input_enabled) {
+                                BAE_PRINTF("External open request: MIDI input enabled - ignoring: %s\n", incoming);
+                                set_status_message("MIDI input enabled: external open ignored");
                             } else {
-                                set_status_message("Failed to load external media file");
+                                if(bae_load_song_with_settings(incoming, transpose, tempo, volume, loopPlay, reverbType, ch_enable)) {
+                                    duration = bae_get_len_ms(); progress=0; 
+                                    playing = false;
+                                    bae_play(&playing);
+                                } else {
+                                    set_status_message("Failed to load external media file");
+                                }
                             }
                         }
                         free(incoming);
@@ -4008,9 +4014,17 @@ int main(int argc, char *argv[]){
     }
         
     // Status indicator (use theme-safe highlight color for playing state)
-    const char *status = playing ? "♪ Playing" : "⏸ Stopped";
-    SDL_Color statusCol = playing ? g_highlight_color : g_header_color;
-        draw_text(R,20, lineY3, status, statusCol);
+    const char *status;
+    SDL_Color statusCol;
+    if (g_midi_input_enabled) {
+        // When MIDI Input mode is enabled, present the transport status as External
+        status = "External";
+        statusCol = g_highlight_color;
+    } else {
+        status = playing ? "♪ Playing" : "■ Stopped";
+        statusCol = playing ? g_highlight_color : g_header_color;
+    }
+    draw_text(R,20, lineY3, status, statusCol);
 
         // Show status message if recent (within 3 seconds)
         if(g_bae.status_message[0] != '\0' && (now - g_bae.status_message_time) < 3000) {
@@ -4355,8 +4369,16 @@ int main(int argc, char *argv[]){
             if(ui_toggle(R, midiEnRect, &g_midi_input_enabled, "MIDI Input", mx,my,mclick)){
                 // initialize or shutdown midi input as requested
                 if(g_midi_input_enabled){
-                    // Reinitialize: ensure a clean start by shutting down first, then init
+                    // When enabling MIDI In, stop and unload any current media so the live synth takes over
+                    // Stop and delete loaded song or sound if present
+                    if(g_exporting){ bae_stop_wav_export(); }
+                    if(g_bae.is_audio_file && g_bae.sound){ BAESound_Stop(g_bae.sound, FALSE); BAESound_Delete(g_bae.sound); g_bae.sound = NULL; }
+                    if(g_bae.song){ BAESong_Stop(g_bae.song, FALSE); BAESong_Delete(g_bae.song); g_bae.song = NULL; }
+                    g_bae.song_loaded = false; g_bae.is_audio_file = false; g_bae.is_rmf_file = false; g_bae.song_length_us = 0;
+                    // Reinitialize: ensure a clean start by shutting down any existing MIDI input first, then init
                     midi_input_shutdown();
+                    // Ensure we have a live song available for incoming MIDI
+                    if(g_live_song == NULL && g_bae.mixer){ g_live_song = BAESong_New(g_bae.mixer); if(g_live_song){ BAESong_Preroll(g_live_song); } }
                     // If the user has chosen a specific input device, open that one
                     if(g_midi_input_device_index >= 0 && g_midi_input_device_index < g_midi_input_device_count){
                         int api = g_midi_device_api[g_midi_input_device_index];
