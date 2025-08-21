@@ -783,6 +783,12 @@ static void karaoke_commit_line(uint32_t time_us, const char *line);
 static int g_total_play_ms = 0;
 static int g_last_engine_pos_ms = 0;
 
+// Progress bar stripe animation state
+static int g_progress_stripe_offset = 0;
+static const int g_progress_stripe_width = 28;
+// Toggle for WebTV-style progress bar (Settings -> "WebTV Style Bar")
+static bool g_disable_webtv_progress_bar = false; // default: WebTV enabled
+
 // VU meter state (smoothed levels 0.0 .. 1.0 and peak hold)
 static float g_vu_left_level = 0.0f;
 static float g_vu_right_level = 0.0f;
@@ -1095,6 +1101,8 @@ typedef struct {
     int sample_rate_hz;
     bool has_show_keyboard;
     bool show_keyboard;
+    bool has_webtv;
+    bool disable_webtv_progress_bar;
     bool has_export_codec;
     int export_codec_index;
 } Settings;
@@ -1129,19 +1137,15 @@ static void save_settings(const char* last_bank_path, int reverb_type, bool loop
     
     FILE* f = fopen(settings_path, "w");
     if (f) {
-        // Existing values
         fprintf(f, "last_bank=%s\n", path_to_save ? path_to_save : "");
         fprintf(f, "reverb_type=%d\n", reverb_type);
         fprintf(f, "loop_enabled=%d\n", loop_enabled ? 1 : 0);
-        // New persisted UI settings (always write to simplify parsing)
         fprintf(f, "volume_curve=%d\n", g_volume_curve);
         fprintf(f, "stereo_output=%d\n", g_stereo_output ? 1 : 0);
         fprintf(f, "sample_rate=%d\n", g_sample_rate_hz);
     fprintf(f, "show_keyboard=%d\n", g_show_virtual_keyboard ? 1 : 0);
-    // Export codec index persisted so user preference survives restarts
-    fprintf(f, "export_codec_index=%d\n", g_exportCodecIndex);
-        BAE_PRINTF("Saved settings: last_bank=%s reverb=%d loop=%d volCurve=%d stereo=%d rate=%d\n", 
-            path_to_save ? path_to_save : "", reverb_type, loop_enabled ? 1 : 0, g_volume_curve, g_stereo_output?1:0, g_sample_rate_hz);
+    fprintf(f, "disable_webtv_progress_bar=%d\n", g_disable_webtv_progress_bar ? 1 : 0);
+        fprintf(f, "export_codec_index=%d\n", g_exportCodecIndex);
         fclose(f);
     } else {
         BAE_PRINTF("Failed to open %s for writing\n", settings_path);
@@ -1162,6 +1166,7 @@ static Settings load_settings() {
     settings.has_stereo = false; settings.stereo_output = true;
     settings.has_sample_rate = false; settings.sample_rate_hz = 44100;
     settings.has_show_keyboard = false; settings.show_keyboard = false;
+    settings.has_webtv = false; settings.disable_webtv_progress_bar = false;
     
     // Build path to settings file in executable directory
     char settings_path[768];
@@ -1186,42 +1191,51 @@ static Settings load_settings() {
         while (len > 0 && (line[len-1] == '\n' || line[len-1] == '\r')) {
             line[--len] = '\0';
         }
-        
-        if (strncmp(line, "last_bank=", 10) == 0) {
-            char* path = line + 10;
+    // Trim leading whitespace so keys with accidental indentation are accepted
+    char *p = line;
+    while(*p && isspace((unsigned char)*p)) p++;
+    // Skip optional UTF-8 BOM if present
+    if ((unsigned char)p[0] == 0xEF && (unsigned char)p[1] == 0xBB && (unsigned char)p[2] == 0xBF) p += 3;
+
+        if (strncmp(p, "last_bank=", 10) == 0) {
+            char* path = p + 10;
             if (strlen(path) > 0) {
                 strncpy(settings.bank_path, path, sizeof(settings.bank_path)-1);
                 settings.bank_path[sizeof(settings.bank_path)-1] = '\0';
                 settings.has_bank = true;
                 BAE_PRINTF("Loaded bank setting: %s\n", settings.bank_path);
             }
-        } else if (strncmp(line, "reverb_type=", 12) == 0) {
-            settings.reverb_type = atoi(line + 12);
+        } else if (strncmp(p, "reverb_type=", 12) == 0) {
+            settings.reverb_type = atoi(p + 12);
             settings.has_reverb = true;
             BAE_PRINTF("Loaded reverb setting: %d\n", settings.reverb_type);
-        } else if (strncmp(line, "loop_enabled=", 13) == 0) {
-            settings.loop_enabled = (atoi(line + 13) != 0);
+        } else if (strncmp(p, "loop_enabled=", 13) == 0) {
+            settings.loop_enabled = (atoi(p + 13) != 0);
             settings.has_loop = true;
             BAE_PRINTF("Loaded loop setting: %d\n", settings.loop_enabled ? 1 : 0);
-        } else if (strncmp(line, "volume_curve=", 13) == 0) {
-            settings.volume_curve = atoi(line + 13);
+        } else if (strncmp(p, "volume_curve=", 13) == 0) {
+            settings.volume_curve = atoi(p + 13);
             settings.has_volume_curve = true;
             BAE_PRINTF("Loaded volume curve: %d\n", settings.volume_curve);
-        } else if (strncmp(line, "stereo_output=", 14) == 0) {
-            settings.stereo_output = (atoi(line + 14) != 0);
+        } else if (strncmp(p, "stereo_output=", 14) == 0) {
+            settings.stereo_output = (atoi(p + 14) != 0);
             settings.has_stereo = true;
             BAE_PRINTF("Loaded stereo output: %d\n", settings.stereo_output ? 1 : 0);
-        } else if (strncmp(line, "sample_rate=", 12) == 0) {
-            settings.sample_rate_hz = atoi(line + 12);
+        } else if (strncmp(p, "sample_rate=", 12) == 0) {
+            settings.sample_rate_hz = atoi(p + 12);
             if(settings.sample_rate_hz < 7000 || settings.sample_rate_hz > 50000){ settings.sample_rate_hz = 44100; }
             settings.has_sample_rate = true;
             BAE_PRINTF("Loaded sample rate: %d\n", settings.sample_rate_hz);
-        } else if (strncmp(line, "show_keyboard=", 14) == 0) {
-            settings.show_keyboard = (atoi(line + 14) != 0);
+        } else if (strncmp(p, "show_keyboard=", 14) == 0) {
+            settings.show_keyboard = (atoi(p + 14) != 0);
             settings.has_show_keyboard = true;
             BAE_PRINTF("Loaded show keyboard: %d\n", settings.show_keyboard?1:0);
-        } else if (strncmp(line, "export_codec_index=", 19) == 0) {
-            settings.export_codec_index = atoi(line + 19);
+        } else if (strncmp(p, "disable_webtv_progress_bar=", 27) == 0) {
+            settings.disable_webtv_progress_bar = (atoi(p + 27) != 0);
+            settings.has_webtv = true;
+            BAE_PRINTF("Loaded disable_webtv_progress_bar: %d\n", settings.disable_webtv_progress_bar?1:0);
+        } else if (strncmp(p, "export_codec_index=", 19) == 0) {
+            settings.export_codec_index = atoi(p + 19);
             settings.has_export_codec = true;
             BAE_PRINTF("Loaded export codec index: %d\n", settings.export_codec_index);
         }
@@ -2264,6 +2278,7 @@ int main(int argc, char *argv[]){
     if (settings.has_sample_rate) { g_sample_rate_hz = settings.sample_rate_hz; }
     if (settings.has_show_keyboard) { g_show_virtual_keyboard = settings.show_keyboard; }
     if (settings.has_export_codec) { g_exportCodecIndex = settings.export_codec_index; if(g_exportCodecIndex < 0) g_exportCodecIndex = 0; }
+    if (settings.has_webtv) { g_disable_webtv_progress_bar = settings.disable_webtv_progress_bar; }
     // Apply stored default velocity (aka volume) curve to global engine setting so new songs adopt it
     if (settings.has_volume_curve) {
         BAE_SetDefaultVelocityCurve(g_volume_curve);
@@ -2276,7 +2291,7 @@ int main(int argc, char *argv[]){
     
     if(!g_bae.bank_loaded){ BAE_PRINTF("WARNING: No patch bank loaded. Place patches.hsb next to executable or use built-in patches.\n"); }
 
-    SDL_Window *win = SDL_CreateWindow("miniBAE Player (Prototype)", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, WINDOW_W, g_window_h, SDL_WINDOW_SHOWN);
+    SDL_Window *win = SDL_CreateWindow("miniBAE Player", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, WINDOW_W, g_window_h, SDL_WINDOW_SHOWN);
     setWindowTitle(win);
     setWindowIcon(win);
     if(!win){ BAE_PRINTF("Window failed: %s\n", SDL_GetError()); SDL_Quit(); return 1; }
@@ -2735,8 +2750,56 @@ int main(int argc, char *argv[]){
         float pct = (duration>0)? (float)progress/duration : 0.f; 
         if(pct<0)pct=0; if(pct>1)pct=1;
         if(pct > 0) {
-            // Revert progress bar fill to accent color (user wants progress bar to retain accent styling)
-            draw_rect(R, (Rect){bar.x+2,bar.y+2,(int)((bar.w-4)*pct),bar.h-4}, g_accent_color);
+            // Animated striped progress fill using accent color
+            int fillW = (int)((bar.w-4) * pct);
+            Rect fillRect = { bar.x + 2, bar.y + 2, fillW, bar.h - 4 };
+            // Background for fill area (darker strip base)
+            SDL_Color accent_dark = g_accent_color;
+            int tr = (int)accent_dark.r - 36; if(tr < 0) tr = 0; accent_dark.r = (Uint8)tr;
+            int tg = (int)accent_dark.g - 36; if(tg < 0) tg = 0; accent_dark.g = (Uint8)tg;
+            int tb = (int)accent_dark.b - 36; if(tb < 0) tb = 0; accent_dark.b = (Uint8)tb;
+            if(g_disable_webtv_progress_bar){
+                // Simple solid accent fill when WebTV style is disabled
+                draw_rect(R, fillRect, g_accent_color);
+            } else {
+                draw_rect(R, fillRect, accent_dark);
+
+                // Clip drawing to the fill area so stripes don't bleed outside
+                SDL_Rect clip = { fillRect.x, fillRect.y, fillRect.w, fillRect.h };
+                SDL_RenderSetClipRect(R, &clip);
+
+                // Draw diagonal stripes (leaning down-right) with equal dark/light band sizes.
+                SDL_SetRenderDrawBlendMode(R, SDL_BLENDMODE_BLEND);
+                SDL_SetRenderDrawColor(R, g_accent_color.r, g_accent_color.g, g_accent_color.b, 220);
+                int bandW = (g_progress_stripe_width / 2) + 4; // light band width (widened)
+                if(bandW < 6) bandW = 6;
+                int stripeStep = bandW * 2; // dark+light equal
+                int thickness = 18; // make the light band visibly wider
+                int off = g_progress_stripe_offset % stripeStep;
+                // Draw slanted bands by drawing multiple parallel lines per band
+                // Draw slanted bands leaning up-left (reverse of previous)
+                for(int sx = -fillRect.h - bandW - off; sx < fillRect.w + fillRect.h; sx += stripeStep){
+                    int x0 = fillRect.x + sx;
+                    int x1 = x0 + bandW;
+                    for(int t=0; t<thickness; ++t){
+                        // Draw from bottom to top so the slant opposes previous direction
+                        SDL_RenderDrawLine(R, x0 + t, fillRect.y + fillRect.h, x1 + t, fillRect.y);
+                    }
+                }
+
+                // Restore clip
+                SDL_RenderSetClipRect(R, NULL);
+                // Advance stripe animation only every other frame to slow it down
+                static int g_progress_frame_counter = 0;
+                g_progress_frame_counter++;
+                // Advance more slowly: 1 unit every N frames (keeps frame rate unchanged)
+                const int advanceInterval = 3; // increase to slow the perceived scroll speed
+                if((g_progress_frame_counter % advanceInterval) == 0){
+                    // Reverse scrolling direction by subtracting a single unit
+                    g_progress_stripe_offset = (g_progress_stripe_offset - 1) % (stripeStep);
+                    if(g_progress_stripe_offset < 0) g_progress_stripe_offset += stripeStep;
+                }
+            }
         }
         if(ui_mdown && point_in(ui_mx,ui_my,bar)){
             int rel = ui_mx - bar.x; if(rel<0)rel=0; if(rel>bar.w) rel=bar.w; 
@@ -3678,6 +3741,17 @@ int main(int argc, char *argv[]){
                 save_settings(g_current_bank_path[0]?g_current_bank_path:NULL, reverbType, loopPlay);
                 // Close dropdown if hiding keyboard
                 if(!g_show_virtual_keyboard) g_keyboard_channel_dd_open=false;
+            }
+
+            // WebTV-style progress bar toggle (stored as disable flag internally)
+            Rect wtvRect = { dlg.x + pad, dlg.y + 192, 18, 18 };
+            // ui_toggle expects a bool* for the visible checked state. Present a
+            // temporary that represents the positive meaning (WebTV enabled).
+            bool webtv_enabled = !g_disable_webtv_progress_bar;
+            if(ui_toggle(R, wtvRect, &webtv_enabled, "WebTV Style Bar", mx,my,mclick)){
+                // Update internal inverted flag and persist
+                g_disable_webtv_progress_bar = !webtv_enabled;
+                save_settings(g_current_bank_path[0]?g_current_bank_path:NULL, reverbType, loopPlay);
             }
 
             // Export codec selector (moved from main UI into Settings dialog)
