@@ -1009,6 +1009,8 @@ static bool g_rmf_info_loaded = false;          // have we populated fields for 
 static char g_rmf_info_values[INFO_TYPE_COUNT][512]; // storage for each info field
 // Settings dialog state (UI only, functionality not applied yet)
 static bool g_show_settings_dialog = false;
+// About dialog (placeholder)
+static bool g_show_about_dialog = false;
 // Settings button no longer uses icon; keep simple text button
 static int  g_volume_curve = 0; // 0..4
 static bool g_volumeCurveDropdownOpen = false;
@@ -2954,7 +2956,7 @@ int main(int argc, char *argv[]){
     // Channel toggles in a neat grid (with measured label centering)
     // Block background interactions when a modal is active or when exporting.
     // Exporting will dim and lock most UI, but the Stop button remains active.
-    bool modal_block = g_show_settings_dialog || (g_show_rmf_info_dialog && g_bae.is_rmf_file) || g_exporting; // block when any modal/dialog open or export in progress
+    bool modal_block = g_show_settings_dialog || g_show_about_dialog || (g_show_rmf_info_dialog && g_bae.is_rmf_file) || g_exporting; // block when any modal/dialog open or export in progress
     // When a modal is active we fully swallow background hover/drag/click by using off-screen, inert inputs
     int ui_mx = mx, ui_my = my; bool ui_mdown = mdown; bool ui_mclick = mclick;
     if(modal_block){ ui_mx = ui_my = -10000; ui_mdown = ui_mclick = false; }
@@ -3958,8 +3960,16 @@ int main(int argc, char *argv[]){
             }
         }
 
-        // Load Bank button (left of Settings). Label trimmed to "Load Bank" per request.
-        if(ui_button(R, loadBankBtn, "Load Bank", ui_mx, ui_my, ui_mdown) && ui_mclick && !modal_block){
+    // About button (left of Load Bank) - same size as settings
+    Rect aboutBtn = { loadBankBtn.x - gap - btnW, baseY, btnW, btnH };
+    draw_rect(R, aboutBtn, g_button_base);
+    draw_frame(R, aboutBtn, g_button_border);
+    int abtw=0, abth=0; measure_text("About", &abtw, &abth);
+    draw_text(R, aboutBtn.x + (aboutBtn.w - abtw)/2, aboutBtn.y + (aboutBtn.h - abth)/2, "About", g_button_text);
+    if(point_in(ui_mx, ui_my, aboutBtn) && ui_mclick && !modal_block){ g_show_about_dialog = !g_show_about_dialog; if(g_show_about_dialog){ g_show_settings_dialog = false; g_show_rmf_info_dialog = false; } }
+
+    // Load Bank button (left of Settings). Label trimmed to "Load Bank" per request.
+    if(ui_button(R, loadBankBtn, "Load Bank", ui_mx, ui_my, ui_mdown) && ui_mclick && !modal_block){
             #ifdef _WIN32
             char fileBuf[1024]={0};
             OPENFILENAMEA ofn; ZeroMemory(&ofn,sizeof(ofn));
@@ -4573,6 +4583,8 @@ int main(int argc, char *argv[]){
                 if(!g_show_virtual_keyboard) g_keyboard_channel_dd_open=false;
             }
 
+        
+
             Rect wtvRect = { rightX, dlg.y + 108, 18, 18 };
             bool webtv_enabled = !g_disable_webtv_progress_bar;
             if(ui_toggle(R, wtvRect, &webtv_enabled, "WebTV Style Bar", mx,my,mclick)){
@@ -4740,6 +4752,33 @@ int main(int argc, char *argv[]){
             // Discard clicks outside dialog (after dropdown so it doesn't immediately close on open)
             if(mclick && !point_in(mx,my,dlg)) { /* swallow */ }
         }
+
+    // About dialog (modal overlay) - same size as Settings
+    if(g_show_about_dialog){
+        SDL_Color dim = g_is_dark_mode ? (SDL_Color){0,0,0,120} : (SDL_Color){0,0,0,90};
+        draw_rect(R,(Rect){0,0,WINDOW_W,g_window_h}, dim);
+        int dlgW = 560; int dlgH = 280; int pad = 10;
+        Rect dlg = { (WINDOW_W - dlgW)/2, (g_window_h - dlgH)/2, dlgW, dlgH };
+        SDL_Color dlgBg = g_panel_bg; dlgBg.a = 240;
+        draw_rect(R, dlg, dlgBg);
+        draw_frame(R, dlg, g_panel_border);
+        draw_text(R, dlg.x + pad, dlg.y + 8, "About", g_header_color);
+        // Close X
+        Rect closeBtn = {dlg.x + dlg.w - 22, dlg.y + 8, 14, 14};
+        bool overClose = point_in(mx,my,closeBtn);
+        draw_rect(R, closeBtn, overClose?g_button_hover:g_button_base);
+        draw_frame(R, closeBtn, g_button_border);
+        draw_text(R, closeBtn.x+3, closeBtn.y+1, "X", g_button_text);
+        if(mclick && overClose){ g_show_about_dialog = false; }
+
+        // Placeholder content — simple app name/version text for now
+        char verbuf[128]; snprintf(verbuf, sizeof(verbuf), "%s", "miniBAE");
+        draw_text(R, dlg.x + pad, dlg.y + 40, verbuf, g_text_color);
+        draw_text(R, dlg.x + pad, dlg.y + 64, "About dialog content will be added later.", g_text_color);
+
+    // Note: deliberately do NOT close About dialog when clicking outside to
+    // avoid immediate close when the About button (outside the dialog) is clicked.
+    }
 
     // Render export dropdown when Settings dialog is open and the export dropdown was triggered there
 #if USE_MPEG_ENCODER != FALSE
