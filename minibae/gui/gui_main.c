@@ -2895,26 +2895,29 @@ int main(int argc, char *argv[]){
         draw_rect(R, controlPanel, panelBg);
         draw_frame(R, controlPanel, panelBorder);
         draw_text(R, 410, 20, "PLAYBACK CONTROLS", headerCol);
-        
+
+    // When external MIDI input is active we dim and disable most playback controls
+    bool playback_controls_enabled = !g_midi_input_enabled;
+
         // Transpose control
         draw_text(R,410, 45, "Transpose:", labelCol);
-    ui_slider(R,(Rect){410, 60, 160, 14}, &transpose, -24, 24, ui_mx,ui_my,ui_mdown,ui_mclick);
+    ui_slider(R,(Rect){410, 60, 160, 14}, &transpose, -24, 24, playback_controls_enabled ? ui_mx : -1, playback_controls_enabled ? ui_my : -1, playback_controls_enabled ? ui_mdown : false, playback_controls_enabled ? ui_mclick : false);
         char tbuf[64]; snprintf(tbuf,sizeof(tbuf),"%+d", transpose); 
         draw_text(R,580, 58, tbuf, labelCol);
-    if(ui_button(R,(Rect){620, 56, 50,20},"Reset",ui_mx,ui_my,ui_mdown) && ui_mclick && !modal_block){ 
+    if(playback_controls_enabled && ui_button(R,(Rect){620, 56, 50,20},"Reset",ui_mx,ui_my,ui_mdown) && ui_mclick && !modal_block){ 
             transpose=0; bae_set_transpose(transpose);
         }        
 
         // Tempo control  
         draw_text(R,410, 85, "Tempo:", labelCol);
-    ui_slider(R,(Rect){410, 100, 160, 14}, &tempo, 25, 200, ui_mx,ui_my,ui_mdown,ui_mclick);
+    ui_slider(R,(Rect){410, 100, 160, 14}, &tempo, 25, 200, playback_controls_enabled ? ui_mx : -1, playback_controls_enabled ? ui_my : -1, playback_controls_enabled ? ui_mdown : false, playback_controls_enabled ? ui_mclick : false);
         snprintf(tbuf,sizeof(tbuf),"%d%%", tempo); 
         draw_text(R,580, 98, tbuf, labelCol);
-    if(ui_button(R,(Rect){620, 96, 50,20},"Reset",ui_mx,ui_my,ui_mdown) && ui_mclick && !modal_block){ 
+    if(playback_controls_enabled && ui_button(R,(Rect){620, 96, 50,20},"Reset",ui_mx,ui_my,ui_mdown) && ui_mclick && !modal_block){ 
             tempo=100; bae_set_tempo(tempo);
         }        
 
-        // Reverb controls
+        // Reverb controls (we always leave Reverb interactive even when MIDI input is enabled)
         draw_text(R,690, 25, "Reverb:", labelCol);
     // Removed non-functional 'No Change' option; first entry now 'Default' (engine type 0)
     // Removed engine reverb index 0 (NO_CHANGE). UI list now maps i -> engine index (i+1)
@@ -2938,13 +2941,27 @@ int main(int argc, char *argv[]){
 
         // Volume control
         draw_text(R,690, 80, "Volume:", labelCol);
-        // Disable volume slider interaction when reverb dropdown is open
-        bool volume_enabled = !g_reverbDropdownOpen;
+        // Disable volume slider interaction when reverb dropdown is open or playback controls disabled
+        bool volume_enabled = !g_reverbDropdownOpen && playback_controls_enabled;
     ui_slider(R,(Rect){690, 95, 120, 14}, &volume, 0, 100, 
          volume_enabled ? ui_mx : -1, volume_enabled ? ui_my : -1, 
          volume_enabled ? ui_mdown : false, volume_enabled ? ui_mclick : false);
         char vbuf[32]; snprintf(vbuf,sizeof(vbuf),"%d%%", volume); 
         draw_text(R,690,115,vbuf,labelCol);
+        
+        // If MIDI input is enabled, paint a semi-transparent overlay over the control panel to dim it
+        if(g_midi_input_enabled){ SDL_Color dim = g_is_dark_mode ? (SDL_Color){0,0,0,160} : (SDL_Color){255,255,255,160}; draw_rect(R, controlPanel, dim); 
+            // Redraw Reverb controls on top so they remain active/visible
+            draw_rect(R, ddRect, dd_bg); draw_frame(R, ddRect, dd_frame); draw_text(R, ddRect.x+6, ddRect.y+6, cur, dd_txt); draw_text(R, ddRect.x + ddRect.w - 16, ddRect.y+6, g_reverbDropdownOpen?"^":"v", dd_txt);
+            // Draw the external MIDI notice in the bottom-right of the control panel
+            const char *notice = "External MIDI Input Enabled";
+            int n_w=0, n_h=0; measure_text(notice, &n_w, &n_h);
+            int n_x = controlPanel.x + controlPanel.w - n_w - 8;
+            int n_y = controlPanel.y + controlPanel.h - n_h - 6;
+            draw_text(R, n_x, n_y, notice, g_highlight_color);
+            // Ensure the "Reverb:" label itself is also drawn above the dim layer
+            draw_text(R, 690, 25, "Reverb:", labelCol);
+        }
 
     // Transport panel
         draw_rect(R, transportPanel, panelBg);
