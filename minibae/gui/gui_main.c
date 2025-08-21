@@ -3108,9 +3108,43 @@ int main(int argc, char *argv[]){
             draw_text(R,60, lineY2, "<none>", muted);
         }
         
-    // Shifted right and slightly wider so it doesn't cover friendly bank info text
-    // Moved further right by 150px to avoid overlapping friendly names
-    if(ui_button(R,(Rect){490,lineY2-2,120,20}, "Load Bank...", ui_mx,ui_my,ui_mdown) && ui_mclick && !modal_block){
+    // Previously the Load/Builtin Bank buttons lived here; they have been moved
+    // down to sit beside the Settings button for a cleaner, uniform look.
+
+    // Settings + Bank buttons now live INSIDE the Status & Bank panel with 4px padding
+    {
+    int pad = 4; // panel-relative padding
+    int btnW = 90; int btnH = 30; // fixed size (uniform for Settings and bank buttons)
+    int builtinW = btnW + 30; // make Builtin Bank wider to fit text
+        // Anchor buttons to bottom-right corner of statusPanel
+        int baseX = statusPanel.x + statusPanel.w - pad - btnW;
+        int baseY = statusPanel.y + statusPanel.h - pad - btnH;
+        // Settings button sits at baseX, baseY
+        Rect settingsBtn = { baseX, baseY, btnW, btnH };
+        // Spacing between buttons
+        int gap = 8;
+    // Builtin Bank immediately left of Settings (wider)
+    Rect builtinBtn = { baseX - gap - builtinW, baseY, builtinW, btnH };
+    // Load Bank to the left of Builtin Bank
+    Rect loadBankBtn = { builtinBtn.x - gap - btnW, baseY, btnW, btnH };
+    bool settingsEnabled = !g_reverbDropdownOpen;
+    bool overSettings = settingsEnabled && point_in(ui_mx,ui_my,settingsBtn);
+    SDL_Color sbg = settingsEnabled ? (overSettings ? g_button_hover : g_button_base) : g_button_base;
+    if(!settingsEnabled){ sbg.a = 180; }
+    if(g_show_settings_dialog) sbg = g_button_base;
+        draw_rect(R, settingsBtn, sbg);
+        draw_frame(R, settingsBtn, g_button_border);
+        int tw=0,th=0; measure_text("Settings", &tw,&th);
+        draw_text(R, settingsBtn.x + (settingsBtn.w - tw)/2, settingsBtn.y + (settingsBtn.h - th)/2, "Settings", g_button_text);
+    if(settingsEnabled && !modal_block && ui_mclick && overSettings){
+            g_show_settings_dialog = !g_show_settings_dialog;
+            if(g_show_settings_dialog){
+                g_volumeCurveDropdownOpen = false; g_show_rmf_info_dialog = false;
+            }
+        }
+
+        // Load Bank button (left of Settings). Label trimmed to "Load Bank" per request.
+        if(ui_button(R, loadBankBtn, "Load Bank", ui_mx, ui_my, ui_mdown) && ui_mclick && !modal_block){
             #ifdef _WIN32
             char fileBuf[1024]={0};
             OPENFILENAMEA ofn; ZeroMemory(&ofn,sizeof(ofn));
@@ -3145,11 +3179,8 @@ int main(int argc, char *argv[]){
             #endif
         }
 
-#ifdef _BUILT_IN_PATCHES
-    // Builtin Bank button: placed to the right of Load Bank; disabled when builtin is already loaded
-    {
-        // Move builtin button in tandem with Load Bank (+150px)
-        Rect builtinBtn = { 490 + 120 + 8, lineY2-2, 110, 20 };
+        // Builtin Bank button (left of Load Bank)
+        #ifdef _BUILT_IN_PATCHES
         bool builtin_loaded = (g_current_bank_path[0] && strcmp(g_current_bank_path, "__builtin__") == 0);
         bool builtinEnabled = !builtin_loaded && !modal_block && !g_reverbDropdownOpen;
         bool overBuiltin = builtinEnabled && point_in(ui_mx, ui_my, builtinBtn);
@@ -3164,33 +3195,7 @@ int main(int argc, char *argv[]){
                 set_status_message("Failed to load built-in bank");
             }
         }
-    }
-#endif // _BUILT_IN_PATCHES
-
-    // Settings button now lives INSIDE the Status & Bank panel with 4px padding from that panel's border
-    {
-    int pad = 4; // panel-relative padding
-        int btnW = 90; int btnH = 30; // fixed size
-        // Anchor to bottom-right corner of statusPanel instead of window
-        Rect settingsBtn = { statusPanel.x + statusPanel.w - pad - btnW,
-                             statusPanel.y + statusPanel.h - pad - btnH,
-                             btnW, btnH };
-    bool settingsEnabled = !g_reverbDropdownOpen;
-    bool overSettings = settingsEnabled && point_in(ui_mx,ui_my,settingsBtn);
-    SDL_Color sbg = settingsEnabled ? (overSettings ? g_button_hover : g_button_base) : g_button_base;
-    if(!settingsEnabled){ sbg.a = 180; }
-    if(g_show_settings_dialog) sbg = g_button_base;
-        draw_rect(R, settingsBtn, sbg);
-        draw_frame(R, settingsBtn, g_button_border);
-        int tw=0,th=0; measure_text("Settings", &tw,&th);
-        draw_text(R, settingsBtn.x + (settingsBtn.w - tw)/2, settingsBtn.y + (settingsBtn.h - th)/2, "Settings", g_button_text);
-    if(settingsEnabled && !modal_block && ui_mclick && overSettings){
-            g_show_settings_dialog = !g_show_settings_dialog;
-            if(g_show_settings_dialog){
-                g_volumeCurveDropdownOpen = false; g_show_rmf_info_dialog = false;
-                g_volumeCurveDropdownOpen = false; g_show_rmf_info_dialog = false;
-            }
-        }
+        #endif
     }
         
     // Status indicator (use theme-safe highlight color for playing state)
