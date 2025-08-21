@@ -783,6 +783,15 @@ static void karaoke_commit_line(uint32_t time_us, const char *line);
 static int g_total_play_ms = 0;
 static int g_last_engine_pos_ms = 0;
 
+// VU meter state (smoothed levels 0.0 .. 1.0 and peak hold)
+static float g_vu_left_level = 0.0f;
+static float g_vu_right_level = 0.0f;
+static int g_vu_peak_left = 0;
+static int g_vu_peak_right = 0;
+static Uint32 g_vu_peak_hold_until = 0; // universal peak hold timeout (ms)
+// Visual gain applied to raw sample amplitudes (linear multiplier)
+static float g_vu_gain = 8.0f;
+
 // Helper: commit previous line and shift current -> previous (newline behavior)
 static void karaoke_newline(uint32_t t_us){
     // Finish the current line: commit it, shift to previous display line, clear current.
@@ -3177,6 +3186,79 @@ int main(int argc, char *argv[]){
             // Muted text: slightly darker in light mode for better contrast on pale panels
             SDL_Color muted = g_is_dark_mode ? (SDL_Color){150,150,150,255} : (SDL_Color){80,80,80,255};
             draw_text(R,60, lineY2, "<none>", muted);
+        }
+
+        // Vertical-stacked stereo VU meters placed above the buttons in the status panel
+        // Stacked L (top) and R (bottom). Uses a responsive color gradient and labels.
+        {
+            int btnW_local = 90; int gap_local = 8; int pad_local = 4; int btnH_local = 30;
+            // Reserve a small area to the right for channel labels (L / R)
+            int labelWidth = 18;
+            int metersW = 300; // leave room for buttons and labels at right
+            int vuX = statusPanel.x + statusPanel.w - metersW - 20;
+            if(metersW < 40) metersW = 40;
+            int meterH = 12; // each meter height
+            int spacing = 6;
+            int vuY = statusPanel.y + statusPanel.h - pad_local - btnH_local - 12 - (meterH + spacing) * 2; // stacked above buttons and away from text
+
+            // Sample and update levels (more responsive smoothing)
+            if(g_bae.mixer){
+                short sL=0, sR=0, out=0;
+                if(BAEMixer_GetAudioSampleFrame(g_bae.mixer, &sL, &sR, &out) == BAE_NO_ERROR){
+                    float rawL = fabsf((float)sL) / 32768.0f * g_vu_gain;
+                    float rawR = fabsf((float)sR) / 32768.0f * g_vu_gain;
+                    // simple soft-knee compression for display and sqrt for perceptual mapping
+                    float fL = sqrtf(MIN(1.0f, rawL));
+                    float fR = sqrtf(MIN(1.0f, rawR));
+                    const float alpha = 0.35f; // slightly faster response
+                    g_vu_left_level = g_vu_left_level*(1.0f-alpha) + fL*alpha;
+                    g_vu_right_level = g_vu_right_level*(1.0f-alpha) + fR*alpha;
+                    Uint32 now = SDL_GetTicks();
+                    int il = (int)(g_vu_left_level*100.0f); int ir = (int)(g_vu_right_level*100.0f);
+                    if(il > g_vu_peak_left){ g_vu_peak_left = il; g_vu_peak_hold_until = now + 600; }
+                    if(ir > g_vu_peak_right){ g_vu_peak_right = ir; g_vu_peak_hold_until = now + 600; }
+                    if(now > g_vu_peak_hold_until){ g_vu_peak_left = (int)(g_vu_left_level*100.0f); g_vu_peak_right = (int)(g_vu_right_level*100.0f); }
+                }
+            }
+
+            // Helper to compute a nice meter color from 0..1 (green -> yellow -> red)
+            #define METER_COLOR_FROM_LEVEL(v, outcol) do { \
+                float _t = (v); if(_t < 0.f) _t = 0.f; if(_t > 1.f) _t = 1.f; \
+                SDL_Color _c; _c.a = 255; \
+                if(_t <= 0.6f){ float u = _t / 0.6f; _c.r = (Uint8)(0 + u * 255); _c.g = (Uint8)(200); _c.b = 0; } \
+                else { float u = (_t - 0.6f) / 0.4f; _c.r = (Uint8)(255 - u * 55); _c.g = (Uint8)(200 - u * 160); _c.b = 0; } \
+                (outcol) = _c; } while(0)
+
+            // Background track (subtle)
+            SDL_Color trackBg = g_panel_bg; trackBg.a = 220;
+
+            // Draw left (top) meter
+            draw_rect(R, (Rect){vuX, vuY, metersW, meterH}, trackBg);
+            draw_frame(R, (Rect){vuX, vuY, metersW, meterH}, g_panel_border);
+            int leftFill = (int)(g_vu_left_level * (metersW - 6)); if(leftFill<0) leftFill=0; if(leftFill>metersW-6) leftFill=metersW-6;
+            SDL_Color leftCol; METER_COLOR_FROM_LEVEL(g_vu_left_level, leftCol);
+            draw_rect(R, (Rect){vuX+3, vuY+3, leftFill, meterH-6}, leftCol);
+            // Draw left peak as small vertical marker
+            int pL = vuX + 3 + (int)((g_vu_peak_left/100.0f) * (metersW-6)); if(pL < vuX+3) pL = vuX+3; if(pL > vuX+3+metersW-6) pL = vuX+3+metersW-6;
+            draw_rect(R, (Rect){pL-1, vuY+1, 2, meterH-2}, (SDL_Color){255,200,0,255});
+
+            // Draw right (bottom) meter stacked below
+            int vuY2 = vuY + meterH + spacing;
+            draw_rect(R, (Rect){vuX, vuY2, metersW, meterH}, trackBg);
+            draw_frame(R, (Rect){vuX, vuY2, metersW, meterH}, g_panel_border);
+            int rightFill = (int)(g_vu_right_level * (metersW - 6)); if(rightFill<0) rightFill=0; if(rightFill>metersW-6) rightFill=metersW-6;
+            SDL_Color rightCol; METER_COLOR_FROM_LEVEL(g_vu_right_level, rightCol);
+            draw_rect(R, (Rect){vuX+3, vuY2+3, rightFill, meterH-6}, rightCol);
+            int pR = vuX + 3 + (int)((g_vu_peak_right/100.0f) * (metersW-6)); if(pR < vuX+3) pR = vuX+3; if(pR > vuX+3+metersW-6) pR = vuX+3+metersW-6;
+            draw_rect(R, (Rect){pR-1, vuY2+1, 2, meterH-2}, (SDL_Color){255,200,0,255});
+
+            // Draw simple L / R labels to the right of each meter
+            int labelX = vuX + metersW + 6;
+            SDL_Color labelCol = g_text_color;
+            draw_text(R, labelX, vuY - 1, "L", labelCol);
+            draw_text(R, labelX, vuY2 - 1, "R", labelCol);
+
+            #undef METER_COLOR_FROM_LEVEL
         }
         
     // Previously the Load/Builtin Bank buttons lived here; they have been moved
