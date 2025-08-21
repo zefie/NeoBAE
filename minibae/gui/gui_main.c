@@ -2661,10 +2661,14 @@ int main(int argc, char *argv[]){
                         if (midi_sz >= 3) {
                             unsigned char note = midi_buf[1];
                             unsigned char vel = midi_buf[2];
-                                        unsigned char target_ch = (unsigned char)mch;
-                                        if(target) BAESong_NoteOff(target, target_ch, note, 0, 0);
-                                        unsigned char out[3] = {(unsigned char)(0x80 | (mch & 0x0F)), note, vel}; FORWARD_OUT(out,3);
-                                        g_keyboard_active_notes_by_channel[mch][note] = 0;
+                            unsigned char target_ch = (unsigned char)mch;
+                            // Always forward Note Off to engine if the note was previously marked active
+                            if(target && g_keyboard_active_notes_by_channel[mch][note]) {
+                                BAESong_NoteOff(target, target_ch, note, 0, 0);
+                            }
+                            unsigned char out[3] = {(unsigned char)(0x80 | (mch & 0x0F)), note, vel}; FORWARD_OUT(out,3);
+                            // Clear active flag regardless so stale notes don't persist
+                            g_keyboard_active_notes_by_channel[mch][note] = 0;
                         }
                         break;
                     case 0x90: // Note On
@@ -2673,13 +2677,19 @@ int main(int argc, char *argv[]){
                             unsigned char vel = midi_buf[2];
                             if (vel != 0) {
                                             unsigned char target_ch = (unsigned char)mch;
-                                            if(target) BAESong_NoteOnWithLoad(target, target_ch, note, vel, 0);
+                                            // Only send NoteOn to internal engine when channel is enabled (not muted)
+                                            if(ch_enable[mch]){
+                                                if(target) BAESong_NoteOnWithLoad(target, target_ch, note, vel, 0);
+                                                g_keyboard_active_notes_by_channel[mch][note] = 1;
+                                            }
                                             unsigned char out[3] = {(unsigned char)(0x90 | (mch & 0x0F)), note, vel}; FORWARD_OUT(out,3);
-                                            g_keyboard_active_notes_by_channel[mch][note] = 1;
                             } else {
                                 // Note On with velocity 0 == Note Off
                                             unsigned char target_ch = (unsigned char)mch;
-                                            if(target) BAESong_NoteOff(target, target_ch, note, 0, 0);
+                                            // If note previously active, ensure engine receives NoteOff even if channel currently muted
+                                            if(target && g_keyboard_active_notes_by_channel[mch][note]) {
+                                                BAESong_NoteOff(target, target_ch, note, 0, 0);
+                                            }
                                             unsigned char out[3] = {(unsigned char)(0x80 | (mch & 0x0F)), note, 0}; FORWARD_OUT(out,3);
                                             g_keyboard_active_notes_by_channel[mch][note] = 0;
                             }
@@ -2689,7 +2699,10 @@ int main(int argc, char *argv[]){
                         if (midi_sz >= 3) {
                             unsigned char note = midi_buf[1];
                             unsigned char pressure = midi_buf[2];
-                            if(target) BAESong_KeyPressure(target, (unsigned char)mch, note, pressure, 0);
+                            // Respect channel mute: only apply when enabled
+                            if(ch_enable[mch]){
+                                if(target) BAESong_KeyPressure(target, (unsigned char)mch, note, pressure, 0);
+                            }
                             unsigned char out[3] = {(unsigned char)(0xA0 | (mch & 0x0F)), note, pressure}; FORWARD_OUT(out,3);
                         }
                         break;
@@ -2702,13 +2715,19 @@ int main(int argc, char *argv[]){
                             else if (cc == 32) { g_midi_bank_lsb[mch] = val; }
                             {
                                 unsigned char target_ch = (unsigned char)mch;
-                                if(target) BAESong_ControlChange(target, target_ch, cc, val, 0);
+                                // Apply control change only if channel is enabled. However, All Notes Off / All Sound Off
+                                // should always be sent so held notes are cleared even when muted.
+                                if(ch_enable[mch]){
+                                    if(target) BAESong_ControlChange(target, target_ch, cc, val, 0);
+                                }
                             }
                             unsigned char out[3] = {(unsigned char)(0xB0 | (mch & 0x0F)), cc, val}; FORWARD_OUT(out,3);
 
-                            // MIDI All Notes Off (CC 123) or All Sound Off (120)
+                            // MIDI All Notes Off (CC 123) or All Sound Off (120) - always clear engine notes
                             if (cc == 123 || cc == 120) {
                                 if(target) BAESong_AllNotesOff(target, 0);
+                                // Also clear our active-note book-keeping for that channel
+                                for(int n=0;n<128;n++) g_keyboard_active_notes_by_channel[mch][n] = 0;
                             }
                         }
                         break;
@@ -2716,7 +2735,8 @@ int main(int argc, char *argv[]){
                         if (midi_sz >= 2) {
                             unsigned char program = midi_buf[1];
                             unsigned char bank = g_midi_bank_msb[mch];
-                            // Apply bank/program to song (respect stopped -> keyboard channel)
+                            // Program changes are applied even when channel is muted so the instrument
+                            // will be correct when unmuted.
                             {
                                 unsigned char target_ch = (unsigned char)mch;
                                 if(target){ BAESong_ProgramBankChange(target, target_ch, program, bank, 0); BAESong_ProgramChange(target, target_ch, program, 0); }
@@ -2727,7 +2747,9 @@ int main(int argc, char *argv[]){
                     case 0xD0: // Channel Pressure (Aftertouch)
                         if (midi_sz >= 2) {
                             unsigned char pressure = midi_buf[1];
-                            if(target) BAESong_ChannelPressure(target, (unsigned char)mch, pressure, 0);
+                            if(ch_enable[mch]){
+                                if(target) BAESong_ChannelPressure(target, (unsigned char)mch, pressure, 0);
+                            }
                             unsigned char out[2] = {(unsigned char)(0xD0 | (mch & 0x0F)), pressure}; FORWARD_OUT(out,2);
                         }
                         break;
@@ -2735,7 +2757,9 @@ int main(int argc, char *argv[]){
                         if (midi_sz >= 3) {
                             unsigned char lsb = midi_buf[1];
                             unsigned char msb = midi_buf[2];
-                            if(target) BAESong_PitchBend(target, (unsigned char)mch, lsb, msb, 0);
+                            if(ch_enable[mch]){
+                                if(target) BAESong_PitchBend(target, (unsigned char)mch, lsb, msb, 0);
+                            }
                             unsigned char out[3] = {(unsigned char)(0xE0 | (mch & 0x0F)), lsb, msb}; FORWARD_OUT(out,3);
                         }
                         break;
