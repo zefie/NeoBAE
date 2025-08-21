@@ -3131,7 +3131,9 @@ int main(int argc, char *argv[]){
     int pbuf_x = 680;
     // Clickable region just around current time text
     Rect progressRect = {pbuf_x, time_y, pbuf_w, pbuf_h>0?pbuf_h:16};
-    bool progressInteract = !g_reverbDropdownOpen;
+    // Transport controls (Play/seek) are disabled when external MIDI input is active.
+    bool transport_enabled = !g_midi_input_enabled;
+    bool progressInteract = !g_reverbDropdownOpen && transport_enabled;
     bool progressHover = progressInteract && point_in(ui_mx,ui_my,progressRect);
     if(progressInteract && progressHover && ui_mclick){ progress = 0; bae_seek_ms(0); g_total_play_ms = progress; g_last_engine_pos_ms = progress; }
     SDL_Color progressColor = progressHover ? g_highlight_color : labelCol;
@@ -3178,7 +3180,7 @@ int main(int argc, char *argv[]){
     draw_text(R, pbuf_x, time_y + 18, total_time_buf, labelCol);
 
         // Transport buttons
-        if (g_midi_input_enabled) {
+        if (!transport_enabled) {
             // Draw disabled Play button (no interaction)
             Rect playRect = {20, 215, 60,22};
             SDL_Color disabledBg = g_panel_bg; SDL_Color disabledTxt = g_panel_border;
@@ -3196,6 +3198,7 @@ int main(int argc, char *argv[]){
                 }
             }
         }
+    // Stop remains active even when transport is dimmed for MIDI input mode
     if(ui_button(R,(Rect){90, 215, 60,22}, "Stop", ui_mx,ui_my,ui_mdown) && ui_mclick && !modal_block){ 
             bae_stop(&playing,&progress);
             // Ensure engine releases any held notes when user stops playback (panic)
@@ -3234,6 +3237,10 @@ int main(int argc, char *argv[]){
                 bae_stop_wav_export();
             }
         }
+
+        
+
+        
 
         // Virtual MIDI Keyboard Panel (always shown for songs, hidden for audio files)
     if(showKeyboard){
@@ -3389,18 +3396,30 @@ int main(int argc, char *argv[]){
     {
         Rect loopR = {160, 215, 20,20};
         bool clicked = false;
-        if(!modal_block){
-            if(ui_toggle(R, loopR, &loopPlay, "Loop", ui_mx, ui_my, ui_mclick)) clicked = true;
-        } else if(g_exporting){
-            // While exporting allow loop toggle using real mouse coords so user can uncheck loop
-            if(ui_toggle(R, loopR, &loopPlay, "Loop", mx, my, mclick)) clicked = true;
-        }
-        if(clicked){
-            bae_set_loop(loopPlay);
-            g_bae.loop_enabled_gui = loopPlay;
-            // Save settings when loop is changed
-            if (g_current_bank_path[0] != '\0') {
-                save_settings(g_current_bank_path, reverbType, loopPlay);
+        // When MIDI input is enabled, render a disabled Loop checkbox (no interaction) so it appears under the dim overlay
+        if(g_midi_input_enabled){
+            SDL_Color disabledBg = g_panel_bg; SDL_Color disabledTxt = g_panel_border;
+            // Draw checkbox background and border
+            draw_rect(R, loopR, disabledBg); draw_frame(R, loopR, g_panel_border);
+            Rect inner = { loopR.x + 3, loopR.y + 3, loopR.w - 6, loopR.h - 6 };
+            if(loopPlay){ draw_rect(R, inner, g_accent_color); draw_frame(R, inner, g_button_text); }
+            else { draw_rect(R, inner, g_panel_bg); draw_frame(R, inner, g_panel_border); }
+            // Label
+            draw_text(R, loopR.x + loopR.w + 6, loopR.y + 2, "Loop", disabledTxt);
+        } else {
+            if(!modal_block){
+                if(ui_toggle(R, loopR, &loopPlay, "Loop", ui_mx, ui_my, ui_mclick)) clicked = true;
+            } else if(g_exporting){
+                // While exporting allow loop toggle using real mouse coords so user can uncheck loop
+                if(ui_toggle(R, loopR, &loopPlay, "Loop", mx, my, mclick)) clicked = true;
+            }
+            if(clicked){
+                bae_set_loop(loopPlay);
+                g_bae.loop_enabled_gui = loopPlay;
+                // Save settings when loop is changed
+                if (g_current_bank_path[0] != '\0') {
+                    save_settings(g_current_bank_path, reverbType, loopPlay);
+                }
             }
         }
     }
@@ -3509,6 +3528,30 @@ int main(int argc, char *argv[]){
                 }
             }
         }
+    #if 1
+            // If MIDI input is enabled, paint a semi-transparent overlay over the transport panel
+            // to dim it and disable interactions except the Stop button (which we keep active).
+            if(g_midi_input_enabled){ SDL_Color dim = g_is_dark_mode ? (SDL_Color){0,0,0,160} : (SDL_Color){255,255,255,160}; draw_rect(R, transportPanel, dim);
+                // Redraw Stop button on top of the dim overlay so the user can stop
+                Rect stopRect = {90, 215, 60,22};
+                // Use raw mouse coords so the Stop button remains clickable even when modal_block is true
+                if(ui_button(R, stopRect, "Stop", mx, my, mdown) && mclick){
+                    bae_stop(&playing,&progress);
+                    // Ensure engine releases any held notes when user stops playback (panic)
+                    midi_output_send_all_notes_off(); // silence any external device too
+                    if(g_bae.song){ gui_panic_all_notes(g_bae.song); }
+                    if(g_live_song){ gui_panic_all_notes(g_live_song); }
+                    if(g_show_virtual_keyboard){ BAESong target = g_bae.song ? g_bae.song : g_live_song; if(target){ for(int n=0;n<128;n++){ BAESong_NoteOff(target,(unsigned char)g_keyboard_channel,(unsigned char)n,0,0); } } g_keyboard_mouse_note = -1; memset(g_keyboard_active_notes, 0, sizeof(g_keyboard_active_notes)); g_keyboard_suppress_until = SDL_GetTicks() + 250; }
+                    // Reset total-play timer on user Stop
+                    g_total_play_ms = 0;
+                    g_last_engine_pos_ms = 0;
+                    // Also stop export if active
+                    if(g_exporting) { bae_stop_wav_export(); }
+                    // consume the click so underlying UI doesn't react to the same event
+                    mclick = false;
+                }
+            }
+    #endif
 #ifdef SUPPORT_KARAOKE
         // Karaoke panel rendering (two lines: current + next)
         if(showKaraoke){
