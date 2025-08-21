@@ -499,12 +499,16 @@ static bool point_in(int mx,int my, Rect r){
 }
 
 static void draw_rect(SDL_Renderer *R, Rect r, SDL_Color c){
+    // Ensure renderer uses blending so alpha is honored for overlays
+    SDL_SetRenderDrawBlendMode(R, SDL_BLENDMODE_BLEND);
     SDL_SetRenderDrawColor(R,c.r,c.g,c.b,c.a);
     SDL_Rect rr = {r.x,r.y,r.w,r.h};
     SDL_RenderFillRect(R,&rr);
 }
 
 static void draw_frame(SDL_Renderer *R, Rect r, SDL_Color c){
+    // Frame strokes may also use alpha; enable blending to be safe
+    SDL_SetRenderDrawBlendMode(R, SDL_BLENDMODE_BLEND);
     SDL_SetRenderDrawColor(R,c.r,c.g,c.b,c.a);
     SDL_Rect rr = {r.x,r.y,r.w,r.h};
     SDL_RenderDrawRect(R,&rr);
@@ -651,7 +655,7 @@ static void draw_custom_checkbox(SDL_Renderer *R, Rect r, bool checked, bool hov
 static bool ui_toggle(SDL_Renderer *R, Rect r, bool *value, const char *label, int mx,int my,bool mclick){
     SDL_Color txt = g_text_color;
     bool over = point_in(mx,my,r);
-    
+
     // Draw custom checkbox
     draw_custom_checkbox(R, r, *value, over);
     
@@ -764,6 +768,12 @@ static bool g_karaoke_suspended = false; // suspend (e.g., during export)
 
 // Forward declaration (defined later) so helpers can call it
 static void karaoke_commit_line(uint32_t time_us, const char *line);
+
+// Total playtime globals (ms) tracked across the session — used by transport UI
+// This timer accumulates playback time even when the song loops and is
+// advanced using deltas of the engine position so it does not reset on loops.
+static int g_total_play_ms = 0;
+static int g_last_engine_pos_ms = 0;
 
 // Helper: commit previous line and shift current -> previous (newline behavior)
 static void karaoke_newline(uint32_t t_us){
@@ -931,7 +941,12 @@ static int  g_sample_rate_hz = 44100;       // current selected sample rate
 static bool g_sampleRateDropdownOpen = false; // dropdown open state
 // Export dropdown state: controls encoding choice when exporting
 static bool g_exportDropdownOpen = false;
-static int  g_exportCodecIndex = 0; // 0 = PCM 16 WAV, 1..6 = MP3 bitrates
+// Default export codec: prefer 192kbps MP3 if MPEG encoder is available
+#if USE_MPEG_ENCODER != FALSE
+static int  g_exportCodecIndex = 4; // 0 = PCM 16 WAV, 1..6 = MP3 bitrates (4 -> 192kbps MP3)
+#else
+static int  g_exportCodecIndex = 0; // fallback to WAV when MPEG encoder not present
+#endif
 static const char *g_exportCodecNames[] = {
     "PCM 16 WAV",
 #if USE_MPEG_ENCODER != FALSE
@@ -1063,6 +1078,8 @@ typedef struct {
     int sample_rate_hz;
     bool has_show_keyboard;
     bool show_keyboard;
+    bool has_export_codec;
+    int export_codec_index;
 } Settings;
 
 static void save_settings(const char* last_bank_path, int reverb_type, bool loop_enabled) {
@@ -1104,6 +1121,8 @@ static void save_settings(const char* last_bank_path, int reverb_type, bool loop
         fprintf(f, "stereo_output=%d\n", g_stereo_output ? 1 : 0);
         fprintf(f, "sample_rate=%d\n", g_sample_rate_hz);
     fprintf(f, "show_keyboard=%d\n", g_show_virtual_keyboard ? 1 : 0);
+    // Export codec index persisted so user preference survives restarts
+    fprintf(f, "export_codec_index=%d\n", g_exportCodecIndex);
         BAE_PRINTF("Saved settings: last_bank=%s reverb=%d loop=%d volCurve=%d stereo=%d rate=%d\n", 
             path_to_save ? path_to_save : "", reverb_type, loop_enabled ? 1 : 0, g_volume_curve, g_stereo_output?1:0, g_sample_rate_hz);
         fclose(f);
@@ -1184,6 +1203,10 @@ static Settings load_settings() {
             settings.show_keyboard = (atoi(line + 14) != 0);
             settings.has_show_keyboard = true;
             BAE_PRINTF("Loaded show keyboard: %d\n", settings.show_keyboard?1:0);
+        } else if (strncmp(line, "export_codec_index=", 19) == 0) {
+            settings.export_codec_index = atoi(line + 19);
+            settings.has_export_codec = true;
+            BAE_PRINTF("Loaded export codec index: %d\n", settings.export_codec_index);
         }
     }
     
@@ -1265,6 +1288,13 @@ static bool bae_start_wav_export(const char* output_file) {
     }
     
     g_exporting = true;
+#if 1
+    // Ensure virtual keyboard is reset and any held note is released when export starts
+    if(g_show_virtual_keyboard){
+        if(g_keyboard_mouse_note != -1){ if(g_bae.song) BAESong_NoteOff(g_bae.song,(unsigned char)g_keyboard_channel,(unsigned char)g_keyboard_mouse_note,0,0); g_keyboard_mouse_note = -1; }
+        memset(g_keyboard_active_notes, 0, sizeof(g_keyboard_active_notes));
+    }
+#endif
 #ifdef SUPPORT_KARAOKE    
     g_karaoke_suspended = true; // disable karaoke during export
 #endif
@@ -1819,6 +1849,14 @@ static void bae_seek_ms(int ms){
     if(!g_bae.song) return; 
     uint32_t us=(uint32_t)ms*1000UL; 
     BAESong_SetMicrosecondPosition(g_bae.song, us); 
+    // Reset virtual keyboard UI and release any held virtual note when seeking
+    if(g_show_virtual_keyboard) {
+        if(g_keyboard_mouse_note != -1) {
+            if(g_bae.song) BAESong_NoteOff(g_bae.song,(unsigned char)g_keyboard_channel,(unsigned char)g_keyboard_mouse_note,0,0);
+            g_keyboard_mouse_note = -1;
+        }
+        memset(g_keyboard_active_notes, 0, sizeof(g_keyboard_active_notes));
+    }
 }
 static int  bae_get_pos_ms(){ 
     if(g_bae.is_audio_file) {
@@ -1971,7 +2009,10 @@ static bool bae_play(bool *playing){
             g_bae.is_playing = true;
             return true;
         } else {
-            BAESong_Pause(g_bae.song); 
+            BAESong_Pause(g_bae.song);
+            // Release any held virtual keyboard note and clear keyboard UI state on pause
+            if(g_keyboard_mouse_note != -1){ if(g_bae.song) BAESong_NoteOff(g_bae.song,(unsigned char)g_keyboard_channel,(unsigned char)g_keyboard_mouse_note,0,0); g_keyboard_mouse_note = -1; }
+            memset(g_keyboard_active_notes, 0, sizeof(g_keyboard_active_notes));
             *playing=false; 
             g_bae.is_playing = false;
             return true; 
@@ -1989,6 +2030,11 @@ static void bae_stop(bool *playing,int *progress){
         BAESong_SetMicrosecondPosition(g_bae.song,0); 
         *playing=false; *progress=0;
         g_bae.is_playing = false;
+    }
+    // Always reset virtual keyboard UI and release any held virtual note when stopping
+    if(g_show_virtual_keyboard){
+        if(g_keyboard_mouse_note != -1){ if(g_bae.song) BAESong_NoteOff(g_bae.song,(unsigned char)g_keyboard_channel,(unsigned char)g_keyboard_mouse_note,0,0); g_keyboard_mouse_note = -1; }
+        memset(g_keyboard_active_notes, 0, sizeof(g_keyboard_active_notes));
     }
 }
 
@@ -2191,6 +2237,7 @@ int main(int argc, char *argv[]){
     if (settings.has_stereo) { g_stereo_output = settings.stereo_output; }
     if (settings.has_sample_rate) { g_sample_rate_hz = settings.sample_rate_hz; }
     if (settings.has_show_keyboard) { g_show_virtual_keyboard = settings.show_keyboard; }
+    if (settings.has_export_codec) { g_exportCodecIndex = settings.export_codec_index; if(g_exportCodecIndex < 0) g_exportCodecIndex = 0; }
     // Apply stored default velocity (aka volume) curve to global engine setting so new songs adopt it
     if (settings.has_volume_curve) {
         BAE_SetDefaultVelocityCurve(g_volume_curve);
@@ -2494,7 +2541,9 @@ int main(int argc, char *argv[]){
         draw_text(R, 20, 20, "MIDI CHANNELS", headerCol);
         
     // Channel toggles in a neat grid (with measured label centering)
-    bool modal_block = g_show_settings_dialog || (g_show_rmf_info_dialog && g_bae.is_rmf_file); // block when any modal/dialog open
+    // Block background interactions when a modal is active or when exporting.
+    // Exporting will dim and lock most UI, but the Stop button remains active.
+    bool modal_block = g_show_settings_dialog || (g_show_rmf_info_dialog && g_bae.is_rmf_file) || g_exporting; // block when any modal/dialog open or export in progress
     // When a modal is active we fully swallow background hover/drag/click by using off-screen, inert inputs
     int ui_mx = mx, ui_my = my; bool ui_mdown = mdown; bool ui_mclick = mclick;
     if(modal_block){ ui_mx = ui_my = -10000; ui_mdown = ui_mclick = false; }
@@ -2605,6 +2654,9 @@ int main(int argc, char *argv[]){
                 progress = new_progress;
                 last_drag_progress = new_progress;
                 bae_seek_ms(progress);
+                // User-initiated seek -> set total-play timer to the new position
+                g_total_play_ms = progress;
+                g_last_engine_pos_ms = progress;
             }
         } else {
             // Reset when not dragging
@@ -2626,12 +2678,49 @@ int main(int argc, char *argv[]){
     Rect progressRect = {pbuf_x, time_y, pbuf_w, pbuf_h>0?pbuf_h:16};
     bool progressInteract = !g_reverbDropdownOpen;
     bool progressHover = progressInteract && point_in(ui_mx,ui_my,progressRect);
-    if(progressInteract && progressHover && ui_mclick){ progress = 0; bae_seek_ms(0); }
+    if(progressInteract && progressHover && ui_mclick){ progress = 0; bae_seek_ms(0); g_total_play_ms = progress; g_last_engine_pos_ms = progress; }
     SDL_Color progressColor = progressHover ? g_highlight_color : labelCol;
     draw_text(R,pbuf_x, time_y, pbuf, progressColor);
     int slash_x = pbuf_x + pbuf_w + 6; // gap
     draw_text(R,slash_x, time_y, "/", labelCol);
     draw_text(R,slash_x + 10, time_y, dbuf, labelCol);
+
+    // Update session total-played time using engine position deltas so it
+    // doesn't reset when the song loops. We only update while actively
+    // playing a MIDI/RMF song (not raw audio files) because audio files
+    // use frame-based positions and their seeking behavior differs.
+    if(playing && g_bae.song_loaded && !g_bae.is_audio_file){
+        int curPos = bae_get_pos_ms();
+        if(g_last_engine_pos_ms == 0){
+            // Initialize to current engine pos when we first start playing
+            g_last_engine_pos_ms = curPos;
+        }
+        int delta = curPos - g_last_engine_pos_ms;
+        if(delta < 0){
+            // Negative delta indicates a loop or seek backwards; treat as
+            // continuation and do not subtract — assume a loop advanced total
+            // by (curPos) since engine wrapped to start. In that case add curPos.
+            delta = curPos;
+        }
+        // Only account reasonably-sized deltas to avoid spikes from seeks
+        if(delta >= 0 && delta < 5*60*1000){ // ignore >5 minutes jumps
+            g_total_play_ms += delta;
+        }
+        g_last_engine_pos_ms = curPos;
+    } else if(!playing){
+        // When not playing, keep last engine pos synced so resume deltas
+        // are computed correctly and don't double-count paused intervals.
+        g_last_engine_pos_ms = bae_get_pos_ms();
+    }
+
+    // Draw total-played session timer below the progress time
+    int total_ms = g_total_play_ms;
+    int t_ms = total_ms % 1000;
+    int t_sec = (total_ms/1000) % 60;
+    int t_min = (total_ms/1000) / 60;
+    char total_time_buf[64]; snprintf(total_time_buf, sizeof(total_time_buf), "%02d:%02d.%03d", t_min, t_sec, t_ms);
+    int total_w=0,total_h=0; measure_text(total_time_buf,&total_w,&total_h);
+    draw_text(R, pbuf_x, time_y + 18, total_time_buf, labelCol);
 
         // Transport buttons
     if(ui_button(R,(Rect){20, 215, 60,22}, playing?"Pause":"Play", ui_mx,ui_my,ui_mdown) && ui_mclick && !modal_block){ 
@@ -2639,6 +2728,9 @@ int main(int argc, char *argv[]){
         }
     if(ui_button(R,(Rect){90, 215, 60,22}, "Stop", ui_mx,ui_my,ui_mdown) && ui_mclick && !modal_block){ 
             bae_stop(&playing,&progress);
+            // Reset total-play timer on user Stop
+            g_total_play_ms = 0;
+            g_last_engine_pos_ms = 0;
             // Also stop export if active
             if(g_exporting) {
                 bae_stop_wav_export();
@@ -2665,9 +2757,11 @@ int main(int argc, char *argv[]){
             if(!modal_block && ui_mclick && overDD){ g_keyboard_channel_dd_open = !g_keyboard_channel_dd_open; }
             // (Dropdown list itself drawn later for proper z-order)
             if(!g_keyboard_channel_dd_open && ui_mclick && !overDD){ /* no-op */ }
-            // Fetch active notes
+            // Fetch active notes (but suppress engine-driven highlights during export)
             memset(g_keyboard_active_notes,0,sizeof(g_keyboard_active_notes));
-            if(g_bae.song){ BAESong_GetActiveNotes(g_bae.song, (unsigned char)g_keyboard_channel, g_keyboard_active_notes); }
+            if(!g_exporting && g_bae.song){
+                BAESong_GetActiveNotes(g_bae.song, (unsigned char)g_keyboard_channel, g_keyboard_active_notes);
+            }
             // Keyboard drawing region
             int kbX = keyboardPanel.x + 110; int kbY = keyboardPanel.y + 28; int kbW = keyboardPanel.w - 120; int kbH = keyboardPanel.h - 38;
             // Define note range (61-key C2..C7)
@@ -2691,7 +2785,7 @@ int main(int argc, char *argv[]){
                     draw_frame(R,(Rect){x,kbY,w,kbH}, g_panel_border);
                     // Optional note name for C notes
                     if(m==0){ char nb[8]; int octave = (n/12)-1; snprintf(nb,sizeof(nb),"C%d", octave); int tw,th; measure_text(nb,&tw,&th); draw_text(R,x+2,kbY+kbH- (th+2), nb, g_is_dark_mode ? (SDL_Color){20,20,25,255} : (SDL_Color){30,30,30,255}); }
-            if(!g_keyboard_channel_dd_open && !modal_block && ui_mx>=x && ui_mx < x+w && ui_my>=kbY && ui_my < kbY+kbH){ mouseNoteCandidateWhite = n; }
+            if(!g_keyboard_channel_dd_open && !modal_block && !g_reverbDropdownOpen && !g_exportDropdownOpen && !g_exporting && ui_mx>=x && ui_mx < x+w && ui_my>=kbY && ui_my < kbY+kbH){ mouseNoteCandidateWhite = n; }
                     wIndex++;
                 }
             }
@@ -2712,13 +2806,13 @@ int main(int argc, char *argv[]){
                     if(g_keyboard_mouse_note == n) keyCol = g_accent_color; // invert colors for contrast
                     draw_rect(R,(Rect){bx,kbY,bw,bh}, keyCol);
                     draw_frame(R,(Rect){bx,kbY,bw,bh}, g_panel_border);
-                    if(!g_keyboard_channel_dd_open && !modal_block && ui_mx>=bx && ui_mx < bx + bw && ui_my>=kbY && ui_my < kbY+bh){ mouseNoteCandidateBlack = n; }
+                    if(!g_keyboard_channel_dd_open && !modal_block && !g_reverbDropdownOpen && !g_exportDropdownOpen && !g_exporting && ui_mx>=bx && ui_mx < bx + bw && ui_my>=kbY && ui_my < kbY+bh){ mouseNoteCandidateBlack = n; }
                 }
             }
             // Determine hovered note (black takes precedence over white)
             int mouseNote = (mouseNoteCandidateBlack != -1) ? mouseNoteCandidateBlack : mouseNoteCandidateWhite;
             // Interaction: monophonic click-n-drag play (velocity varies by vertical position)
-            if(!modal_block && !g_keyboard_channel_dd_open){
+            if(!modal_block && !g_keyboard_channel_dd_open && !g_reverbDropdownOpen && !g_exportDropdownOpen && !g_exporting){
                 if(ui_mdown){
                     if(mouseNote != -1 && mouseNote != g_keyboard_mouse_note){
                         // Release previous
@@ -2758,7 +2852,16 @@ int main(int argc, char *argv[]){
                 if(g_keyboard_mouse_note != -1){ if(g_bae.song){ BAESong_NoteOff(g_bae.song,(unsigned char)g_keyboard_channel,(unsigned char)g_keyboard_mouse_note,0,0); } g_keyboard_mouse_note = -1; }
             }
         }
-    if(ui_toggle(R,(Rect){160, 215, 20,20}, &loopPlay, "Loop", ui_mx,ui_my,ui_mclick && !modal_block)) { 
+    {
+        Rect loopR = {160, 215, 20,20};
+        bool clicked = false;
+        if(!modal_block){
+            if(ui_toggle(R, loopR, &loopPlay, "Loop", ui_mx, ui_my, ui_mclick)) clicked = true;
+        } else if(g_exporting){
+            // While exporting allow loop toggle using real mouse coords so user can uncheck loop
+            if(ui_toggle(R, loopR, &loopPlay, "Loop", mx, my, mclick)) clicked = true;
+        }
+        if(clicked){
             bae_set_loop(loopPlay);
             g_bae.loop_enabled_gui = loopPlay;
             // Save settings when loop is changed
@@ -2766,6 +2869,7 @@ int main(int argc, char *argv[]){
                 save_settings(g_current_bank_path, reverbType, loopPlay);
             }
         }
+    }
     if(ui_button(R,(Rect){230, 215, 80,22}, "Open...", ui_mx,ui_my,ui_mdown) && ui_mclick && !modal_block){
             char *sel = open_file_dialog();
             if(sel){ 
@@ -2789,7 +2893,7 @@ int main(int argc, char *argv[]){
         // Export controls (only for MIDI/RMF files)
         if(!g_bae.is_audio_file && g_bae.song_loaded) {
             // Export button
-            if(ui_button(R,(Rect){320, 215, 80,22}, g_exporting ? "Exporting..." : "Export", ui_mx,ui_my,ui_mdown) && ui_mclick && !g_exporting && !modal_block){
+            if(ui_button(R,(Rect){320, 215, 80,22}, "Export", ui_mx,ui_my,ui_mdown) && ui_mclick && !g_exporting && !modal_block){
                 // When export button clicked, open save dialog using extension depending on codec
                 char *export_file = save_export_dialog(g_exportCodecIndex != 0);
                 if(export_file) {
@@ -2830,6 +2934,11 @@ int main(int argc, char *argv[]){
                                                                      (BAECompressionType)compression);
                         if(result != BAE_NO_ERROR){ char msg[128]; snprintf(msg,sizeof(msg),"Export failed to start (%d)", result); set_status_message(msg); }
                         else {
+                            // Reset virtual keyboard so no keys remain active during export
+                            if(g_show_virtual_keyboard){
+                                if(g_keyboard_mouse_note != -1){ if(g_bae.song) BAESong_NoteOff(g_bae.song,(unsigned char)g_keyboard_channel,(unsigned char)g_keyboard_mouse_note,0,0); g_keyboard_mouse_note = -1; }
+                                memset(g_keyboard_active_notes, 0, sizeof(g_keyboard_active_notes));
+                            }
                             // Start song to drive export
                             BAESong_Stop(g_bae.song, FALSE);
                             BAESong_SetMicrosecondPosition(g_bae.song, 0);
@@ -2845,15 +2954,6 @@ int main(int argc, char *argv[]){
                     free(export_file);
                 }
             }
-#if USE_MPEG_ENCODER != FALSE             
-            // Export codec indicator is drawn here; the dropdown list itself is rendered later (end-of-frame)
-            Rect exportDdRect = { 320 + 86, 215, 120, 22 };
-            SDL_Color dd_bg = g_button_base; if(point_in(mx,my,exportDdRect)) dd_bg = g_button_hover; if(g_exportDropdownOpen) dd_bg = g_button_press;
-            draw_rect(R, exportDdRect, dd_bg); draw_frame(R, exportDdRect, g_button_border);
-            const char *curName = g_exportCodecNames[g_exportCodecIndex]; draw_text(R, exportDdRect.x+6, exportDdRect.y+6, curName, g_button_text);
-            draw_text(R, exportDdRect.x + exportDdRect.w - 16, exportDdRect.y+6, g_exportDropdownOpen?"^":"v", g_button_text);
-            if(point_in(mx,my,exportDdRect) && mclick){ g_exportDropdownOpen = !g_exportDropdownOpen; if(g_exportDropdownOpen){ g_volumeCurveDropdownOpen=false; g_sampleRateDropdownOpen=false; }}
-#endif
             // RMF Info button (only for RMF files)
             if(g_bae.is_rmf_file){
                 if(ui_button(R,(Rect){440, 215, 80,22}, "RMF Info", ui_mx,ui_my,ui_mdown) && ui_mclick && !modal_block){
@@ -3310,7 +3410,7 @@ int main(int argc, char *argv[]){
             // Dim background
             SDL_Color dim = g_is_dark_mode ? (SDL_Color){0,0,0,120} : (SDL_Color){0,0,0,90};
             draw_rect(R,(Rect){0,0,WINDOW_W,g_window_h}, dim);
-            int dlgW = 360; int dlgH = 220; int pad = 10; // increased height to fit keyboard toggle
+            int dlgW = 360; int dlgH = 280; int pad = 10; // increased height to fit all controls
             Rect dlg = { (WINDOW_W - dlgW)/2, (g_window_h - dlgH)/2, dlgW, dlgH };
             SDL_Color dlgBg = g_panel_bg; dlgBg.a = 240;
             SDL_Color dlgFrame = g_panel_border;
@@ -3342,8 +3442,9 @@ int main(int argc, char *argv[]){
             if(point_in(mx,my,vcRect) && mclick){ 
                 g_volumeCurveDropdownOpen = !g_volumeCurveDropdownOpen; 
                 if(g_volumeCurveDropdownOpen){ 
-                    // Ensure only one dropdown active; disable sample rate menu while volume curve is open
+                    // Ensure only one dropdown active; disable sample rate and export menus while volume curve is open
                     g_sampleRateDropdownOpen = false; 
+                    g_exportDropdownOpen = false;
                 }
             }
 
@@ -3365,10 +3466,16 @@ int main(int argc, char *argv[]){
             SDL_Color sr_text_col = g_button_text; if(!sampleRateEnabled){ sr_text_col.a = 180; }
             draw_text(R, srRect.x + 6, srRect.y + 6, srLabel, sr_text_col);
             draw_text(R, srRect.x + srRect.w - 16, srRect.y + 6, g_sampleRateDropdownOpen?"^":"v", sr_text_col);
-            if(sampleRateEnabled && point_in(mx,my,srRect) && mclick){ g_sampleRateDropdownOpen = !g_sampleRateDropdownOpen; }
+            if(sampleRateEnabled && point_in(mx,my,srRect) && mclick){ 
+                g_sampleRateDropdownOpen = !g_sampleRateDropdownOpen; 
+                if(g_sampleRateDropdownOpen){ 
+                    // Close export dropdown when sample rate menu opens
+                    g_exportDropdownOpen = false; 
+                }
+            }
 
-            // Stereo checkbox now below sample rate selector
-            Rect cbRect = { dlg.x + pad, dlg.y + 108, 18, 18 };
+            // Stereo checkbox now placed below Export Codec (moved export above checkboxes)
+            Rect cbRect = { dlg.x + pad, dlg.y + 140, 18, 18 };
             if(ui_toggle(R, cbRect, &g_stereo_output, "Stereo Output", mx,my,mclick)){
                 int prePosMs = bae_get_pos_ms(); bool wasPlayingBefore = g_bae.is_playing;
                 if(recreate_mixer_and_restore(g_sample_rate_hz, g_stereo_output, reverbType, transpose, tempo, volume, loopPlay, ch_enable)){
@@ -3382,14 +3489,38 @@ int main(int argc, char *argv[]){
                 save_settings(g_current_bank_path[0]?g_current_bank_path:NULL, reverbType, loopPlay);
             }
 
-            // Virtual keyboard toggle
-            Rect kbRect = { dlg.x + pad, dlg.y + 132, 18, 18 };
+            // Virtual keyboard toggle (moved down)
+            Rect kbRect = { dlg.x + pad, dlg.y + 166, 18, 18 };
             if(ui_toggle(R, kbRect, &g_show_virtual_keyboard, "Show Virtual Keyboard", mx,my,mclick)){
                 // Persist immediately
                 save_settings(g_current_bank_path[0]?g_current_bank_path:NULL, reverbType, loopPlay);
                 // Close dropdown if hiding keyboard
                 if(!g_show_virtual_keyboard) g_keyboard_channel_dd_open=false;
             }
+
+            // Export codec selector (moved from main UI into Settings dialog)
+#if USE_MPEG_ENCODER != FALSE
+            // Position export codec above the stereo/keyboard checkboxes
+            // Nudge down slightly for uniform spacing with other controls
+            Rect expRect = { dlg.x + dlg.w - 170, dlg.y + 104, 150, 24 };
+            draw_text(R, dlg.x + pad, dlg.y + 108, "Export Codec:", g_text_color);
+            // Disable export control while other dropdowns are open to avoid conflicts
+            bool exportEnabled = !g_volumeCurveDropdownOpen && !g_sampleRateDropdownOpen;
+            // Show current codec name
+            SDL_Color exp_bg = g_button_base; SDL_Color exp_txt = g_button_text;
+            if(!exportEnabled){ exp_bg.a = 180; exp_txt.a = 180; }
+            else { if(point_in(mx,my,expRect)) exp_bg = g_button_hover; if(g_exportDropdownOpen) exp_bg = g_button_press; }
+            draw_rect(R, expRect, exp_bg); draw_frame(R, expRect, g_button_border);
+            const char *expName = g_exportCodecNames[g_exportCodecIndex]; draw_text(R, expRect.x + 6, expRect.y + 6, expName, exp_txt);
+            draw_text(R, expRect.x + expRect.w - 16, expRect.y + 6, g_exportDropdownOpen?"^":"v", exp_txt);
+            if(exportEnabled && point_in(mx,my,expRect) && mclick){
+                g_exportDropdownOpen = !g_exportDropdownOpen;
+                if(g_exportDropdownOpen){
+                    // Ensure only one dropdown is active at a time
+                    g_volumeCurveDropdownOpen = false; g_sampleRateDropdownOpen = false;
+                }
+            }
+#endif
 
             // Footer help + version + compile info (shifted up one row for extra line)
             SDL_Color help = g_is_dark_mode ? (SDL_Color){180,180,190,255} : (SDL_Color){80,80,80,255};
@@ -3520,19 +3651,22 @@ int main(int argc, char *argv[]){
             if(mclick && !point_in(mx,my,dlg)) { /* swallow */ }
         }
 
-    // Render export dropdown list last so it layers above other UI elements
-#if USE_MPEG_ENCODER != FALSE 
-    if(g_exportDropdownOpen){
-        Rect exportDdRect = { 320 + 86, 215, 120, 22 };
+    // Render export dropdown when Settings dialog is open and the export dropdown was triggered there
+#if USE_MPEG_ENCODER != FALSE
+    if(g_show_settings_dialog && g_exportDropdownOpen){
+        // expRect defined in settings dialog: position dropdown beneath it
+        // Use same dlgW/dlgH as settings dialog so dropdown aligns with moved control
+        int dlgW = 360; int dlgH = 280; // must match settings dialog above
+    Rect expRect = { (WINDOW_W - dlgW)/2 + dlgW - 170, (g_window_h - dlgH)/2 + 104, 150, 24 };
         int codecCount = (int)(sizeof(g_exportCodecNames)/sizeof(g_exportCodecNames[0]));
         int cols = 2;
         int rows = (codecCount + cols - 1) / cols;
         int gapX = 6;
-        int itemH = exportDdRect.h;
-        int itemW = exportDdRect.w;
+        int itemH = expRect.h;
+        int itemW = expRect.w;
         int boxW = itemW * cols + gapX * (cols - 1);
         int boxH = itemH * rows;
-        Rect box = { exportDdRect.x, exportDdRect.y + exportDdRect.h + 1, boxW, boxH };
+        Rect box = { expRect.x, expRect.y + expRect.h + 1, boxW, boxH };
         SDL_Color ddBg = g_panel_bg; ddBg.a = 255; Rect shadowRect = {box.x + 2, box.y + 2, box.w, box.h}; SDL_Color shadow = {0,0,0, g_is_dark_mode ? 160 : 120};
         draw_rect(R, shadowRect, shadow);
         draw_rect(R, box, ddBg); draw_frame(R, box, g_panel_border);
@@ -3544,13 +3678,38 @@ int main(int argc, char *argv[]){
             draw_rect(R, ir, ibg);
             if(row < rows - 1){ SDL_SetRenderDrawColor(R, g_panel_border.r, g_panel_border.g, g_panel_border.b, 255); SDL_RenderDrawLine(R, ir.x, ir.y+ir.h, ir.x+ir.w, ir.y+ir.h); }
             draw_text(R, ir.x+6, ir.y+6, g_exportCodecNames[i], g_button_text);
-            if(over && mclick){ g_exportCodecIndex = i; g_exportDropdownOpen = false; }
+            if(over && mclick){
+                int oldExportIdx = g_exportCodecIndex;
+                g_exportCodecIndex = i;
+                g_exportDropdownOpen = false;
+                if(oldExportIdx != g_exportCodecIndex){
+                    // Persist user's chosen export codec so it survives restarts
+                    save_settings(g_current_bank_path[0]?g_current_bank_path:NULL, reverbType, loopPlay);
+                }
+            }
         }
         // Close dropdown if clicked outside
-        if(mclick && !point_in(mx,my,box) && !point_in(mx,my,exportDdRect)) g_exportDropdownOpen = false;
+        if(mclick && !point_in(mx,my,box) && !point_in(mx,my,expRect)) g_exportDropdownOpen = false;
     }
 #endif
 
+    // If exporting, render a slight dim overlay that disables everything except the Stop button.
+    if(g_exporting){
+        SDL_Color dim = g_is_dark_mode ? (SDL_Color){0,0,0,100} : (SDL_Color){0,0,0,100};
+        draw_rect(R, (Rect){0,0,WINDOW_W,g_window_h}, dim);
+        // Re-draw an active Stop button on top of the dim overlay so the user can cancel export.
+        Rect stopRect = {90, 215, 60,22};
+        // Use raw mouse coords so the Stop button remains clickable even when modal_block is true
+        if(ui_button(R, stopRect, "Stop", mx, my, mdown) && mclick){
+            bae_stop(&playing,&progress);
+            // Also stop export if active
+            if(g_exporting) {
+                bae_stop_wav_export();
+            }
+            // consume the click so underlying UI doesn't react to the same event
+            mclick = false;
+        }
+    }
     SDL_RenderPresent(R);
     SDL_Delay(16);
     static int lastTranspose=123456, lastTempo=123456, lastVolume=123456, lastReverbType=-1; static bool lastLoop=false;
