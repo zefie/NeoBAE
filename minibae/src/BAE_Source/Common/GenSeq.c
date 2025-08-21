@@ -947,6 +947,33 @@ void GM_SetSongMetaEventCallback(GM_Song *theSong, GM_SongMetaCallbackProcPtr th
     }
 }
 
+// Register raw MIDI event callback
+void GM_SetSongMidiEventCallback(GM_Song *theSong, GM_MidiEventCallbackPtr theCallback, void *reference)
+{
+    if (theSong)
+    {
+        theSong->midiEventCallbackPtr = theCallback;
+        theSong->midiEventCallbackReference = reference;
+    }
+}
+
+// Internal helper to invoke raw MIDI event callback with a status byte and up to two data bytes.
+static void PV_CallMidiEventCallback(void *threadContext, GM_Song *pSong, const unsigned char *message, int16_t length)
+{
+    GM_MidiEventCallbackPtr cb;
+
+    if (pSong == NULL || message == NULL || length <= 0)
+        return;
+
+    cb = pSong->midiEventCallbackPtr;
+    if (cb)
+    {
+        // Provide the song's current microsecond timestamp to the callback.
+        uint32_t t_us = (uint32_t)pSong->songMicroseconds;
+        (*cb)(threadContext, pSong, message, length, t_us, pSong->midiEventCallbackReference);
+    }
+}
+
 
 #if X_PLATFORM != X_WEBTV
 // This will return realtime information about the current set of notes being playing right now.
@@ -2835,12 +2862,26 @@ static void PV_ProcessExternalMIDIQueue(GM_Song *pSong)
                             sprintf(msgQueue[qindex++].s, "note off %d  time %d\n", event.byte1, event.timeStamp);
                     }
 #endif
+                    {
+                        unsigned char msg[3];
+                        msg[0] = (unsigned char)(0x90 | (event.midiChannel & 0x0F));
+                        msg[1] = event.byte1;
+                        msg[2] = event.byte2;
+                        PV_CallMidiEventCallback(NULL, pSong, msg, 3);
+                    }
                     PV_ProcessNoteOn(pSong, event.midiChannel, -1, event.byte1, event.byte2);
                     break;
                 case B_NOTE_OFF:                    // �� Note Off
 #ifdef EVENT_DEBUG
                     if (qindex < 5000) sprintf(msgQueue[qindex++].s, "note off %d  time %d\n", event.byte1, event.timeStamp);
 #endif
+                    {
+                        unsigned char msg[3];
+                        msg[0] = (unsigned char)(0x80 | (event.midiChannel & 0x0F));
+                        msg[1] = event.byte1;
+                        msg[2] = event.byte2;
+                        PV_CallMidiEventCallback(NULL, pSong, msg, 3);
+                    }
                     PV_ProcessNoteOff(pSong, event.midiChannel, -1, event.byte1, event.byte2);
                     break;
                 case 0xB0:                  // �� Control Change
@@ -2857,12 +2898,32 @@ static void PV_ProcessExternalMIDIQueue(GM_Song *pSong)
                       qindex = 0;
                     }
 #endif
+                    {
+                        unsigned char msg[3];
+                        msg[0] = (unsigned char)(0xB0 | (event.midiChannel & 0x0F));
+                        msg[1] = event.byte1;
+                        msg[2] = event.byte2;
+                        PV_CallMidiEventCallback(NULL, pSong, msg, 3);
+                    }
                     PV_ProcessController(pSong, event.midiChannel, -1, event.byte1, event.byte2);
                     break;
                 case B_PROGRAM_CHANGE:                  // �� ProgramChange
+                    {
+                        unsigned char msg[2];
+                        msg[0] = (unsigned char)(0xC0 | (event.midiChannel & 0x0F));
+                        msg[1] = event.byte1;
+                        PV_CallMidiEventCallback(NULL, pSong, msg, 2);
+                    }
                     PV_ProcessProgramChange(pSong, event.midiChannel, -1, event.byte1);
                     break;
                 case B_PITCH_BEND:                  // �� SetPitchBend
+                    {
+                        unsigned char msg[3];
+                        msg[0] = (unsigned char)(0xE0 | (event.midiChannel & 0x0F));
+                        msg[1] = event.byte1;
+                        msg[2] = event.byte2;
+                        PV_CallMidiEventCallback(NULL, pSong, msg, 3);
+                    }
                     PV_ProcessPitchBend(pSong, event.midiChannel, -1, event.byte1, event.byte2);
                     break;
             }
@@ -3552,12 +3613,26 @@ GetMIDIevent:
                 case 0x90:                  // �� Note On
                     value = *midi_stream++;     // MIDI note
                     volume = *midi_stream++;    // note on velocity
-                    PV_ProcessNoteOn(pSong, MIDIChannel, (XSWORD)currentTrack, (XSWORD)value, (XSWORD)volume);
+                        {
+                            unsigned char msg[3];
+                            msg[0] = (unsigned char)(0x90 | (MIDIChannel & 0x0F));
+                            msg[1] = (unsigned char)value;
+                            msg[2] = (unsigned char)volume;
+                            PV_CallMidiEventCallback(threadContext, pSong, msg, 3);
+                        }
+                        PV_ProcessNoteOn(pSong, MIDIChannel, (XSWORD)currentTrack, (XSWORD)value, (XSWORD)volume);
                     break;
                 case 0x80:                  // �� Note Off
                     value = *midi_stream++;     // MIDI note
                     volume = *midi_stream++;    // note off velocity, ignore for now
-                    PV_ProcessNoteOff(pSong, MIDIChannel, (XSWORD)currentTrack, (XSWORD)value, (XSWORD)volume);
+                        {
+                            unsigned char msg[3];
+                            msg[0] = (unsigned char)(0x80 | (MIDIChannel & 0x0F));
+                            msg[1] = (unsigned char)value;
+                            msg[2] = (unsigned char)volume;
+                            PV_CallMidiEventCallback(threadContext, pSong, msg, 3);
+                        }
+                        PV_ProcessNoteOff(pSong, MIDIChannel, (XSWORD)currentTrack, (XSWORD)value, (XSWORD)volume);
                     break;
                 case 0xB0:                  // �� Control Change
                     controler = *midi_stream++; // control #
@@ -3574,6 +3649,13 @@ GetMIDIevent:
                     }
 #endif
                     midi_byte = *midi_stream++; // controller value
+                    {
+                        unsigned char msg[3];
+                        msg[0] = (unsigned char)(0xB0 | (MIDIChannel & 0x0F));
+                        msg[1] = (unsigned char)controler;
+                        msg[2] = (unsigned char)midi_byte;
+                        PV_CallMidiEventCallback(threadContext, pSong, msg, 3);
+                    }
                     PV_ProcessController(pSong, MIDIChannel, (XSWORD)currentTrack, (XSWORD)controler, (XSWORD)midi_byte);
                     
                     if (pSong->AnalyzeMode == SCAN_NORMAL)
@@ -3596,6 +3678,12 @@ GetMIDIevent:
                     }
 #endif
                     midi_stream++;
+                    {
+                        unsigned char msg[2];
+                        msg[0] = (unsigned char)(0xC0 | (MIDIChannel & 0x0F));
+                        msg[1] = (unsigned char)value;
+                        PV_CallMidiEventCallback(threadContext, pSong, msg, 2);
+                    }
                     PV_ProcessProgramChange(pSong, MIDIChannel, (XSWORD)currentTrack, (XSWORD)value);
 #if 0 && USE_CREATION_API == TRUE
                     if (pSong->AnalyzeMode == SCAN_FIND_PATCHES) 
@@ -3611,6 +3699,13 @@ GetMIDIevent:
                 case 0xE0:                  // �� SetPitchBend
                     valueLSB = *midi_stream++;
                     valueMSB = *midi_stream++;
+                    {
+                        unsigned char msg[3];
+                        msg[0] = (unsigned char)(0xE0 | (MIDIChannel & 0x0F));
+                        msg[1] = (unsigned char)valueLSB;
+                        msg[2] = (unsigned char)valueMSB;
+                        PV_CallMidiEventCallback(threadContext, pSong, msg, 3);
+                    }
                     PV_ProcessPitchBend(pSong, MIDIChannel, (XSWORD)currentTrack, valueMSB, valueLSB);
                     break;
                 case 0xA0:                  // ��  Key Pressure
@@ -3629,6 +3724,14 @@ GetMIDIevent:
             //          printf("sysex 0x%x length %ld\n", midi_byte, value);
             //          BAE_PrintHexDump(midi_stream, (value < 32) ? value : 32);
             //      }
+                    // For sysex, pass the full sysex message (0xF0 ... data ... 0xF7)
+                    if (midi_byte == 0xF0 && value > 0)
+                    {
+                        // Build a simple buffer on stack if size reasonable
+                        int sendLen = (int)value + 1; // include initial 0xF0
+                        unsigned char *syx = (unsigned char *)midi_stream - 1; // points to 0xF0
+                        PV_CallMidiEventCallback(threadContext, pSong, syx, sendLen);
+                    }
                     midi_stream += value;   // skip sysex
                     break;
             } /* end switch */

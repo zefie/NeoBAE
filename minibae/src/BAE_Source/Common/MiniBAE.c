@@ -7963,6 +7963,31 @@ static void PV_BAESong_SetControllerCallback(BAESong song, BAE_SongControllerCal
     song->mControllerCallbackReference = callbackReference;
 }
 
+static void PV_BAESong_SetMidiEventCallback(BAESong song, GM_MidiEventCallbackPtr pCallback, void *callbackReference)
+{
+    if (song && song->pSong)
+    {
+        song->pSong->midiEventCallbackPtr = pCallback;
+        song->pSong->midiEventCallbackReference = callbackReference;
+    }
+}
+
+BAEResult BAESong_SetMidiEventCallback(BAESong song, GM_MidiEventCallbackPtr pCallback, void *callbackReference)
+{
+    OPErr err = NO_ERR;
+    if ((song) && (song->mID == OBJECT_ID))
+    {
+        BAE_AcquireMutex(song->mLock);
+        PV_BAESong_SetMidiEventCallback(song, pCallback, callbackReference);
+        BAE_ReleaseMutex(song->mLock);
+    }
+    else
+    {
+        err = NULL_OBJECT;
+    }
+    return BAE_TranslateOPErr(err);
+}
+
 // song callbacks
 BAEResult BAESong_SetControllerCallback(BAESong song, BAE_SongControllerCallbackPtr pCallback, void *callbackReference, int16_t controller)
 {

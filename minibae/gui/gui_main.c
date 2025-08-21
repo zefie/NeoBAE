@@ -34,6 +34,7 @@
 #include "X_Assert.h"
 #include <SDL_ttf.h>
 #include "midi_input.h"
+#include "midi_output.h"
 #include "../src/thirdparty/rtmidi/rtmidi_c.h"
 static TTF_Font *g_font = NULL;
 #ifndef MIN
@@ -760,14 +761,24 @@ static int g_keyboard_base_octave = 4;
 // Lazy init flag for pressed-note array
 static bool g_keyboard_map_initialized = false;
 // MIDI input settings
-static bool g_midi_input_enabled = false; // enable external MIDI keyboard
-static int g_midi_device_index = 0; // selected device index (or -1 for virtual)
-static bool g_midi_device_dd_open = false; // dropdown open state
-static int g_midi_device_count = 0; // cached device count
-// We'll fetch device names on demand; keep a small cache
-static char g_midi_device_name_cache[32][128];
-static int  g_midi_device_api[32];
-static int  g_midi_device_port[32];
+static bool g_midi_input_enabled = false; // enable external MIDI input keyboard
+static int g_midi_input_device_index = 0; // selected input device index
+static bool g_midi_input_device_dd_open = false; // dropdown open state
+static int g_midi_input_device_count = 0; // cached input device count
+// MIDI output settings
+static bool g_midi_output_enabled = false; // enable external MIDI output
+static int g_midi_output_device_index = 0; // selected output device index
+static bool g_midi_output_device_dd_open = false; // dropdown open state for output
+static int g_midi_output_device_count = 0; // cached output device count
+// Track master volume so we can mute device (not just song) while sending external MIDI
+static double g_last_requested_master_volume = 1.0; // 0.0..1.0 per UI
+static bool   g_master_muted_for_midi_out = false;
+// We'll fetch device names on demand; keep a small cache shared for input/output
+static char g_midi_device_name_cache[64][128];
+static int  g_midi_device_api[64];
+static int  g_midi_device_port[64];
+// Combined cache count (total input+output entries)
+static int  g_midi_device_count = 0;
 #ifdef SUPPORT_KARAOKE
 // Karaoke / lyric display state
 static bool g_karaoke_enabled = true; // simple always-on toggle (future: UI setting)
@@ -958,6 +969,15 @@ static void gui_lyric_callback(struct GM_Song *songPtr, const char *lyric, uint3
         p2++;
     }
     if(g_lyric_mutex) SDL_UnlockMutex(g_lyric_mutex);
+}
+
+// Raw MIDI event callback from engine — forward to external MIDI output when enabled
+static void gui_midi_event_callback(void *threadContext, struct GM_Song *pSong, const unsigned char *midiMessage, int16_t length, uint32_t timeMicroseconds, void *ref){
+    (void)threadContext; (void)pSong; (void)timeMicroseconds; (void)ref;
+    if(!g_midi_output_enabled) return;
+    if(!midiMessage || length <= 0) return;
+    // Send raw bytes to configured RtMidi output
+    midi_output_send(midiMessage, length);
 }
 #endif
 
@@ -1834,6 +1854,8 @@ static bool bae_load_song(const char* path){
         }
     }
 #endif
+    // If MIDI Output already enabled, register engine MIDI event callback so events are forwarded
+    if(g_midi_output_enabled && g_bae.song){ BAESong_SetMidiEventCallback(g_bae.song, gui_midi_event_callback, NULL); }
     const char *base=path; for(const char *p=path; *p; ++p){ if(*p=='/'||*p=='\\') base=p+1; }
     char msg[128]; snprintf(msg,sizeof(msg),"Loaded: %s", base); set_status_message(msg); return true;
 }
@@ -1848,6 +1870,7 @@ static bool bae_load_song_with_settings(const char* path, int transpose, int tem
 static void bae_set_volume(int volPct){
     if(volPct<0)volPct=0; if(volPct>100)volPct=100;
     double f = volPct/100.0;
+    g_last_requested_master_volume = f; // remember user intent
     
     if(g_bae.is_audio_file && g_bae.sound) {
         BAESound_SetVolume(g_bae.sound, FLOAT_TO_UNSIGNED_FIXED(f));
@@ -1855,8 +1878,8 @@ static void bae_set_volume(int volPct){
         BAESong_SetVolume(g_bae.song, FLOAT_TO_UNSIGNED_FIXED(f));
     }
     
-    // Also adjust master volume
-    if(g_bae.mixer){ BAEMixer_SetMasterVolume(g_bae.mixer, FLOAT_TO_UNSIGNED_FIXED(f)); }
+    // Also adjust master volume unless globally muted for MIDI Out
+    if(g_bae.mixer && !g_master_muted_for_midi_out){ BAEMixer_SetMasterVolume(g_bae.mixer, FLOAT_TO_UNSIGNED_FIXED(f)); }
 }
 
 static void bae_set_tempo(int percent){
@@ -1890,7 +1913,9 @@ static void bae_seek_ms(int ms){
     }
     if(!g_bae.song) return; 
     uint32_t us=(uint32_t)ms*1000UL; 
-    BAESong_SetMicrosecondPosition(g_bae.song, us); 
+    BAESong_SetMicrosecondPosition(g_bae.song, us);
+    // When seeking, ensure external MIDI devices are silenced to avoid hanging notes
+    if(g_midi_output_enabled){ midi_output_send_all_notes_off(); }
     // Reset virtual keyboard UI and release any held virtual note when seeking
     if(g_show_virtual_keyboard) {
         if(g_keyboard_mouse_note != -1) {
@@ -2052,6 +2077,8 @@ static bool bae_play(bool *playing){
             return true;
         } else {
             BAESong_Pause(g_bae.song);
+            // Ensure external MIDI devices are silenced on pause
+            if(g_midi_output_enabled){ midi_output_send_all_notes_off(); }
             // Release any held virtual keyboard notes and clear keyboard UI state on pause
             if(g_show_virtual_keyboard && g_bae.song){
                 for(int n=0;n<128;n++){
@@ -2074,7 +2101,8 @@ static void bae_stop(bool *playing,int *progress){
         *playing=false; *progress=0;
     g_bae.is_playing = false;
     } else if(!g_bae.is_audio_file && g_bae.song) {
-        BAESong_Stop(g_bae.song,FALSE); 
+    BAESong_Stop(g_bae.song,FALSE); 
+    if(g_midi_output_enabled){ midi_output_send_all_notes_off(); }
         BAESong_SetMicrosecondPosition(g_bae.song,0); 
         *playing=false; *progress=0;
         g_bae.is_playing = false;
@@ -2493,6 +2521,7 @@ int main(int argc, char *argv[]){
                             g_keyboard_pressed_note[sc] = midi;
                             if(g_show_virtual_keyboard && g_bae.song){
                                 BAESong_NoteOnWithLoad(g_bae.song, (unsigned char)g_keyboard_channel, (unsigned char)midi, 100, 0);
+                                if(g_midi_output_enabled){ unsigned char mmsg[3]; mmsg[0] = (unsigned char)(0x90 | (g_keyboard_channel & 0x0F)); mmsg[1] = (unsigned char)midi; mmsg[2] = 100; midi_output_send(mmsg,3); }
                                 // Mark active in UI array so key lights up immediately
                                 g_keyboard_active_notes[midi] = 1;
                             }
@@ -2503,6 +2532,7 @@ int main(int argc, char *argv[]){
                                 g_keyboard_pressed_note[sc] = -1;
                                 if(g_show_virtual_keyboard && g_bae.song){
                                     BAESong_NoteOff(g_bae.song, (unsigned char)g_keyboard_channel, (unsigned char)heldMidi, 0, 0);
+                                    if(g_midi_output_enabled){ unsigned char mmsg[3]; mmsg[0] = (unsigned char)(0x80 | (g_keyboard_channel & 0x0F)); mmsg[1] = (unsigned char)heldMidi; mmsg[2] = 0; midi_output_send(mmsg,3); }
                                     g_keyboard_active_notes[heldMidi] = 0;
                                 }
                             }
@@ -2572,12 +2602,14 @@ int main(int argc, char *argv[]){
                         if (mtype == 0x90 && vel != 0) {
                             // Note On -> force to virtual keyboard channel
                             BAESong_NoteOnWithLoad(g_bae.song, (unsigned char)g_keyboard_channel, note, vel, 0);
+                            if(g_midi_output_enabled){ unsigned char mmsg[3]; mmsg[0]=(unsigned char)(0x90 | (g_keyboard_channel & 0x0F)); mmsg[1]=note; mmsg[2]=vel; midi_output_send(mmsg,3); }
                             // Also mark active immediately so the virtual keyboard lights up
                             // even when engine playback isn't running (consistent with QWERTY handler).
                             g_keyboard_active_notes[note] = 1;
                         } else {
                             // Note Off (or Note On with vel==0)
                             BAESong_NoteOff(g_bae.song, (unsigned char)g_keyboard_channel, note, 0, 0);
+                            if(g_midi_output_enabled){ unsigned char mmsg[3]; mmsg[0]=(unsigned char)(0x80 | (g_keyboard_channel & 0x0F)); mmsg[1]=note; mmsg[2]=0; midi_output_send(mmsg,3); }
                             // Clear UI active state immediately as well
                             g_keyboard_active_notes[note] = 0;
                         }
@@ -3054,19 +3086,21 @@ int main(int argc, char *argv[]){
                             if(vel > 112) vel = 112;
                         }
                         if(g_bae.song){ BAESong_NoteOnWithLoad(g_bae.song,(unsigned char)g_keyboard_channel,(unsigned char)mouseNote,(unsigned char)vel,0); }
+                        if(g_midi_output_enabled){ unsigned char m[3]; m[0] = (unsigned char)(0x90 | (g_keyboard_channel & 0x0F)); m[1] = (unsigned char)mouseNote; m[2] = (unsigned char)vel; midi_output_send(m,3); }
                         g_keyboard_mouse_note = mouseNote;
                     } else if(mouseNote == -1 && g_keyboard_mouse_note != -1){
                         // Dragged outside – stop sounding note
                         if(g_bae.song){ BAESong_NoteOff(g_bae.song,(unsigned char)g_keyboard_channel,(unsigned char)g_keyboard_mouse_note,0,0); }
+                        if(g_midi_output_enabled && g_keyboard_mouse_note != -1){ unsigned char m[3]; m[0] = (unsigned char)(0x80 | (g_keyboard_channel & 0x0F)); m[1] = (unsigned char)g_keyboard_mouse_note; m[2] = 0; midi_output_send(m,3); }
                         g_keyboard_mouse_note = -1;
                     }
                 } else {
                     // Mouse released anywhere
-                    if(g_keyboard_mouse_note != -1){ if(g_bae.song){ BAESong_NoteOff(g_bae.song,(unsigned char)g_keyboard_channel,(unsigned char)g_keyboard_mouse_note,0,0); } g_keyboard_mouse_note = -1; }
+                    if(g_keyboard_mouse_note != -1){ if(g_bae.song){ BAESong_NoteOff(g_bae.song,(unsigned char)g_keyboard_channel,(unsigned char)g_keyboard_mouse_note,0,0); } if(g_midi_output_enabled){ unsigned char m[3]; m[0]=(unsigned char)(0x80 | (g_keyboard_channel & 0x0F)); m[1]=(unsigned char)g_keyboard_mouse_note; m[2]=0; midi_output_send(m,3);} g_keyboard_mouse_note = -1; }
                 }
             } else {
                 // If dropdown/modal opens while holding a note, release it
-                if(g_keyboard_mouse_note != -1){ if(g_bae.song){ BAESong_NoteOff(g_bae.song,(unsigned char)g_keyboard_channel,(unsigned char)g_keyboard_mouse_note,0,0); } g_keyboard_mouse_note = -1; }
+                if(g_keyboard_mouse_note != -1){ if(g_bae.song){ BAESong_NoteOff(g_bae.song,(unsigned char)g_keyboard_channel,(unsigned char)g_keyboard_mouse_note,0,0); } if(g_midi_output_enabled){ unsigned char m[3]; m[0]=(unsigned char)(0x80 | (g_keyboard_channel & 0x0F)); m[1]=(unsigned char)g_keyboard_mouse_note; m[2]=0; midi_output_send(m,3);} g_keyboard_mouse_note = -1; }
             }
         }
     {
@@ -3111,6 +3145,9 @@ int main(int argc, char *argv[]){
         if(!g_bae.is_audio_file && g_bae.song_loaded) {
             // Export button
             if(ui_button(R,(Rect){320, 215, 80,22}, "Export", ui_mx,ui_my,ui_mdown) && ui_mclick && !g_exporting && !modal_block){
+                if(g_midi_output_enabled){
+                    set_status_message("Export disabled while MIDI Output enabled");
+                } else {
                 // When export button clicked, open save dialog using extension depending on codec
                 char *export_file = save_export_dialog(g_exportCodecIndex != 0);
                 if(export_file) {
@@ -3169,6 +3206,7 @@ int main(int argc, char *argv[]){
                         }
                     }
                     free(export_file);
+                }
                 }
             }
             // RMF Info button (only for RMF files)
@@ -3742,7 +3780,7 @@ int main(int argc, char *argv[]){
             draw_text(R, vcRect.x + vcRect.w - 16, vcRect.y + 6, g_volumeCurveDropdownOpen?"^":"v", dd_txt);
             if(point_in(mx,my,vcRect) && mclick){ 
                 g_volumeCurveDropdownOpen = !g_volumeCurveDropdownOpen; 
-                if(g_volumeCurveDropdownOpen){ g_sampleRateDropdownOpen = false; g_exportDropdownOpen = false; g_midi_device_dd_open = false; }
+                if(g_volumeCurveDropdownOpen){ g_sampleRateDropdownOpen = false; g_exportDropdownOpen = false; g_midi_input_device_dd_open = false; g_midi_output_device_dd_open = false; }
             }
 
             // Sample Rate selector
@@ -3760,7 +3798,7 @@ int main(int argc, char *argv[]){
             SDL_Color sr_text_col = g_button_text; if(!sampleRateEnabled){ sr_text_col.a = 180; }
             draw_text(R, srRect.x + 6, srRect.y + 6, srLabel, sr_text_col);
             draw_text(R, srRect.x + srRect.w - 16, srRect.y + 6, g_sampleRateDropdownOpen?"^":"v", sr_text_col);
-            if(sampleRateEnabled && point_in(mx,my,srRect) && mclick){ g_sampleRateDropdownOpen = !g_sampleRateDropdownOpen; if(g_sampleRateDropdownOpen){ g_exportDropdownOpen = false; g_midi_device_dd_open = false; } }
+            if(sampleRateEnabled && point_in(mx,my,srRect) && mclick){ g_sampleRateDropdownOpen = !g_sampleRateDropdownOpen; if(g_sampleRateDropdownOpen){ g_exportDropdownOpen = false; g_midi_input_device_dd_open = false; g_midi_output_device_dd_open = false; } }
 
             // Export codec selector (left column, below sample rate)
 #if USE_MPEG_ENCODER != FALSE
@@ -3773,15 +3811,15 @@ int main(int argc, char *argv[]){
             draw_rect(R, expRect, exp_bg); draw_frame(R, expRect, g_button_border);
             const char *expName = g_exportCodecNames[g_exportCodecIndex]; draw_text(R, expRect.x + 6, expRect.y + 6, expName, exp_txt);
             draw_text(R, expRect.x + expRect.w - 16, expRect.y + 6, g_exportDropdownOpen?"^":"v", exp_txt);
-            if(exportEnabled && point_in(mx,my,expRect) && mclick){ g_exportDropdownOpen = !g_exportDropdownOpen; if(g_exportDropdownOpen){ g_volumeCurveDropdownOpen = false; g_sampleRateDropdownOpen = false; g_midi_device_dd_open = false; } }
+            if(exportEnabled && point_in(mx,my,expRect) && mclick){ g_exportDropdownOpen = !g_exportDropdownOpen; if(g_exportDropdownOpen){ g_volumeCurveDropdownOpen = false; g_sampleRateDropdownOpen = false; g_midi_input_device_dd_open = false; g_midi_output_device_dd_open = false; } }
 #endif
 
-            // MIDI input enable checkbox and device selector (left column, below Export)
+        // MIDI input enable checkbox and device selector (left column, below Export)
             Rect midiEnRect = { leftX, dlg.y + 140, 18, 18 };
-            if(ui_toggle(R, midiEnRect, &g_midi_input_enabled, "Enable MIDI Input", mx,my,mclick)){
+        if(ui_toggle(R, midiEnRect, &g_midi_input_enabled, "MIDI Input", mx,my,mclick)){
                 // initialize or shutdown midi input as requested
                 if(g_midi_input_enabled){
-                    midi_input_init("miniBAE", -1, -1);
+            midi_input_init("miniBAE", -1, -1);
                 } else {
                     midi_input_shutdown();
                 }
@@ -3791,25 +3829,27 @@ int main(int argc, char *argv[]){
             // MIDI device dropdown (right-aligned in left column)
             Rect midiDevRect = { controlRightX, dlg.y + 136, controlW, 24 };
             // populate device list lazily when dropdown opened
-            if(g_midi_device_dd_open){
-                // Enumerate compiled RtMidi APIs and collect input ports from each API
+            if(g_midi_input_device_dd_open || g_midi_output_device_dd_open){
+                // Enumerate compiled RtMidi APIs and collect input ports first, then output ports.
                 g_midi_device_count = 0;
+                g_midi_input_device_count = 0;
+                g_midi_output_device_count = 0;
                 enum RtMidiApi apis[16];
                 int apiCount = rtmidi_get_compiled_api(apis, (unsigned int)(sizeof(apis)/sizeof(apis[0])));
                 if(apiCount <= 0) apiCount = 0;
                 const char *dbg = getenv("MINIBAE_DEBUG_MIDI");
-                for(int ai=0; ai<apiCount && g_midi_device_count < 32; ++ai){
+                // First: inputs
+                for(int ai=0; ai<apiCount && g_midi_device_count < 64; ++ai){
                     RtMidiInPtr r = rtmidi_in_create(apis[ai], "miniBAE_enum", 1000);
                     if(!r) continue;
                     unsigned int cnt = rtmidi_get_port_count(r);
-                    if(dbg){ const char *an = rtmidi_api_name(apis[ai]); fprintf(stderr, "[MIDI ENUM] API %d (%s): ok=%d msg='%s' ports=%u\n", ai, an?an:"?", r->ok, r->msg?r->msg:"", cnt); }
-                    for(unsigned int di=0; di<cnt && g_midi_device_count < 32; ++di){
+                    if(dbg){ const char *an = rtmidi_api_name(apis[ai]); fprintf(stderr, "[MIDI ENUM IN] API %d (%s): ok=%d msg='%s' ports=%u\n", ai, an?an:"?", r->ok, r->msg?r->msg:"", cnt); }
+                    for(unsigned int di=0; di<cnt && g_midi_device_count < 64; ++di){
                         int needed = 0; rtmidi_get_port_name(r, di, NULL, &needed);
                         if(needed > 0){
                             int bufLen = needed < 128 ? needed : 128;
                             char buf[128]; buf[0]='\0';
                             if(rtmidi_get_port_name(r, di, buf, &bufLen) >= 0){
-                                // Prefix with API name so identical port names from different backends are distinguishable
                                 const char *apiName = rtmidi_api_name(apis[ai]);
                                 if(apiName && apiName[0]){
                                     char full[192]; snprintf(full, sizeof(full), "%s: %s", apiName, buf);
@@ -3820,22 +3860,100 @@ int main(int argc, char *argv[]){
                                 g_midi_device_name_cache[g_midi_device_count][sizeof(g_midi_device_name_cache[g_midi_device_count])-1] = '\0';
                                 g_midi_device_api[g_midi_device_count] = ai;
                                 g_midi_device_port[g_midi_device_count] = (int)di;
-                                ++g_midi_device_count;
+                                ++g_midi_device_count; ++g_midi_input_device_count;
                             }
                         }
                     }
                     rtmidi_in_free(r);
                 }
+                // Then: outputs (append after inputs)
+                for(int ai=0; ai<apiCount && g_midi_device_count < 64; ++ai){
+                    RtMidiOutPtr r = rtmidi_out_create(apis[ai], "miniBAE_enum");
+                    if(!r) continue;
+                    unsigned int cnt = rtmidi_get_port_count(r);
+                    if(dbg){ const char *an = rtmidi_api_name(apis[ai]); fprintf(stderr, "[MIDI ENUM OUT] API %d (%s): ok=%d msg='%s' ports=%u\n", ai, an?an:"?", r->ok, r->msg?r->msg:"", cnt); }
+                    for(unsigned int di=0; di<cnt && g_midi_device_count < 64; ++di){
+                        int needed = 0; rtmidi_get_port_name(r, di, NULL, &needed);
+                        if(needed > 0){
+                            int bufLen = needed < 128 ? needed : 128;
+                            char buf[128]; buf[0]='\0';
+                            if(rtmidi_get_port_name(r, di, buf, &bufLen) >= 0){
+                                const char *apiName = rtmidi_api_name(apis[ai]);
+                                if(apiName && apiName[0]){
+                                    char full[192]; snprintf(full, sizeof(full), "%s: %s", apiName, buf);
+                                    strncpy(g_midi_device_name_cache[g_midi_device_count], full, sizeof(g_midi_device_name_cache[g_midi_device_count])-1);
+                                } else {
+                                    strncpy(g_midi_device_name_cache[g_midi_device_count], buf, sizeof(g_midi_device_name_cache[g_midi_device_count])-1);
+                                }
+                                g_midi_device_name_cache[g_midi_device_count][sizeof(g_midi_device_name_cache[g_midi_device_count])-1] = '\0';
+                                g_midi_device_api[g_midi_device_count] = ai;
+                                g_midi_device_port[g_midi_device_count] = (int)di;
+                                ++g_midi_device_count; ++g_midi_output_device_count;
+                            }
+                        }
+                    }
+                    rtmidi_out_free(r);
+                }
             }
-            // draw current device name
-            const char *curDev = (g_midi_device_index >=0 && g_midi_device_index < g_midi_device_count) ? g_midi_device_name_cache[g_midi_device_index] : "(Default)";
-            bool midiEnabled = !(g_volumeCurveDropdownOpen || g_sampleRateDropdownOpen || g_exportDropdownOpen || g_volumeCurveDropdownOpen);
+            // draw current input device name
+            const char *curDev = (g_midi_input_device_index >=0 && g_midi_input_device_index < g_midi_input_device_count) ? g_midi_device_name_cache[g_midi_input_device_index] : "(Default)";
+            // Allow input UI to be active unless other dropdowns (sample rate, volume curve, export) are open.
+            bool midiInputEnabled = !(g_volumeCurveDropdownOpen || g_sampleRateDropdownOpen || g_exportDropdownOpen);
+            // MIDI output should be disabled whenever the MIDI input dropdown is open (so only one of them can be active at once)
+            bool midiOutputEnabled = !(g_volumeCurveDropdownOpen || g_sampleRateDropdownOpen || g_exportDropdownOpen || g_midi_input_device_dd_open);
             SDL_Color md_bg = g_button_base; SDL_Color md_txt = g_button_text;
-            if(!midiEnabled){ md_bg.a = 180; md_txt.a = 180; }
+            if(!midiInputEnabled){ md_bg.a = 180; md_txt.a = 180; }
             else if(point_in(mx,my,midiDevRect)) md_bg = g_button_hover;
             draw_rect(R, midiDevRect, md_bg); draw_frame(R, midiDevRect, g_button_border);
-            draw_text(R, midiDevRect.x + 6, midiDevRect.y + 6, curDev, md_txt); draw_text(R, midiDevRect.x + midiDevRect.w - 16, midiDevRect.y + 6, g_midi_device_dd_open?"^":"v", md_txt);
-            if(midiEnabled && point_in(mx,my,midiDevRect) && mclick){ g_midi_device_dd_open = !g_midi_device_dd_open; if(g_midi_device_dd_open){ g_volumeCurveDropdownOpen = false; g_sampleRateDropdownOpen = false; g_exportDropdownOpen = false; } }
+            draw_text(R, midiDevRect.x + 6, midiDevRect.y + 6, curDev, md_txt); draw_text(R, midiDevRect.x + midiDevRect.w - 16, midiDevRect.y + 6, g_midi_input_device_dd_open?"^":"v", md_txt);
+            if(midiInputEnabled && point_in(mx,my,midiDevRect) && mclick){ g_midi_input_device_dd_open = !g_midi_input_device_dd_open; if(g_midi_input_device_dd_open){ g_volumeCurveDropdownOpen = false; g_sampleRateDropdownOpen = false; g_exportDropdownOpen = false; g_midi_output_device_dd_open = false; } }
+
+            // MIDI output checkbox and device selector (placed next to input)
+            Rect midiOutEnRect = { leftX, dlg.y + 168, 18, 18 };
+            if(ui_toggle(R, midiOutEnRect, &g_midi_output_enabled, "MIDI Output", mx,my,mclick)){
+                if(g_midi_output_enabled){
+                    // try to init default output (will open first port or virtual)
+                    // Ensure any previous output is cleanly silenced first
+                    midi_output_init("miniBAE", -1, -1);
+                    // After opening, send current instrument table so external device matches internal synth
+                    if(g_bae.song){
+                        for(unsigned char ch=0; ch<16; ++ch){ unsigned char program=0, bank=0; if(BAESong_GetProgramBank(g_bae.song, ch, &program, &bank) == BAE_NO_ERROR){
+                                    unsigned char buf[3];
+                                    // Send Bank Select MSB (controller 0) if bank fits into MSB
+                                    buf[0] = (unsigned char)(0xB0 | (ch & 0x0F)); buf[1] = 0; buf[2] = (unsigned char)(bank & 0x7F); midi_output_send(buf,3);
+                                    // Program Change
+                                    buf[0] = (unsigned char)(0xC0 | (ch & 0x0F)); buf[1] = (unsigned char)(program & 0x7F); midi_output_send(buf,2);
+                                } }
+                    }
+                    // Register engine MIDI event callback to mirror events
+                    if(g_bae.song){ BAESong_SetMidiEventCallback(g_bae.song, gui_midi_event_callback, NULL); }
+                    // Mute overall device (not just song) so internal synth is silent
+                    if(g_bae.mixer){
+                        BAEMixer_SetMasterVolume(g_bae.mixer, FLOAT_TO_UNSIGNED_FIXED(0.0));
+                        g_master_muted_for_midi_out = true;
+                    }
+                } else {
+                    // Before closing output, tell external device to silence and reset
+                    midi_output_send_all_notes_off();
+                    midi_output_shutdown();
+                    // Unregister engine MIDI event callback
+                    if(g_bae.song){ BAESong_SetMidiEventCallback(g_bae.song, NULL, NULL); }
+                    // Restore master volume
+                    if(g_bae.mixer){
+                        BAEMixer_SetMasterVolume(g_bae.mixer, FLOAT_TO_UNSIGNED_FIXED(g_last_requested_master_volume));
+                        g_master_muted_for_midi_out = false;
+                    }
+                }
+                save_settings(g_current_bank_path[0]?g_current_bank_path:NULL, reverbType, loopPlay);
+            }
+            Rect midiOutDevRect = { controlRightX, dlg.y + 164, controlW, 24 };
+            const char *curOutDev = (g_midi_output_device_index >=0 && g_midi_output_device_index < g_midi_output_device_count) ? g_midi_device_name_cache[g_midi_input_device_count + g_midi_output_device_index] : "(Default)";
+            SDL_Color mo_bg = g_button_base; SDL_Color mo_txt = g_button_text;
+            if(!midiOutputEnabled){ mo_bg.a = 180; mo_txt.a = 180; }
+            else if(point_in(mx,my,midiOutDevRect)) mo_bg = g_button_hover;
+            draw_rect(R, midiOutDevRect, mo_bg); draw_frame(R, midiOutDevRect, g_button_border);
+            draw_text(R, midiOutDevRect.x + 6, midiOutDevRect.y + 6, curOutDev, mo_txt); draw_text(R, midiOutDevRect.x + midiOutDevRect.w - 16, midiOutDevRect.y + 6, g_midi_output_device_dd_open?"^":"v", mo_txt);
+            if(midiOutputEnabled && point_in(mx,my,midiOutDevRect) && mclick){ g_midi_output_device_dd_open = !g_midi_output_device_dd_open; if(g_midi_output_device_dd_open){ g_volumeCurveDropdownOpen = false; g_sampleRateDropdownOpen = false; g_exportDropdownOpen = false; g_midi_input_device_dd_open = false; } }
 
             // Right column controls (checkboxes)
             Rect cbRect = { rightX, dlg.y + 36, 18, 18 };
@@ -3876,7 +3994,7 @@ int main(int argc, char *argv[]){
                 else { snprintf(ver, sizeof(ver), "libminiBAE %s", _VERSION); ver2[0] = '\0'; }
                 int vw=0,vh=0; measure_text(ver,&vw,&vh);
                 Rect verRect = { dlg.x + pad, lineVerY, vw, vh>0?vh:14 };
-                bool dropdownActive = g_sampleRateDropdownOpen || g_volumeCurveDropdownOpen || g_midi_device_dd_open || g_exportDropdownOpen;
+                bool dropdownActive = g_sampleRateDropdownOpen || g_volumeCurveDropdownOpen || g_midi_input_device_dd_open || g_midi_output_device_dd_open || g_exportDropdownOpen;
                 bool overVer = !dropdownActive && point_in(mx,my,verRect);
                 SDL_Color verColor = overVer ? g_accent_color : help;
                 draw_text(R, verRect.x, verRect.y, ver, verColor);
@@ -3936,30 +4054,69 @@ int main(int argc, char *argv[]){
                 }
                 if(mclick && !point_in(mx,my,srRect) && !point_in(mx,my,box)) g_sampleRateDropdownOpen=false;
             }
-            // MIDI device dropdown
-            if(g_midi_device_dd_open){
+            // MIDI input device dropdown
+            if(g_midi_input_device_dd_open){
                 int itemH = midiDevRect.h;
-                int deviceCount = g_midi_device_count;
+                int deviceCount = g_midi_input_device_count;
                 if(deviceCount <= 0) deviceCount = 1; // show placeholder
                 Rect box = { midiDevRect.x, midiDevRect.y + midiDevRect.h + 1, midiDevRect.w, itemH * deviceCount };
                 SDL_Color ddBg = g_panel_bg; ddBg.a = 255; SDL_Color shadow = {0,0,0, g_is_dark_mode ? 120 : 90};
                 Rect shadowRect = {box.x + 2, box.y + 2, box.w, box.h}; draw_rect(R, shadowRect, shadow);
                 draw_rect(R, box, ddBg); draw_frame(R, box, g_panel_border);
-                if(g_midi_device_count == 0){ // placeholder
+                if(g_midi_input_device_count == 0){ // placeholder
                     Rect ir = {box.x, box.y, box.w, itemH}; draw_rect(R, ir, g_panel_bg); draw_text(R, ir.x+6, ir.y+6, "No MIDI devices", g_text_color);
                 } else {
-                    for(int i=0;i<g_midi_device_count && i<32;i++){
+                    for(int i=0;i<g_midi_input_device_count && i<64;i++){
                         Rect ir = {box.x, box.y + i*itemH, box.w, itemH}; bool over = point_in(mx,my,ir);
-                        SDL_Color ibg = (i==g_midi_device_index)? g_highlight_color : g_panel_bg; if(over) ibg = g_button_hover;
+                        SDL_Color ibg = (i==g_midi_input_device_index)? g_highlight_color : g_panel_bg; if(over) ibg = g_button_hover;
                         draw_rect(R, ir, ibg);
-                        if(i < g_midi_device_count-1){ SDL_SetRenderDrawColor(R, g_panel_border.r, g_panel_border.g, g_panel_border.b, 255); SDL_RenderDrawLine(R, ir.x, ir.y+ir.h, ir.x+ir.w, ir.y+ir.h); }
+                        if(i < g_midi_input_device_count-1){ SDL_SetRenderDrawColor(R, g_panel_border.r, g_panel_border.g, g_panel_border.b, 255); SDL_RenderDrawLine(R, ir.x, ir.y+ir.h, ir.x+ir.w, ir.y+ir.h); }
                         draw_text(R, ir.x+6, ir.y+6, g_midi_device_name_cache[i], g_button_text);
-                        if(over && mclick){ g_midi_device_index = i; g_midi_device_dd_open = false; // reopen midi input with chosen device
+                        if(over && mclick){ g_midi_input_device_index = i; g_midi_input_device_dd_open = false; // reopen midi input with chosen device
                             midi_input_shutdown(); midi_input_init("miniBAE", g_midi_device_api[i], g_midi_device_port[i]); save_settings(g_current_bank_path[0]?g_current_bank_path:NULL, reverbType, loopPlay);
                         }
                     }
                 }
-                if(mclick && !point_in(mx,my,midiDevRect) && !point_in(mx,my,box)) g_midi_device_dd_open = false;
+                if(mclick && !point_in(mx,my,midiDevRect) && !point_in(mx,my,box)) g_midi_input_device_dd_open = false;
+            }
+
+            // MIDI output device dropdown
+            // Don't render the output dropdown while the input dropdown is open
+            if(g_midi_output_device_dd_open && !g_midi_input_device_dd_open){
+                int itemH = midiOutDevRect.h;
+                int deviceCount = g_midi_output_device_count;
+                if(deviceCount <= 0) deviceCount = 1; // show placeholder
+                Rect box = { midiOutDevRect.x, midiOutDevRect.y + midiOutDevRect.h + 1, midiOutDevRect.w, itemH * deviceCount };
+                SDL_Color ddBg = g_panel_bg; ddBg.a = 255; SDL_Color shadow = {0,0,0, g_is_dark_mode ? 120 : 90};
+                Rect shadowRect = {box.x + 2, box.y + 2, box.w, box.h}; draw_rect(R, shadowRect, shadow);
+                draw_rect(R, box, ddBg); draw_frame(R, box, g_panel_border);
+                if(g_midi_output_device_count == 0){ // placeholder
+                    Rect ir = {box.x, box.y, box.w, itemH}; draw_rect(R, ir, g_panel_bg); draw_text(R, ir.x+6, ir.y+6, "No MIDI devices", g_text_color);
+                } else {
+                    for(int i=0;i<g_midi_output_device_count && i<64;i++){
+                        Rect ir = {box.x, box.y + i*itemH, box.w, itemH}; bool over = point_in(mx,my,ir);
+                        SDL_Color ibg = (i==g_midi_output_device_index)? g_highlight_color : g_panel_bg; if(over) ibg = g_button_hover;
+                        draw_rect(R, ir, ibg);
+                        if(i < g_midi_output_device_count-1){ SDL_SetRenderDrawColor(R, g_panel_border.r, g_panel_border.g, g_panel_border.b, 255); SDL_RenderDrawLine(R, ir.x, ir.y+ir.h, ir.x+ir.w, ir.y+ir.h); }
+                        draw_text(R, ir.x+6, ir.y+6, g_midi_device_name_cache[g_midi_input_device_count + i], g_button_text);
+                        if(over && mclick){ g_midi_output_device_index = i; g_midi_output_device_dd_open = false; // reopen midi output with chosen device
+                            // Silence previous device before switching
+                            midi_output_send_all_notes_off();
+                            midi_output_shutdown();
+                            midi_output_init("miniBAE", g_midi_device_api[g_midi_input_device_count + i], g_midi_device_port[g_midi_input_device_count + i]);
+                            // After opening, send current instrument table
+                            if(g_bae.song){
+                                for(unsigned char ch=0; ch<16; ++ch){ unsigned char program=0, bank=0; if(BAESong_GetProgramBank(g_bae.song, ch, &program, &bank) == BAE_NO_ERROR){
+                                            unsigned char buf[3];
+                                            buf[0] = (unsigned char)(0xB0 | (ch & 0x0F)); buf[1] = 0; buf[2] = (unsigned char)(bank & 0x7F); midi_output_send(buf,3);
+                                            buf[0] = (unsigned char)(0xC0 | (ch & 0x0F)); buf[1] = (unsigned char)(program & 0x7F); midi_output_send(buf,2);
+                                        } }
+                            }
+                            save_settings(g_current_bank_path[0]?g_current_bank_path:NULL, reverbType, loopPlay);
+                        }
+                    }
+                }
+                if(mclick && !point_in(mx,my,midiOutDevRect) && !point_in(mx,my,box)) g_midi_output_device_dd_open = false;
             }
             if(g_volumeCurveDropdownOpen){
                 int itemH = vcRect.h; int totalH = itemH * vcCount; Rect box = {vcRect.x, vcRect.y + vcRect.h + 1, vcRect.w, totalH};

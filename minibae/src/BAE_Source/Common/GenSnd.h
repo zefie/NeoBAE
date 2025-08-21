@@ -653,6 +653,12 @@ typedef void        (*GM_SongMetaCallbackProcPtr)(void *threadContext, struct GM
 // New lyric-specific callback providing precise song microsecond timestamp when lyric meta event (0x05) occurs
 typedef void        (*GM_SongLyricCallbackProcPtr)(struct GM_Song *pSong, const char *lyricText, uint32_t lyricTimeMicroseconds, void *reference);
 
+// Raw MIDI event callback. The callback receives the raw MIDI message bytes
+// (status + data bytes), the length of the message, and a timestamp in
+// microseconds representing the current song time. The reference pointer is
+// the user-provided context.
+typedef void        (*GM_MidiEventCallbackPtr)(void *threadContext, struct GM_Song *pSong, const unsigned char *midiMessage, int16_t length, uint32_t timeMicroseconds, void *reference);
+
 // mixer callbacks
 typedef void        (*GM_AudioTaskCallbackPtr)(void *threadContext, void *reference);
 typedef void        (*GM_AudioOutputCallbackPtr)(void *threadContext, void *samples, int32_t sampleSize, int32_t channels, uint32_t lengthInFrames);
@@ -1097,6 +1103,11 @@ struct GM_Song
     // Karaoke / lyric support (separate from generic meta callback so GUI can opt-in without parsing every meta event)
     GM_SongLyricCallbackProcPtr lyricCallbackPtr;
     void                        *lyricCallbackReference;
+
+    // Optional raw MIDI event callback (mirroring/export). If set, this will be
+    // called with the raw MIDI bytes for any MIDI event processed for this song.
+    GM_MidiEventCallbackPtr     midiEventCallbackPtr;
+    void                        *midiEventCallbackReference;
 
     // these pointers are NULL until used, then they are allocated
     GM_ControlCallbackPtr       controllerCallback;     // called during playback with controller info
@@ -1997,6 +2008,9 @@ void GM_SetSongTimeCallback(GM_Song *theSong, GM_SongTimeCallbackProcPtr songTim
 void GM_SetSongMetaEventCallback(GM_Song *theSong, GM_SongMetaCallbackProcPtr theCallback, void *reference);
 
 void GM_SetControllerCallback(GM_Song *theSong, void *reference, GM_ControlerCallbackPtr controllerCallback, int16_t controller);
+
+// Register a raw MIDI event callback for a song. Pass NULL to disable.
+void GM_SetSongMidiEventCallback(GM_Song *theSong, GM_MidiEventCallbackPtr theCallback, void *reference);
 
 // Display
 XSWORD GM_GetAudioSampleFrame(XSWORD *pLeft, XSWORD *pRight);

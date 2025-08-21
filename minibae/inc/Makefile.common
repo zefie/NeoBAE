@@ -200,7 +200,7 @@ endif
 # playbae = libMiniBAE srcs + playbae.c
 ifneq ($(BUILD_GUI),)
 	BAE_FLAGS += -DOUTPUT_TO_LOGFILE=1
-	SRC_BIN		:= $(SRC) gui_main.c midi_input.c
+	SRC_BIN		:= $(SRC) gui_main.c midi_input.c midi_output.c
 else
 	SRC_BIN		:= $(SRC) playbae.c
 endif
