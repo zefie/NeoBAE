@@ -40,16 +40,20 @@ ifneq ($(MP3_ENC),)
 	vpath	%.cpp src/BAE_MPEG_Source_II
 endif
 
+ifneq ($(BUILD_GUI),)
+	vpath	%.cpp src/thirdparty/rtmidi
+	vpath	%.c src/thirdparty/rtmidi
+endif
+
 INC_PATH	:= -Isrc/BAE_Source/Common
 INC_PATH	+= -Isrc/BAE_Source/Platform
 INC_PATH	+= -Isrc/BAE_MPEG_Source_II
 INC_PATH	+= -Isrc/banks/patches111
 INC_PATH	+= -Isrc/thirdparty/minimp3
+INC_PATH	+= -Isrc/thirdparty/rtmidi
 ifneq ($(MP3_ENC),)
 	INC_PATH	+= -Isrc/thirdparty/hmp3/hmp3/src/pub
 endif
-
-### Start configure BAE API
 
 # default to ANSI
 ifeq ($(BAE_API),)
@@ -136,6 +140,13 @@ SRC		+=	DriverTools.c \
 			g72x.c \
 			sha1mini.c
 
+ifneq ($(BUILD_GUI),)
+# RtMidi (C wrapper) - provide real-time MIDI input for GUI
+SRC += rtmidi_c.cpp RtMidi.cpp
+### Start configure BAE API
+endif
+
+
 # Compile in patches if desired
 ifeq ($(BAE_BUILT_IN_PATCHES),1)
 	SRC +=		BAEPatches.c
@@ -189,7 +200,7 @@ endif
 # playbae = libMiniBAE srcs + playbae.c
 ifneq ($(BUILD_GUI),)
 	BAE_FLAGS += -DOUTPUT_TO_LOGFILE=1
-	SRC_BIN		:= $(SRC) gui_main.c
+	SRC_BIN		:= $(SRC) gui_main.c midi_input.c
 else
 	SRC_BIN		:= $(SRC) playbae.c
 endif

@@ -4,3 +4,6 @@
 [submodule "minibae/src/thirdparty/minimp3"]
 	path = minibae/src/thirdparty/minimp3
 	url = https://github.com/lieff/minimp3.git
+[submodule "minibae/src/thirdparty/rtmidi"]
+	path = minibae/src/thirdparty/rtmidi
+	url = https://github.com/thestk/rtmidi
