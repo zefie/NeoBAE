@@ -33,6 +33,8 @@
 #include "BAE_API.h" // for BAE_GetDeviceSamplesPlayedPosition diagnostics
 #include "X_Assert.h"
 #include <SDL_ttf.h>
+#include "midi_input.h"
+#include "../src/thirdparty/rtmidi/rtmidi_c.h"
 static TTF_Font *g_font = NULL;
 #ifndef MIN
 #define MIN(a,b) ((a) < (b) ? (a) : (b))
@@ -757,6 +759,13 @@ static int g_keyboard_pressed_note[SDL_NUM_SCANCODES];
 static int g_keyboard_base_octave = 4;
 // Lazy init flag for pressed-note array
 static bool g_keyboard_map_initialized = false;
+// MIDI input settings
+static bool g_midi_input_enabled = false; // enable external MIDI keyboard
+static int g_midi_device_index = 0; // selected device index (or -1 for virtual)
+static bool g_midi_device_dd_open = false; // dropdown open state
+static int g_midi_device_count = 0; // cached device count
+// We'll fetch device names on demand; keep a small cache
+static char g_midi_device_name_cache[32][128];
 #ifdef SUPPORT_KARAOKE
 // Karaoke / lyric display state
 static bool g_karaoke_enabled = true; // simple always-on toggle (future: UI setting)
@@ -3696,7 +3705,7 @@ int main(int argc, char *argv[]){
             draw_text(R, vcRect.x + vcRect.w - 16, vcRect.y + 6, g_volumeCurveDropdownOpen?"^":"v", dd_txt);
             if(point_in(mx,my,vcRect) && mclick){ 
                 g_volumeCurveDropdownOpen = !g_volumeCurveDropdownOpen; 
-                if(g_volumeCurveDropdownOpen){ g_sampleRateDropdownOpen = false; g_exportDropdownOpen = false; }
+                if(g_volumeCurveDropdownOpen){ g_sampleRateDropdownOpen = false; g_exportDropdownOpen = false; g_midi_device_dd_open = false; }
             }
 
             // Sample Rate selector
@@ -3714,7 +3723,7 @@ int main(int argc, char *argv[]){
             SDL_Color sr_text_col = g_button_text; if(!sampleRateEnabled){ sr_text_col.a = 180; }
             draw_text(R, srRect.x + 6, srRect.y + 6, srLabel, sr_text_col);
             draw_text(R, srRect.x + srRect.w - 16, srRect.y + 6, g_sampleRateDropdownOpen?"^":"v", sr_text_col);
-            if(sampleRateEnabled && point_in(mx,my,srRect) && mclick){ g_sampleRateDropdownOpen = !g_sampleRateDropdownOpen; if(g_sampleRateDropdownOpen){ g_exportDropdownOpen = false; } }
+            if(sampleRateEnabled && point_in(mx,my,srRect) && mclick){ g_sampleRateDropdownOpen = !g_sampleRateDropdownOpen; if(g_sampleRateDropdownOpen){ g_exportDropdownOpen = false; g_midi_device_dd_open = false; } }
 
             // Export codec selector (left column, below sample rate)
 #if USE_MPEG_ENCODER != FALSE
@@ -3727,8 +3736,46 @@ int main(int argc, char *argv[]){
             draw_rect(R, expRect, exp_bg); draw_frame(R, expRect, g_button_border);
             const char *expName = g_exportCodecNames[g_exportCodecIndex]; draw_text(R, expRect.x + 6, expRect.y + 6, expName, exp_txt);
             draw_text(R, expRect.x + expRect.w - 16, expRect.y + 6, g_exportDropdownOpen?"^":"v", exp_txt);
-            if(exportEnabled && point_in(mx,my,expRect) && mclick){ g_exportDropdownOpen = !g_exportDropdownOpen; if(g_exportDropdownOpen){ g_volumeCurveDropdownOpen = false; g_sampleRateDropdownOpen = false; } }
+            if(exportEnabled && point_in(mx,my,expRect) && mclick){ g_exportDropdownOpen = !g_exportDropdownOpen; if(g_exportDropdownOpen){ g_volumeCurveDropdownOpen = false; g_sampleRateDropdownOpen = false; g_midi_device_dd_open = false; } }
 #endif
+
+            // MIDI input enable checkbox and device selector (left column, below Export)
+            Rect midiEnRect = { leftX, dlg.y + 140, 18, 18 };
+            if(ui_toggle(R, midiEnRect, &g_midi_input_enabled, "Enable MIDI Input", mx,my,mclick)){
+                // initialize or shutdown midi input as requested
+                if(g_midi_input_enabled){
+                    midi_input_init("miniBAE");
+                } else {
+                    midi_input_shutdown();
+                }
+                // persist
+                save_settings(g_current_bank_path[0]?g_current_bank_path:NULL, reverbType, loopPlay);
+            }
+            // MIDI device dropdown (right-aligned in left column)
+            Rect midiDevRect = { controlRightX, dlg.y + 136, controlW, 24 };
+            // populate device list lazily when dropdown opened
+            if(g_midi_device_dd_open){
+                // query RtMidi for device names
+                RtMidiInPtr r = rtmidi_in_create_default();
+                if(r){
+                    unsigned int cnt = rtmidi_get_port_count(r);
+                    g_midi_device_count = (int)cnt;
+                    for(unsigned int di=0; di<cnt && di<32; ++di){
+                        int needed = 0; rtmidi_get_port_name(r, di, NULL, &needed);
+                        if(needed > 0 && needed < 128){ char buf[128]; rtmidi_get_port_name(r, di, buf, &needed); strncpy(g_midi_device_name_cache[di], buf, sizeof(g_midi_device_name_cache[di])-1); g_midi_device_name_cache[di][sizeof(g_midi_device_name_cache[di])-1]='\0'; }
+                    }
+                    rtmidi_in_free(r);
+                }
+            }
+            // draw current device name
+            const char *curDev = (g_midi_device_index >=0 && g_midi_device_index < g_midi_device_count) ? g_midi_device_name_cache[g_midi_device_index] : "(Default)";
+            bool midiEnabled = !(g_volumeCurveDropdownOpen || g_sampleRateDropdownOpen || g_exportDropdownOpen || g_volumeCurveDropdownOpen);
+            SDL_Color md_bg = g_button_base; SDL_Color md_txt = g_button_text;
+            if(!midiEnabled){ md_bg.a = 180; md_txt.a = 180; }
+            else if(point_in(mx,my,midiDevRect)) md_bg = g_button_hover;
+            draw_rect(R, midiDevRect, md_bg); draw_frame(R, midiDevRect, g_button_border);
+            draw_text(R, midiDevRect.x + 6, midiDevRect.y + 6, curDev, md_txt); draw_text(R, midiDevRect.x + midiDevRect.w - 16, midiDevRect.y + 6, g_midi_device_dd_open?"^":"v", md_txt);
+            if(midiEnabled && point_in(mx,my,midiDevRect) && mclick){ g_midi_device_dd_open = !g_midi_device_dd_open; if(g_midi_device_dd_open){ g_volumeCurveDropdownOpen = false; g_sampleRateDropdownOpen = false; g_exportDropdownOpen = false; } }
 
             // Right column controls (checkboxes)
             Rect cbRect = { rightX, dlg.y + 36, 18, 18 };
@@ -3754,6 +3801,8 @@ int main(int argc, char *argv[]){
                 save_settings(g_current_bank_path[0]?g_current_bank_path:NULL, reverbType, loopPlay);
             }
 
+            // MIDI channel selector removed from Settings dialog - channel is now controlled in the virtual keyboard dialog
+
             // Footer help + version + compile info
             SDL_Color help = g_is_dark_mode ? (SDL_Color){180,180,190,255} : (SDL_Color){80,80,80,255};
             int lineHelpY = dlg.y + dlg.h - 54;
@@ -3767,7 +3816,7 @@ int main(int argc, char *argv[]){
                 else { snprintf(ver, sizeof(ver), "libminiBAE %s", _VERSION); ver2[0] = '\0'; }
                 int vw=0,vh=0; measure_text(ver,&vw,&vh);
                 Rect verRect = { dlg.x + pad, lineVerY, vw, vh>0?vh:14 };
-                bool dropdownActive = g_sampleRateDropdownOpen || g_volumeCurveDropdownOpen;
+                bool dropdownActive = g_sampleRateDropdownOpen || g_volumeCurveDropdownOpen || g_midi_device_dd_open || g_exportDropdownOpen;
                 bool overVer = !dropdownActive && point_in(mx,my,verRect);
                 SDL_Color verColor = overVer ? g_accent_color : help;
                 draw_text(R, verRect.x, verRect.y, ver, verColor);
@@ -3827,6 +3876,31 @@ int main(int argc, char *argv[]){
                 }
                 if(mclick && !point_in(mx,my,srRect) && !point_in(mx,my,box)) g_sampleRateDropdownOpen=false;
             }
+            // MIDI device dropdown
+            if(g_midi_device_dd_open){
+                int itemH = midiDevRect.h;
+                int deviceCount = g_midi_device_count;
+                if(deviceCount <= 0) deviceCount = 1; // show placeholder
+                Rect box = { midiDevRect.x, midiDevRect.y + midiDevRect.h + 1, midiDevRect.w, itemH * deviceCount };
+                SDL_Color ddBg = g_panel_bg; ddBg.a = 255; SDL_Color shadow = {0,0,0, g_is_dark_mode ? 120 : 90};
+                Rect shadowRect = {box.x + 2, box.y + 2, box.w, box.h}; draw_rect(R, shadowRect, shadow);
+                draw_rect(R, box, ddBg); draw_frame(R, box, g_panel_border);
+                if(g_midi_device_count == 0){ // placeholder
+                    Rect ir = {box.x, box.y, box.w, itemH}; draw_rect(R, ir, g_panel_bg); draw_text(R, ir.x+6, ir.y+6, "No MIDI devices", g_text_color);
+                } else {
+                    for(int i=0;i<g_midi_device_count && i<32;i++){
+                        Rect ir = {box.x, box.y + i*itemH, box.w, itemH}; bool over = point_in(mx,my,ir);
+                        SDL_Color ibg = (i==g_midi_device_index)? g_highlight_color : g_panel_bg; if(over) ibg = g_button_hover;
+                        draw_rect(R, ir, ibg);
+                        if(i < g_midi_device_count-1){ SDL_SetRenderDrawColor(R, g_panel_border.r, g_panel_border.g, g_panel_border.b, 255); SDL_RenderDrawLine(R, ir.x, ir.y+ir.h, ir.x+ir.w, ir.y+ir.h); }
+                        draw_text(R, ir.x+6, ir.y+6, g_midi_device_name_cache[i], g_button_text);
+                        if(over && mclick){ g_midi_device_index = i; g_midi_device_dd_open = false; // reopen midi input with chosen device
+                            midi_input_shutdown(); midi_input_init("miniBAE"); save_settings(g_current_bank_path[0]?g_current_bank_path:NULL, reverbType, loopPlay);
+                        }
+                    }
+                }
+                if(mclick && !point_in(mx,my,midiDevRect) && !point_in(mx,my,box)) g_midi_device_dd_open = false;
+            }
             if(g_volumeCurveDropdownOpen){
                 int itemH = vcRect.h; int totalH = itemH * vcCount; Rect box = {vcRect.x, vcRect.y + vcRect.h + 1, vcRect.w, totalH};
                 SDL_Color ddBg = g_panel_bg; ddBg.a = 255; SDL_Color shadow = {0,0,0, g_is_dark_mode ? 120 : 90}; Rect shadowRect = {box.x + 2, box.y + 2, box.w, box.h}; draw_rect(R, shadowRect, shadow); draw_rect(R, box, ddBg); draw_frame(R, box, g_panel_border);
@@ -3842,9 +3916,14 @@ int main(int argc, char *argv[]){
 #if USE_MPEG_ENCODER != FALSE
     if(g_show_settings_dialog && g_exportDropdownOpen){
         // expRect defined in settings dialog: position dropdown beneath it
-        // Use same dlgW/dlgH as settings dialog so dropdown aligns with moved control
+        // Compute using same dialog math as the settings dialog so dropdown aligns with the control
     int dlgW = 560; int dlgH = 280; // must match settings dialog above (wider)
-    Rect expRect = { (WINDOW_W - dlgW)/2 + dlgW - 170, (g_window_h - dlgH)/2 + 104, 150, 24 };
+    int pad = 10; int controlW = 150;
+    int dlgX = (WINDOW_W - dlgW)/2; int dlgY = (g_window_h - dlgH)/2;
+    int colW = (dlgW - pad*3) / 2;
+    int leftX = dlgX + pad;
+    int controlRightX = leftX + colW - controlW;
+    Rect expRect = { controlRightX, dlgY + 104, controlW, 24 };
         int codecCount = (int)(sizeof(g_exportCodecNames)/sizeof(g_exportCodecNames[0]));
         int cols = 2;
         int rows = (codecCount + cols - 1) / cols;
