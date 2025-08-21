@@ -1533,6 +1533,23 @@ static void bae_service_wav_export() {
     }
 }
 
+// Panic helper: aggressively silence all voices for a given BAESong.
+// Sends Sustain Off (CC64=0), All Sound Off (CC120), All Notes Off (CC123),
+// and explicit NoteOff for every channel/note.
+static void gui_panic_all_notes(BAESong s){
+    if(!s) return;
+    for(int ch=0; ch<16; ++ch){
+        BAESong_ControlChange(s, (unsigned char)ch, 64, 0, 0);  // Sustain Off
+        BAESong_ControlChange(s, (unsigned char)ch, 120, 0, 0); // All Sound Off
+        BAESong_ControlChange(s, (unsigned char)ch, 123, 0, 0); // All Notes Off
+    }
+    for(int ch=0; ch<16; ++ch){
+        for(int n=0; n<128; ++n){
+            BAESong_NoteOff(s, (unsigned char)ch, (unsigned char)n, 0, 0);
+        }
+    }
+}
+
 // Map integer Hz to BAERate enum (subset offered in UI)
 static BAERate map_rate_from_hz(int hz){
     switch(hz){
@@ -2132,6 +2149,10 @@ static void bae_stop(bool *playing,int *progress){
     g_bae.is_playing = false;
     } else if(!g_bae.is_audio_file && g_bae.song) {
     BAESong_Stop(g_bae.song,FALSE); 
+    // Proactively silence any lingering voices both on the file song and the live song
+    if(g_bae.song){ gui_panic_all_notes(g_bae.song); }
+    if(g_live_song){ gui_panic_all_notes(g_live_song); }
+    if(g_bae.mixer){ for(int i=0;i<3;i++){ BAEMixer_Idle(g_bae.mixer); } }
     if(g_midi_output_enabled){ midi_output_send_all_notes_off(); }
         BAESong_SetMicrosecondPosition(g_bae.song,0); 
         *playing=false; *progress=0;
@@ -2142,7 +2163,9 @@ static void bae_stop(bool *playing,int *progress){
         BAESong target = g_bae.song ? g_bae.song : g_live_song;
         if(target){ for(int n=0;n<128;n++){ BAESong_NoteOff(target, (unsigned char)g_keyboard_channel, (unsigned char)n, 0, 0); } }
         g_keyboard_mouse_note = -1;
+        memset(g_keyboard_active_notes_by_channel, 0, sizeof(g_keyboard_active_notes_by_channel));
         memset(g_keyboard_active_notes, 0, sizeof(g_keyboard_active_notes));
+        g_keyboard_suppress_until = SDL_GetTicks() + 250;
     }
 }
 
@@ -2228,7 +2251,7 @@ static char *save_export_dialog(bool want_mp3){
 void setWindowTitle(SDL_Window *window){
     const char *libMiniBAECPUArch = BAE_GetCurrentCPUArchitecture();
     char windowTitle[128];
-    snprintf(windowTitle, sizeof(windowTitle), "miniBAE Player (Prototype) - %s", libMiniBAECPUArch);
+    snprintf(windowTitle, sizeof(windowTitle), "miniBAE Player - %s", libMiniBAECPUArch);
     SDL_SetWindowTitle(window, windowTitle);
 }
 
@@ -2278,7 +2301,7 @@ int main(int argc, char *argv[]){
                 const char *pathToSend = argv[1];
                 HWND found = NULL;
                 // Title we expect
-                const char *want = "miniBAE Player (Prototype)";
+                const char *want = "miniBAE Player";
                 // Enumerator callback
                 struct EnumCtx { const char *want; HWND found; } ctx;
                 ctx.want = want; ctx.found = NULL;
@@ -2854,15 +2877,7 @@ int main(int argc, char *argv[]){
             draw_text(R,cx,ty,buf,labelCol);
         }
 
-    // 'All' checkbox below channel list: when checked, virtual keyboard shows
-    // incoming notes from all channels. When unchecked, only the selected
-    // channel is shown. Disable interaction while the channel dropdown is open.
-    Rect allR = {chStartX, chStartY + 2*35 + 10, 40, 16};
-    // Use ui_toggle for consistent rendering and input handling. Pass mclick
-    // only when the dropdown is closed so the checkbox is non-interactive
-    // while the channel menu is open.
-    bool allClicked = ui_toggle(R, allR, &g_keyboard_show_all_channels, "All", ui_mx, ui_my, (!g_keyboard_channel_dd_open && !modal_block) ? ui_mclick : false);
-    (void)allClicked; // value applied directly to g_keyboard_show_all_channels
+    // 'All' checkbox: moved to render after the virtual keyboard so it appears on top.
 
         // Channel control buttons in a row
         int btnY = chStartY + 75;
@@ -3088,9 +3103,28 @@ int main(int argc, char *argv[]){
         }
     if(ui_button(R,(Rect){90, 215, 60,22}, "Stop", ui_mx,ui_my,ui_mdown) && ui_mclick && !modal_block){ 
             bae_stop(&playing,&progress);
-            // Ensure engine releases any held notes when user stops playback
-            if(g_bae.song){ BAESong_AllNotesOff(g_bae.song, 0); }
-            if(g_live_song){ BAESong_AllNotesOff(g_live_song, 0); }
+            // Ensure engine releases any held notes when user stops playback (panic)
+            midi_output_send_all_notes_off(); // silence any external device too
+            if(g_bae.song){ gui_panic_all_notes(g_bae.song); }
+            if(g_live_song){ gui_panic_all_notes(g_live_song); }
+            // Also ensure the virtual keyboard UI and per-channel note state are cleared
+            // immediately after the engine AllNotesOff so the UI can't show lingering notes.
+            if(g_show_virtual_keyboard){
+                BAESong target = g_bae.song ? g_bae.song : g_live_song;
+                if(target){
+                    // Send NoteOff for every channel/note to be extra-safe
+                    for(int ch = 0; ch < 16; ++ch){
+                        for(int n = 0; n < 128; ++n){
+                            BAESong_NoteOff(target, (unsigned char)ch, (unsigned char)n, 0, 0);
+                        }
+                    }
+                }
+                // Clear UI-held state so keys render as released immediately
+                g_keyboard_mouse_note = -1;
+                memset(g_keyboard_active_notes_by_channel, 0, sizeof(g_keyboard_active_notes_by_channel));
+                memset(g_keyboard_active_notes, 0, sizeof(g_keyboard_active_notes));
+                g_keyboard_suppress_until = SDL_GetTicks() + 250;
+            }
             // Reset total-play timer on user Stop
             g_total_play_ms = 0;
             g_last_engine_pos_ms = 0;
@@ -3146,9 +3180,20 @@ int main(int argc, char *argv[]){
                 if(target && g_bae.is_playing){
                     Uint32 nowms = SDL_GetTicks();
                     if(nowms >= g_keyboard_suppress_until){
-                        unsigned char engine_notes[128]; memset(engine_notes, 0, sizeof(engine_notes));
-                        BAESong_GetActiveNotes(target, (unsigned char)g_keyboard_channel, engine_notes);
-                        for(int i=0;i<128;i++) merged_notes[i] |= engine_notes[i];
+                        if(g_keyboard_show_all_channels){
+                            // Query each channel and OR them together so engine-driven
+                            // activity on any channel lights the virtual keyboard when
+                            // the 'All' option is enabled.
+                            for(int ch=0; ch<16; ++ch){
+                                unsigned char ch_notes[128]; memset(ch_notes, 0, sizeof(ch_notes));
+                                BAESong_GetActiveNotes(target, (unsigned char)ch, ch_notes);
+                                for(int i=0;i<128;i++) merged_notes[i] |= ch_notes[i];
+                            }
+                        } else {
+                            unsigned char engine_notes[128]; memset(engine_notes, 0, sizeof(engine_notes));
+                            BAESong_GetActiveNotes(target, (unsigned char)g_keyboard_channel, engine_notes);
+                            for(int i=0;i<128;i++) merged_notes[i] |= engine_notes[i];
+                        }
                     }
                 }
             }
@@ -3662,6 +3707,37 @@ int main(int argc, char *argv[]){
         }
 
         // Draw deferred file tooltip (full path)
+        // Draw 'All' checkbox for virtual keyboard channel merging. Placed here
+        // so it renders on top of the keyboard panel (correct z-order). Only
+        // show when the virtual keyboard is visible.
+        if(showKeyboard){
+            {
+                Rect allR = {20, 40 + 280, 16, 16}; // chStartX=20, chStartY=40, y offset +200
+                bool allHover = point_in(ui_mx, ui_my, allR);
+                bool allClickable = (!g_keyboard_channel_dd_open && !modal_block);
+                if(allClickable && ui_mclick && allHover){ g_keyboard_show_all_channels = !g_keyboard_show_all_channels; }
+                SDL_Color cb_border = g_button_border;
+                draw_rect(R, allR, g_panel_bg);
+                draw_frame(R, allR, cb_border);
+                Rect inner = { allR.x + 3, allR.y + 3, allR.w - 6, allR.h - 6 };
+                if(g_keyboard_show_all_channels){
+                    draw_rect(R, inner, g_accent_color);
+                    draw_frame(R, inner, g_button_text);
+                    SDL_SetRenderDrawColor(R, g_button_text.r, g_button_text.g, g_button_text.b, g_button_text.a);
+                    int x1 = inner.x + 2; int y1 = inner.y + inner.h/2;
+                    int x2 = inner.x + inner.w/2 - 1; int y2 = inner.y + inner.h - 3;
+                    int x3 = inner.x + inner.w - 3; int y3 = inner.y + 3;
+                    SDL_RenderDrawLine(R, x1, y1, x2, y2);
+                    SDL_RenderDrawLine(R, x2, y2, x3, y3);
+                } else {
+                    draw_rect(R, inner, g_panel_bg);
+                    draw_frame(R, inner, cb_border);
+                }
+                int _tw=0,_th=0; measure_text("All Ch.", &_tw, &_th);
+                draw_text(R, allR.x + allR.w + 10, allR.y + (allR.h - _th)/2, "All Ch.", labelCol);
+            }
+        }
+
         if(g_file_tooltip_visible){
             Rect tipRect = g_file_tooltip_rect;
             SDL_Color shadow = {0,0,0, g_is_dark_mode ? 140 : 100};
@@ -3960,12 +4036,44 @@ int main(int argc, char *argv[]){
 
         // MIDI input enable checkbox and device selector (left column, below Export)
             Rect midiEnRect = { leftX, dlg.y + 140, 18, 18 };
-        if(ui_toggle(R, midiEnRect, &g_midi_input_enabled, "MIDI Input", mx,my,mclick)){
+            if(ui_toggle(R, midiEnRect, &g_midi_input_enabled, "MIDI Input", mx,my,mclick)){
                 // initialize or shutdown midi input as requested
                 if(g_midi_input_enabled){
-            midi_input_init("miniBAE", -1, -1);
-                } else {
+                    // Reinitialize: ensure a clean start by shutting down first, then init
                     midi_input_shutdown();
+                    // If the user has chosen a specific input device, open that one
+                    if(g_midi_input_device_index >= 0 && g_midi_input_device_index < g_midi_input_device_count){
+                        int api = g_midi_device_api[g_midi_input_device_index];
+                        int port = g_midi_device_port[g_midi_input_device_index];
+                        midi_input_init("miniBAE", api, port);
+                    } else {
+                        midi_input_init("miniBAE", -1, -1);
+                    }
+                } else {
+                    // Capture current engine targets (both) before shutdown
+                    BAESong saved_song = g_bae.song;
+                    BAESong saved_live = g_live_song;
+                    // Shutdown MIDI input
+                    midi_input_shutdown();
+                    // Also send All-Notes-Off to any MIDI output device to silence external hardware
+                    midi_output_send_all_notes_off();
+                    // Tell engine to silence any notes using the saved pointers (panic both)
+                    if(saved_song){ gui_panic_all_notes(saved_song); }
+                    if(saved_live){ gui_panic_all_notes(saved_live); }
+                    // Extra pass with a tiny idle helps some synth paths flush tails
+                    if(g_bae.mixer){ BAEMixer_Idle(g_bae.mixer); }
+                    if(saved_song){ gui_panic_all_notes(saved_song); }
+                    if(saved_live){ gui_panic_all_notes(saved_live); }
+                    // Clear virtual keyboard UI state so no keys remain highlighted (do this regardless of visibility)
+                    g_keyboard_mouse_note = -1;
+                    memset(g_keyboard_active_notes_by_channel, 0, sizeof(g_keyboard_active_notes_by_channel));
+                    memset(g_keyboard_active_notes, 0, sizeof(g_keyboard_active_notes));
+                    g_keyboard_suppress_until = SDL_GetTicks() + 250;
+                    // Process mixer idle a few times to flush note-off events promptly
+                    if(g_bae.mixer){ for(int i=0;i<4;i++){ BAEMixer_Idle(g_bae.mixer); } }
+                    // To be absolutely sure the lightweight live synth is quiet, delete and recreate it
+                    if(g_live_song){ BAESong_Stop(g_live_song, FALSE); BAESong_Delete(g_live_song); g_live_song = NULL; }
+                    if(g_bae.mixer){ g_live_song = BAESong_New(g_bae.mixer); if(g_live_song){ BAESong_Preroll(g_live_song); } }
                 }
                 // persist
                 save_settings(g_current_bank_path[0]?g_current_bank_path:NULL, reverbType, loopPlay);
