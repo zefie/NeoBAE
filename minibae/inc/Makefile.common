@@ -174,7 +174,34 @@ ifeq ($(MP3_ENC),1)
 	# Add all libmp3lame and mpglib C sources and the LAME adapter.
 	# Using wildcard keeps this list maintainable when LAME sources change.
 	ifeq ($(shell [ -d src/thirdparty/lame-3.100/libmp3lame ] && echo yes),yes)
-		SRC += $(wildcard src/thirdparty/lame-3.100/libmp3lame/*.c) $(wildcard src/thirdparty/lame-3.100/mpglib/*.c)
+		SRC += bitstream.c \
+			newmdct.c \
+			tables.c \
+			encoder.c \
+			presets.c \
+			takehiro.c \
+			fft.c \
+			psymodel.c \
+			util.c \
+			gain_analysis.c \
+			quantize.c \
+			vbrquantize.c \
+			id3tag.c \
+			quantize_pvt.c \
+			VbrTag.c \
+			lame.c \
+			reservoir.c \
+			version.c \
+			mpglib_interface.c \
+			set_get.c \
+			common.c \
+			decode_i386.c \
+			layer1.c \
+			layer3.c \
+			dct64_i386.c \
+			interface.c \
+			layer2.c \
+			tabinit.c
 	endif
 	SRC += XMPEG_lame_encoder.cpp
 endif
