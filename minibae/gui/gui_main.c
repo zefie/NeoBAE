@@ -1030,15 +1030,16 @@ static int  g_sample_rate_hz = 44100;       // current selected sample rate
 static bool g_sampleRateDropdownOpen = false; // dropdown open state
 // Export dropdown state: controls encoding choice when exporting
 static bool g_exportDropdownOpen = false;
-// Default export codec: prefer 192kbps MP3 if MPEG encoder is available
+// Default export codec: prefer 128kbps MP3 if MPEG encoder is available
 #if USE_MPEG_ENCODER != FALSE
-static int  g_exportCodecIndex = 4; // 0 = PCM 16 WAV, 1..6 = MP3 bitrates (4 -> 192kbps MP3)
+static int  g_exportCodecIndex = 4; // 0 = PCM 16 WAV, 1..6 = MP3 bitrates (4 -> 128kbps MP3)
 #else
 static int  g_exportCodecIndex = 0; // fallback to WAV when MPEG encoder not present
 #endif
 static const char *g_exportCodecNames[] = {
     "PCM 16 WAV",
 #if USE_MPEG_ENCODER != FALSE
+    "64kbps MP3",
     "96kbps MP3",
     "128kbps MP3",
     "160kbps MP3",
@@ -1051,12 +1052,13 @@ static const char *g_exportCodecNames[] = {
 // Direct mapping from dropdown index to BAE compression enum, half bitrate for per channel
 static const BAECompressionType g_exportCompressionMap[] = {
     BAE_COMPRESSION_NONE,
-    BAE_COMPRESSION_MPEG_48,
     BAE_COMPRESSION_MPEG_64,
-    BAE_COMPRESSION_MPEG_80,
     BAE_COMPRESSION_MPEG_96,
     BAE_COMPRESSION_MPEG_128,
-    BAE_COMPRESSION_MPEG_160
+    BAE_COMPRESSION_MPEG_160,
+    BAE_COMPRESSION_MPEG_192,
+    BAE_COMPRESSION_MPEG_256,
+    BAE_COMPRESSION_MPEG_320
 };
 #endif
 // Deferred bank filename tooltip state
@@ -1122,6 +1124,13 @@ static int g_export_progress = 0; // retained for potential legacy UI, not shown
 static uint32_t g_export_last_pos = 0; // track advancement
 static int g_export_stall_iters = 0;        // stall detection
 static char g_export_path[1024] = {0};      // path of current export file
+// Track current export output type so MPEG exports can use a different
+// completion detection strategy (device samples based) compared to WAV.
+static int  g_export_file_type = BAE_WAVE_TYPE; // BAE_WAVE_TYPE or BAE_MPEG_TYPE
+// MPEG export completion heuristic state (persisted across service calls)
+static uint32_t g_export_last_device_samples = 0;
+static int g_export_stable_loops = 0;
+static const uint32_t EXPORT_MPEG_STABLE_THRESHOLD = 8; // matches playbae heuristic
 
 static void set_status_message(const char *msg) {
     strncpy(g_bae.status_message, msg, sizeof(g_bae.status_message)-1);

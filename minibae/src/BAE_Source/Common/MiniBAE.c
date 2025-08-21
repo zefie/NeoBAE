@@ -3318,8 +3318,10 @@ void BAEMixer_StopOutputToFile(void)
         {
 #if USE_MPEG_ENCODER != FALSE
             case BAE_MPEG_TYPE:
+                BAE_PRINTF("audio: BAEMixer_StopOutputToFile freeing mWritingEncoder=%p\n", mWritingEncoder);
                 MPG_EncodeFreeStream(mWritingEncoder);
                 mWritingEncoder = NULL;
+                BAE_PRINTF("audio: BAEMixer_StopOutputToFile mWritingEncoder now NULL\n");
                 break;
 #endif
             case BAE_WAVE_TYPE:
@@ -3432,7 +3434,11 @@ BAEResult BAEMixer_ServiceAudioOutputToFile(BAEMixer theMixer)
                                 }
                             }
                             // Do NOT free stream here unless encoder signals done explicitly
-                            if(isDone && mWritingEncoder){ MPG_EncodeFreeStream(mWritingEncoder); mWritingEncoder=NULL; }
+                            if(isDone){
+                                BAE_PRINTF("audio: MPG_EncodeProcess signaled done, freeing encoder %p\n", mWritingEncoder);
+                                if(mWritingEncoder){ MPG_EncodeFreeStream(mWritingEncoder); mWritingEncoder=NULL; BAE_PRINTF("audio: encoder freed, mWritingEncoder=NULL\n"); }
+                                else { BAE_PRINTF("audio: encoder already NULL when done signaled\n"); }
+                            }
                         }
                     } 
                     break;

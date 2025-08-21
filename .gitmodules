@@ -1,6 +1,3 @@
-[submodule "minibae/src/thirdparty/hmp3"]
-    path = minibae/src/thirdparty/hmp3
-    url = https://github.com/maikmerten/hmp3.git
 [submodule "minibae/src/thirdparty/minimp3"]
 	path = minibae/src/thirdparty/minimp3
 	url = https://github.com/lieff/minimp3.git

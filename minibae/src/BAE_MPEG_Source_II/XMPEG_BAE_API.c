@@ -1229,7 +1229,7 @@ SndCompressionType XGetMPEGBitrateType(uint32_t bitrate)
 #if 0
     #pragma mark #### encoder API
 #endif
-#if USE_MPEG_ENCODER
+#if USE_MPEG_ENCODER && !defined(USE_LAME_ENCODER)
 // create new mpeg stream to prepare for encoding. Returns NULL if failed.
 void * MPG_EncodeNewStream(uint32_t encodeRate,
                             uint32_t sampleRate, uint32_t channels,
@@ -1476,7 +1476,7 @@ void XGetClosestMPEGSampleRateAndEncodeRate(XFIXED inSampleRate,
     }
 }
 
-#endif  //USE_MPEG_ENCODER
+#endif  //USE_MPEG_ENCODER && !defined(USE_LAME_ENCODER)
 
 
 // EOF of XMPEG_BAE_API.c

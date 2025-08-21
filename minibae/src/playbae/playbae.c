@@ -1221,36 +1221,26 @@ int main(int argc, char *argv[])
          {
 #if defined(USE_MPEG_ENCODER) && (USE_MPEG_ENCODER!=0)
             positionDisplayMultiplier = 100;
-            // Map total kbps to per-channel enum
+            /* Map total kbps directly to the compression enum (no per-channel inference).
+             * -b specifies TOTAL kbps. Pick the closest supported total kbps and use that. */
             BAEAudioModifiers modsTmp; BAEMixer_GetModifiers(theMixer, &modsTmp);
             int channels = (modsTmp & BAE_USE_STEREO)?2:1;
-         /* -b specifies TOTAL kbps. Derive per-channel for enum selection. */
             int totalReq = gMP3BitrateKbps;
-            /* Enforce a sane minimum: historically very low total bitrates (eg. 32/56)
-            * can cause the encoder to fail to initialize. Require >=64 kbps. */
-            if(totalReq < 96 && (rate == BAE_RATE_32K || rate == BAE_RATE_44K)) {
-               playbae_printf("MP3 export requires a minimum total bitrate of 96kbps at 44100hz; requested %dkbps. Aborting MP3 export.\n", totalReq);
-               BAEMixer_Delete(theMixer);
-               return 1;
-            } else if (totalReq < 24) {
-               playbae_printf("MP3 export requires a minimum total bitrate of 24kbps at %dhz; requested %dkbps. Aborting MP3 export.\n", rate, totalReq);
+            if(totalReq < 32) {
+               playbae_printf("MP3 export requires a minimum total bitrate of 32kbps; requested %dkbps. Aborting MP3 export.\n", totalReq);
                BAEMixer_Delete(theMixer);
                return 1;
             }
-            if(totalReq > 320) totalReq = 320; /* MP3 Layer III practical max total */
-               int perChan = totalReq / channels;
-               if(perChan < 8) perChan = 8;
-               if(perChan > 320) perChan = 320;
+            if(totalReq > 320) totalReq = 320; /* clamp to practical max total */
             BAECompressionType cType = BAE_COMPRESSION_MPEG_128; // default
             struct {int rate; BAECompressionType ct;} mapTbl[] = {
-                {8,BAE_COMPRESSION_MPEG_8},{16,BAE_COMPRESSION_MPEG_16},{24,BAE_COMPRESSION_MPEG_24},
                 {32,BAE_COMPRESSION_MPEG_32},{40,BAE_COMPRESSION_MPEG_40},{48,BAE_COMPRESSION_MPEG_48},{56,BAE_COMPRESSION_MPEG_56},
                 {64,BAE_COMPRESSION_MPEG_64},{80,BAE_COMPRESSION_MPEG_80},{96,BAE_COMPRESSION_MPEG_96},{112,BAE_COMPRESSION_MPEG_112},
                 {128,BAE_COMPRESSION_MPEG_128},{160,BAE_COMPRESSION_MPEG_160},{192,BAE_COMPRESSION_MPEG_192},{224,BAE_COMPRESSION_MPEG_224},
                 {256,BAE_COMPRESSION_MPEG_256},{320,BAE_COMPRESSION_MPEG_320}
             };
-            /* Choose closest match based on per-channel kbps so '-b' remains a TOTAL kbps argument. */
-            int bestDiff = 1000; for(size_t i=0;i<sizeof(mapTbl)/sizeof(mapTbl[0]);++i){int d=abs(mapTbl[i].rate - perChan); if(d<bestDiff){bestDiff=d; cType=mapTbl[i].ct;}}
+            /* Choose closest match based on total kbps */
+            int bestDiff = 100000; for(size_t i=0;i<sizeof(mapTbl)/sizeof(mapTbl[0]);++i){int d=abs(mapTbl[i].rate - totalReq); if(d<bestDiff){bestDiff=d; cType=mapTbl[i].ct;}}
             err = BAEMixer_StartOutputToFile(theMixer,(BAEPathName)parmFile, BAE_MPEG_TYPE, cType);
             if(err){
                playbae_printf("Error %d starting MP3 export: %s\n", err, parmFile);
@@ -1261,7 +1251,7 @@ int main(int argc, char *argv[])
             gWriteToFile=TRUE; gWriteToFileType = BAE_MPEG_TYPE;
             int total = totalReq;
             if(channels > 1){
-               playbae_printf("Writing MP3 (CBR %d kbps total, %d ch @ %d kbps/ch) to %s\n", total, channels, perChan, parmFile);
+               playbae_printf("Writing MP3 (CBR %d kbps, joint stereo) to %s\n", total, parmFile);
             } else {
                playbae_printf("Writing MP3 (CBR %d kbps, mono) to %s\n", total, parmFile);
             }
