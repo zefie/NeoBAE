@@ -2469,6 +2469,10 @@ int main(int argc, char *argv[]){
                     else if(sym == SDLK_o) note = 13; // C#
 
                     if(note != -1){
+                        // While exporting we want to disable the virtual keyboard so
+                        // user key presses don't affect the export audio. Preserve
+                        // other keys like Escape—only ignore piano mapping here.
+                        if (g_exporting) { break; }
                         // Compute MIDI note number: C4 = 60
                         int midi = 60 + (g_keyboard_base_octave - 4) * 12 + note;
                         if(midi < 0) midi = 0; if(midi > 127) midi = 127;
