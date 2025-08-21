@@ -835,6 +835,12 @@ static int g_vu_peak_right = 0;
 static Uint32 g_vu_peak_hold_until = 0; // universal peak hold timeout (ms)
 // Visual gain applied to raw sample amplitudes (linear multiplier)
 static float g_vu_gain = 6.0f;
+// Per-MIDI-channel VU (0.0 .. 1.0). Renderer will draw these beside each mute checkbox.
+static float g_channel_vu[16] = {0.0f};
+// Per-channel peak level (0..1) and hold timers (ms since epoch)
+static float g_channel_peak_level[16] = {0.0f};
+static Uint32 g_channel_peak_hold_until[16] = {0};
+static int g_channel_peak_hold_ms = 600; // how long to hold peak in ms
 
 // Helper: commit previous line and shift current -> previous (newline behavior)
 static void karaoke_newline(uint32_t t_us){
@@ -2623,6 +2629,13 @@ int main(int argc, char *argv[]){
                                 if(g_midi_output_enabled){ unsigned char mmsg[3]; mmsg[0] = (unsigned char)(0x90 | (g_keyboard_channel & 0x0F)); mmsg[1] = (unsigned char)midi; mmsg[2] = 100; midi_output_send(mmsg,3); }
                                 // Mark active in per-channel UI array so key lights up immediately
                                 g_keyboard_active_notes_by_channel[g_keyboard_channel][midi] = 1;
+                                // also update VU/peak for virtual keyboard (use velocity 100)
+                                {
+                                    float lvl = 100.0f / 127.0f;
+                                    int ch = g_keyboard_channel;
+                                    if(lvl > g_channel_vu[ch]) g_channel_vu[ch] = lvl;
+                                    if(lvl > g_channel_peak_level[ch]){ g_channel_peak_level[ch] = lvl; g_channel_peak_hold_until[ch] = SDL_GetTicks() + g_channel_peak_hold_ms; }
+                                }
                             }
                         } else {
                             // Key up: send note off if we had recorded it
@@ -2727,6 +2740,10 @@ int main(int argc, char *argv[]){
                                             if(ch_enable[mch]){
                                                 if(target) BAESong_NoteOnWithLoad(target, target_ch, note, vel, 0);
                                                 g_keyboard_active_notes_by_channel[mch][note] = 1;
+                                                // Update VU/peak from incoming MIDI velocity
+                                                float lvl_in = (float)vel / 127.0f;
+                                                if(lvl_in > g_channel_vu[mch]) g_channel_vu[mch] = lvl_in;
+                                                if(lvl_in > g_channel_peak_level[mch]){ g_channel_peak_level[mch] = lvl_in; g_channel_peak_hold_until[mch] = SDL_GetTicks() + g_channel_peak_hold_ms; }
                                             }
                                             unsigned char out[3] = {(unsigned char)(0x90 | (mch & 0x0F)), note, vel}; FORWARD_OUT(out,3);
                             } else {
@@ -2936,15 +2953,123 @@ int main(int argc, char *argv[]){
     int ui_mx = mx, ui_my = my; bool ui_mdown = mdown; bool ui_mclick = mclick;
     if(modal_block){ ui_mx = ui_my = -10000; ui_mdown = ui_mclick = false; }
     int chStartX = 20, chStartY = 40;
+        // Precompute estimated per-channel levels from mixer realtime info when available.
+        float realtime_channel_level[16]; for(int _i=0; _i<16; ++_i) realtime_channel_level[_i] = 0.0f;
+        bool have_realtime_levels = false;
+        if(g_bae.mixer && !g_exporting){
+            GM_AudioInfo ai;
+            GM_GetRealtimeAudioInformation(&ai);
+            // Sum squares of per-voice scaledVolume (0..MAX_NOTE_VOLUME) per channel and convert to RMS-ish value
+            float sumsq[16]; for(int _i=0; _i<16; ++_i) sumsq[_i] = 0.0f;
+            int voices = (ai.voicesActive > 0) ? ai.voicesActive : 0;
+            if(voices > 0){
+                for(int v=0; v<voices; ++v){
+                    int ch = ai.channel[v];
+                    if(ch < 0 || ch >= 16) continue;
+                    float vol = (float)ai.scaledVolume[v] / (float)MAX_NOTE_VOLUME; if(vol < 0.f) vol = 0.f; if(vol > 1.f) vol = 1.f;
+                    sumsq[ch] += vol * vol;
+                }
+                for(int ch=0; ch<16; ++ch){
+                    realtime_channel_level[ch] = sqrtf(MIN(1.0f, sumsq[ch]));
+                }
+                have_realtime_levels = true;
+            }
+        }
+
         for(int i=0;i<16;i++){
             int col = i % 8; int row = i / 8;
             Rect r = {chStartX + col*45, chStartY + row*35, 16, 16};
             char buf[4]; snprintf(buf,sizeof(buf),"%d", i+1);
-            ui_toggle(R,r,&ch_enable[i],NULL,ui_mx,ui_my, ui_mclick && !modal_block);
+            // Handle toggle and clear VU when channel is muted
+            bool toggled = ui_toggle(R,r,&ch_enable[i],NULL,ui_mx,ui_my, ui_mclick && !modal_block);
+            if(toggled && !ch_enable[i]){
+                // Muted -> immediately empty visible VU
+                g_channel_vu[i] = 0.0f;
+            }
             int tw=0,th=0; measure_text(buf,&tw,&th);
+            // Reserve a few pixels to the right of checkbox for the VU meter so
+            // the number doesn't visually collide with it. Center within checkbox width.
             int cx = r.x + (r.w - tw)/2;
             int ty = r.y + r.h + 2; // label below box
             draw_text(R,cx,ty,buf,labelCol);
+            
+                // Draw a tiny vertical VU meter immediately to the right of the checkbox.
+                // Height = checkbox height + gap (2) + number text height so it aligns with both.
+                int meterW = 6; // narrow vertical meter
+                int meterH = r.h + 2 + th;
+                // Move 3px to the left from previous placement: use +5 instead of +8
+                int meterX = r.x + r.w + 5; // slightly closer to checkbox
+                int meterY = r.y; // align top with checkbox
+                Rect meterBg = {meterX, meterY, meterW, meterH};
+                // Background / frame
+                draw_rect(R, meterBg, g_panel_bg);
+                draw_frame(R, meterBg, g_panel_border);
+
+                // Prefer realtime estimated per-channel levels when available. Otherwise fall back to
+                // the previous activity-driven heuristic (incoming MIDI or engine active notes).
+                if(have_realtime_levels){
+                    float lvl = realtime_channel_level[i]; if(lvl < 0.f) lvl = 0.f; if(lvl > 1.f) lvl = 1.f;
+                    const float alpha = 0.35f; // smoothing (attack/decay)
+                    g_channel_vu[i] = g_channel_vu[i] * (1.0f - alpha) + lvl * alpha;
+                    // update peak from realtime level
+                    if(lvl > g_channel_peak_level[i]){ g_channel_peak_level[i] = lvl; g_channel_peak_hold_until[i] = SDL_GetTicks() + g_channel_peak_hold_ms; }
+                } else {
+                    // Simple activity-based VU: set to full when any active notes on that channel
+                    // (from incoming MIDI UI array or engine active notes), otherwise decay.
+                    bool active = false;
+                    // Check per-channel incoming MIDI UI state
+                    for(int n=0;n<128 && !active;n++){
+                        if(g_keyboard_active_notes_by_channel[i][n]) active = true;
+                    }
+                    // Also query engine active notes when playing or when no MIDI input
+                    if(!active && !g_exporting){
+                        BAESong target = g_bae.song ? g_bae.song : g_live_song;
+                        if(target){
+                            unsigned char ch_notes[128]; memset(ch_notes,0,sizeof(ch_notes));
+                            BAESong_GetActiveNotes(target, (unsigned char)i, ch_notes);
+                            for(int n=0;n<128;n++){ if(ch_notes[n]){ active = true; break; } }
+                        }
+                    }
+                    // Update channel VU with simple attack/decay
+                    if(active){ g_channel_vu[i] = 1.0f; }
+                    else { g_channel_vu[i] *= 0.86f; if(g_channel_vu[i] < 0.005f) g_channel_vu[i] = 0.0f; }
+                }
+
+                // Fill level from bottom using per-channel VU value (clamped)
+                float lvl = g_channel_vu[i]; if(lvl < 0.f) lvl = 0.f; if(lvl > 1.f) lvl = 1.f;
+                int innerPad = 2;
+                int innerH = meterH - (innerPad*2);
+                int fillH = (int)(lvl * innerH);
+                if(fillH > 0){
+                    // Draw a simple vertical gradient: green (low) -> yellow (mid) -> red (high)
+                    int gx = meterX + innerPad;
+                    int gw = meterW - (innerPad*2);
+                    for(int yoff=0;yoff<fillH;yoff++){
+                        float t = (float)yoff / (float)(innerH>0?innerH:1); // 0..1 from bottom
+                        // reverse so bottom is t=0
+                        t = (float)yoff / (float)(innerH>0?innerH:1);
+                        // map to gradient from green->yellow->red based on relative height
+                        float frac = (float)yoff / (float)(innerH>0?innerH:1);
+                        SDL_Color col;
+                        if(frac < 0.5f){ // green to yellow
+                            float p = frac / 0.5f;
+                            col.r = (Uint8)(g_highlight_color.r * p + 20 * (1.0f - p));
+                            col.g = (Uint8)(200 * (1.0f - (1.0f-p)*0.2f));
+                            col.b = (Uint8)(20);
+                        } else { // yellow to red
+                            float p = (frac - 0.5f) / 0.5f;
+                            col.r = (Uint8)(200 + (55 * p));
+                            col.g = (Uint8)(200 * (1.0f - p));
+                            col.b = 20;
+                        }
+                        // Draw one horizontal scanline of the gradient from bottom upwards
+                        SDL_SetRenderDrawColor(R, col.r, col.g, col.b, 255);
+                        SDL_RenderDrawLine(R, gx, meterY + meterH - innerPad - 1 - yoff, gx + gw - 1, meterY + meterH - innerPad - 1 - yoff);
+                    }
+                }
+                // Channel peak markers intentionally removed — we only draw the realtime fill.
+                // Decay the realtime meter value gradually
+                g_channel_vu[i] *= 0.92f; if(g_channel_vu[i] < 0.0005f) g_channel_vu[i] = 0.0f;
         }
 
     // 'All' checkbox: moved to render after the virtual keyboard so it appears on top.
@@ -3733,18 +3858,63 @@ int main(int argc, char *argv[]){
             draw_rect(R, (Rect){vuX, vuY, metersW, meterH}, trackBg);
             draw_frame(R, (Rect){vuX, vuY, metersW, meterH}, g_panel_border);
             int leftFill = (int)(g_vu_left_level * (metersW - 6)); if(leftFill<0) leftFill=0; if(leftFill>metersW-6) leftFill=metersW-6;
-            SDL_Color leftCol; METER_COLOR_FROM_LEVEL(g_vu_left_level, leftCol);
-            draw_rect(R, (Rect){vuX+3, vuY+3, leftFill, meterH-6}, leftCol);
+            // Draw a left-to-right gradient fill (green -> yellow -> red) for the left meter
+            int innerX = vuX + 3;
+            int innerW = metersW - 6;
+            int innerY = vuY + 3;
+            int innerH = meterH - 6;
+            if(leftFill > 0){
+                for(int xoff = 0; xoff < leftFill; ++xoff){
+                    float frac = (float)xoff / (float)(innerW>0?innerW:1); // 0..1 left->right
+                    SDL_Color col;
+                    if(frac < 0.5f){ // green -> yellow
+                        float p = frac / 0.5f;
+                        col.r = (Uint8)(g_highlight_color.r * p + 20 * (1.0f - p));
+                        col.g = (Uint8)(200 * (1.0f - (1.0f-p)*0.2f));
+                        col.b = 20;
+                    } else { // yellow -> red
+                        float p = (frac - 0.5f) / 0.5f;
+                        col.r = (Uint8)(200 + (55 * p));
+                        col.g = (Uint8)(200 * (1.0f - p));
+                        col.b = 20;
+                    }
+                    SDL_SetRenderDrawColor(R, col.r, col.g, col.b, 255);
+                    SDL_RenderDrawLine(R, innerX + xoff, innerY, innerX + xoff, innerY + innerH - 1);
+                }
+            }
             int pL = vuX + 3 + (int)((g_vu_peak_left/100.0f) * (metersW-6)); if(pL < vuX+3) pL = vuX+3; if(pL > vuX+3+metersW-6) pL = vuX+3+metersW-6;
-            draw_rect(R, (Rect){pL-1, vuY+1, 2, meterH-2}, (SDL_Color){255,200,0,255});
+            // Draw white-ish peak marker similar to per-channel meters
+            draw_rect(R, (Rect){pL-1, vuY+1, 2, meterH-2}, (SDL_Color){255,255,255,200});
             int vuY2 = vuY + meterH + spacing;
             draw_rect(R, (Rect){vuX, vuY2, metersW, meterH}, trackBg);
             draw_frame(R, (Rect){vuX, vuY2, metersW, meterH}, g_panel_border);
             int rightFill = (int)(g_vu_right_level * (metersW - 6)); if(rightFill<0) rightFill=0; if(rightFill>metersW-6) rightFill=metersW-6;
-            SDL_Color rightCol; METER_COLOR_FROM_LEVEL(g_vu_right_level, rightCol);
-            draw_rect(R, (Rect){vuX+3, vuY2+3, rightFill, meterH-6}, rightCol);
+            // Right meter gradient (same mapping as left)
+            int innerX2 = vuX + 3;
+            int innerW2 = metersW - 6;
+            int innerY2 = vuY2 + 3;
+            int innerH2 = meterH - 6;
+            if(rightFill > 0){
+                for(int xoff = 0; xoff < rightFill; ++xoff){
+                    float frac = (float)xoff / (float)(innerW2>0?innerW2:1);
+                    SDL_Color col;
+                    if(frac < 0.5f){
+                        float p = frac / 0.5f;
+                        col.r = (Uint8)(g_highlight_color.r * p + 20 * (1.0f - p));
+                        col.g = (Uint8)(200 * (1.0f - (1.0f-p)*0.2f));
+                        col.b = 20;
+                    } else {
+                        float p = (frac - 0.5f) / 0.5f;
+                        col.r = (Uint8)(200 + (55 * p));
+                        col.g = (Uint8)(200 * (1.0f - p));
+                        col.b = 20;
+                    }
+                    SDL_SetRenderDrawColor(R, col.r, col.g, col.b, 255);
+                    SDL_RenderDrawLine(R, innerX2 + xoff, innerY2, innerX2 + xoff, innerY2 + innerH2 - 1);
+                }
+            }
             int pR = vuX + 3 + (int)((g_vu_peak_right/100.0f) * (metersW-6)); if(pR < vuX+3) pR = vuX+3; if(pR > vuX+3+metersW-6) pR = vuX+3+metersW-6;
-            draw_rect(R, (Rect){pR-1, vuY2+1, 2, meterH-2}, (SDL_Color){255,200,0,255});
+            draw_rect(R, (Rect){pR-1, vuY2+1, 2, meterH-2}, (SDL_Color){255,255,255,200});
             int labelX = vuX + metersW + 6; SDL_Color labelCol = g_text_color; draw_text(R, labelX, vuY - 1, "L", labelCol); draw_text(R, labelX, vuY2 - 1, "R", labelCol);
             #undef METER_COLOR_FROM_LEVEL
 
