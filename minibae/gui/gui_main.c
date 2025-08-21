@@ -1020,6 +1020,8 @@ static char g_rmf_info_values[INFO_TYPE_COUNT][512]; // storage for each info fi
 static bool g_show_settings_dialog = false;
 // About dialog (placeholder)
 static bool g_show_about_dialog = false;
+// About dialog page index (0..n-1)
+static int g_about_page = 0;
 // Settings button no longer uses icon; keep simple text button
 static int  g_volume_curve = 0; // 0..4
 static bool g_volumeCurveDropdownOpen = false;
@@ -3976,7 +3978,7 @@ int main(int argc, char *argv[]){
     draw_frame(R, aboutBtn, g_button_border);
     int abtw=0, abth=0; measure_text("About", &abtw, &abth);
     draw_text(R, aboutBtn.x + (aboutBtn.w - abtw)/2, aboutBtn.y + (aboutBtn.h - abth)/2, "About", g_button_text);
-    if(point_in(ui_mx, ui_my, aboutBtn) && ui_mclick && !modal_block){ g_show_about_dialog = !g_show_about_dialog; if(g_show_about_dialog){ g_show_settings_dialog = false; g_show_rmf_info_dialog = false; } }
+    if(point_in(ui_mx, ui_my, aboutBtn) && ui_mclick && !modal_block){ g_show_about_dialog = !g_show_about_dialog; if(g_show_about_dialog){ g_show_settings_dialog = false; g_show_rmf_info_dialog = false; g_about_page = 0; } }
 
     // Load Bank button (left of Settings). Label trimmed to "Load Bank" per request.
     if(ui_button(R, loadBankBtn, "Load Bank", ui_mx, ui_my, ui_mdown) && ui_mclick && !modal_block){
@@ -4604,58 +4606,7 @@ int main(int argc, char *argv[]){
 
             // MIDI channel selector removed from Settings dialog - channel is now controlled in the virtual keyboard dialog
 
-            // Footer help + version + compile info
-            SDL_Color help = g_is_dark_mode ? (SDL_Color){180,180,190,255} : (SDL_Color){80,80,80,255};
-            int lineHelpY = dlg.y + dlg.h - 54;
-            int lineVerY  = dlg.y + dlg.h - 40;
-            int lineCompY = dlg.y + dlg.h - 26;
-            {
-                char ver[160]; char ver2[160];
-                char *compInfo = (char*)BAE_GetCompileInfo();
-                if (compInfo) { snprintf(ver, sizeof(ver), "libminiBAE %s", _VERSION); snprintf(ver2, sizeof(ver2), "built with %s", compInfo); free(compInfo); }
-                else { snprintf(ver, sizeof(ver), "libminiBAE %s", _VERSION); ver2[0] = '\0'; }
-                int vw=0,vh=0; measure_text(ver,&vw,&vh);
-                Rect verRect = { dlg.x + pad, lineVerY, vw, vh>0?vh:14 };
-                bool dropdownActive = g_sampleRateDropdownOpen || g_volumeCurveDropdownOpen || g_midi_input_device_dd_open || g_midi_output_device_dd_open || g_exportDropdownOpen;
-                bool overVer = !dropdownActive && point_in(mx,my,verRect);
-                SDL_Color verColor = overVer ? g_accent_color : help;
-                draw_text(R, verRect.x, verRect.y, ver, verColor);
-                if(overVer && !dropdownActive){ SDL_SetRenderDrawColor(R, verColor.r, verColor.g, verColor.b, verColor.a); SDL_RenderDrawLine(R, verRect.x, verRect.y + verRect.h - 2, verRect.x + verRect.w, verRect.y + verRect.h - 2); }
-                if(mclick && overVer && !dropdownActive){
-                    const char *raw = _VERSION;
-                    char url[256]; url[0]='\0';
-                    if (strstr(raw, "-dirty")) {
-                        size_t len = strlen(raw);
-                        if (len > 6) {
-                            strncpy(url, raw, len - 6);
-                            url[len - 6] = '\0';
-                        } else {
-                            snprintf(url, sizeof(url), "%s", raw);
-                        }
-                    } else {
-                        snprintf(url, sizeof(url), "%s", raw);
-                    }
-                    if(strncmp(raw,"git-",4)==0){
-                        const char *sha = raw+4;
-                        char shortSha[64]; int i=0;
-                        while(sha[i] && sha[i] != '-' && i < (int)sizeof(shortSha)-1){ shortSha[i]=sha[i]; i++; }
-                        shortSha[i]='\0';
-                        snprintf(url,sizeof(url),"https://github.com/zefie/miniBAE/commit/%s", shortSha);
-                    } else {
-                        snprintf(url,sizeof(url),"https://github.com/zefie/miniBAE/tree/%s", raw);
-                    }
-                    if(url[0]){
-#ifdef _WIN32
-                        ShellExecuteA(NULL, "open", url, NULL, NULL, SW_SHOWNORMAL);
-#else
-                        char cmd[512];
-                        snprintf(cmd,sizeof(cmd),"(xdg-open '%s' || open '%s') >/dev/null 2>&1 &", url, url);
-                        system(cmd);
-#endif
-                    }
-                }
-                if(ver2[0]){ draw_text(R, dlg.x + pad, lineCompY, ver2, help); }
-            }
+            // Footer info removed (moved to About dialog)
 
             // Render dropdown lists LAST so they layer over footer text
             if(g_sampleRateDropdownOpen && !g_volumeCurveDropdownOpen){
@@ -4781,10 +4732,186 @@ int main(int argc, char *argv[]){
         draw_text(R, closeBtn.x+3, closeBtn.y+1, "X", g_button_text);
         if(mclick && overClose){ g_show_about_dialog = false; }
 
-        // Placeholder content — simple app name/version text for now
-        char verbuf[128]; snprintf(verbuf, sizeof(verbuf), "%s", "miniBAE");
-        draw_text(R, dlg.x + pad, dlg.y + 40, verbuf, g_text_color);
-        draw_text(R, dlg.x + pad, dlg.y + 64, "About dialog content will be added later.", g_text_color);
+    // About dialog content: paged. Page 0 = main info, Page 1 = credits/licenses
+    // Navigation controls drawn bottom-right
+        const char *cpuArch = BAE_GetCurrentCPUArchitecture();
+        char *baeVersion = (char*)BAE_GetVersion(); /* malloc'd by engine */
+        char *compInfo = (char*)BAE_GetCompileInfo(); /* malloc'd by engine */
+
+        char line1[256];
+        if(baeVersion && cpuArch) snprintf(line1, sizeof(line1), "miniBAE Player (%s) %s", cpuArch, baeVersion);
+        else if(baeVersion) snprintf(line1, sizeof(line1), "miniBAE Player %s", baeVersion);
+        else if(cpuArch) snprintf(line1, sizeof(line1), "miniBAE Player (%s)", cpuArch);
+        else snprintf(line1, sizeof(line1), "miniBAE Player");
+
+        char line2[256];
+        if(compInfo && compInfo[0]) snprintf(line2, sizeof(line2), "built with %s", compInfo);
+        else line2[0] = '\0';
+
+        int y = dlg.y + 40;
+        // Page 0: main info
+        if(g_about_page == 0){
+            // Make version text clickable and link to GitHub (commit or tree)
+            int vw=0, vh=0; measure_text(line1, &vw, &vh);
+            Rect verLinkRect = { dlg.x + pad, y, vw, vh>0?vh:14 };
+            bool overVerLink = point_in(mx,my,verLinkRect);
+            SDL_Color verLinkCol = overVerLink ? g_accent_color : g_text_color;
+            draw_text(R, verLinkRect.x, verLinkRect.y, line1, verLinkCol);
+            if(overVerLink){ SDL_SetRenderDrawColor(R, verLinkCol.r, verLinkCol.g, verLinkCol.b, verLinkCol.a); SDL_RenderDrawLine(R, verLinkRect.x, verLinkRect.y + verLinkRect.h - 2, verLinkRect.x + verLinkRect.w, verLinkRect.y + verLinkRect.h - 2); }
+            if(mclick && overVerLink){
+                const char *raw = baeVersion ? baeVersion : _VERSION;
+                char url[256]; url[0]='\0';
+                if (strstr(raw, "-dirty")) {
+                    size_t len = strlen(raw);
+                    if (len > 6) {
+                        strncpy(url, raw, len - 6);
+                        url[len - 6] = '\0';
+                    } else {
+                        snprintf(url, sizeof(url), "%s", raw);
+                    }
+                } else {
+                    snprintf(url, sizeof(url), "%s", raw);
+                }
+                if(strncmp(raw,"git-",4)==0){
+                    const char *sha = raw+4;
+                    char shortSha[64]; int i=0;
+                    while(sha[i] && sha[i] != '-' && i < (int)sizeof(shortSha)-1){ shortSha[i]=sha[i]; i++; }
+                    shortSha[i]='\0';
+                    snprintf(url,sizeof(url),"https://github.com/zefie/miniBAE/commit/%s", shortSha);
+                } else {
+                    snprintf(url,sizeof(url),"https://github.com/zefie/miniBAE/tree/%s", raw);
+                }
+                if(url[0]){
+#ifdef _WIN32
+                    ShellExecuteA(NULL, "open", url, NULL, NULL, SW_SHOWNORMAL);
+#else
+                    char cmd[512];
+                    snprintf(cmd,sizeof(cmd),"(xdg-open '%s' || open '%s') >/dev/null 2>&1 &", url, url);
+                    system(cmd);
+#endif
+                }
+            }
+            y += 20;
+            if(line2[0]){ draw_text(R, dlg.x + pad, y, line2, g_text_color); y += 20; }
+            draw_text(R, dlg.x + pad, y, "", g_text_color); /* spacer */ y += 6;
+            draw_text(R, dlg.x + pad, y, "(C) 2025 Zefie Networks", g_text_color); y += 18;
+            const char *urls[] = { "https://www.soundmusicsys.com/", "https://github.com/zefie/miniBAE/", NULL };
+            for(int i=0; urls[i]; ++i){
+                const char *u = urls[i]; int tw=0, th=0; measure_text(u, &tw, &th);
+                Rect r = { dlg.x + pad, y, tw, th>0?th:14 };
+                bool over = point_in(mx,my,r);
+                SDL_Color col = over ? g_accent_color : g_highlight_color;
+                draw_text(R, r.x, r.y, u, col);
+                if(over){ SDL_SetRenderDrawColor(R, col.r, col.g, col.b, col.a); SDL_RenderDrawLine(R, r.x, r.y + r.h - 2, r.x + r.w, r.y + r.h - 2); }
+                if(mclick && over){
+                    if(strncmp(u, "http", 4) == 0){
+#ifdef _WIN32
+                        ShellExecuteA(NULL, "open", u, NULL, NULL, SW_SHOWNORMAL);
+#else
+                        char cmd[512];
+                        snprintf(cmd, sizeof(cmd), "(xdg-open '%s' || open '%s') >/dev/null 2>&1 &", u, u);
+                        system(cmd);
+#endif
+                    }
+                }
+                y += 18;
+            }
+        }
+        // Page 1: credits/licenses (part 1)
+        else if(g_about_page == 1){
+            draw_text(R, dlg.x + pad, y, "This software makes use of the following software:", g_text_color); y += 18;
+            const char *credits_page1[] = {
+                "",
+                "miniBAE",
+                "Copyright (c) 2009 Beatnik, Inc All rights reserved.",
+                "Original miniBAE source code available at:",
+                "https://github.com/heyigor/miniBAE/",
+                "",
+                "SDL2 & SDL2_ttf",
+                "Copyright (C) 1997-2025 Sam Lantinga <slouken@libsdl.org>",
+                "https://www.libsdl.org/",
+                "",
+                NULL
+            };
+            for(int i=0; credits_page1[i]; ++i){
+                const char *txt = credits_page1[i];
+                if(strncmp(txt, "http", 4) == 0){
+                    int tw=0, th=0; measure_text(txt, &tw, &th);
+                    Rect r = { dlg.x + pad + 8, y, tw, th>0?th:14 };
+                    bool over = point_in(mx,my,r);
+                    SDL_Color col = over ? g_accent_color : g_highlight_color;
+                    draw_text(R, r.x, r.y, txt, col);
+                    if(over){ SDL_SetRenderDrawColor(R, col.r, col.g, col.b, col.a); SDL_RenderDrawLine(R, r.x, r.y + r.h - 2, r.x + r.w, r.y + r.h - 2); }
+                    if(mclick && over){
+#ifdef _WIN32
+                        ShellExecuteA(NULL, "open", txt, NULL, NULL, SW_SHOWNORMAL);
+#else
+                        char cmd[512];
+                        snprintf(cmd, sizeof(cmd), "(xdg-open '%s' || open '%s') >/dev/null 2>&1 &", txt, txt);
+                        system(cmd);
+#endif
+                    }
+                } else {
+                    draw_text(R, dlg.x + pad + 8, y, txt, g_text_color);
+                }
+                y += 16;
+                if(y > dlg.y + dlg.h - 36) break;
+            }
+        }
+
+        // Page 2: credits/licenses (part 2)
+        else if(g_about_page == 2){
+            draw_text(R, dlg.x + pad, y, "Additional credits and licenses:", g_text_color); y += 18;
+            const char *credits_page2[] = {
+                "",
+                "minimp3",
+                "Licensed under the CC0",
+                "http://creativecommons.org/publicdomain/zero/1.0/",
+                "",
+                "libmp3lame",
+                "https://lame.sourceforge.io/",
+                NULL
+            };
+            for(int i=0; credits_page2[i]; ++i){
+                const char *txt = credits_page2[i];
+                if(strncmp(txt, "http", 4) == 0){
+                    int tw=0, th=0; measure_text(txt, &tw, &th);
+                    Rect r = { dlg.x + pad + 8, y, tw, th>0?th:14 };
+                    bool over = point_in(mx,my,r);
+                    SDL_Color col = over ? g_accent_color : g_highlight_color;
+                    draw_text(R, r.x, r.y, txt, col);
+                    if(over){ SDL_SetRenderDrawColor(R, col.r, col.g, col.b, col.a); SDL_RenderDrawLine(R, r.x, r.y + r.h - 2, r.x + r.w, r.y + r.h - 2); }
+                    if(mclick && over){
+#ifdef _WIN32
+                        ShellExecuteA(NULL, "open", txt, NULL, NULL, SW_SHOWNORMAL);
+#else
+                        char cmd[512];
+                        snprintf(cmd, sizeof(cmd), "(xdg-open '%s' || open '%s') >/dev/null 2>&1 &", txt, txt);
+                        system(cmd);
+#endif
+                    }
+                } else {
+                    draw_text(R, dlg.x + pad + 8, y, txt, g_text_color);
+                }
+                y += 16;
+                if(y > dlg.y + dlg.h - 36) break;
+            }
+        }
+
+        // Page navigation controls (bottom-right)
+        Rect navPrev = { dlg.x + dlg.w - 70, dlg.y + dlg.h - 34, 24, 20 };
+        Rect navNext = { dlg.x + dlg.w - 34, dlg.y + dlg.h - 34, 24, 20 };
+        bool overPrev = point_in(mx,my,navPrev);
+        bool overNext = point_in(mx,my,navNext);
+        draw_rect(R, navPrev, overPrev?g_button_hover:g_button_base); draw_frame(R, navPrev, g_button_border); draw_text(R, navPrev.x+6, navPrev.y+3, "<", g_button_text);
+        draw_rect(R, navNext, overNext?g_button_hover:g_button_base); draw_frame(R, navNext, g_button_border); draw_text(R, navNext.x+6, navNext.y+3, ">", g_button_text);
+        // Page indicator
+    char pg[32]; snprintf(pg, sizeof(pg), "%d / %d", g_about_page+1, 3);
+        int pw=0,ph=0; measure_text(pg,&pw,&ph); draw_text(R, dlg.x + dlg.w - 100 - pw/2, dlg.y + dlg.h - 32, pg, g_text_color);
+    if(mclick){ if(overPrev && g_about_page > 0){ g_about_page--; } else if(overNext && g_about_page < 2){ g_about_page++; } }
+
+        if(baeVersion) free(baeVersion);
+        if(compInfo) free(compInfo);
 
     // Note: deliberately do NOT close About dialog when clicking outside to
     // avoid immediate close when the About button (outside the dialog) is clicked.
