@@ -773,6 +773,11 @@ static bool g_midi_input_enabled = false; // enable external MIDI input keyboard
 static int g_midi_input_device_index = 0; // selected input device index
 static bool g_midi_input_device_dd_open = false; // dropdown open state
 static int g_midi_input_device_count = 0; // cached input device count
+// Guard to avoid recursive mixer recreation when load_bank is invoked by
+// recreate_mixer_and_restore (which itself calls load_bank to restore banks).
+// This prevents infinite recursion while still allowing an initial recreate
+// when a bank is loaded while MIDI input is enabled.
+static bool g_in_bank_load_recreate = false;
 // Per-channel bank MSB/LSB tracking so Program Bank changes can be applied
 static unsigned char g_midi_bank_msb[16] = {0};
 static unsigned char g_midi_bank_lsb[16] = {0};
@@ -1725,6 +1730,15 @@ static bool load_bank(const char *path, bool current_playing_state, int transpos
             g_current_bank_path[sizeof(g_current_bank_path)-1] = '\0';
             BAE_PRINTF("Loaded built-in bank\n");
             set_status_message("Loaded built-in bank");
+
+            // If external MIDI input is enabled, recreate mixer so live MIDI
+            // continues to route into the new mixer with the new bank.
+            if (g_midi_input_enabled && !g_in_bank_load_recreate) {
+                g_in_bank_load_recreate = true;
+                recreate_mixer_and_restore(g_sample_rate_hz, g_stereo_output, reverb_type,
+                                           transpose, tempo, volume, loop_enabled, ch_enable);
+                g_in_bank_load_recreate = false;
+            }
             
             // Save this as the last used bank only if requested
             if (save_to_settings) {
@@ -1779,6 +1793,18 @@ static bool load_bank(const char *path, bool current_playing_state, int transpos
         char msg[128]; 
         snprintf(msg, sizeof(msg), "Loaded bank: %s", display_name);
         set_status_message(msg);
+
+        // If external MIDI input is enabled, recreate the mixer so the live
+        // MIDI routing is attached to a fresh mixer instance with the new
+        // bank loaded. Protect with a guard to avoid infinite recursion
+        // because recreate_mixer_and_restore itself calls load_bank.
+        if (g_midi_input_enabled && !g_in_bank_load_recreate) {
+            g_in_bank_load_recreate = true;
+            // reuse current GUI settings (sample rate & stereo output)
+            recreate_mixer_and_restore(g_sample_rate_hz, g_stereo_output, reverb_type,
+                                       transpose, tempo, volume, loop_enabled, ch_enable);
+            g_in_bank_load_recreate = false;
+        }
 #ifdef _BUILT_IN_PATCHES
     }
 #endif
@@ -2519,17 +2545,23 @@ int main(int argc, char *argv[]){
                                 set_status_message("Failed to load dropped bank file");
                             }
                         } else {
-                            // Try to load as media file (original behavior)
-                            BAE_PRINTF("Drag and drop: Loading media file: %s\n", dropped);
-                            if(bae_load_song_with_settings(dropped, transpose, tempo, volume, loopPlay, reverbType, ch_enable)) {
-                                duration = bae_get_len_ms(); progress=0; 
-                                playing = false; // Ensure we start from stopped state
-                                bae_play(&playing); // Auto-start playback
-                                BAE_PRINTF("Successfully loaded dropped media: %s\n", dropped);
-                                // Status message is set by bae_load_song_with_settings function
+                            // If MIDI input is enabled we don't accept dropped media files
+                            if (g_midi_input_enabled) {
+                                BAE_PRINTF("Drag and drop: MIDI input enabled - ignoring dropped media: %s\n", dropped);
+                                set_status_message("MIDI input enabled: media drop ignored");
                             } else {
-                                BAE_PRINTF("Failed to load dropped media: %s\n", dropped);
-                                set_status_message("Failed to load dropped media file");
+                                // Try to load as media file (original behavior)
+                                BAE_PRINTF("Drag and drop: Loading media file: %s\n", dropped);
+                                if(bae_load_song_with_settings(dropped, transpose, tempo, volume, loopPlay, reverbType, ch_enable)) {
+                                    duration = bae_get_len_ms(); progress=0; 
+                                    playing = false; // Ensure we start from stopped state
+                                    bae_play(&playing); // Auto-start playback
+                                    BAE_PRINTF("Successfully loaded dropped media: %s\n", dropped);
+                                    // Status message is set by bae_load_song_with_settings function
+                                } else {
+                                    BAE_PRINTF("Failed to load dropped media: %s\n", dropped);
+                                    set_status_message("Failed to load dropped media file");
+                                }
                             }
                         }
                         SDL_free(dropped);
@@ -3146,13 +3178,21 @@ int main(int argc, char *argv[]){
     draw_text(R, pbuf_x, time_y + 18, total_time_buf, labelCol);
 
         // Transport buttons
-    if(ui_button(R,(Rect){20, 215, 60,22}, playing?"Pause":"Play", ui_mx,ui_my,ui_mdown) && ui_mclick && !modal_block){ 
-            if(bae_play(&playing)){
-                // If the play call resulted in a pause (playing==false), clear visible notes on the virtual keyboard
-                if(!playing){
-                    if(g_keyboard_mouse_note != -1){ BAESong target = g_bae.song ? g_bae.song : g_live_song; if(target) BAESong_NoteOff(target,(unsigned char)g_keyboard_channel,(unsigned char)g_keyboard_mouse_note,0,0); g_keyboard_mouse_note = -1; }
-                    memset(g_keyboard_active_notes_by_channel, 0, sizeof(g_keyboard_active_notes_by_channel));
-                    memset(g_keyboard_active_notes, 0, sizeof(g_keyboard_active_notes));
+        if (g_midi_input_enabled) {
+            // Draw disabled Play button (no interaction)
+            Rect playRect = {20, 215, 60,22};
+            SDL_Color disabledBg = g_panel_bg; SDL_Color disabledTxt = g_panel_border;
+            draw_rect(R, playRect, disabledBg); draw_frame(R, playRect, g_panel_border);
+            draw_text(R, playRect.x + 6, playRect.y + 4, playing?"Pause":"Play", disabledTxt);
+        } else {
+            if(ui_button(R,(Rect){20, 215, 60,22}, playing?"Pause":"Play", ui_mx,ui_my,ui_mdown) && ui_mclick && !modal_block){ 
+                if(bae_play(&playing)){
+                    // If the play call resulted in a pause (playing==false), clear visible notes on the virtual keyboard
+                    if(!playing){
+                        if(g_keyboard_mouse_note != -1){ BAESong target = g_bae.song ? g_bae.song : g_live_song; if(target) BAESong_NoteOff(target,(unsigned char)g_keyboard_channel,(unsigned char)g_keyboard_mouse_note,0,0); g_keyboard_mouse_note = -1; }
+                        memset(g_keyboard_active_notes_by_channel, 0, sizeof(g_keyboard_active_notes_by_channel));
+                        memset(g_keyboard_active_notes, 0, sizeof(g_keyboard_active_notes));
+                    }
                 }
             }
         }
@@ -3364,7 +3404,14 @@ int main(int argc, char *argv[]){
             }
         }
     }
-    if(ui_button(R,(Rect){230, 215, 80,22}, "Open...", ui_mx,ui_my,ui_mdown) && ui_mclick && !modal_block){
+    if (g_midi_input_enabled) {
+        // Draw disabled Open... button (no interaction)
+        Rect openRect = {230, 215, 80,22};
+        SDL_Color disabledBg = g_panel_bg; SDL_Color disabledTxt = g_panel_border;
+        draw_rect(R, openRect, disabledBg); draw_frame(R, openRect, g_panel_border);
+        draw_text(R, openRect.x + 8, openRect.y + 4, "Open...", disabledTxt);
+    } else {
+        if(ui_button(R,(Rect){230, 215, 80,22}, "Open...", ui_mx,ui_my,ui_mdown) && ui_mclick && !modal_block){
             char *sel = open_file_dialog();
             if(sel){ 
                 if(bae_load_song_with_settings(sel, transpose, tempo, volume, loopPlay, reverbType, ch_enable)){ 
@@ -3383,6 +3430,7 @@ int main(int argc, char *argv[]){
                 free(sel); 
             }
         }
+    }
         
         // Export controls (only for MIDI/RMF files)
         if(!g_bae.is_audio_file && g_bae.song_loaded) {
@@ -4134,7 +4182,7 @@ int main(int argc, char *argv[]){
                 save_settings(g_current_bank_path[0]?g_current_bank_path:NULL, reverbType, loopPlay);
             }
             // MIDI device dropdown (right-aligned in left column)
-            Rect midiDevRect = { controlRightX, dlg.y + 136, controlW, 24 };
+            Rect midiDevRect = { controlRightX, dlg.y + 136, controlW + 200, 24 };
             // populate device list lazily when dropdown opened
             if(g_midi_input_device_dd_open || g_midi_output_device_dd_open){
                 // Enumerate compiled RtMidi APIs and collect input ports first, then output ports.
@@ -4253,7 +4301,7 @@ int main(int argc, char *argv[]){
                 }
                 save_settings(g_current_bank_path[0]?g_current_bank_path:NULL, reverbType, loopPlay);
             }
-            Rect midiOutDevRect = { controlRightX, dlg.y + 164, controlW, 24 };
+            Rect midiOutDevRect = { controlRightX, dlg.y + 164, controlW + 200, 24 };
             const char *curOutDev = (g_midi_output_device_index >=0 && g_midi_output_device_index < g_midi_output_device_count) ? g_midi_device_name_cache[g_midi_input_device_count + g_midi_output_device_index] : "(Default)";
             SDL_Color mo_bg = g_button_base; SDL_Color mo_txt = g_button_text;
             if(!midiOutputEnabled){ mo_bg.a = 180; mo_txt.a = 180; }
@@ -4304,7 +4352,6 @@ int main(int argc, char *argv[]){
             int lineHelpY = dlg.y + dlg.h - 54;
             int lineVerY  = dlg.y + dlg.h - 40;
             int lineCompY = dlg.y + dlg.h - 26;
-            draw_text(R, dlg.x + pad, lineHelpY, "Settings persist to minibae.ini.", help);
             {
                 char ver[160]; char ver2[160];
                 char *compInfo = (char*)BAE_GetCompileInfo();
@@ -4369,18 +4416,18 @@ int main(int argc, char *argv[]){
                     char txt[32]; snprintf(txt,sizeof(txt),"%d Hz", r);
                     SDL_Color itxt = (selected||over)? g_button_text : g_text_color; draw_text(R, ir.x+6, ir.y+6, txt, itxt);
                     if(over && mclick){ bool changed = (g_sample_rate_hz != r); g_sample_rate_hz = r; g_sampleRateDropdownOpen=false; if(changed){ int prePosMs = bae_get_pos_ms(); bool wasPlayingBefore = g_bae.is_playing; if(recreate_mixer_and_restore(g_sample_rate_hz, g_stereo_output, reverbType, transpose, tempo, volume, loopPlay, ch_enable)){ if(wasPlayingBefore){ progress = bae_get_pos_ms(); duration = bae_get_len_ms(); } else if(prePosMs > 0){ bae_seek_ms(prePosMs); progress=prePosMs; duration=bae_get_len_ms(); playing=false; } else { progress=0; duration=bae_get_len_ms(); playing=false; }
-                                    // If MIDI input was active when we changed sample rate, reinit MIDI hardware so it stays connected
-                                    if(g_midi_input_enabled){
-                                        midi_input_shutdown();
-                                        if(g_midi_input_device_index >= 0 && g_midi_input_device_index < g_midi_input_device_count){
-                                            int api = g_midi_device_api[g_midi_input_device_index];
-                                            int port = g_midi_device_port[g_midi_input_device_index];
-                                            midi_input_init("miniBAE", api, port);
-                                        } else {
-                                            midi_input_init("miniBAE", -1, -1);
-                                        }
-                                    }
-                                    save_settings(g_current_bank_path[0]?g_current_bank_path:NULL, reverbType, loopPlay); } } }
+                    // If MIDI input was active when we changed sample rate, reinit MIDI hardware so it stays connected
+                    if(g_midi_input_enabled){
+                        midi_input_shutdown();
+                        if(g_midi_input_device_index >= 0 && g_midi_input_device_index < g_midi_input_device_count){
+                            int api = g_midi_device_api[g_midi_input_device_index];
+                            int port = g_midi_device_port[g_midi_input_device_index];
+                            midi_input_init("miniBAE", api, port);
+                        } else {
+                            midi_input_init("miniBAE", -1, -1);
+                        }
+                    }
+                    save_settings(g_current_bank_path[0]?g_current_bank_path:NULL, reverbType, loopPlay); } } }
                 }
                 if(mclick && !point_in(mx,my,srRect) && !point_in(mx,my,box)) g_sampleRateDropdownOpen=false;
             }
