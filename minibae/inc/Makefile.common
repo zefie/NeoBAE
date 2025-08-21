@@ -96,7 +96,7 @@ ifeq ($(BAE_BUILT_IN_PATCHES),)
 endif
 
 # Debug
-ifneq ($(DEBUG),)
+ifeq ($(DEBUG),1)
 	BAE_FLAGS +=    -D_DEBUG=1
 endif
 
