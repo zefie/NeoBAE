@@ -749,6 +749,8 @@ static bool g_keyboard_channel_dd_open = false;
 static unsigned char g_keyboard_active_notes[128]; // temp buffer each frame
 static bool g_show_virtual_keyboard = false; // user toggle (default off)
 static int g_keyboard_mouse_note = -1; // currently held note by mouse, -1 if none
+// Suppress engine-driven active-note queries for a short time after user Stop/Pause
+static Uint32 g_keyboard_suppress_until = 0;
 #ifdef SUPPORT_KARAOKE
 // Karaoke / lyric display state
 static bool g_karaoke_enabled = true; // simple always-on toggle (future: UI setting)
@@ -2010,9 +2012,15 @@ static bool bae_play(bool *playing){
             return true;
         } else {
             BAESong_Pause(g_bae.song);
-            // Release any held virtual keyboard note and clear keyboard UI state on pause
-            if(g_keyboard_mouse_note != -1){ if(g_bae.song) BAESong_NoteOff(g_bae.song,(unsigned char)g_keyboard_channel,(unsigned char)g_keyboard_mouse_note,0,0); g_keyboard_mouse_note = -1; }
-            memset(g_keyboard_active_notes, 0, sizeof(g_keyboard_active_notes));
+            // Release any held virtual keyboard notes and clear keyboard UI state on pause
+            if(g_show_virtual_keyboard && g_bae.song){
+                for(int n=0;n<128;n++){
+                    BAESong_NoteOff(g_bae.song, (unsigned char)g_keyboard_channel, (unsigned char)n, 0, 0);
+                }
+                g_keyboard_mouse_note = -1;
+                memset(g_keyboard_active_notes, 0, sizeof(g_keyboard_active_notes));
+                g_keyboard_suppress_until = SDL_GetTicks() + 250;
+            }
             *playing=false; 
             g_bae.is_playing = false;
             return true; 
@@ -2031,9 +2039,12 @@ static void bae_stop(bool *playing,int *progress){
         *playing=false; *progress=0;
         g_bae.is_playing = false;
     }
-    // Always reset virtual keyboard UI and release any held virtual note when stopping
-    if(g_show_virtual_keyboard){
-        if(g_keyboard_mouse_note != -1){ if(g_bae.song) BAESong_NoteOff(g_bae.song,(unsigned char)g_keyboard_channel,(unsigned char)g_keyboard_mouse_note,0,0); g_keyboard_mouse_note = -1; }
+    // Always reset virtual keyboard UI and release any held virtual notes when stopping
+    if(g_show_virtual_keyboard && g_bae.song){
+        for(int n=0;n<128;n++){
+            BAESong_NoteOff(g_bae.song, (unsigned char)g_keyboard_channel, (unsigned char)n, 0, 0);
+        }
+        g_keyboard_mouse_note = -1;
         memset(g_keyboard_active_notes, 0, sizeof(g_keyboard_active_notes));
     }
 }
@@ -2724,13 +2735,21 @@ int main(int argc, char *argv[]){
 
         // Transport buttons
     if(ui_button(R,(Rect){20, 215, 60,22}, playing?"Pause":"Play", ui_mx,ui_my,ui_mdown) && ui_mclick && !modal_block){ 
-            if(bae_play(&playing)){} 
+            if(bae_play(&playing)){
+                // If the play call resulted in a pause (playing==false), clear visible notes on the virtual keyboard
+                if(!playing){
+                    if(g_keyboard_mouse_note != -1){ if(g_bae.song) BAESong_NoteOff(g_bae.song,(unsigned char)g_keyboard_channel,(unsigned char)g_keyboard_mouse_note,0,0); g_keyboard_mouse_note = -1; }
+                    memset(g_keyboard_active_notes, 0, sizeof(g_keyboard_active_notes));
+                }
+            }
         }
     if(ui_button(R,(Rect){90, 215, 60,22}, "Stop", ui_mx,ui_my,ui_mdown) && ui_mclick && !modal_block){ 
             bae_stop(&playing,&progress);
             // Reset total-play timer on user Stop
             g_total_play_ms = 0;
             g_last_engine_pos_ms = 0;
+            // Clear visible virtual keyboard notes on Stop
+        if(g_show_virtual_keyboard && g_bae.song){ for(int n=0;n<128;n++){ BAESong_NoteOff(g_bae.song,(unsigned char)g_keyboard_channel,(unsigned char)n,0,0); } g_keyboard_mouse_note = -1; memset(g_keyboard_active_notes, 0, sizeof(g_keyboard_active_notes)); g_keyboard_suppress_until = SDL_GetTicks() + 250; }
             // Also stop export if active
             if(g_exporting) {
                 bae_stop_wav_export();
@@ -2757,10 +2776,15 @@ int main(int argc, char *argv[]){
             if(!modal_block && ui_mclick && overDD){ g_keyboard_channel_dd_open = !g_keyboard_channel_dd_open; }
             // (Dropdown list itself drawn later for proper z-order)
             if(!g_keyboard_channel_dd_open && ui_mclick && !overDD){ /* no-op */ }
-            // Fetch active notes (but suppress engine-driven highlights during export)
+            // Fetch active notes (but suppress engine-driven highlights during export
+            // or immediately after a user-driven Stop/Pause so the UI doesn't
+            // immediately relight notes before the engine processes NoteOffs).
             memset(g_keyboard_active_notes,0,sizeof(g_keyboard_active_notes));
-            if(!g_exporting && g_bae.song){
-                BAESong_GetActiveNotes(g_bae.song, (unsigned char)g_keyboard_channel, g_keyboard_active_notes);
+            if(!g_exporting && g_bae.song && g_bae.is_playing){
+                Uint32 nowms = SDL_GetTicks();
+                if(nowms >= g_keyboard_suppress_until){
+                    BAESong_GetActiveNotes(g_bae.song, (unsigned char)g_keyboard_channel, g_keyboard_active_notes);
+                }
             }
             // Keyboard drawing region
             int kbX = keyboardPanel.x + 110; int kbY = keyboardPanel.y + 28; int kbW = keyboardPanel.w - 120; int kbH = keyboardPanel.h - 38;
@@ -3709,6 +3733,9 @@ int main(int argc, char *argv[]){
             // consume the click so underlying UI doesn't react to the same event
             mclick = false;
         }
+
+    // Clear visible virtual keyboard notes when stopping from export overlay too
+    if(g_show_virtual_keyboard && g_bae.song){ for(int n=0;n<128;n++){ BAESong_NoteOff(g_bae.song,(unsigned char)g_keyboard_channel,(unsigned char)n,0,0); } g_keyboard_mouse_note = -1; memset(g_keyboard_active_notes, 0, sizeof(g_keyboard_active_notes)); g_keyboard_suppress_until = SDL_GetTicks() + 250; }
     }
     SDL_RenderPresent(R);
     SDL_Delay(16);
