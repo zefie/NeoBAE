@@ -1029,6 +1029,7 @@ typedef struct
     // Preserve position across bank reloads
     bool preserve_position_on_next_start;
     uint32_t preserved_start_position_us;
+    bool song_finished;                  // true if engine reported song finished
     // Patch bank info
     BAEBankToken bank_token;
     char bank_name[256];
@@ -3390,6 +3391,7 @@ static bool bae_load_song(const char *path)
     }
     g_bae.song_loaded = false;
     g_bae.is_audio_file = false;
+    g_bae.song_finished = false;
     g_bae.is_rmf_file = false;
     g_bae.song_length_us = 0;
     g_show_rmf_info_dialog = false;
@@ -3595,6 +3597,16 @@ static void bae_seek_ms(int ms)
         return;
     uint32_t us = (uint32_t)ms * 1000UL;
     BAESong_SetMicrosecondPosition(g_bae.song, us);
+    // If the song had previously finished and the user is allowed to seek
+    // past the end via the UI, preserve this position so Play will resume
+    // from the user-selected spot. This makes seeking after a finished
+    // playback behave like repositioning for the next start.
+    if (g_bae.song_finished && g_bae.song_loaded && !g_bae.is_audio_file)
+    {
+        g_bae.preserved_start_position_us = us;
+        g_bae.preserve_position_on_next_start = true;
+        BAE_PRINTF("User seek while finished: preserving start position %u us\n", us);
+    }
     // When seeking, ensure external MIDI devices are silenced to avoid hanging notes
     if (g_midi_output_enabled)
     {
@@ -3822,6 +3834,12 @@ static bool bae_play(bool *playing)
                         BAE_PRINTF("WARNING: resume position mismatch (delta=%d us)\n", (int)verifyPos - (int)startPosUs);
                     }
                 }
+            // Clear finished flag now that we're starting playback from a preserved or normal position
+            if (g_bae.song_finished)
+            {
+                g_bae.song_finished = false;
+                g_bae.preserve_position_on_next_start = false; // consumed
+            }
             }
             // Give mixer a few idle cycles to prime buffers (helps avoid initial stall)
             if (g_bae.mixer)
@@ -3906,6 +3924,8 @@ static void bae_stop(bool *playing, int *progress)
         *progress = 0;
         g_bae.is_playing = false;
     }
+    // Clear finished flag when user stops playback
+    g_bae.song_finished = false;
     // Always reset virtual keyboard UI and release any held virtual notes when stopping
     if (g_show_virtual_keyboard)
     {
@@ -5007,6 +5027,7 @@ int main(int argc, char *argv[])
                 BAE_PRINTF("Song finished, stopping playback\n");
                 playing = false;
                 g_bae.is_playing = false;
+                g_bae.song_finished = true;
                 progress = 0;
                 if (!g_bae.is_audio_file && g_bae.song)
                 {
