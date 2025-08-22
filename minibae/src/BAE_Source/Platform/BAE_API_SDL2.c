@@ -48,6 +48,97 @@ extern int16_t BAE_GetMaxSamplePerSlice(void); // ensure visible for sizing
 static Uint8 *g_sliceStatic = NULL;
 static size_t g_sliceStaticSize = 0;
 
+// PCM recorder state (writes raw PCM slices produced by audio callback to WAV)
+static FILE *g_pcm_rec_fp = NULL;
+static uint64_t g_pcm_rec_data_bytes = 0;
+static uint32_t g_pcm_rec_channels = 0;
+static uint32_t g_pcm_rec_sample_rate = 0;
+static uint32_t g_pcm_rec_bits = 0;
+
+// MP3 recorder state: real-time encoding via ring buffer and encoder thread (no temp file)
+typedef struct MP3EncState_s {
+    // config
+    uint32_t channels;
+    uint32_t sample_rate;
+    uint32_t bits; // expect 16
+    uint32_t bitrate; // bits/sec
+    // output
+    XFILE out;
+    // encoder
+    void *enc;
+    uint32_t framesPerCall; // typical 1152
+    int16_t *encPcmBuf; // buffer passed to encoder API
+    // ring buffer of int16 interleaved frames
+    int16_t *ring;
+    uint32_t ringFrames; // capacity in frames
+    uint32_t readPos; // in frames
+    uint32_t writePos; // in frames
+    uint32_t usedFrames; // frames currently stored
+    // threading & sync
+    SDL_Thread *thread;
+    SDL_mutex *mtx;
+    SDL_cond *cond;
+    volatile int accepting; // producer writes while true
+    volatile int running;   // consumer waits while true or data pending
+    volatile uint64_t droppedFrames; // for diagnostics
+} MP3EncState;
+
+static MP3EncState *g_mp3enc = NULL;
+static char g_mp3rec_mp3_path[1024] = {0};
+static uint32_t g_mp3rec_channels = 0;
+static uint32_t g_mp3rec_sample_rate = 0;
+static uint32_t g_mp3rec_bits = 0;
+static uint32_t g_mp3rec_bitrate = 0;     // total bits/sec
+
+static XBOOL pcm_wav_write_header_local(FILE *f, uint32_t channels, uint32_t sample_rate, uint32_t bits, uint64_t data_bytes){
+    if(!f) return FALSE;
+    uint32_t byte_rate = sample_rate * channels * (bits/8);
+    uint16_t block_align = channels * (bits/8);
+    fwrite("RIFF",1,4,f);
+    uint32_t chunk_size = (uint32_t)(36 + data_bytes); fwrite(&chunk_size,4,1,f);
+    fwrite("WAVE",1,4,f);
+    fwrite("fmt ",1,4,f);
+    uint32_t subchunk1_size = 16; fwrite(&subchunk1_size,4,1,f);
+    uint16_t audio_format = 1; fwrite(&audio_format,2,1,f);
+    uint16_t num_channels = (uint16_t)channels; fwrite(&num_channels,2,1,f);
+    uint32_t sr = (uint32_t)sample_rate; fwrite(&sr,4,1,f);
+    fwrite(&byte_rate,4,1,f);
+    fwrite(&block_align,2,1,f);
+    uint16_t bits_per_sample = (uint16_t)bits; fwrite(&bits_per_sample,2,1,f);
+    fwrite("data",1,4,f);
+    uint32_t data_size_32 = (uint32_t)data_bytes; fwrite(&data_size_32,4,1,f);
+    return TRUE;
+}
+
+int BAE_Platform_PCMRecorder_Start(const char *path, uint32_t channels, uint32_t sample_rate, uint32_t bits){
+    if(!path) return -1;
+    if(g_pcm_rec_fp) return -1; // already recording
+    FILE *f = fopen(path, "wb+");
+    if(!f) return -1;
+    // write placeholder header
+    g_pcm_rec_fp = f;
+    g_pcm_rec_channels = channels; g_pcm_rec_sample_rate = sample_rate; g_pcm_rec_bits = bits;
+    g_pcm_rec_data_bytes = 0;
+    pcm_wav_write_header_local(g_pcm_rec_fp, channels, sample_rate, bits, 0);
+    fflush(g_pcm_rec_fp);
+    BAE_PRINTF("Platform PCM recorder started: %s (%u Hz, %u ch, %u bits)\n", path, sample_rate, channels, bits);
+    return 0;
+}
+
+void BAE_Platform_PCMRecorder_Stop(void){
+    if(!g_pcm_rec_fp) return;
+    if (g_audioDevice) SDL_LockAudioDevice(g_audioDevice);
+    fseek(g_pcm_rec_fp, 0, SEEK_SET);
+    pcm_wav_write_header_local(g_pcm_rec_fp, g_pcm_rec_channels, g_pcm_rec_sample_rate, g_pcm_rec_bits, g_pcm_rec_data_bytes);
+    fflush(g_pcm_rec_fp);
+    fclose(g_pcm_rec_fp);
+    g_pcm_rec_fp = NULL;
+    g_pcm_rec_data_bytes = 0;
+    g_pcm_rec_channels = 0; g_pcm_rec_sample_rate = 0; g_pcm_rec_bits = 0;
+    BAE_PRINTF("Platform PCM recorder stopped\n");
+    if (g_audioDevice) SDL_UnlockAudioDevice(g_audioDevice);
+}
+
 static void PV_ComputeSliceSizeFromEngine(void) {
     // Engine already returns the per-slice frame count for the CURRENT configured rate.
     // Earlier code incorrectly tried to rescale this assuming a 44.1k baseline which
@@ -145,6 +236,67 @@ static void audio_callback(void *userdata, Uint8 *stream, int len) {
         
         // Call the engine to generate audio
         BAE_BuildMixerSlice(userdata, g_sliceStatic, sliceBytes, frames);
+
+        // If platform PCM recorder is active, append this slice exactly as generated
+        if (g_pcm_rec_fp) {
+            size_t wrote = fwrite(g_sliceStatic, 1, (size_t)sliceBytes, g_pcm_rec_fp);
+            if (wrote == (size_t)sliceBytes) {
+                g_pcm_rec_data_bytes += (uint64_t)wrote;
+            } else {
+                BAE_PRINTF("Warning: platform pcm recorder write short: %zu/%ld\n", wrote, (long)sliceBytes);
+            }
+        }
+        // If MP3 recorder is active, push PCM to encoder ring buffer
+        if (g_mp3enc && g_mp3enc->accepting) {
+            MP3EncState *s = g_mp3enc;
+            const uint32_t frames = (uint32_t)(sliceBytes / (g_channels * (g_bits/8)));
+            if (frames) {
+                // Convert/prepare int16 interleaved data
+                static int16_t *scratch16 = NULL; static uint32_t scratchFrames = 0; // per-process
+                int16_t *temp = NULL;
+                if (g_bits == 16) {
+                    temp = (int16_t*)g_sliceStatic; // reuse
+                } else {
+                    // Convert 8-bit unsigned to 16-bit signed into persistent scratch
+                    if (scratchFrames < frames) {
+                        free(scratch16);
+                        scratch16 = (int16_t*)malloc((size_t)frames * s->channels * sizeof(int16_t));
+                        scratchFrames = scratch16 ? frames : 0;
+                    }
+                    if (!scratch16) {
+                        // drop if OOM
+                        s->droppedFrames += frames;
+                        goto after_ring_write;
+                    }
+                    const uint8_t *src8 = (const uint8_t*)g_sliceStatic;
+                    for (uint32_t i=0;i<frames * s->channels;i++) scratch16[i] = ((int)src8[i] - 128) << 8;
+                    temp = scratch16;
+                }
+
+                SDL_LockMutex(s->mtx);
+                uint32_t space = s->ringFrames - s->usedFrames;
+                uint32_t toWrite = (frames <= space) ? frames : space;
+                if (toWrite > 0) {
+                    uint32_t first = toWrite;
+                    uint32_t cont = s->ringFrames - s->writePos;
+                    if (first > cont) first = cont;
+                    memcpy(s->ring + s->writePos * s->channels, temp, first * s->channels * sizeof(int16_t));
+                    s->writePos = (s->writePos + first) % s->ringFrames;
+                    s->usedFrames += first;
+                    uint32_t remain = toWrite - first;
+                    if (remain) {
+                        memcpy(s->ring + s->writePos * s->channels, temp + first * s->channels, remain * s->channels * sizeof(int16_t));
+                        s->writePos = (s->writePos + remain) % s->ringFrames;
+                        s->usedFrames += remain;
+                    }
+                    SDL_CondSignal(s->cond);
+                } else {
+                    s->droppedFrames += frames;
+                }
+                SDL_UnlockMutex(s->mtx);
+            }
+        }
+after_ring_write:
         
         if (sliceBytes > remaining) {
             memcpy(out, g_sliceStatic, remaining);
@@ -453,3 +605,154 @@ uint32_t BAE_GetDeviceSamplesCapturedPosition(){ return 0; }
 // ---- Misc ----
 void BAE_DisplayMemoryUsage(int detailLevel){ (void)detailLevel; }
 void BAE_PrintHexDump(void *address, int32_t length){ unsigned char *p=(unsigned char*)address; for(int32_t i=0;i<length;i++){ if((i%16)==0) BAE_PRINTF("\n%08lx: ", (uint32_t)i); BAE_PRINTF("%02X ", p[i]); } BAE_PRINTF("\n"); }
+
+#if USE_MPEG_ENCODER != FALSE
+#include "XMPEG_BAE_API.h"
+
+// Refill callback to pull PCM frames from ring buffer for encoder thread
+static XBOOL MP3Refill_FromRing(void *buffer, void *userRef){
+    if (!buffer || !userRef) return FALSE;
+    MP3EncState *s = (MP3EncState*)userRef;
+    int16_t *dst = (int16_t*)buffer;
+    const uint32_t needFrames = s->framesPerCall;
+    uint32_t copied = 0;
+    SDL_LockMutex(s->mtx);
+    while (copied < needFrames) {
+        while (s->usedFrames == 0) {
+            if (!s->running) {
+                // No more input will arrive. If we copied something, pad and return TRUE once.
+                if (copied > 0) {
+                    uint32_t pad = (needFrames - copied) * s->channels;
+                    memset(dst + copied * s->channels, 0, pad * sizeof(int16_t));
+                    SDL_UnlockMutex(s->mtx);
+                    return TRUE;
+                }
+                SDL_UnlockMutex(s->mtx);
+                return FALSE; // signal end
+            }
+            SDL_CondWait(s->cond, s->mtx);
+        }
+        uint32_t cont = s->ringFrames - s->readPos;
+        uint32_t canRead = (s->usedFrames < cont) ? s->usedFrames : cont;
+        uint32_t want = needFrames - copied;
+        if (canRead > want) canRead = want;
+        memcpy(dst + copied * s->channels,
+               s->ring + s->readPos * s->channels,
+               canRead * s->channels * sizeof(int16_t));
+        s->readPos = (s->readPos + canRead) % s->ringFrames;
+        s->usedFrames -= canRead;
+        copied += canRead;
+    }
+    SDL_UnlockMutex(s->mtx);
+    return TRUE;
+}
+
+static int MP3EncoderThread(void *userdata){
+    MP3EncState *s = (MP3EncState*)userdata;
+    if (!s) return 0;
+    // Create encoder
+    s->encPcmBuf = (int16_t*)XNewPtr(s->framesPerCall * s->channels * sizeof(int16_t));
+    if (!s->encPcmBuf) return 0;
+    s->enc = MPG_EncodeNewStream(s->bitrate, s->sample_rate, s->channels, (XPTR)s->encPcmBuf, s->framesPerCall);
+    if (!s->enc) { XDisposePtr((XPTR)s->encPcmBuf); s->encPcmBuf = NULL; return 0; }
+    MPG_EncodeSetRefillCallback(s->enc, MP3Refill_FromRing, s);
+    // Drive encoder until it reports last and no more bytes
+    for(;;){
+        XPTR bitbuf = NULL; uint32_t bitsz = 0; XBOOL last = FALSE;
+        (void)MPG_EncodeProcess(s->enc, &bitbuf, &bitsz, &last);
+        if (bitsz > 0 && bitbuf) { XFileWrite(s->out, bitbuf, (int32_t)bitsz); }
+        if (last && bitsz == 0) break;
+        SDL_Delay(1);
+    }
+    MPG_EncodeFreeStream(s->enc); s->enc = NULL;
+    if (s->encPcmBuf) { XDisposePtr((XPTR)s->encPcmBuf); s->encPcmBuf = NULL; }
+    return 0;
+}
+#endif
+
+int BAE_Platform_MP3Recorder_Start(const char *path, uint32_t channels, uint32_t sample_rate, uint32_t bits, uint32_t bitrate){
+    if (!path) return -1;
+    if (g_mp3enc) return -1; // already recording
+    snprintf(g_mp3rec_mp3_path, sizeof(g_mp3rec_mp3_path), "%s", path);
+    g_mp3rec_channels = channels; g_mp3rec_sample_rate = sample_rate; g_mp3rec_bits = bits; g_mp3rec_bitrate = bitrate;
+
+#if USE_MPEG_ENCODER == FALSE
+    BAE_PRINTF("MP3 encode skipped: encoder not built\n");
+    return -1;
+#else
+    MP3EncState *s = (MP3EncState*)calloc(1, sizeof(MP3EncState));
+    if (!s) return -1;
+    s->channels = channels;
+    s->sample_rate = sample_rate;
+    s->bits = bits;
+    s->bitrate = bitrate;
+    s->framesPerCall = 1152;
+    // 2 seconds ring buffer
+    s->ringFrames = (sample_rate ? sample_rate : 44100) * 2;
+    s->ring = (int16_t*)calloc((size_t)s->ringFrames * channels, sizeof(int16_t));
+    s->mtx = SDL_CreateMutex();
+    s->cond = SDL_CreateCond();
+    s->running = 1;
+    s->accepting = 1;
+    if (!s->ring || !s->mtx || !s->cond) {
+        if (s->ring) free(s->ring);
+        if (s->mtx) SDL_DestroyMutex(s->mtx);
+        if (s->cond) SDL_DestroyCond(s->cond);
+        free(s);
+        return -1;
+    }
+
+    // Open output file
+    XFILENAME xfOut; XConvertPathToXFILENAME((void*)g_mp3rec_mp3_path, &xfOut);
+    s->out = XFileOpenForWrite(&xfOut, TRUE);
+    if (!s->out) {
+        SDL_DestroyCond(s->cond); SDL_DestroyMutex(s->mtx); free(s->ring); free(s);
+        return -1;
+    }
+
+    // Spawn encoder thread
+    s->thread = SDL_CreateThread(MP3EncoderThread, "mp3enc", s);
+    if (!s->thread) {
+        XFileClose(s->out); SDL_DestroyCond(s->cond); SDL_DestroyMutex(s->mtx); free(s->ring); free(s);
+        return -1;
+    }
+
+    g_mp3enc = s;
+    BAE_PRINTF("Platform MP3 recorder started (streaming): %s (%u Hz, %u ch, %u bits, %u bps)\n",
+               g_mp3rec_mp3_path, sample_rate, channels, bits, bitrate);
+    return 0;
+#endif
+}
+
+void BAE_Platform_MP3Recorder_Stop(void){
+    MP3EncState *s = g_mp3enc;
+    if (!s) return;
+    // Lock audio device to prevent callback from writing concurrently while we flip flags
+    if (g_audioDevice) SDL_LockAudioDevice(g_audioDevice);
+    // Stop accepting new PCM immediately
+    s->accepting = 0;
+    if (g_audioDevice) SDL_UnlockAudioDevice(g_audioDevice);
+    // Signal encoder thread that no more input will arrive once buffer drains
+    SDL_LockMutex(s->mtx);
+    s->running = 0;
+    SDL_CondBroadcast(s->cond);
+    SDL_UnlockMutex(s->mtx);
+
+    // Wait encoder thread to finish
+    if (s->thread) { SDL_WaitThread(s->thread, NULL); s->thread = NULL; }
+
+    // Close output file and cleanup (stop audio callback from touching state during teardown)
+    if (g_audioDevice) SDL_LockAudioDevice(g_audioDevice);
+    unsigned long long dropped = (unsigned long long)s->droppedFrames;
+    if (s->out) { XFileClose(s->out); s->out = NULL; }
+    if (s->cond) { SDL_DestroyCond(s->cond); s->cond = NULL; }
+    if (s->mtx) { SDL_DestroyMutex(s->mtx); s->mtx = NULL; }
+    if (s->ring) { free(s->ring); s->ring = NULL; }
+    free(s);
+    g_mp3enc = NULL;
+    if (g_audioDevice) SDL_UnlockAudioDevice(g_audioDevice);
+
+    g_mp3rec_mp3_path[0] = '\0';
+    g_mp3rec_channels = g_mp3rec_sample_rate = g_mp3rec_bits = g_mp3rec_bitrate = 0;
+    BAE_PRINTF("Platform MP3 recorder stopped (streaming). Dropped frames: %llu\n", dropped);
+}

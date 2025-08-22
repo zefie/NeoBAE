@@ -351,6 +351,21 @@ int BAE_GetAudioBufferCount(void);
 // Return the number of bytes used for audio buffer for output to card
 int32_t BAE_GetAudioByteBufferSize(void);
 
+// Platform-level PCM/MP3 recorder helpers (SDL2 backend provides implementations).
+// Start recording PCM produced by the audio callback into a WAV file. Returns 0 on
+// success or -1 on failure. channels/sample_rate/bits must match active device.
+int BAE_Platform_PCMRecorder_Start(const char *path, uint32_t channels, uint32_t sample_rate, uint32_t bits);
+// Stop the platform PCM recorder and finalize the WAV header. Safe if not active.
+void BAE_Platform_PCMRecorder_Stop(void);
+
+// Start recording PCM via audio callback to a temporary WAV and, on Stop, encode to MP3.
+// 'path' is the final MP3 output path. 'bitrate' is total bits/sec (e.g., 128000).
+// Returns 0 on success, -1 on failure.
+int BAE_Platform_MP3Recorder_Start(const char *path, uint32_t channels, uint32_t sample_rate, uint32_t bits, uint32_t bitrate);
+
+// Stop the platform MP3 recorder and finalize/flush encoder. Safe to call if not active.
+void BAE_Platform_MP3Recorder_Stop(void);
+
 // **** Audio Engine feedback functions. These functions are used to direct or get
 //      information about the engine.
 //
