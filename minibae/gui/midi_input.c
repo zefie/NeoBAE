@@ -5,10 +5,18 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdatomic.h>
+#include <time.h>
+#ifndef _WIN32
+#include <sys/time.h>
+#endif
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN 1
+#include <windows.h>
+#endif
 
 #include "../src/thirdparty/rtmidi/rtmidi_c.h"
 
-#define QUEUE_CAPACITY 2048u /* power-of-two is better for mod using mask */
+#define QUEUE_CAPACITY 16384u /* power-of-two ring buffer (larger to prevent overflow under bursts) */
 #define QUEUE_MASK (QUEUE_CAPACITY-1u)
 #define MAX_MSG_SIZE 1024u
 
@@ -28,6 +36,41 @@ static atomic_ulong g_q_head = 0; /* consumer index */
 static atomic_ulong g_q_tail = 0; /* producer index */
 static atomic_uint g_drop_count = 0;
 
+// Monotonic high-resolution timestamp in seconds for robust inter-event timing
+static double midi_now_seconds(void)
+{
+#ifdef _WIN32
+    static LARGE_INTEGER s_freq = {0};
+    LARGE_INTEGER pc;
+    if (s_freq.QuadPart == 0)
+    {
+        QueryPerformanceFrequency(&s_freq);
+        if (s_freq.QuadPart == 0)
+        {
+            // Fallback: use timeGetTime-ish granularity via clock()
+            return (double)clock() / (double)CLOCKS_PER_SEC;
+        }
+    }
+    QueryPerformanceCounter(&pc);
+    return (double)pc.QuadPart / (double)s_freq.QuadPart;
+#else
+    // Prefer monotonic clocks when available; otherwise fall back to gettimeofday
+#if defined(CLOCK_MONOTONIC_RAW)
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC_RAW, &ts);
+    return (double)ts.tv_sec + (double)ts.tv_nsec * 1e-9;
+#elif defined(CLOCK_MONOTONIC)
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (double)ts.tv_sec + (double)ts.tv_nsec * 1e-9;
+#else
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    return (double)tv.tv_sec + (double)tv.tv_usec * 1e-6;
+#endif
+#endif
+}
+
 /* Callback runs on RtMidi's thread: single producer */
 static void midi_ccallback(double timeStamp, const unsigned char* message, size_t messageSize, void *userData) {
     (void)userData;
@@ -37,7 +80,9 @@ static void midi_ccallback(double timeStamp, const unsigned char* message, size_
     unsigned long next = tail + 1UL;
     if((next - head) <= QUEUE_CAPACITY) {
         MidiEvent *e = &g_queue[tail & QUEUE_MASK];
-        e->timestamp = timeStamp;
+        // Use our own monotonic timestamp to avoid backend-dependent semantics of timeStamp
+        (void)timeStamp; // unused – RtMidi provides absolute time on some APIs; we standardize
+        e->timestamp = midi_now_seconds();
         unsigned int copy = (unsigned int)messageSize;
         if(copy > MAX_MSG_SIZE) copy = MAX_MSG_SIZE;
         e->size = copy;
@@ -68,8 +113,9 @@ bool midi_input_init(const char *client_name, int api_index, int port_index) {
     if(!g_rtmidi) return false;
     // try to set callback
     rtmidi_in_set_callback(g_rtmidi, midi_ccallback, NULL);
-    // ignore system realtime messages (clock/sense)
-    rtmidi_in_ignore_types(g_rtmidi, false, true, true);
+    // Ignore SysEx and system realtime messages (clock/sense) to prevent queue floods from large or frequent messages.
+    // If SysEx recording is desired later, this can be made configurable.
+    rtmidi_in_ignore_types(g_rtmidi, true, true, true);
     // open requested port if specified
     unsigned int count = rtmidi_get_port_count(g_rtmidi);
     if(port_index >= 0 && (unsigned int)port_index < count){

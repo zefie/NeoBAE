@@ -1112,6 +1112,7 @@ static const int g_midi_record_division = 1000;     // ticks per quarter note fo
 static const uint32_t g_midi_record_tempo = 500000; // default microseconds per quarter note (120 BPM)
 static bool g_midi_record_first_event = false;      // for first-event silence capture
 static uint64_t g_midi_record_start_pc = 0;         // perf counter at record start
+static SDL_mutex *g_midi_record_mutex = NULL;       // guard record file writes/close
 #ifdef SUPPORT_KARAOKE
 // Karaoke / lyric display state
 static bool g_karaoke_enabled = true; // simple always-on toggle (future: UI setting)
@@ -2050,6 +2051,11 @@ static bool midi_record_start(const char *out_path)
         return false;
     if (!out_path || !out_path[0])
         return false;
+    // Ensure background MIDI service thread is running so recording work is off the UI thread
+    if (!g_midi_service_thread)
+    {
+        midi_service_start();
+    }
     // create temp path next to output or in /tmp
     snprintf(g_midi_record_path, sizeof(g_midi_record_path), "%s", out_path);
 #ifdef _WIN32
@@ -2058,11 +2064,22 @@ static bool midi_record_start(const char *out_path)
     // prefer /tmp for atomic finalization
     snprintf(g_midi_record_temp, sizeof(g_midi_record_temp), "/tmp/minibae_midi_record_%ld.tmp", (long)getpid());
 #endif
+    if (!g_midi_record_mutex)
+        g_midi_record_mutex = SDL_CreateMutex();
+    if (g_midi_record_mutex)
+        SDL_LockMutex(g_midi_record_mutex);
     g_midi_record_temp_fp = fopen(g_midi_record_temp, "wb+");
     if (!g_midi_record_temp_fp)
     {
+        if (g_midi_record_mutex)
+            SDL_UnlockMutex(g_midi_record_mutex);
         set_status_message("Failed to open temp file for MIDI record");
         return false;
+    }
+    // Attach a large buffer to reduce write syscall frequency during high-rate input
+    {
+        static unsigned char s_buf[256 * 1024];
+        setvbuf(g_midi_record_temp_fp, (char*)s_buf, _IOFBF, sizeof(s_buf));
     }
     // reset timers
     g_midi_record_start_ts = 0.0;
@@ -2084,6 +2101,8 @@ static bool midi_record_start(const char *out_path)
     tempo_evt[5] = (unsigned char)((g_midi_record_tempo >> 8) & 0xFF);
     tempo_evt[6] = (unsigned char)(g_midi_record_tempo & 0xFF);
     fwrite(tempo_evt, 1, sizeof(tempo_evt), g_midi_record_temp_fp);
+    if (g_midi_record_mutex)
+        SDL_UnlockMutex(g_midi_record_mutex);
 
     g_midi_recording = true;
     set_status_message("MIDI recording started");
@@ -2190,9 +2209,15 @@ static bool midi_record_stop(void)
 {
     if (!g_midi_recording)
         return false;
+    // Stop further writes from the MIDI thread before closing the file
+    g_midi_recording = false;
+    if (g_midi_record_mutex)
+        SDL_LockMutex(g_midi_record_mutex);
     if (g_midi_record_temp_fp)
         fclose(g_midi_record_temp_fp);
     g_midi_record_temp_fp = NULL;
+    if (g_midi_record_mutex)
+        SDL_UnlockMutex(g_midi_record_mutex);
     // Open temp for reading and final output for writing
     FILE *tf = fopen(g_midi_record_temp, "rb");
     if (!tf)
@@ -2725,9 +2750,8 @@ static int midi_service_thread_fn(void *unused)
             // If recording is active, write the event to temporary track storage
             if (g_midi_recording && g_midi_record_temp_fp)
             {
-                // RtMidi's timeStamp is DELTA seconds since previous message and works well.
-                // Special-case the very first event after record start to include initial silence
-                // using our high-resolution timer between record_start and first message.
+                // Use absolute monotonic timestamps captured at input time and compute deltas here.
+                // Special-case the very first event to include initial silence from record start.
                 double delta_us;
                 if (g_midi_record_first_event && g_midi_perf_freq > 0.0)
                 {
@@ -2737,10 +2761,16 @@ static int midi_service_thread_fn(void *unused)
                     delta_us = ((double)(pc - g_midi_record_start_pc) / g_midi_perf_freq) * 1000000.0;
                     g_midi_record_last_pc = pc;
                     g_midi_record_first_event = false;
+                    // Anchor last-ts baseline for subsequent events
+                    if (midi_ts > 0.0)
+                        g_midi_record_last_ts = midi_ts;
                 }
-                else if (midi_ts >= 0.0)
+                else if (midi_ts > 0.0 && g_midi_record_last_ts > 0.0)
                 {
-                    delta_us = midi_ts * 1000000.0; // seconds -> microseconds
+                    double dsec = midi_ts - g_midi_record_last_ts;
+                    if (dsec < 0.0) dsec = 0.0; // guard clock anomalies
+                    delta_us = dsec * 1000000.0;
+                    g_midi_record_last_ts = midi_ts;
                     g_midi_record_last_pc = SDL_GetPerformanceCounter();
                 }
                 else if (g_midi_perf_freq > 0.0)
@@ -2781,10 +2811,16 @@ static int midi_service_thread_fn(void *unused)
                 }
                 for (int i = tmp_len - 1; i >= 0; --i)
                     vlq[vlq_len++] = tmp[i];
-                fwrite(vlq, 1, vlq_len, g_midi_record_temp_fp);
-                // Write MIDI message bytes
-                fwrite(midi_buf, 1, midi_sz, g_midi_record_temp_fp);
-                fflush(g_midi_record_temp_fp);
+                if (g_midi_record_mutex)
+                    SDL_LockMutex(g_midi_record_mutex);
+                if (g_midi_record_temp_fp)
+                {
+                    fwrite(vlq, 1, vlq_len, g_midi_record_temp_fp);
+                    // Write MIDI message bytes (buffered; no per-event flush to avoid stalls)
+                    fwrite(midi_buf, 1, midi_sz, g_midi_record_temp_fp);
+                }
+                if (g_midi_record_mutex)
+                    SDL_UnlockMutex(g_midi_record_mutex);
             }
             unsigned char status = midi_buf[0];
             unsigned char mtype = status & 0xF0;
@@ -2800,15 +2836,13 @@ static int midi_service_thread_fn(void *unused)
 
             switch (mtype)
             {
-            case 0x80: // Note Off
+        case 0x80: // Note Off
                 if (midi_sz >= 3)
                 {
                     unsigned char note = midi_buf[1];
                     unsigned char vel = midi_buf[2];
-                    if (g_keyboard_active_notes_by_channel[mch][note])
-                    {
-                        BAESong_NoteOff(target, (unsigned char)mch, note, 0, 0);
-                    }
+            // Always forward NoteOff to engine to prevent stuck notes even if channel currently muted
+            BAESong_NoteOff(target, (unsigned char)mch, note, 0, 0);
                     unsigned char out[3] = {(unsigned char)(0x80 | (mch & 0x0F)), note, vel};
                     FORWARD_OUT_T(out, 3);
                     g_keyboard_active_notes_by_channel[mch][note] = 0;
@@ -2839,10 +2873,8 @@ static int midi_service_thread_fn(void *unused)
                     }
                     else
                     {
-                        if (g_keyboard_active_notes_by_channel[mch][note])
-                        {
-                            BAESong_NoteOff(target, (unsigned char)mch, note, 0, 0);
-                        }
+                        // Velocity 0 Note On == Note Off — always deliver to engine
+                        BAESong_NoteOff(target, (unsigned char)mch, note, 0, 0);
                         unsigned char out[3] = {(unsigned char)(0x80 | (mch & 0x0F)), note, 0};
                         FORWARD_OUT_T(out, 3);
                         g_keyboard_active_notes_by_channel[mch][note] = 0;
@@ -2871,7 +2903,12 @@ static int midi_service_thread_fn(void *unused)
                         g_midi_bank_msb[mch] = val;
                     else if (cc == 32)
                         g_midi_bank_lsb[mch] = val;
-                    if (g_thread_ch_enabled[mch])
+                    // Always route All Notes Off / All Sound Off regardless of mute state to prevent hangs
+                    if (cc == 120 || cc == 123)
+                    {
+                        BAESong_ControlChange(target, (unsigned char)mch, cc, val, 0);
+                    }
+                    else if (g_thread_ch_enabled[mch])
                     {
                         BAESong_ControlChange(target, (unsigned char)mch, cc, val, 0);
                     }
@@ -4776,11 +4813,9 @@ int main(int argc, char *argv[])
                         unsigned char note = midi_buf[1];
                         unsigned char vel = midi_buf[2];
                         unsigned char target_ch = (unsigned char)mch;
-                        // Always forward Note Off to engine if the note was previously marked active
-                        if (target && g_keyboard_active_notes_by_channel[mch][note])
-                        {
+                        // Always forward Note Off to engine to prevent stuck notes even if muted
+                        if (target)
                             BAESong_NoteOff(target, target_ch, note, 0, 0);
-                        }
                         unsigned char out[3] = {(unsigned char)(0x80 | (mch & 0x0F)), note, vel};
                         FORWARD_OUT(out, 3);
                         // Clear active flag regardless so stale notes don't persist
@@ -4818,11 +4853,9 @@ int main(int argc, char *argv[])
                         {
                             // Note On with velocity 0 == Note Off
                             unsigned char target_ch = (unsigned char)mch;
-                            // If note previously active, ensure engine receives NoteOff even if channel currently muted
-                            if (target && g_keyboard_active_notes_by_channel[mch][note])
-                            {
+                            // Always deliver NoteOff even if muted to prevent stuck notes
+                            if (target)
                                 BAESong_NoteOff(target, target_ch, note, 0, 0);
-                            }
                             unsigned char out[3] = {(unsigned char)(0x80 | (mch & 0x0F)), note, 0};
                             FORWARD_OUT(out, 3);
                             g_keyboard_active_notes_by_channel[mch][note] = 0;
@@ -4860,9 +4893,13 @@ int main(int argc, char *argv[])
                         }
                         {
                             unsigned char target_ch = (unsigned char)mch;
-                            // Apply control change only if channel is enabled. However, All Notes Off / All Sound Off
-                            // should always be sent so held notes are cleared even when muted.
-                            if (ch_enable[mch])
+                            // Always route All Notes Off / All Sound Off regardless of mute state to prevent hangs
+                            if (cc == 120 || cc == 123)
+                            {
+                                if (target)
+                                    BAESong_ControlChange(target, target_ch, cc, val, 0);
+                            }
+                            else if (ch_enable[mch])
                             {
                                 if (target)
                                     BAESong_ControlChange(target, target_ch, cc, val, 0);
