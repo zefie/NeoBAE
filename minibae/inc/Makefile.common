@@ -140,8 +140,8 @@ SRC		+=	DriverTools.c \
 
 ifneq ($(BUILD_GUI),)
 	# RtMidi (C wrapper) - provide real-time MIDI input for GUI
-	SRC += rtmidi_c.cpp RtMidi.cpp 
-	BAE_FLAGS += -DUSE_RTMIDI
+	SRC += rtmidi_c.cpp RtMidi.cpp midi_input.c midi_output.c
+	BAE_FLAGS += -DSUPPORT_MIDI_HW=1
 endif
 
 
@@ -209,7 +209,7 @@ endif
 # playbae = libMiniBAE srcs + playbae.c
 ifneq ($(BUILD_GUI),)
 	BAE_FLAGS += -DOUTPUT_TO_LOGFILE=1
-	SRC_BIN		:= $(SRC) gui_main.c midi_input.c midi_output.c
+	SRC_BIN		:= $(SRC) gui_main.c
 else
 	SRC_BIN		:= $(SRC) playbae.c
 endif

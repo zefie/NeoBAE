@@ -1453,7 +1453,7 @@ static bool g_exportDropdownOpen = false;
 // MIDI-record format dropdown (visible when MIDI-in is enabled)
 static bool g_midiRecordFormatDropdownOpen = false;
 static int g_midiRecordFormatIndex = 0; // 0 = MIDI, 1 = WAV, 2..n = MP3 bitrates
-#ifdef USE_RTMIDI
+#ifdef SUPPORT_MIDI_HW
 static const char *g_midiRecordFormatNames[] = {
     "MIDI Sequence",
     "PCM 16 WAV",
@@ -6392,7 +6392,7 @@ int main(int argc, char *argv[])
                 }
             }
         }
-#if 1
+#ifdef SUPPORT_MIDI_HW
         // If MIDI input is enabled, paint a semi-transparent overlay over the transport panel
         // to dim it and disable interactions except the Stop button (which we keep active).
         if (g_midi_input_enabled)
@@ -7891,7 +7891,7 @@ int main(int argc, char *argv[])
                 }
             }
 #endif
-
+#ifdef SUPPORT_MIDI_HW
             // MIDI input enable checkbox and device selector (left column, below Export)
             Rect midiEnRect = {leftX, dlg.y + 140, 18, 18};
             if (ui_toggle(R, midiEnRect, &g_midi_input_enabled, "MIDI Input", mx, my, mclick))
@@ -8239,7 +8239,7 @@ int main(int argc, char *argv[])
                     g_midi_input_device_dd_open = false;
                 }
             }
-
+#endif
             // Right column controls (checkboxes)
             Rect cbRect = {rightX, dlg.y + 36, 18, 18};
             if (ui_toggle(R, cbRect, &g_stereo_output, "Stereo Output", mx, my, mclick))
@@ -8398,6 +8398,7 @@ int main(int argc, char *argv[])
                 if (mclick && !point_in(mx, my, srRect) && !point_in(mx, my, box))
                     g_sampleRateDropdownOpen = false;
             }
+#ifdef SUPPORT_MIDI_HW            
             // MIDI input device dropdown
             if (g_midi_input_device_dd_open)
             {
@@ -8523,6 +8524,7 @@ int main(int argc, char *argv[])
                 if (mclick && !point_in(mx, my, midiOutDevRect) && !point_in(mx, my, box))
                     g_midi_output_device_dd_open = false;
             }
+#endif            
             if (g_volumeCurveDropdownOpen)
             {
                 int itemH = vcRect.h;
@@ -8733,11 +8735,13 @@ int main(int argc, char *argv[])
                 draw_text(R, dlg.x + pad, y, "This software makes use of the following software:", g_text_color);
                 y += 18;
                 const char *credits_page1[] = {
+                    // miniBAE is obviously required
                     "",
                     "miniBAE",
                     "Copyright (c) 2009 Beatnik, Inc All rights reserved.",
                     "Original miniBAE source code available at:",
                     "https://github.com/heyigor/miniBAE/",
+                    // SDL is also required for this GUI so no #ifdef is necessary
                     "",
                     "SDL2 & SDL2_ttf",
                     "Copyright (C) 1997-2025 Sam Lantinga <slouken@libsdl.org>",
@@ -8781,23 +8785,30 @@ int main(int argc, char *argv[])
                 }
             }
 
+#if defined(USE_MP3_DECODER) || defined(USE_MP3_ENCODER) || defined(SUPPORT_MIDI_HW)
             // Page 2: credits/licenses (part 2)
             else if (g_about_page == 2)
             {
                 draw_text(R, dlg.x + pad, y, "Additional credits and licenses:", g_text_color);
                 y += 18;
                 const char *credits_page2[] = {
+#ifdef USE_MP3_DECODER
                     "",
                     "minimp3",
                     "Licensed under the CC0",
                     "http://creativecommons.org/publicdomain/zero/1.0/",
+#endif
+#ifdef USE_MP3_ENCODER
                     "",
                     "libmp3lame",
                     "https://lame.sourceforge.io/",
+#endif
+#ifdef SUPPORT_MIDI_HW
                     "",
                     "RtMidi: realtime MIDI i/o C++ classes",
                     "Copyright (c) 2003-2023 Gary P. Scavone",
                     "https://github.com/thestk/rtmidi",
+#endif
                     NULL};
                 for (int i = 0; credits_page2[i]; ++i)
                 {
@@ -8835,7 +8846,7 @@ int main(int argc, char *argv[])
                         break;
                 }
             }
-
+#endif
             // Page navigation controls (bottom-right)
             Rect navPrev = {dlg.x + dlg.w - 70, dlg.y + dlg.h - 34, 24, 20};
             Rect navNext = {dlg.x + dlg.w - 34, dlg.y + dlg.h - 34, 24, 20};
