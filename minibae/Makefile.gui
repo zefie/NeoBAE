@@ -12,18 +12,9 @@ AR      	:= ar
 STRIP		:= strip
 
 OPTI            := -O2 -fPIC
-CFLAGS  	:= $(ARCH) $(OPTI) $(INC_PATH) -D_THREAD_SAFE -DEMBED_FONT_TTF -Wno-unused-value
+CFLAGS  	:= $(ARCH) $(OPTI) $(INC_PATH) -D_THREAD_SAFE -Wno-unused-value
 
-# If EMBED_FONT_TTF specified, generate embedded_font.h and define GUI_EMBED_FONT
-ifdef EMBED_FONT_TTF
-CFLAGS += -DGUI_EMBED_FONT
-EMBED_FONT_HEADER := gui/embedded_font.h
-$(EMBED_FONT_HEADER): $(EMBED_FONT_TTF) ../scripts/embed_ttf.py
-	@echo @embed $<
-	@python3 ../scripts/embed_ttf.py $(EMBED_FONT_TTF) $(EMBED_FONT_HEADER)
-# Ensure binary depends on generated header (order-only so it doesn't rebuild objects unnecessarily)
-$(TARGET_BIN): | $(EMBED_FONT_HEADER)
-endif
+
 
 ifneq ($(BAE_FLAGS),)
 	CFLAGS	+= $(BAE_FLAGS)
@@ -84,14 +75,44 @@ else
 	endif
 endif
 
+ifneq ($(ENABLE_MIDI_HW),)
+	# System ALSA and PulseAudio detection (pkg-config preferred, fallbacks provided)
+	ifneq (,$(strip $(shell pkg-config --version 2>/dev/null)))
+
+		ifneq ($(ENABLE_ALSA),)
+			# Try ALSA via pkg-config
+			ALSA_CFLAGS := $(shell pkg-config --cflags alsa 2>/dev/null)
+			ALSA_LIBS   := $(shell pkg-config --libs alsa 2>/dev/null)
+			ifneq ($(ALSA_LIBS),)
+				CFLAGS += $(ALSA_CFLAGS) -D__LINUX_ALSA__
+				LIBS := $(ALSA_LIBS) $(LIBS)
+			endif # ALSA_LIBS
+		endif # ENABLE_ALSA
+
+		ifneq ($(ENABLE_JACK),)
+			# Try JACK via pkg-config (jack)
+			JACK_CFLAGS := $(shell pkg-config --cflags jack 2>/dev/null)
+			JACK_LIBS   := $(shell pkg-config --libs jack 2>/dev/null)
+			ifneq ($(JACK_LIBS),)
+				CFLAGS += $(JACK_CFLAGS) -D__UNIX_JACK__
+				LIBS := $(JACK_LIBS) $(LIBS)
+			endif # JACK_LIBS
+		endif # ENABLE_JACK
+	endif # pkg-config check
+endif # ENABLE_MIDI_HW
+
 CXXFLAGS 	:= $(CFLAGS)
 ifneq ($(MP3_ENC),)
     LD := $(CXX)
     LIBS += -lstdc++ -lsupc++
 endif
 
-
 all: $(TARGET_LIB).a ${TARGET_LIB}.so $(TARGET_BIN)
+
+ifdef EMBED_TTF_FONT
+# ensure gui_main.o is built after the generated header so the include is available
+$(OBJ_DIR)gui_main.o: $(EMBED_FONT_HEADER)
+endif
 
 $(TARGET_LIB).a: $(OBJ)
 	@mkdir -p $(TARGET_OUT)

@@ -1,14 +1,15 @@
 BAE_BUILT_IN_PATCHES	:= 1
 BAE_API			:= SDL2
 DEBUG			:= 0
-BUILD_GUI   := 1
+BUILD_GUI   	:= 1
+ENABLE_MIDI_HW	:= 1
 include inc/Makefile.common
 SOURCE_DIR = $(CURDIR)
 
 ifeq ($(BITS),32)
-CROSS := i686-w64-mingw32-
+	CROSS := i686-w64-mingw32-
 else
-CROSS := x86_64-w64-mingw32-
+	CROSS := x86_64-w64-mingw32-
 endif
 
 ARCH		:= -static
@@ -25,8 +26,13 @@ DLLTOOL		:= $(CROSS)dlltool
 WINDRES		:= $(CROSS)windres
 
 OPTI            := -O2 -fPIC
-CFLAGS  	:= $(ARCH) $(OPTI) $(INC_PATH) -D_THREAD_SAFE -DEMBED_FONT_TTF -Wno-unused-value -D__WINDOWS_MM__
+CFLAGS  	:= $(ARCH) $(OPTI) $(INC_PATH) -D_THREAD_SAFE -DEMBED_FONT_TTF -Wno-unused-value
 
+
+ifneq ($(ENABLE_MIDI_HW),)
+	# WinMM MIDI HW Support
+	CFLAGS += -D__WINDOWS_MM__ 
+endif
 
 ifneq ($(BAE_FLAGS),)
 	CFLAGS	+= $(BAE_FLAGS)
@@ -76,6 +82,11 @@ LIBS = \
 			-lodbc32 \
 			-lodbccp32
 
+ifdef EMBED_TTF_FONT
+# ensure gui_main.o is built after the generated header so the include is available
+$(OBJ_DIR)gui_main.o: $(EMBED_FONT_HEADER)
+endif
+
 all: $(TARGET_LIB).a ${TARGET_LIB}.dll $(TARGET_BIN)
 
 $(TARGET_LIB).a: $(OBJ)
@@ -94,9 +105,9 @@ $(TARGET_LIB).dll: ${OBJ}
 $(TARGET_BIN): ${OBJ_BIN}
 	@mkdir -p $(TARGET_OUT)/Banks
 	$(${SOURCE_DIR}/src/banks/copy.sh $(TARGET_OUT)/Banks)
-	@if [ -f gui/minibae_gui.rc ]; then \
+	@if [ -f src/gui/minibae_gui.rc ]; then \
 		echo "Compiling resource file..."; \
-		${WINDRES} gui/minibae_gui.rc $(OBJ_DIR)minibae_gui.o; \
+		${WINDRES} src/gui/minibae_gui.rc $(OBJ_DIR)minibae_gui.o; \
 		${LD} -o $(TARGET_OUT)${TARGET_BIN} ${LDFLAGS} ${OBJ_BIN} $(OBJ_DIR)minibae_gui.o -Wl,--subsystem,windows ${LIBS}; \
 	else \
 		${LD} -o $(TARGET_OUT)${TARGET_BIN} ${LDFLAGS} ${OBJ_BIN} -Wl,--subsystem,windows ${LIBS}; \

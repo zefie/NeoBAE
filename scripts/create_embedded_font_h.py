@@ -7,7 +7,7 @@ Environment/flags:
     extern const unsigned char embedded_font_data[];
     extern const unsigned int embedded_font_size;
   And (unless --no-guard) include guard GUI_EMBEDDED_FONT_H.
-After generating the header, build with -DGUI_EMBED_FONT to enable usage.
+After generating the header, build with -DEMBED_TTF_FONT to enable usage.
 """
 import sys, os, textwrap
 
@@ -43,7 +43,9 @@ def main():
         f.write(f"#define embedded_font_data {sym_name}_data\n")
         f.write(f"#define embedded_font_size {sym_name}_size\n")
         f.write("\n#endif // GUI_EMBEDDED_FONT_H\n")
-    print(f"Wrote {out_path} ({len(data)} bytes) as C array ({len(data)} bytes raw)")
+        # Perform a stat on the output file to get its size
+    stat_info = os.stat(out_path)
+    print(f"Wrote {out_path} ({stat_info.st_size} bytes) as C array ({len(data)} bytes raw)")
     return 0
 
 if __name__ == '__main__':

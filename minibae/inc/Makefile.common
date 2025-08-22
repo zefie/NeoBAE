@@ -3,6 +3,7 @@ TEST_OUT_DIR	:= tests/
 TARGET_OUT	:= bin/
 BAE_FLAGS	:=
 MP3_ENC := 1
+EMBED_TTF_FONT := src/thirdparty/fonts/HelveticaNeue.ttf
 
 # Begin Allow Overrides
 ifeq ($(TARGET_LIB),)
@@ -29,7 +30,7 @@ vpath	%.c src/banks/patches111
 vpath	%.c src/BAE_MPEG_Source_II
 
 ifneq ($(BUILD_GUI),) 
-	vpath	%.c gui
+	vpath	%.c src/gui
 else
 	vpath	%.c src/playbae
 endif
@@ -95,6 +96,7 @@ endif
 # Compile built-in patches by default
 ifeq ($(BAE_BUILT_IN_PATCHES),)
 	BAE_BUILT_IN_PATCHES	:= 1
+	BAE_FLAGS += -D_BUILT_IN_PATCHES=1
 endif
 
 # Debug
@@ -138,13 +140,6 @@ SRC		+=	DriverTools.c \
 			g72x.c \
 			sha1mini.c
 
-ifneq ($(BUILD_GUI),)
-	# RtMidi (C wrapper) - provide real-time MIDI input for GUI
-	SRC += rtmidi_c.cpp RtMidi.cpp midi_input.c midi_output.c
-	BAE_FLAGS += -DSUPPORT_MIDI_HW=1
-endif
-
-
 # Compile in patches if desired
 ifeq ($(BAE_BUILT_IN_PATCHES),1)
 	SRC +=		BAEPatches.c
@@ -164,16 +159,16 @@ ifeq ($(MP3_ENC),1)
 	# Let LAME detect standard headers correctly on our build host
 	BAE_FLAGS += -DUSE_MPEG_ENCODER=1 -DUSE_LAME_ENCODER=1 -DIEEE_FLOAT -DSTDC_HEADERS=1 -DHAVE_STDINT_H=1 -DHAVE_INTTYPES_H=1 -DHAVE_CONFIG_H=1
 	# Add LAME include path so adapter can find "lame.h"
-	INC_PATH += -Isrc/thirdparty/lame-3.100/include
+	INC_PATH += -Isrc/thirdparty/lame-3.100-slim/include
 	# Also make top-level LAME dir visible so <config.h> (provided below) is found
-	INC_PATH += -Isrc/thirdparty/lame-3.100
-	INC_PATH += -Isrc/thirdparty/lame-3.100/libmp3lame
+	INC_PATH += -Isrc/thirdparty/lame-3.100-slim
+	INC_PATH += -Isrc/thirdparty/lame-3.100-slim/libmp3lame
 	# Let the build find LAME source files (libmp3lame and mpglib)
-	vpath	%.c src/thirdparty/lame-3.100/libmp3lame
-	vpath	%.c src/thirdparty/lame-3.100/mpglib
+	vpath	%.c src/thirdparty/lame-3.100-slim/libmp3lame
+	vpath	%.c src/thirdparty/lame-3.100-slim/mpglib
 	# Add all libmp3lame and mpglib C sources and the LAME adapter.
 	# Using wildcard keeps this list maintainable when LAME sources change.
-	ifeq ($(shell [ -d src/thirdparty/lame-3.100/libmp3lame ] && echo yes),yes)
+	ifeq ($(shell [ -d src/thirdparty/lame-3.100-slim/libmp3lame ] && echo yes),yes)
 		SRC += bitstream.c \
 			newmdct.c \
 			tables.c \
@@ -206,12 +201,19 @@ ifeq ($(MP3_ENC),1)
 	SRC += XMPEG_lame_encoder.cpp
 endif
 
+
 # playbae = libMiniBAE srcs + playbae.c
 ifneq ($(BUILD_GUI),)
 	BAE_FLAGS += -DOUTPUT_TO_LOGFILE=1
-	SRC_BIN		:= $(SRC) gui_main.c
+	SRC_BIN		:= $(SRC) gui_logging.c gui_theme.c gui_widgets.c gui_text.c gui_midi_vkbd.c gui_karaoke.c gui_export.c gui_dialogs.c gui_bae.c gui_settings.c gui_main.c
 else
 	SRC_BIN		:= $(SRC) playbae.c
+endif
+
+ifneq ($(ENABLE_MIDI_HW),)
+	# RtMidi (C wrapper) - provide real-time MIDI input for GUI
+	BAE_FLAGS += -DSUPPORT_MIDI_HW=1
+	SRC_BIN +=  gui_midi_hw.c gui_midi_hw_input.c gui_midi_hw_output.c rtmidi_c.cpp RtMidi.cpp
 endif
 
 ifneq ($(LOGFILE),)
@@ -221,5 +223,21 @@ endif
 OBJ_DIR 	:= $(BUILD_DIR)obj/
 OBJ 		:= $(addprefix $(OBJ_DIR),$(addsuffix .o,$(basename ${SRC})))
 OBJ_BIN 	:= $(addprefix $(OBJ_DIR),$(addsuffix .o,$(basename ${SRC_BIN})))
+
+ifeq ($(BUILD_GUI),1)
+
+# If EMBED_TTF_FONT specified, generate embedded_font.h and define EMBED_TTF_FONT
+ifdef EMBED_TTF_FONT
+BAE_FLAGS += -DEMBED_TTF_FONT -I$(OBJ_DIR)
+
+EMBED_FONT_HEADER := $(OBJ_DIR)embedded_font.h
+$(EMBED_FONT_HEADER): $(EMBED_TTF_FONT) ../scripts/create_embedded_font_h.py
+	@echo @embed $<
+	@mkdir -p $(dir $(EMBED_FONT_HEADER))
+	@python3 ../scripts/create_embedded_font_h.py $(EMBED_TTF_FONT) $(EMBED_FONT_HEADER)
+
+endif # EMBED_FONT_HEADER
+
+endif # BUILD_GUI
 
 #### End Makefile.common
