@@ -7765,6 +7765,95 @@ BAEResult BAESong_ParseMidiData(BAESong song, unsigned char commandByte, unsigne
     return theErr;
 }
 
+// BAESong_InjectMidiMessage
+// Injects an arbitrary raw MIDI message into the song's raw MIDI event path.
+BAEResult BAESong_InjectMidiMessage(BAESong song, const unsigned char *message, int16_t length, uint32_t time)
+{
+    BAEResult theErr = BAE_NO_ERROR;
+
+    if (!song || song->mID != OBJECT_ID) return BAE_NULL_OBJECT;
+    if (!message || length <= 0) return BAE_PARAM_ERR;
+
+    BAE_AcquireMutex(song->mLock);
+#ifdef _DEBUG
+    // Debug: descriptive log for injected raw MIDI message
+    {
+        char desc[256]; desc[0] = '\0';
+        unsigned char st = message[0];
+        if (st < 0xF0) {
+            unsigned char mtype = st & 0xF0; unsigned char mch = st & 0x0F;
+            switch (mtype) {
+                case 0x80:
+                    if (length >= 3) snprintf(desc, sizeof(desc), "NoteOff ch=%u note=%u vel=%u", mch, message[1], message[2]);
+                    else snprintf(desc, sizeof(desc), "NoteOff ch=%u (truncated)", mch);
+                    break;
+                case 0x90:
+                    if (length >= 3) snprintf(desc, sizeof(desc), "NoteOn ch=%u note=%u vel=%u", mch, message[1], message[2]);
+                    else snprintf(desc, sizeof(desc), "NoteOn ch=%u (truncated)", mch);
+                    break;
+                case 0xA0:
+                    if (length >= 3) snprintf(desc, sizeof(desc), "PolyAftertouch ch=%u note=%u pressure=%u", mch, message[1], message[2]);
+                    else snprintf(desc, sizeof(desc), "PolyAftertouch ch=%u (truncated)", mch);
+                    break;
+                case 0xB0:
+                    if (length >= 3) snprintf(desc, sizeof(desc), "ControlChange ch=%u cc=%u val=%u", mch, message[1], message[2]);
+                    else snprintf(desc, sizeof(desc), "ControlChange ch=%u (truncated)", mch);
+                    break;
+                case 0xC0:
+                    if (length >= 2) snprintf(desc, sizeof(desc), "ProgramChange ch=%u prog=%u", mch, message[1]);
+                    else snprintf(desc, sizeof(desc), "ProgramChange ch=%u (truncated)", mch);
+                    break;
+                case 0xD0:
+                    if (length >= 2) snprintf(desc, sizeof(desc), "ChannelPressure ch=%u pressure=%u", mch, message[1]);
+                    else snprintf(desc, sizeof(desc), "ChannelPressure ch=%u (truncated)", mch);
+                    break;
+                case 0xE0:
+                    if (length >= 3) snprintf(desc, sizeof(desc), "PitchBend ch=%u lsb=%u msb=%u", mch, message[1], message[2]);
+                    else snprintf(desc, sizeof(desc), "PitchBend ch=%u (truncated)", mch);
+                    break;
+                default:
+                    snprintf(desc, sizeof(desc), "ChannelMessage 0x%02X ch=%u", mtype, mch);
+                    break;
+            }
+        } else {
+            switch (st) {
+                case 0xF0: snprintf(desc, sizeof(desc), "SysEx start len=%d", (int)length); break;
+                case 0xF7: snprintf(desc, sizeof(desc), "SysEx continuation/EOX len=%d", (int)length); break;
+                case 0xF1: snprintf(desc, sizeof(desc), "MTC Quarter Frame"); break;
+                case 0xF2: snprintf(desc, sizeof(desc), "Song Position Pointer"); break;
+                case 0xF3: snprintf(desc, sizeof(desc), "Song Select"); break;
+                case 0xF6: snprintf(desc, sizeof(desc), "Tune Request"); break;
+                case 0xF8: snprintf(desc, sizeof(desc), "Timing Clock"); break;
+                case 0xFA: snprintf(desc, sizeof(desc), "Start"); break;
+                case 0xFB: snprintf(desc, sizeof(desc), "Continue"); break;
+                case 0xFC: snprintf(desc, sizeof(desc), "Stop"); break;
+                case 0xFE: snprintf(desc, sizeof(desc), "Active Sensing"); break;
+                case 0xFF: snprintf(desc, sizeof(desc), "System Reset/Meta"); break;
+                default: snprintf(desc, sizeof(desc), "System 0x%02X len=%d", st, (int)length); break;
+            }
+        }
+
+        int dump_len = (length > 64) ? 64 : length;
+        char hexdump[64*3 + 16]; hexdump[0] = '\0';
+        for(int i=0;i<dump_len;i++){ char tmp[8]; snprintf(tmp,sizeof(tmp), "%02X ", message[i]); strncat(hexdump, tmp, sizeof(hexdump)-strlen(hexdump)-1); }
+        if(length > dump_len) strncat(hexdump, "...", sizeof(hexdump)-strlen(hexdump)-1);
+        BAE_PRINTF("BAE-INJECT: time=%u %s (len=%d) hex=%s\n", time, desc, (int)length, hexdump);
+    }
+#endif
+    // If the GM_Song has a registered raw MIDI event callback, call it directly.
+    if (song->pSong && song->pSong->midiEventCallbackPtr)
+    {
+        GM_MidiEventCallbackPtr cb = song->pSong->midiEventCallbackPtr;
+        void *cbRef = song->pSong->midiEventCallbackReference;
+        uint32_t t_us = 0;
+        if (song->pSong) t_us = (uint32_t)song->pSong->songMicroseconds;
+        (*cb)(NULL, song->pSong, message, length, t_us, cbRef);
+    }
+    BAE_ReleaseMutex(song->mLock);
+
+    return theErr;
+}
+
 
 // BAESong_Preroll()
 // --------------------------------------

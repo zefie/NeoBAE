@@ -2092,6 +2092,11 @@ BAEResult           BAESong_ParseMidiData(BAESong song,
                             unsigned char data3Byte,
                             uint32_t time);
 
+// Inject an arbitrary raw MIDI message (can be SysEx) into the song's
+// raw MIDI event path. This will invoke the song's registered
+// GM_MidiEventCallbackPtr (if any) with the provided message and length.
+BAEResult           BAESong_InjectMidiMessage(BAESong song, const unsigned char *message, int16_t length, uint32_t time);
+
 
 // BAESong_NoteOff()
 // --------------------------------------

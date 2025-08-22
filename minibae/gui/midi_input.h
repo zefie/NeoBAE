@@ -21,4 +21,7 @@ void midi_input_shutdown(void);
 // the message length (1..1024). timestamp is seconds since some epoch (as double).
 bool midi_input_poll(unsigned char *buffer, unsigned int *size_out, double *timestamp);
 
+// Return number of messages that were dropped due to full input queue since init
+unsigned int midi_input_drops(void);
+
 #endif // MIDI_INPUT_H
