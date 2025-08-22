@@ -770,6 +770,16 @@ static int g_keyboard_base_octave = 4;
 static bool g_keyboard_map_initialized = false;
 // MIDI input settings
 static bool g_midi_input_enabled = false; // enable external MIDI input keyboard
+// Background MIDI service thread to decouple MIDI input from the UI loop (so drags don't stall input)
+static SDL_Thread *g_midi_service_thread = NULL;
+static volatile int g_midi_service_quit = 0;
+// Thread-visible copy of per-channel enable flags (1=enabled, 0=muted)
+static volatile unsigned char g_thread_ch_enabled[16] = {1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1};
+
+// Forward decls for MIDI service helpers
+static int  midi_service_thread_fn(void *unused);
+static void midi_service_start(void);
+static void midi_service_stop(void);
 static int g_midi_input_device_index = 0; // selected input device index
 static bool g_midi_input_device_dd_open = false; // dropdown open state
 static int g_midi_input_device_count = 0; // cached input device count
@@ -1667,10 +1677,132 @@ static bool load_bank_simple(const char *path, bool save_to_settings, int reverb
 
 // map_rate_from_hz provided above
 
+// MIDI service thread implementation: polls midi_input queue and forwards to engine/live song.
+static int midi_service_thread_fn(void *unused){
+    (void)unused;
+    // Avoid CPU spin: short sleep when idle
+    const Uint32 idle_sleep_ms = 2;
+    while(!g_midi_service_quit){
+        if(!(g_midi_input_enabled)) { SDL_Delay(idle_sleep_ms); continue; }
+        // Ensure a valid target exists
+        BAESong target = g_bae.song ? g_bae.song : g_live_song;
+        if(!target){ SDL_Delay(idle_sleep_ms); continue; }
+        // Drain queued MIDI quickly
+        unsigned char midi_buf[1024]; unsigned int midi_sz = 0; double midi_ts = 0.0;
+        bool had_any = false;
+        while(!g_midi_service_quit && midi_input_poll(midi_buf, &midi_sz, &midi_ts)){
+            had_any = true;
+            if(midi_sz < 1) continue;
+            unsigned char status = midi_buf[0];
+            unsigned char mtype = status & 0xF0;
+            unsigned char mch = status & 0x0F;
+
+            // Mirror to external MIDI out if enabled
+            #define FORWARD_OUT_T(buf,len) do { if(g_midi_output_enabled) midi_output_send((buf),(len)); } while(0)
+
+            switch(mtype){
+                case 0x80: // Note Off
+                    if(midi_sz >= 3){
+                        unsigned char note = midi_buf[1];
+                        unsigned char vel  = midi_buf[2];
+                        if(g_keyboard_active_notes_by_channel[mch][note]){
+                            BAESong_NoteOff(target, (unsigned char)mch, note, 0, 0);
+                        }
+                        unsigned char out[3] = { (unsigned char)(0x80 | (mch & 0x0F)), note, vel }; FORWARD_OUT_T(out,3);
+                        g_keyboard_active_notes_by_channel[mch][note] = 0;
+                    }
+                    break;
+                case 0x90: // Note On (or velocity 0 => off)
+                    if(midi_sz >= 3){
+                        unsigned char note = midi_buf[1];
+                        unsigned char vel  = midi_buf[2];
+                        if(vel){
+                            if(g_thread_ch_enabled[mch]){
+                                BAESong_NoteOnWithLoad(target, (unsigned char)mch, note, vel, 0);
+                                g_keyboard_active_notes_by_channel[mch][note] = 1;
+                                float lvl_in = (float)vel / 127.0f;
+                                if(lvl_in > g_channel_vu[mch]) g_channel_vu[mch] = lvl_in;
+                                if(lvl_in > g_channel_peak_level[mch]){ g_channel_peak_level[mch] = lvl_in; g_channel_peak_hold_until[mch] = SDL_GetTicks() + g_channel_peak_hold_ms; }
+                            }
+                            unsigned char out[3] = { (unsigned char)(0x90 | (mch & 0x0F)), note, vel }; FORWARD_OUT_T(out,3);
+                        } else {
+                            if(g_keyboard_active_notes_by_channel[mch][note]){
+                                BAESong_NoteOff(target, (unsigned char)mch, note, 0, 0);
+                            }
+                            unsigned char out[3] = { (unsigned char)(0x80 | (mch & 0x0F)), note, 0 }; FORWARD_OUT_T(out,3);
+                            g_keyboard_active_notes_by_channel[mch][note] = 0;
+                        }
+                    }
+                    break;
+                case 0xA0: // poly aftertouch
+                    if(midi_sz >= 3){
+                        unsigned char note = midi_buf[1];
+                        unsigned char pressure = midi_buf[2];
+                        if(g_thread_ch_enabled[mch]){ BAESong_KeyPressure(target, (unsigned char)mch, note, pressure, 0); }
+                        unsigned char out[3] = { (unsigned char)(0xA0 | (mch & 0x0F)), note, pressure }; FORWARD_OUT_T(out,3);
+                    }
+                    break;
+                case 0xB0: // CC
+                    if(midi_sz >= 3){
+                        unsigned char cc = midi_buf[1];
+                        unsigned char val = midi_buf[2];
+                        if(cc == 0) g_midi_bank_msb[mch] = val; else if(cc == 32) g_midi_bank_lsb[mch] = val;
+                        if(g_thread_ch_enabled[mch]){ BAESong_ControlChange(target, (unsigned char)mch, cc, val, 0); }
+                        unsigned char out[3] = { (unsigned char)(0xB0 | (mch & 0x0F)), cc, val }; FORWARD_OUT_T(out,3);
+                    }
+                    break;
+                case 0xC0: // Program Change
+                    if(midi_sz >= 2){
+                        unsigned char prog = midi_buf[1];
+                        if(g_thread_ch_enabled[mch]){ BAESong_ProgramChange(target, (unsigned char)mch, prog, 0); }
+                        unsigned char out[2] = { (unsigned char)(0xC0 | (mch & 0x0F)), prog }; FORWARD_OUT_T(out,2);
+                    }
+                    break;
+                case 0xD0: // Channel pressure
+                    if(midi_sz >= 2){
+                        unsigned char press = midi_buf[1];
+                        if(g_thread_ch_enabled[mch]){ BAESong_ChannelPressure(target, (unsigned char)mch, press, 0); }
+                        unsigned char out[2] = { (unsigned char)(0xD0 | (mch & 0x0F)), press }; FORWARD_OUT_T(out,2);
+                    }
+                    break;
+                case 0xE0: // Pitch bend
+                    if(midi_sz >= 3){
+                        unsigned char lsb = midi_buf[1];
+                        unsigned char msb = midi_buf[2];
+                        if(g_thread_ch_enabled[mch]){ BAESong_PitchBend(target, (unsigned char)mch, lsb, msb, 0); }
+                        unsigned char out[3] = { (unsigned char)(0xE0 | (mch & 0x0F)), lsb, msb }; FORWARD_OUT_T(out,3);
+                    }
+                    break;
+                default:
+                    // Ignore system messages here; rtmidi_in_ignore_types filtered realtime already.
+                    break;
+            }
+        }
+        if(!had_any) SDL_Delay(idle_sleep_ms);
+    }
+    return 0;
+}
+
+static void midi_service_start(void){
+    if(g_midi_service_thread) return;
+    g_midi_service_quit = 0;
+    g_midi_service_thread = SDL_CreateThread(midi_service_thread_fn, "midi_svc", NULL);
+}
+
+static void midi_service_stop(void){
+    if(!g_midi_service_thread) return;
+    g_midi_service_quit = 1;
+    SDL_WaitThread(g_midi_service_thread, NULL);
+    g_midi_service_thread = NULL;
+}
+
 // Recreate mixer with new sample rate / stereo setting preserving current playback state where possible.
 static bool recreate_mixer_and_restore(int sampleRateHz, bool stereo, int reverbType,
                                        int transpose, int tempo, int volume, bool loopPlay,
                                        bool ch_enable[16]){
+    // If MIDI service is active, stop it before tearing down mixer/songs to avoid races.
+    bool resume_midi_service = (g_midi_service_thread != NULL);
+    if(resume_midi_service){ midi_service_stop(); }
     if(g_exporting){
         set_status_message("Can't change audio format during export");
         return false;
@@ -1741,6 +1873,20 @@ static bool recreate_mixer_and_restore(int sampleRateHz, bool stereo, int reverb
         }
     }
     set_status_message("Audio device reconfigured");
+    // If MIDI input is enabled, ensure MIDI input device is (re)initialized and service resumed
+    if(g_midi_input_enabled){
+        midi_input_shutdown();
+        if(g_midi_input_device_index >= 0 && g_midi_input_device_index < g_midi_input_device_count){
+            int api = g_midi_device_api[g_midi_input_device_index];
+            int port = g_midi_device_port[g_midi_input_device_index];
+            midi_input_init("miniBAE", api, port);
+        } else {
+            midi_input_init("miniBAE", -1, -1);
+        }
+        midi_service_start();
+    } else if(resume_midi_service) {
+        // Service was running before but MIDI input no longer enabled; keep it stopped.
+    }
     return true;
 }
 
@@ -2748,12 +2894,15 @@ int main(int argc, char *argv[]){
         if(playing){ progress = bae_get_pos_ms(); duration = bae_get_len_ms(); }
         BAEMixer_Idle(g_bae.mixer); // ensure processing if needed
         bae_update_channel_mutes(ch_enable);
+    // Publish current channel enables to the MIDI thread (plain byte store is fine)
+    for(int _ci=0; _ci<16; ++_ci){ g_thread_ch_enabled[_ci] = ch_enable[_ci] ? 1 : 0; }
 
         // Poll MIDI input and route Note On/Off to the virtual keyboard channel.
         // We do not directly toggle g_keyboard_active_notes here because the
         // keyboard drawing code queries the engine via BAESong_GetActiveNotes
         // later each frame; sending events to the engine is sufficient.
-    if (g_midi_input_enabled && (g_bae.song || g_live_song)) {
+    // When the background MIDI service thread is active, it handles polling; avoid double-processing here.
+    if (!g_midi_service_thread && g_midi_input_enabled && (g_bae.song || g_live_song)) {
             unsigned char midi_buf[1024]; unsigned int midi_sz = 0; double midi_ts = 0.0;
             while (midi_input_poll(midi_buf, &midi_sz, &midi_ts)) {
                 if (midi_sz < 1) continue;
@@ -4451,9 +4600,11 @@ int main(int argc, char *argv[]){
 
         // MIDI input enable checkbox and device selector (left column, below Export)
             Rect midiEnRect = { leftX, dlg.y + 140, 18, 18 };
-            if(ui_toggle(R, midiEnRect, &g_midi_input_enabled, "MIDI Input", mx,my,mclick)){
+        if(ui_toggle(R, midiEnRect, &g_midi_input_enabled, "MIDI Input", mx,my,mclick)){
                 // initialize or shutdown midi input as requested
                 if(g_midi_input_enabled){
+            // Start background service first (so events queue safely as soon as RtMidi is opened)
+            midi_service_start();
                     // When enabling MIDI In, stop and unload any current media so the live synth takes over
                     // Stop and delete loaded song or sound if present
                     if(g_exporting){ bae_stop_wav_export(); }
@@ -4473,6 +4624,8 @@ int main(int argc, char *argv[]){
                         midi_input_init("miniBAE", -1, -1);
                     }
                 } else {
+            // Stop service thread first to avoid racing engine teardown
+            midi_service_stop();
                     // Capture current engine targets (both) before shutdown
                     BAESong saved_song = g_bae.song;
                     BAESong saved_live = g_live_song;
@@ -4639,13 +4792,14 @@ int main(int argc, char *argv[]){
                     else { if(prePosMs > 0){ bae_seek_ms(prePosMs); progress = prePosMs; duration = bae_get_len_ms(); } else { progress = 0; duration = bae_get_len_ms(); } playing=false; }
                     // If MIDI input was active, reinitialize it so hardware stays in a consistent state
                     if(g_midi_input_enabled){
-                        midi_input_shutdown();
+                        // Stop service thread prior to changing devices
+                        midi_service_stop(); midi_input_shutdown();
                         if(g_midi_input_device_index >= 0 && g_midi_input_device_index < g_midi_input_device_count){
                             int api = g_midi_device_api[g_midi_input_device_index];
                             int port = g_midi_device_port[g_midi_input_device_index];
-                            midi_input_init("miniBAE", api, port);
+                            midi_input_init("miniBAE", api, port); midi_service_start();
                         } else {
-                            midi_input_init("miniBAE", -1, -1);
+                            midi_input_init("miniBAE", -1, -1); midi_service_start();
                         }
                     }
                 }
@@ -4689,13 +4843,13 @@ int main(int argc, char *argv[]){
                     if(over && mclick){ bool changed = (g_sample_rate_hz != r); g_sample_rate_hz = r; g_sampleRateDropdownOpen=false; if(changed){ int prePosMs = bae_get_pos_ms(); bool wasPlayingBefore = g_bae.is_playing; if(recreate_mixer_and_restore(g_sample_rate_hz, g_stereo_output, reverbType, transpose, tempo, volume, loopPlay, ch_enable)){ if(wasPlayingBefore){ progress = bae_get_pos_ms(); duration = bae_get_len_ms(); } else if(prePosMs > 0){ bae_seek_ms(prePosMs); progress=prePosMs; duration=bae_get_len_ms(); playing=false; } else { progress=0; duration=bae_get_len_ms(); playing=false; }
                     // If MIDI input was active when we changed sample rate, reinit MIDI hardware so it stays connected
                     if(g_midi_input_enabled){
-                        midi_input_shutdown();
+                        midi_service_stop(); midi_input_shutdown();
                         if(g_midi_input_device_index >= 0 && g_midi_input_device_index < g_midi_input_device_count){
                             int api = g_midi_device_api[g_midi_input_device_index];
                             int port = g_midi_device_port[g_midi_input_device_index];
-                            midi_input_init("miniBAE", api, port);
+                            midi_input_init("miniBAE", api, port); midi_service_start();
                         } else {
-                            midi_input_init("miniBAE", -1, -1);
+                            midi_input_init("miniBAE", -1, -1); midi_service_start();
                         }
                     }
                     save_settings(g_current_bank_path[0]?g_current_bank_path:NULL, reverbType, loopPlay); } } }
@@ -4721,7 +4875,7 @@ int main(int argc, char *argv[]){
                         if(i < g_midi_input_device_count-1){ SDL_SetRenderDrawColor(R, g_panel_border.r, g_panel_border.g, g_panel_border.b, 255); SDL_RenderDrawLine(R, ir.x, ir.y+ir.h, ir.x+ir.w, ir.y+ir.h); }
                         draw_text(R, ir.x+6, ir.y+6, g_midi_device_name_cache[i], g_button_text);
                         if(over && mclick){ g_midi_input_device_index = i; g_midi_input_device_dd_open = false; // reopen midi input with chosen device
-                            midi_input_shutdown(); midi_input_init("miniBAE", g_midi_device_api[i], g_midi_device_port[i]); save_settings(g_current_bank_path[0]?g_current_bank_path:NULL, reverbType, loopPlay);
+                            midi_service_stop(); midi_input_shutdown(); midi_input_init("miniBAE", g_midi_device_api[i], g_midi_device_port[i]); midi_service_start(); save_settings(g_current_bank_path[0]?g_current_bank_path:NULL, reverbType, loopPlay);
                         }
                     }
                 }
@@ -5057,6 +5211,9 @@ int main(int argc, char *argv[]){
     if(reverbType != lastReverbType){ bae_set_reverb(reverbType); lastReverbType = reverbType; }
     }
 
+    // Stop MIDI service and close devices before tearing down SDL
+    midi_service_stop();
+    midi_input_shutdown();
     SDL_DestroyRenderer(R);
     SDL_DestroyWindow(win);
     bae_shutdown();
