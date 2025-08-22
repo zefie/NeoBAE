@@ -139,9 +139,9 @@ SRC		+=	DriverTools.c \
 			sha1mini.c
 
 ifneq ($(BUILD_GUI),)
-# RtMidi (C wrapper) - provide real-time MIDI input for GUI
-SRC += rtmidi_c.cpp RtMidi.cpp
-### Start configure BAE API
+	# RtMidi (C wrapper) - provide real-time MIDI input for GUI
+	SRC += rtmidi_c.cpp RtMidi.cpp 
+	BAE_FLAGS += -DUSE_RTMIDI
 endif
 
 

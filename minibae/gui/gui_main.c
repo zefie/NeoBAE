@@ -1453,6 +1453,7 @@ static bool g_exportDropdownOpen = false;
 // MIDI-record format dropdown (visible when MIDI-in is enabled)
 static bool g_midiRecordFormatDropdownOpen = false;
 static int g_midiRecordFormatIndex = 0; // 0 = MIDI, 1 = WAV, 2..n = MP3 bitrates
+#ifdef USE_RTMIDI
 static const char *g_midiRecordFormatNames[] = {
     "MIDI Sequence",
     "PCM 16 WAV",
@@ -1463,6 +1464,7 @@ static const char *g_midiRecordFormatNames[] = {
     "256kbps MP3",
     "320kbps MP3"};
 static const int g_midiRecordFormatCount = sizeof(g_midiRecordFormatNames) / sizeof(g_midiRecordFormatNames[0]);
+#endif
 // Default export codec: prefer 128kbps MP3 if MPEG encoder is available
 #if USE_MPEG_ENCODER != FALSE
 static int g_exportCodecIndex = 4; // 0 = PCM 16 WAV, 1..6 = MP3 bitrates (4 -> 128kbps MP3)
@@ -3882,6 +3884,14 @@ static bool bae_play(bool *playing)
             }
             *playing = false;
             g_bae.is_playing = false;
+
+            // Clear per-channel VU meters and peaks so UI shows empty levels immediately when stopped
+            for (int i = 0; i < 16; ++i)
+            {
+                g_channel_vu[i] = 0.0f;
+                g_channel_peak_level[i] = 0.0f;
+                g_channel_peak_hold_until[i] = 0;
+            }
             return true;
         }
     }
@@ -3941,6 +3951,13 @@ static void bae_stop(bool *playing, int *progress)
         memset(g_keyboard_active_notes_by_channel, 0, sizeof(g_keyboard_active_notes_by_channel));
         memset(g_keyboard_active_notes, 0, sizeof(g_keyboard_active_notes));
         g_keyboard_suppress_until = SDL_GetTicks() + 250;
+    }
+    // Clear per-channel VU meters and peaks so UI shows empty levels immediately when stopped
+    for (int i = 0; i < 16; ++i)
+    {
+        g_channel_vu[i] = 0.0f;
+        g_channel_peak_level[i] = 0.0f;
+        g_channel_peak_hold_until[i] = 0;
     }
 }
 
@@ -5262,8 +5279,10 @@ int main(int argc, char *argv[])
                     if (g_keyboard_active_notes_by_channel[i][n])
                         active = true;
                 }
-                // Also query engine active notes when playing or when no MIDI input
-                if (!active && !g_exporting)
+                // Also query engine active notes when playing or when no MIDI input.
+                // Prevent querying the engine when playback is stopped AND MIDI input
+                // is enabled so cleared VUs are not immediately repopulated.
+                if (!active && !g_exporting && (playing || !g_midi_input_enabled))
                 {
                     BAESong target = g_bae.song ? g_bae.song : g_live_song;
                     if (target)
@@ -7988,6 +8007,13 @@ int main(int argc, char *argv[])
                             BAESong_Preroll(g_live_song);
                         }
                     }
+                    // Also clear any visible per-channel VU/peak state immediately so the UI goes quiet
+                    for (int i = 0; i < 16; ++i)
+                    {
+                        g_channel_vu[i] = 0.0f;
+                        g_channel_peak_level[i] = 0.0f;
+                        g_channel_peak_hold_until[i] = 0;
+                    }
                 }
                 // persist
                 save_settings(g_current_bank_path[0] ? g_current_bank_path : NULL, reverbType, loopPlay);
@@ -8768,6 +8794,10 @@ int main(int argc, char *argv[])
                     "",
                     "libmp3lame",
                     "https://lame.sourceforge.io/",
+                    "",
+                    "RtMidi: realtime MIDI i/o C++ classes",
+                    "Copyright (c) 2003-2023 Gary P. Scavone",
+                    "https://github.com/thestk/rtmidi",
                     NULL};
                 for (int i = 0; credits_page2[i]; ++i)
                 {
