@@ -1617,6 +1617,23 @@ static void gui_panic_all_notes(BAESong s){
     }
 }
 
+// Panic a single MIDI channel: send NoteOff for any known-active notes and
+// clear sustain/sound. Uses our bookkeeping array so we avoid unnecessary calls.
+static void gui_panic_channel_notes(BAESong s, int ch){
+    if(!s) return;
+    if(ch < 0 || ch >= 16) return;
+    // Safety controls first
+    BAESong_ControlChange(s, (unsigned char)ch, 64, 0, 0);  // Sustain Off
+    BAESong_ControlChange(s, (unsigned char)ch, 120, 0, 0); // All Sound Off
+    BAESong_ControlChange(s, (unsigned char)ch, 123, 0, 0); // All Notes Off
+    // Explicit NoteOff for any keys we believe are active from MIDI-in
+    for(int n=0; n<128; ++n){
+        if(g_keyboard_active_notes_by_channel[ch][n]){
+            BAESong_NoteOff(s, (unsigned char)ch, (unsigned char)n, 0, 0);
+        }
+    }
+}
+
 // Map integer Hz to BAERate enum (subset offered in UI)
 static BAERate map_rate_from_hz(int hz){
     switch(hz){
@@ -3186,6 +3203,26 @@ int main(int argc, char *argv[]){
             if(toggled && !ch_enable[i]){
                 // Muted -> immediately empty visible VU
                 g_channel_vu[i] = 0.0f;
+                // If MIDI-in is active, proactively send NoteOff for any active notes on this channel
+                // to prevent stuck notes from live input. Use the current target song (loaded or live).
+                if(g_midi_input_enabled){
+                    BAESong target = g_bae.song ? g_bae.song : g_live_song;
+                    if(target){
+                        // Send per-channel panic to engine
+                        gui_panic_channel_notes(target, i);
+                        // Also mirror NoteOff to external MIDI out if enabled
+                        if(g_midi_output_enabled){
+                            for(int n=0; n<128; ++n){
+                                if(g_keyboard_active_notes_by_channel[i][n]){
+                                    unsigned char msg[3] = { (unsigned char)(0x80 | (i & 0x0F)), (unsigned char)n, 0 };
+                                    midi_output_send(msg, 3);
+                                }
+                            }
+                        }
+                    }
+                    // Clear UI bookkeeping for that channel regardless
+                    for(int n=0; n<128; ++n) g_keyboard_active_notes_by_channel[i][n] = 0;
+                }
             }
             int tw=0,th=0; measure_text(buf,&tw,&th);
             // Reserve a few pixels to the right of checkbox for the VU meter so
