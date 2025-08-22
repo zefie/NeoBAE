@@ -1110,6 +1110,8 @@ static uint64_t g_midi_record_last_pc = 0;          // last performance counter 
 static double g_midi_perf_freq = 0.0;               // perf counter frequency
 static const int g_midi_record_division = 1000;     // ticks per quarter note for written MIDI file
 static const uint32_t g_midi_record_tempo = 500000; // default microseconds per quarter note (120 BPM)
+static bool g_midi_record_first_event = false;      // for first-event silence capture
+static uint64_t g_midi_record_start_pc = 0;         // perf counter at record start
 #ifdef SUPPORT_KARAOKE
 // Karaoke / lyric display state
 static bool g_karaoke_enabled = true; // simple always-on toggle (future: UI setting)
@@ -2068,6 +2070,8 @@ static bool midi_record_start(const char *out_path)
     // initialize performance counter based timing for accurate deltas
     g_midi_perf_freq = (double)SDL_GetPerformanceFrequency();
     g_midi_record_last_pc = SDL_GetPerformanceCounter();
+    g_midi_record_start_pc = g_midi_record_last_pc;
+    g_midi_record_first_event = true;
 
     // Write an initial tempo meta-event (delta=0) so the saved MIDI uses our conversion tempo.
     // Format: 00 FF 51 03 tt tt tt
@@ -2721,15 +2725,22 @@ static int midi_service_thread_fn(void *unused)
             // If recording is active, write the event to temporary track storage
             if (g_midi_recording && g_midi_record_temp_fp)
             {
-                // RtMidi provides timeStamp as DELTA time in seconds since the previous message.
-                // Use it directly when available; otherwise fall back to a high-res performance counter.
+                // RtMidi's timeStamp is DELTA seconds since previous message and works well.
+                // Special-case the very first event after record start to include initial silence
+                // using our high-resolution timer between record_start and first message.
                 double delta_us;
-                if (midi_ts >= 0.0)
+                if (g_midi_record_first_event && g_midi_perf_freq > 0.0)
+                {
+                    uint64_t pc = SDL_GetPerformanceCounter();
+                    if (g_midi_record_start_pc == 0)
+                        g_midi_record_start_pc = pc;
+                    delta_us = ((double)(pc - g_midi_record_start_pc) / g_midi_perf_freq) * 1000000.0;
+                    g_midi_record_last_pc = pc;
+                    g_midi_record_first_event = false;
+                }
+                else if (midi_ts >= 0.0)
                 {
                     delta_us = midi_ts * 1000000.0; // seconds -> microseconds
-                    // Maintain an accumulated last_ts for coherence if we ever drop to perf-counter path later.
-                    g_midi_record_last_ts += midi_ts;
-                    // Reset last_pc baseline to now so perf-counter fallback stays in sync.
                     g_midi_record_last_pc = SDL_GetPerformanceCounter();
                 }
                 else if (g_midi_perf_freq > 0.0)
@@ -2739,7 +2750,6 @@ static int midi_service_thread_fn(void *unused)
                         g_midi_record_last_pc = pc;
                     delta_us = ((double)(pc - g_midi_record_last_pc) / g_midi_perf_freq) * 1000000.0;
                     g_midi_record_last_pc = pc;
-                    g_midi_record_last_ts += (delta_us / 1000000.0);
                 }
                 else
                 {
@@ -2750,7 +2760,6 @@ static int midi_service_thread_fn(void *unused)
                     Uint32 dms = now_ms - s_last_ms;
                     s_last_ms = now_ms;
                     delta_us = (double)dms * 1000.0;
-                    g_midi_record_last_ts += (double)dms / 1000.0;
                 }
 
                 if (delta_us < 0.0)
