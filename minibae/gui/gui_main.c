@@ -805,6 +805,17 @@ static int  g_midi_device_api[64];
 static int  g_midi_device_port[64];
 // Combined cache count (total input+output entries)
 static int  g_midi_device_count = 0;
+// MIDI recording state
+static bool g_midi_recording = false;               // are we currently recording incoming MIDI?
+static char g_midi_record_path[1024] = {0};         // final .mid path user requested
+static char g_midi_record_temp[1024] = {0};         // temporary track data file path
+static FILE *g_midi_record_temp_fp = NULL;          // temp file for writing raw track events
+static double g_midi_record_start_ts = 0.0;         // timestamp of first recorded event (seconds)
+static double g_midi_record_last_ts = 0.0;          // timestamp of last written event (seconds)
+static uint64_t g_midi_record_last_pc = 0;          // last performance counter for delta timing
+static double g_midi_perf_freq = 0.0;               // perf counter frequency
+static const int g_midi_record_division = 1000;     // ticks per quarter note for written MIDI file
+static const uint32_t g_midi_record_tempo = 500000; // default microseconds per quarter note (120 BPM)
 #ifdef SUPPORT_KARAOKE
 // Karaoke / lyric display state
 static bool g_karaoke_enabled = true; // simple always-on toggle (future: UI setting)
@@ -1485,6 +1496,87 @@ static void bae_stop_wav_export() {
     }
 }
 
+// Simple MIDI file writing helpers
+// Create a temporary track data file and open it for appending raw delta+message bytes.
+static bool midi_record_start(const char *out_path){
+    if(!g_midi_input_enabled) return false;
+    if(g_midi_recording) return false;
+    if(!out_path || !out_path[0]) return false;
+    // create temp path next to output or in /tmp
+    snprintf(g_midi_record_path, sizeof(g_midi_record_path), "%s", out_path);
+#ifdef _WIN32
+    snprintf(g_midi_record_temp, sizeof(g_midi_record_temp), "%s.tmp", out_path);
+#else
+    // prefer /tmp for atomic finalization
+    snprintf(g_midi_record_temp, sizeof(g_midi_record_temp), "/tmp/minibae_midi_record_%ld.tmp", (long)getpid());
+#endif
+    g_midi_record_temp_fp = fopen(g_midi_record_temp, "wb+");
+    if(!g_midi_record_temp_fp){ set_status_message("Failed to open temp file for MIDI record"); return false; }
+    // reset timers
+    g_midi_record_start_ts = 0.0; g_midi_record_last_ts = 0.0;
+    // initialize performance counter based timing for accurate deltas
+    g_midi_perf_freq = (double)SDL_GetPerformanceFrequency();
+    g_midi_record_last_pc = SDL_GetPerformanceCounter();
+
+    // Write an initial tempo meta-event (delta=0) so the saved MIDI uses our conversion tempo.
+    // Format: 00 FF 51 03 tt tt tt
+    unsigned char tempo_evt[7];
+    tempo_evt[0] = 0x00; // delta 0
+    tempo_evt[1] = 0xFF; tempo_evt[2] = 0x51; tempo_evt[3] = 0x03;
+    tempo_evt[4] = (unsigned char)((g_midi_record_tempo >> 16) & 0xFF);
+    tempo_evt[5] = (unsigned char)((g_midi_record_tempo >> 8) & 0xFF);
+    tempo_evt[6] = (unsigned char)(g_midi_record_tempo & 0xFF);
+    fwrite(tempo_evt, 1, sizeof(tempo_evt), g_midi_record_temp_fp);
+
+    g_midi_recording = true;
+    set_status_message("MIDI recording started");
+    return true;
+}
+
+// Helper to write final MIDI header and track chunk by merging temp track data
+static bool midi_record_stop(void){
+    if(!g_midi_recording) return false;
+    if(g_midi_record_temp_fp) fclose(g_midi_record_temp_fp);
+    g_midi_record_temp_fp = NULL;
+    // Open temp for reading and final output for writing
+    FILE *tf = fopen(g_midi_record_temp, "rb");
+    if(!tf){ set_status_message("No recorded MIDI data"); g_midi_recording=false; return false; }
+    FILE *of = fopen(g_midi_record_path, "wb");
+    if(!of){ fclose(tf); set_status_message("Failed to create MIDI file"); g_midi_recording=false; return false; }
+    // Determine track data length (include 4 bytes for appended End-of-Track meta event)
+    fseek(tf, 0, SEEK_END); long tracklen = ftell(tf); fseek(tf, 0, SEEK_SET);
+    tracklen += 4; // we'll append 00 FF 2F 00
+    // Write standard MIDI header (format 0, 1 track)
+    unsigned char header[14];
+    // 'MThd' + header length 6 + format 0 + ntrks 1 + division
+    memcpy(header, "MThd", 4);
+    header[4] = 0x00; header[5] = 0x00; header[6] = 0x00; header[7] = 0x06;
+    header[8] = 0x00; header[9] = 0x00; // format 0
+    header[10] = 0x00; header[11] = 0x01; // one track
+    header[12] = (unsigned char)((g_midi_record_division >> 8) & 0xFF);
+    header[13] = (unsigned char)(g_midi_record_division & 0xFF);
+    fwrite(header, 1, sizeof(header), of);
+    // Write track chunk header
+    unsigned char trkh[8]; memcpy(trkh, "MTrk", 4);
+    uint32_t u32 = (uint32_t)tracklen;
+    trkh[4] = (unsigned char)((u32 >> 24) & 0xFF);
+    trkh[5] = (unsigned char)((u32 >> 16) & 0xFF);
+    trkh[6] = (unsigned char)((u32 >> 8) & 0xFF);
+    trkh[7] = (unsigned char)(u32 & 0xFF);
+    fwrite(trkh,1,8,of);
+    // Copy track data
+    unsigned char buf[4096]; size_t r;
+    while((r = fread(buf,1,sizeof(buf),tf)) > 0) fwrite(buf,1,r,of);
+    // Ensure track ends with End of Track meta event 00 FF 2F 00
+    unsigned char eot[4] = {0x00, 0xFF, 0x2F, 0x00}; fwrite(eot,1,4,of);
+    fclose(tf); fclose(of);
+    // Remove temp file
+    remove(g_midi_record_temp);
+    g_midi_recording = false;
+    set_status_message("MIDI recording saved");
+    return true;
+}
+
 static void bae_service_wav_export() {
     if (!g_exporting) return;
     
@@ -1710,6 +1802,46 @@ static int midi_service_thread_fn(void *unused){
         while(!g_midi_service_quit && midi_input_poll(midi_buf, &midi_sz, &midi_ts)){
             had_any = true;
             if(midi_sz < 1) continue;
+            // If recording is active, write the event to temporary track storage
+            if(g_midi_recording && g_midi_record_temp_fp){
+                // RtMidi provides timeStamp as DELTA time in seconds since the previous message.
+                // Use it directly when available; otherwise fall back to a high-res performance counter.
+                double delta_us;
+                if(midi_ts >= 0.0){
+                    delta_us = midi_ts * 1000000.0; // seconds -> microseconds
+                    // Maintain an accumulated last_ts for coherence if we ever drop to perf-counter path later.
+                    g_midi_record_last_ts += midi_ts;
+                    // Reset last_pc baseline to now so perf-counter fallback stays in sync.
+                    g_midi_record_last_pc = SDL_GetPerformanceCounter();
+                } else if(g_midi_perf_freq > 0.0){
+                    uint64_t pc = SDL_GetPerformanceCounter();
+                    if(g_midi_record_last_pc == 0) g_midi_record_last_pc = pc;
+                    delta_us = ((double)(pc - g_midi_record_last_pc) / g_midi_perf_freq) * 1000000.0;
+                    g_midi_record_last_pc = pc;
+                    g_midi_record_last_ts += (delta_us / 1000000.0);
+                } else {
+                    static Uint32 s_last_ms = 0; Uint32 now_ms = SDL_GetTicks();
+                    if(s_last_ms == 0) s_last_ms = now_ms;
+                    Uint32 dms = now_ms - s_last_ms; s_last_ms = now_ms;
+                    delta_us = (double)dms * 1000.0;
+                    g_midi_record_last_ts += (double)dms / 1000.0;
+                }
+
+                if(delta_us < 0.0) delta_us = 0.0;
+                // Convert delta_us to ticks using division and tempo (us/qn)
+                uint32_t delta_ticks = (uint32_t)( (delta_us * (double)g_midi_record_division) / (double)g_midi_record_tempo + 0.5 );
+                // Write VLQ delta
+                uint32_t v = delta_ticks;
+                unsigned char vlq[5]; int vlq_len = 0;
+                unsigned char tmp[5]; int tmp_len = 0;
+                tmp[tmp_len++] = (unsigned char)(v & 0x7F); v >>= 7;
+                while(v){ tmp[tmp_len++] = (unsigned char)(0x80 | (v & 0x7F)); v >>= 7; }
+                for(int i = tmp_len - 1; i >= 0; --i) vlq[vlq_len++] = tmp[i];
+                fwrite(vlq, 1, vlq_len, g_midi_record_temp_fp);
+                // Write MIDI message bytes
+                fwrite(midi_buf, 1, midi_sz, g_midi_record_temp_fp);
+                fflush(g_midi_record_temp_fp);
+            }
             unsigned char status = midi_buf[0];
             unsigned char mtype = status & 0xF0;
             unsigned char mch = status & 0x0F;
@@ -2499,6 +2631,34 @@ static char *save_export_dialog(bool want_mp3){
         } else { pclose(p); }
     }
     BAE_PRINTF("No GUI file chooser available for saving.\n");
+    return NULL;
+#endif
+}
+
+// Save dialog specifically for MIDI (.mid)
+static char *save_midi_dialog(){
+#ifdef _WIN32
+    char fileBuf[1024] = {0};
+    OPENFILENAMEA ofn; ZeroMemory(&ofn, sizeof(ofn));
+    ofn.lStructSize = sizeof(ofn);
+    ofn.hwndOwner = NULL;
+    ofn.lpstrFilter = "MIDI Files\0*.mid\0All Files\0*.*\0";
+    ofn.lpstrFile = fileBuf; ofn.nMaxFile = sizeof(fileBuf);
+    ofn.Flags = OFN_PATHMUSTEXIST | OFN_OVERWRITEPROMPT;
+    ofn.lpstrDefExt = "mid";
+    if (GetSaveFileNameA(&ofn)){
+        size_t len = strlen(fileBuf); char *ret = (char*)malloc(len+1); if(ret){ memcpy(ret,fileBuf,len+1);} return ret;
+    }
+    return NULL;
+#else
+    const char *cmds[] = {
+        "zenity --file-selection --save --title='Save MIDI' --file-filter='MIDI Files | *.mid' 2>/dev/null",
+        "kdialog --getsavefilename . '*.mid' 2>/dev/null",
+        "yad --file-selection --save --title='Save MIDI' 2>/dev/null",
+        NULL
+    };
+    for(int i=0; cmds[i]; ++i){ FILE *p = popen(cmds[i], "r"); if(!p) continue; char buf[1024]; if(fgets(buf,sizeof(buf),p)){ pclose(p); size_t l=strlen(buf); while(l>0 && (buf[l-1]=='\n' || buf[l-1]=='\r')) buf[--l]='\0'; if(l>0){ char *ret=(char*)malloc(l+1); if(ret){ memcpy(ret,buf,l+1);} return ret; } } else { pclose(p); } }
+    BAE_PRINTF("No GUI file chooser available for saving MIDI.\n");
     return NULL;
 #endif
 }
@@ -3815,103 +3975,109 @@ int main(int argc, char *argv[]){
         }
     }
         
-        // Export controls (only for MIDI/RMF files)
-        if(!g_bae.is_audio_file && g_bae.song_loaded) {
-            // Export button
-            if(ui_button(R,(Rect){320, 215, 80,22}, "Export", ui_mx,ui_my,ui_mdown) && ui_mclick && !g_exporting && !modal_block){
-                if(g_midi_output_enabled){
-                    set_status_message("Export disabled while MIDI Output enabled");
-                } else {
-                // When export button clicked, open save dialog using extension depending on codec
-                char *export_file = save_export_dialog(g_exportCodecIndex != 0);
-                if(export_file) {
-                    // If user selected MP3 codec, ensure filename ends with .mp3 else .wav
-                    if(g_exportCodecIndex == 0){ // WAV
-                        // ensure .wav extension (basic)
-                        size_t L = strlen(export_file);
-                        if(L < 4 || strcasecmp(export_file + L - 4, ".wav") != 0){
-                            // naive realloc: append .wav
-                            size_t n = L + 5; char *tmp = malloc(n); if(tmp){ snprintf(tmp,n, "%s.wav", export_file); free(export_file); export_file = tmp; }
-                        }
+    // Export controls (only for MIDI/RMF files) or MIDI-in recording when enabled
+    if(g_midi_input_enabled || (!g_bae.is_audio_file && g_bae.song_loaded)) {
+            // If MIDI input is enabled, show Record/Stop instead of Export
+            if(g_midi_input_enabled){
+                // When MIDI-in is enabled the overlay provides recording controls. Draw a disabled placeholder here.
+                SDL_Color disabledBg = g_panel_bg; SDL_Color disabledTxt = g_panel_border; Rect placeholder = {320,215,80,22}; draw_rect(R, placeholder, disabledBg); draw_frame(R, placeholder, g_panel_border); draw_text(R, placeholder.x + 14, placeholder.y + 4, "Record", disabledTxt);
+            } else {
+                // Export button (unchanged behavior)
+                if(ui_button(R,(Rect){320, 215, 80,22}, "Export", ui_mx,ui_my,ui_mdown) && ui_mclick && !g_exporting && !modal_block){
+                    if(g_midi_output_enabled){
+                        set_status_message("Export disabled while MIDI Output enabled");
                     } else {
-                        size_t L = strlen(export_file);
-                        if(L < 4 || strcasecmp(export_file + L - 4, ".mp3") != 0){
-                            size_t n = L + 5; char *tmp = malloc(n); if(tmp){ snprintf(tmp,n, "%s.mp3", export_file); free(export_file); export_file = tmp; }
-                        }
-                    }
-                    // Start export using selected codec mapping
-                    // Map our index to BAEMixer compression enums using table
-                    BAECompressionType compression = BAE_COMPRESSION_NONE;
-#if USE_MPEG_ENCODER != FALSE                    
-                    if(g_exportCodecIndex >= 0 && g_exportCodecIndex < (int)(sizeof(g_exportCompressionMap)/sizeof(g_exportCompressionMap[0]))){
-                        compression = g_exportCompressionMap[g_exportCodecIndex];
-                    }
-#endif
-                    // Use BAEMixer_StartOutputToFile directly like bae_start_wav_export but with compression choice
-                    if(!g_bae.song_loaded || g_bae.is_audio_file){ set_status_message("Cannot export: No MIDI/RMF loaded"); }
-                    else {
-                        // Save current state
-                        uint32_t curPosUs = 0; BAESong_GetMicrosecondPosition(g_bae.song, &curPosUs);
-                        g_bae.position_us_before_export = curPosUs;
-                        g_bae.was_playing_before_export = g_bae.is_playing;
-                        g_bae.loop_was_enabled_before_export = g_bae.loop_enabled_gui;
-                        if(g_bae.is_playing){ BAESong_Stop(g_bae.song, FALSE); g_bae.is_playing = false; }
-                        BAESong_SetMicrosecondPosition(g_bae.song, 0);
-                        BAEResult result = BAEMixer_StartOutputToFile(g_bae.mixer, (BAEPathName)export_file,
-                                                                     (g_exportCodecIndex==0)? BAE_WAVE_TYPE : BAE_MPEG_TYPE,
-                                                                     (BAECompressionType)compression);
-                        if(result != BAE_NO_ERROR){ char msg[128]; snprintf(msg,sizeof(msg),"Export failed to start (%d)", result); set_status_message(msg); }
-                        else {
-                            // Determine export file type so service loop can apply MPEG heuristics
-                            g_export_file_type = (g_exportCodecIndex==0) ? BAE_WAVE_TYPE : BAE_MPEG_TYPE;
-
-                            // Reset virtual keyboard so no keys remain active during export
-                            if(g_show_virtual_keyboard){
-                                BAESong target = g_bae.song ? g_bae.song : g_live_song;
-                                if(g_keyboard_mouse_note != -1){ if(target) BAESong_NoteOff(target,(unsigned char)g_keyboard_channel,(unsigned char)g_keyboard_mouse_note,0,0); g_keyboard_mouse_note = -1; }
-                                memset(g_keyboard_active_notes, 0, sizeof(g_keyboard_active_notes));
+                    // When export button clicked, open save dialog using extension depending on codec
+                    char *export_file = save_export_dialog(g_exportCodecIndex != 0);
+                    if(export_file) {
+                        // If user selected MP3 codec, ensure filename ends with .mp3 else .wav
+                        if(g_exportCodecIndex == 0){ // WAV
+                            // ensure .wav extension (basic)
+                            size_t L = strlen(export_file);
+                            if(L < 4 || strcasecmp(export_file + L - 4, ".wav") != 0){
+                                // naive realloc: append .wav
+                                size_t n = L + 5; char *tmp = malloc(n); if(tmp){ snprintf(tmp,n, "%s.wav", export_file); free(export_file); export_file = tmp; }
                             }
-
-                            // Start song to drive export
-                            BAESong_Stop(g_bae.song, FALSE);
+                        } else {
+                            size_t L = strlen(export_file);
+                            if(L < 4 || strcasecmp(export_file + L - 4, ".mp3") != 0){
+                                size_t n = L + 5; char *tmp = malloc(n); if(tmp){ snprintf(tmp,n, "%s.mp3", export_file); free(export_file); export_file = tmp; }
+                            }
+                        }
+                        // Start export using selected codec mapping
+                        // Map our index to BAEMixer compression enums using table
+                        BAECompressionType compression = BAE_COMPRESSION_NONE;
+#if USE_MPEG_ENCODER != FALSE                    
+                        if(g_exportCodecIndex >= 0 && g_exportCodecIndex < (int)(sizeof(g_exportCompressionMap)/sizeof(g_exportCompressionMap[0]))){
+                            compression = g_exportCompressionMap[g_exportCodecIndex];
+                        }
+#endif
+                        // Use BAEMixer_StartOutputToFile directly like bae_start_wav_export but with compression choice
+                        if(!g_bae.song_loaded || g_bae.is_audio_file){ set_status_message("Cannot export: No MIDI/RMF loaded"); }
+                        else {
+                            // Save current state
+                            uint32_t curPosUs = 0; BAESong_GetMicrosecondPosition(g_bae.song, &curPosUs);
+                            g_bae.position_us_before_export = curPosUs;
+                            g_bae.was_playing_before_export = g_bae.is_playing;
+                            g_bae.loop_was_enabled_before_export = g_bae.loop_enabled_gui;
+                            if(g_bae.is_playing){ BAESong_Stop(g_bae.song, FALSE); g_bae.is_playing = false; }
                             BAESong_SetMicrosecondPosition(g_bae.song, 0);
-                            BAESong_Preroll(g_bae.song);
-                            result = BAESong_Start(g_bae.song, 0);
-                            if(result != BAE_NO_ERROR){ BAE_PRINTF("Export: BAESong_Start failed (%d)\n", result); }
-                            else { 
-                                g_bae.is_playing = true;
+                            BAEResult result = BAEMixer_StartOutputToFile(g_bae.mixer, (BAEPathName)export_file,
+                                                                         (g_exportCodecIndex==0)? BAE_WAVE_TYPE : BAE_MPEG_TYPE,
+                                                                         (BAECompressionType)compression);
+                            if(result != BAE_NO_ERROR){ char msg[128]; snprintf(msg,sizeof(msg),"Export failed to start (%d)", result); set_status_message(msg); }
+                            else {
+                                // Determine export file type so service loop can apply MPEG heuristics
+                                g_export_file_type = (g_exportCodecIndex==0) ? BAE_WAVE_TYPE : BAE_MPEG_TYPE;
 
-                                // If MPEG export, prime encoder by servicing several slices so sequencer events schedule
-                                if(g_export_file_type == BAE_MPEG_TYPE){
-                                    for(int prime=0; prime<8; ++prime){
-                                        BAEResult serr = BAEMixer_ServiceAudioOutputToFile(g_bae.mixer);
-                                        if (serr != BAE_NO_ERROR) {
-                                            char msg[128]; snprintf(msg,sizeof(msg),"MP3 export initialization failed (%d)", serr); set_status_message(msg);
-                                            BAEMixer_StopOutputToFile();
-                                            break;
-                                        }
-                                    }
-                                    // If song still reports done, keep priming briefly until active or safety limit
-                                    {
-                                        BAE_BOOL preDone = TRUE; int safety = 0;
-                                        while(preDone && safety < 32){
-                                            if(BAESong_IsDone(g_bae.song, &preDone) != BAE_NO_ERROR) break;
-                                            if(!preDone) break;
+                                // Reset virtual keyboard so no keys remain active during export
+                                if(g_show_virtual_keyboard){
+                                    BAESong target = g_bae.song ? g_bae.song : g_live_song;
+                                    if(g_keyboard_mouse_note != -1){ if(target) BAESong_NoteOff(target,(unsigned char)g_keyboard_channel,(unsigned char)g_keyboard_mouse_note,0,0); g_keyboard_mouse_note = -1; }
+                                    memset(g_keyboard_active_notes, 0, sizeof(g_keyboard_active_notes));
+                                }
+
+                                // Start song to drive export
+                                BAESong_Stop(g_bae.song, FALSE);
+                                BAESong_SetMicrosecondPosition(g_bae.song, 0);
+                                BAESong_Preroll(g_bae.song);
+                                result = BAESong_Start(g_bae.song, 0);
+                                if(result != BAE_NO_ERROR){ BAE_PRINTF("Export: BAESong_Start failed (%d)\n", result); }
+                                else { 
+                                    g_bae.is_playing = true;
+
+                                    // If MPEG export, prime encoder by servicing several slices so sequencer events schedule
+                                    if(g_export_file_type == BAE_MPEG_TYPE){
+                                        for(int prime=0; prime<8; ++prime){
                                             BAEResult serr = BAEMixer_ServiceAudioOutputToFile(g_bae.mixer);
-                                            if (serr != BAE_NO_ERROR) break;
-                                            BAE_WaitMicroseconds(2000);
-                                            safety++;
+                                            if (serr != BAE_NO_ERROR) {
+                                                char msg[128]; snprintf(msg,sizeof(msg),"MP3 export initialization failed (%d)", serr); set_status_message(msg);
+                                                BAEMixer_StopOutputToFile();
+                                                break;
+                                            }
+                                        }
+                                        // If song still reports done, keep priming briefly until active or safety limit
+                                        {
+                                            BAE_BOOL preDone = TRUE; int safety = 0;
+                                            while(preDone && safety < 32){
+                                                if(BAESong_IsDone(g_bae.song, &preDone) != BAE_NO_ERROR) break;
+                                                if(!preDone) break;
+                                                BAEResult serr = BAEMixer_ServiceAudioOutputToFile(g_bae.mixer);
+                                                if (serr != BAE_NO_ERROR) break;
+                                                BAE_WaitMicroseconds(2000);
+                                                safety++;
+                                            }
                                         }
                                     }
                                 }
+                                g_exporting = true;
+                                g_export_path[0]=0; strncpy(g_export_path, export_file, sizeof(g_export_path)-1); g_export_path[sizeof(g_export_path)-1]='\0';
+                                set_status_message("Export started");
                             }
-                            g_exporting = true;
-                            g_export_path[0]=0; strncpy(g_export_path, export_file, sizeof(g_export_path)-1); g_export_path[sizeof(g_export_path)-1]='\0';
-                            set_status_message("Export started");
                         }
+                        free(export_file);
                     }
-                    free(export_file);
-                }
+                    }
                 }
             }
             // RMF Info button (only for RMF files)
@@ -3943,6 +4109,22 @@ int main(int argc, char *argv[]){
                     if(g_exporting) { bae_stop_wav_export(); }
                     // consume the click so underlying UI doesn't react to the same event
                     mclick = false;
+                }
+                // Also draw Record/Stop in the Export slot so MIDI users can record even when panel is dimmed
+                Rect recRect = {320, 215, 80,22};
+                if(!g_midi_recording){
+                    if(ui_button(R, recRect, "Record", mx, my, mdown) && mclick){
+                        char *export_file = save_midi_dialog();
+                        if(export_file){
+                            // ensure .mid extension
+                            size_t L = strlen(export_file);
+                            if(L < 4 || strcasecmp(export_file + L - 4, ".mid") != 0){ size_t n = L + 5; char *tmp = malloc(n); if(tmp){ snprintf(tmp,n, "%s.mid", export_file); free(export_file); export_file = tmp; } }
+                            if(export_file){ bool started = midi_record_start(export_file); free(export_file); if(!started) set_status_message("Failed to start MIDI record"); }
+                        }
+                        mclick = false;
+                    }
+                } else {
+                    if(ui_button(R, recRect, "Stop", mx, my, mdown) && mclick){ if(!midi_record_stop()){ set_status_message("Failed to finalize MIDI file"); } mclick = false; }
                 }
             }
     #endif
