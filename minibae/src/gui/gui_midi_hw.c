@@ -199,6 +199,35 @@ bool midi_record_start(const char *out_path)
     tempo_evt[5] = (unsigned char)((g_midi_record_tempo >> 8) & 0xFF);
     tempo_evt[6] = (unsigned char)(g_midi_record_tempo & 0xFF);
     fwrite(tempo_evt, 1, sizeof(tempo_evt), g_midi_record_temp_fp);
+    // Also write initial Program Change / Bank Select MSB events (delta=0) so the
+    // recorded MIDI file reflects the current instrument table in the engine.
+    // Use the same target selection as the MIDI service thread.
+    {
+        BAESong target = g_bae.song ? g_bae.song : g_live_song;
+        if (target)
+        {
+            for (unsigned char ch = 0; ch < 16; ++ch)
+            {
+                unsigned char program = 0, bank = 0;
+                if (BAESong_GetProgramBank(target, ch, &program, &bank) == BAE_NO_ERROR)
+                {
+                    unsigned char evt[4];
+                    // Bank Select MSB (CC 0): delta 0 + 0xB0|ch, controller 0, value
+                    evt[0] = 0x00; // delta 0
+                    evt[1] = (unsigned char)(0xB0 | (ch & 0x0F));
+                    evt[2] = 0x00; // controller 0 = bank MSB
+                    evt[3] = (unsigned char)(bank & 0x7F);
+                    fwrite(evt, 1, 4, g_midi_record_temp_fp);
+                    // Program Change: delta 0 + 0xC0|ch, program
+                    unsigned char pc[3];
+                    pc[0] = 0x00; // delta 0
+                    pc[1] = (unsigned char)(0xC0 | (ch & 0x0F));
+                    pc[2] = (unsigned char)(program & 0x7F);
+                    fwrite(pc, 1, 3, g_midi_record_temp_fp);
+                }
+            }
+        }
+    }
     if (g_midi_record_mutex)
         SDL_UnlockMutex(g_midi_record_mutex);
 
