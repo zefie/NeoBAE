@@ -18,6 +18,11 @@
     units reference this one symbol regardless of build flags. */
 double g_last_requested_master_volume = 1.0; /* 0.0..1.0 per UI */
 
+/* Remember last applied per-sound engine gain (in 0..1 engine space)
+    so BAESound_Start can use the correct initial volume instead of
+    hardcoding 1.0 which would override BAESound_SetVolume done earlier. */
+double g_last_applied_sound_volume = 1.0;
+
 // Volume mapping configuration moved to gui_bae.h
 
 // Global state variables (from main)
@@ -624,25 +629,23 @@ bool bae_load_song(const char *path)
         g_bae.is_audio_file = true;
         get_audio_total_frames();
         audio_current_position = 0;
-        /* Apply current user-requested master volume to the newly loaded sound
-           so UI volume state is respected immediately on load. For audio files
-           we apply the same per-sound boost used in bae_set_volume. */
+        /* Apply the user's last requested master volume consistently by
+           delegating to bae_set_volume. This ensures BAESound and mixer
+           master volumes use the same mapping and any per-sound boost logic
+           is centralized in one place. Reconstruct a UI percent from the
+           stored engine-space value so we can call the same setter.
+        */
         {
             double stored = g_last_requested_master_volume; /* 0..1 engine space */
-            double soundGain = stored * 2.0;                /* double for raw audio files */
-            if (soundGain < 0.0)
-                soundGain = 0.0;
-            if (g_bae.sound)
-                BAESound_SetVolume(g_bae.sound, FLOAT_TO_UNSIGNED_FIXED(soundGain));
-
-#ifdef SUPPORT_MIDI_HW
-            if (g_bae.mixer && !g_master_muted_for_midi_out)
-#else
-            if (g_bae.mixer)
-#endif
-            {
-                BAEMixer_SetMasterVolume(g_bae.mixer, FLOAT_TO_UNSIGNED_FIXED(stored));
-            }
+            double baseline = (NEW_BASELINE_PCT / 100.0);
+            int volPct = (int)(stored / baseline * 100.0 + 0.5);
+            if (volPct < 0)
+                volPct = 0;
+            if (volPct > NEW_MAX_VOLUME_PCT)
+                volPct = NEW_MAX_VOLUME_PCT;
+            /* Call the central volume setter which will adjust both the
+               per-sound volume and the master mixer volume appropriately. */
+            bae_set_volume(volPct);
         }
 
         const char *base = path;
@@ -767,27 +770,36 @@ void bae_set_volume(int volPct)
     // engineGain = (volPct / 100.0) * (NEW_BASELINE_PCT / 100.0)
     double engineGain = (double)volPct / 100.0 * (NEW_BASELINE_PCT / 100.0);
 
-    // Keep a remembered requested master volume in the old 0..1 space for MIDI HW logic
+    // Keep a remembered requested master volume in the old 0..1 space
+    // so other modules (and sound load) can reconstruct user intent.
     double storedVol = engineGain;
-
-#ifdef SUPPORT_MIDI_HW
     g_last_requested_master_volume = storedVol; // remember user intent
-#endif
 
     if (g_bae.is_audio_file && g_bae.sound)
     {
-        /* For raw audio files (WAV/MP3/etc.) boost the per-sound volume so
-           they play louder relative to MIDI/RMF songs. This doubles the
-           engine gain for the sound only; the remembered storedVol (used
-           by MIDI HW logic) remains the user's requested master intent. */
-        double soundGain = engineGain * 2.0;
+          /* For raw audio files we apply an extra per-sound multiplier so the
+              UI's "100%" feels louder. Use a smooth, monotonic mapping so
+              increasing the UI percent never reduces the resulting gain. */
+          double soundMultiplierBase = 3.0;
+          double soundMultiplier = soundMultiplierBase * (1.0 + (double)volPct / 100.0);
+          double soundGain = engineGain * soundMultiplier;
         if (soundGain < 0.0)
             soundGain = 0.0;
         BAESound_SetVolume(g_bae.sound, FLOAT_TO_UNSIGNED_FIXED(soundGain));
+          /* remember actual per-sound engine gain applied so BAESound_Start
+              can use the same value when it starts playback */
+          g_last_applied_sound_volume = soundGain;
     }
     else if (!g_bae.is_audio_file && g_bae.song)
     {
         BAESong_SetVolume(g_bae.song, FLOAT_TO_UNSIGNED_FIXED(engineGain));
+    }
+
+    /* Also apply to the lightweight live synth used for incoming MIDI so changes
+       to the master volume UI affect live input immediately. */
+    if (g_live_song)
+    {
+        BAESong_SetVolume(g_live_song, FLOAT_TO_UNSIGNED_FIXED(engineGain));
     }
 
     // Also adjust master volume unless globally muted for MIDI Out
@@ -1025,7 +1037,7 @@ bool bae_play(bool *playing)
             BAESound_SetLoopCount(g_bae.sound, loopCount);
 
             BAE_PRINTF("Attempting BAESound_Start on '%s' (loop count: %u)\n", g_bae.loaded_path, loopCount);
-            BAEResult sr = BAESound_Start(g_bae.sound, 0, FLOAT_TO_UNSIGNED_FIXED(1.0), 0);
+            BAEResult sr = BAESound_Start(g_bae.sound, 0, FLOAT_TO_UNSIGNED_FIXED(g_last_applied_sound_volume), 0);
             if (sr != BAE_NO_ERROR)
             {
                 BAE_PRINTF("BAESound_Start failed (%d) for '%s'\n", sr, g_bae.loaded_path);

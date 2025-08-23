@@ -894,12 +894,16 @@ int main(int argc, char *argv[])
                         else
                         {
                             // Slider handling: respect the same modal/enable rules used elsewhere
+                                     bool playback_controls_enabled_local =
 #ifdef SUPPORT_MIDI_HW
-                            bool playback_controls_enabled_local = !g_midi_input_enabled;
+                                          !g_midi_input_enabled;
 #else
-                            bool playback_controls_enabled_local = true;
+                                          true;
 #endif
-                            bool volume_enabled_local = !g_reverbDropdownOpen && playback_controls_enabled_local;
+                                     /* Allow the user to adjust master volume even when MIDI input
+                                         is enabled so incoming MIDI velocity can be scaled. Keep
+                                         other playback controls disabled as before. */
+                                     bool volume_enabled_local = !g_reverbDropdownOpen;
 
                             // Transpose slider at {410,63,160,14}
                             if (playback_controls_enabled_local && point_in(mx, my, (Rect){410, 63, 160, 14}))
@@ -1079,7 +1083,8 @@ int main(int argc, char *argv[])
 #else
                         bool playback_controls_enabled_local = true;
 #endif
-                        bool volume_enabled_local = !g_reverbDropdownOpen && playback_controls_enabled_local;
+                        /* Same as wheel handler: allow volume adjustments while MIDI in is enabled */
+                        bool volume_enabled_local = !g_reverbDropdownOpen;
 
                         int delta = (sym == SDLK_RIGHT) ? 1 : -1;
 
@@ -2107,8 +2112,9 @@ int main(int argc, char *argv[])
 
         // Volume control (aligned with Tempo)
         draw_text(R, 687, 85, "Volume:", labelCol);
-        // Disable volume slider interaction when reverb dropdown is open or playback controls disabled
-        bool volume_enabled = !g_reverbDropdownOpen && playback_controls_enabled;
+    // Allow volume slider interaction when reverb dropdown is closed. We want
+    // users to adjust master volume even while external MIDI input is active.
+    bool volume_enabled = !g_reverbDropdownOpen;
         ui_slider(R, (Rect){687, 103, ddRect.w, 14}, &volume, 0, NEW_MAX_VOLUME_PCT,
                   volume_enabled ? ui_mx : -1, volume_enabled ? ui_my : -1,
                   volume_enabled ? ui_mdown : false, volume_enabled ? ui_mclick : false);
@@ -2130,6 +2136,12 @@ int main(int argc, char *argv[])
             draw_frame(R, ddRect, dd_frame);
             draw_text(R, ddRect.x + 6, ddRect.y + 3, cur, dd_txt);
             draw_text(R, ddRect.x + ddRect.w - 16, ddRect.y + 3, g_reverbDropdownOpen ? "^" : "v", dd_txt);
+            // Also redraw Volume controls on top so they remain active/visible
+            draw_text(R, 687, 85, "Volume:", labelCol);
+            ui_slider(R, (Rect){687, 103, ddRect.w, 14}, &volume, 0, NEW_MAX_VOLUME_PCT,
+                      volume_enabled ? ui_mx : -1, volume_enabled ? ui_my : -1,
+                      volume_enabled ? ui_mdown : false, volume_enabled ? ui_mclick : false);
+            draw_text(R, vtxt_x, vtxt_y, vbuf, labelCol);
             // Draw the external MIDI notice in the bottom-right of the control panel
             const char *notice = "External MIDI Input Enabled";
             int n_w = 0, n_h = 0;
@@ -3327,30 +3339,52 @@ int main(int argc, char *argv[])
             // Only show format selector when MIDI input is enabled
             if (g_midi_input_enabled)
             {
-                // Draw the current format button
-                if (ui_button(R, recFmtBtn, g_midiRecordFormatNames[g_midiRecordFormatIndex], mx, my, mdown) && mclick)
+                // If any modal/dialog is open, disable the record-format button and prevent interaction
+                bool recFmtEnabled = !modal_block;
+                // If a modal just opened, close the dropdown to avoid it hanging above dialogs
+                if (!recFmtEnabled && g_midiRecordFormatDropdownOpen)
+                    g_midiRecordFormatDropdownOpen = false;
+
+                if (recFmtEnabled)
                 {
-                    g_midiRecordFormatDropdownOpen = !g_midiRecordFormatDropdownOpen;
-                    // Close other dropdowns when opening
-                    if (g_midiRecordFormatDropdownOpen)
+                    // Draw the current format button (interactive)
+                    if (ui_button(R, recFmtBtn, g_midiRecordFormatNames[g_midiRecordFormatIndex], mx, my, mdown) && mclick)
                     {
-                        g_exportDropdownOpen = false;
-                        g_sampleRateDropdownOpen = false;
-                        g_volumeCurveDropdownOpen = false;
-                        g_midi_input_device_dd_open = false;
-                        g_midi_output_device_dd_open = false;
+                        g_midiRecordFormatDropdownOpen = !g_midiRecordFormatDropdownOpen;
+                        // Close other dropdowns when opening
+                        if (g_midiRecordFormatDropdownOpen)
+                        {
+                            g_exportDropdownOpen = false;
+                            g_sampleRateDropdownOpen = false;
+                            g_volumeCurveDropdownOpen = false;
+                            g_midi_input_device_dd_open = false;
+                            g_midi_output_device_dd_open = false;
+                        }
+                        mclick = false; // consume click
                     }
-                    mclick = false; // consume click
                 }
-                // Render two-column dropdown list when open
-                if (g_midiRecordFormatDropdownOpen)
+                else
+                {
+                    // Render disabled-looking button (no interaction)
+                    SDL_Color disabledBg = g_panel_bg;
+                    SDL_Color disabledTxt = g_panel_border;
+                    disabledBg.a = 200;
+                    disabledTxt.a = 200;
+                    draw_rect(R, recFmtBtn, disabledBg);
+                    draw_frame(R, recFmtBtn, g_panel_border);
+                    draw_text(R, recFmtBtn.x + 6, recFmtBtn.y + 3, g_midiRecordFormatNames[g_midiRecordFormatIndex], disabledTxt);
+                }
+
+                // Render two-column dropdown list when open (only if enabled and open)
+                if (recFmtEnabled && g_midiRecordFormatDropdownOpen)
                 {
                     ui_dropdown_two_column(R, recFmtBtn, &g_midiRecordFormatIndex, g_midiRecordFormatNames, g_midiRecordFormatCount, &g_midiRecordFormatDropdownOpen, mx, my, mdown, mclick);
                 }
             }
             if (!g_midi_recording)
             {
-                if (ui_button(R, recRect, "Record", mx, my, mdown) && mclick)
+                // Disable Record button when a dialog/modal is open
+                if (!modal_block && ui_button(R, recRect, "Record", mx, my, mdown) && mclick)
                 {
                     // Behavior depends on selected format
                     if (g_midiRecordFormatIndex == 0)
@@ -3721,6 +3755,17 @@ int main(int argc, char *argv[])
                         }
                     }
                     mclick = false;
+                }
+                else if (modal_block)
+                {
+                    // Draw disabled Record button (no interaction)
+                    SDL_Color disabledBg = g_panel_bg;
+                    SDL_Color disabledTxt = g_panel_border;
+                    disabledBg.a = 200;
+                    disabledTxt.a = 200;
+                    draw_rect(R, recRect, disabledBg);
+                    draw_frame(R, recRect, g_panel_border);
+                    draw_text(R, recRect.x + 22, recRect.y + 4, "Record", disabledTxt);
                 }
             }
             else

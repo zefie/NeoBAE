@@ -428,6 +428,18 @@ void render_settings_dialog(SDL_Renderer *R, int mx, int my, bool mclick, bool m
         {
             // Start background service first (so events queue safely as soon as RtMidi is opened)
             midi_service_start();
+            /* Apply remembered master volume intent via bae_set_volume so the
+               same normalization used for song loads is applied to the live
+               synth and mixer before ports are opened or events arrive. */
+            if (volume)
+            {
+                bae_set_volume(*volume);
+            }
+            if (g_bae.mixer)
+            {
+                BAEMixer_Idle(g_bae.mixer);
+                BAEMixer_ServiceStreams(g_bae.mixer);
+            }
             // When enabling MIDI In, stop and unload any current media so the live synth takes over
             // Stop and delete loaded song or sound if present
             if (g_exporting)
@@ -459,6 +471,12 @@ void render_settings_dialog(SDL_Renderer *R, int mx, int my, bool mclick, bool m
                 if (g_live_song)
                 {
                     BAESong_Preroll(g_live_song);
+                    /* Use bae_set_volume so per-type normalization is applied to
+                       the newly created live synth and mixer state. */
+                    if (volume)
+                    {
+                        bae_set_volume(*volume);
+                    }
                 }
             }
             // If the user has chosen a specific input device, open that one
@@ -472,6 +490,21 @@ void render_settings_dialog(SDL_Renderer *R, int mx, int my, bool mclick, bool m
             {
                 midi_input_init("miniBAE", -1, -1);
             }
+            if (g_bae.mixer)
+            {
+                for (int _i = 0; _i < 3; ++_i)
+                {
+                    BAEMixer_Idle(g_bae.mixer);
+                    BAEMixer_ServiceStreams(g_bae.mixer);
+                }
+            }
+            /* Re-apply stored master volume intent after MIDI input is opened.
+               Call bae_set_volume to ensure the same normalization/boost
+               behavior used for loaded songs is also used for MIDI-in. */
+            if (volume)
+            {
+                bae_set_volume(*volume);
+            }            
         }
         else
         {
