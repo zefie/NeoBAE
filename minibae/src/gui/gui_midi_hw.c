@@ -49,6 +49,9 @@ extern float g_channel_vu[16];
 extern float g_channel_peak_level[16];
 extern Uint32 g_channel_peak_hold_until[16];
 extern Uint32 g_channel_peak_hold_ms;
+
+// Forward declaration
+extern void set_status_message(const char *msg);
 extern unsigned char g_keyboard_active_notes_by_channel[16][128];
 
 // MIDI state globals
@@ -98,12 +101,25 @@ bool g_master_muted_for_midi_out = false;
 // PCM recording state
 bool g_pcm_wav_recording = false;
 bool g_pcm_mp3_recording = false; // platform MP3 recorder active (MIDI-in)
+#if USE_FLAC_ENCODER != FALSE
+bool g_pcm_flac_recording = false;
+#endif
 FILE *g_pcm_wav_fp = NULL;
 uint64_t g_pcm_wav_data_bytes = 0;
 int g_pcm_wav_channels = 2;
 int g_pcm_wav_sample_rate = 44100;
 int g_pcm_wav_bits = 16;
 bool g_pcm_wav_disengaged_audio = false;
+
+#if USE_FLAC_ENCODER != FALSE
+// FLAC recording state
+static void *g_pcm_flac_encoder = NULL;
+static void *g_pcm_flac_accumulated_samples = NULL;
+static uint32_t g_pcm_flac_accumulated_frames = 0;
+static uint32_t g_pcm_flac_max_accumulated_frames = 0;
+static char g_pcm_flac_output_path[1024] = {0};
+#include "FLAC/stream_encoder.h"
+#endif
 
 // ===== MIDI Event Callback =====
 
@@ -626,5 +642,157 @@ void midi_service_stop(void)
     SDL_WaitThread(g_midi_service_thread, NULL);
     g_midi_service_thread = NULL;
 }
+
+#if USE_FLAC_ENCODER != FALSE
+// FLAC recording functions
+bool pcm_flac_start(const char *path, int channels, int sample_rate, int bits)
+{
+    BAE_PRINTF("FLAC recording start attempt: %s (%d Hz, %d ch, %d bits)\n", path, sample_rate, channels, bits);
+    
+    if (!path) {
+        BAE_PRINTF("FLAC recording: null path\n");
+        return false;
+    }
+    
+    if (g_pcm_flac_recording) {
+        BAE_PRINTF("FLAC recording: already recording\n");
+        return false;
+    }
+    
+    // Store recording parameters
+    g_pcm_wav_channels = channels;
+    g_pcm_wav_sample_rate = sample_rate;
+    g_pcm_wav_bits = bits;
+    
+    strncpy(g_pcm_flac_output_path, path, sizeof(g_pcm_flac_output_path) - 1);
+    g_pcm_flac_output_path[sizeof(g_pcm_flac_output_path) - 1] = '\0';
+    
+    // Allocate buffer for accumulating samples (2 minutes max)
+    g_pcm_flac_max_accumulated_frames = sample_rate * 120; // 2 minutes
+    g_pcm_flac_accumulated_samples = malloc(g_pcm_flac_max_accumulated_frames * channels * (bits / 8));
+    if (!g_pcm_flac_accumulated_samples) {
+        BAE_PRINTF("FLAC recording: failed to allocate %u bytes for buffer\n", 
+                   (unsigned)(g_pcm_flac_max_accumulated_frames * channels * (bits / 8)));
+        return false;
+    }
+    
+    g_pcm_flac_accumulated_frames = 0;
+    g_pcm_flac_recording = true;
+    
+    // Register the callback to capture audio from the audio callback
+    BAE_Platform_SetFlacRecorderCallback(pcm_flac_write_samples);
+    
+    set_status_message("FLAC recording started");
+    BAE_PRINTF("FLAC recording started: %s (%d Hz, %d ch, %d bits)\n", path, sample_rate, channels, bits);
+    return true;
+}
+
+void pcm_flac_finalize(void)
+{
+    if (!g_pcm_flac_recording || !g_pcm_flac_accumulated_samples)
+        return;
+    
+    // Create FLAC encoder and encode all accumulated data
+    FLAC__StreamEncoder *encoder = FLAC__stream_encoder_new();
+    if (encoder) {
+        // Configure encoder
+        FLAC__stream_encoder_set_verify(encoder, true);
+        FLAC__stream_encoder_set_compression_level(encoder, 5);
+        FLAC__stream_encoder_set_channels(encoder, g_pcm_wav_channels);
+        FLAC__stream_encoder_set_bits_per_sample(encoder, g_pcm_wav_bits);
+        FLAC__stream_encoder_set_sample_rate(encoder, g_pcm_wav_sample_rate);
+        FLAC__stream_encoder_set_total_samples_estimate(encoder, g_pcm_flac_accumulated_frames);
+        
+        // Initialize encoder to write to file
+        FLAC__StreamEncoderInitStatus init_status = FLAC__stream_encoder_init_file(encoder, g_pcm_flac_output_path, NULL, NULL);
+        if (init_status == FLAC__STREAM_ENCODER_INIT_STATUS_OK) {
+            // Process all accumulated samples
+            if (g_pcm_wav_bits == 16) {
+                // Convert 16-bit samples to 32-bit for FLAC
+                uint32_t frames_to_process = g_pcm_flac_accumulated_frames;
+                const int16_t *src = (const int16_t *)g_pcm_flac_accumulated_samples;
+                
+                // Process in chunks to avoid large stack allocation
+                const uint32_t chunk_size = 4096;
+                FLAC__int32 *buffer = (FLAC__int32 *)malloc(chunk_size * g_pcm_wav_channels * sizeof(FLAC__int32));
+                if (buffer) {
+                    uint32_t frames_processed = 0;
+                    while (frames_processed < frames_to_process) {
+                        uint32_t frames_this_chunk = frames_to_process - frames_processed;
+                        if (frames_this_chunk > chunk_size)
+                            frames_this_chunk = chunk_size;
+                        
+                        // Convert 16-bit to 32-bit
+                        for (uint32_t i = 0; i < frames_this_chunk * g_pcm_wav_channels; i++) {
+                            buffer[i] = (FLAC__int32)src[frames_processed * g_pcm_wav_channels + i];
+                        }
+                        
+                        // Encode chunk
+                        FLAC__stream_encoder_process_interleaved(encoder, buffer, frames_this_chunk);
+                        frames_processed += frames_this_chunk;
+                    }
+                    free(buffer);
+                }
+            }
+            
+            FLAC__stream_encoder_finish(encoder);
+            set_status_message("FLAC recording saved");
+        } else {
+            set_status_message("FLAC encoding failed");
+        }
+        
+        FLAC__stream_encoder_delete(encoder);
+    }
+    
+    // Clear the audio callback
+    BAE_Platform_ClearFlacRecorderCallback();
+    
+    // Clean up
+    if (g_pcm_flac_accumulated_samples) {
+        free(g_pcm_flac_accumulated_samples);
+        g_pcm_flac_accumulated_samples = NULL;
+    }
+    g_pcm_flac_accumulated_frames = 0;
+    g_pcm_flac_recording = false;
+    g_midi_recording = false;
+}
+
+void pcm_flac_write_samples(int16_t *left, int16_t *right, int frames)
+{
+    if (!g_pcm_flac_recording || !g_pcm_flac_accumulated_samples || frames <= 0)
+        return;
+    
+    // Check if we have room in the accumulation buffer
+    if (g_pcm_flac_accumulated_frames + frames > g_pcm_flac_max_accumulated_frames) {
+        // Buffer overflow - just ignore the extra samples
+        static int warned = 0;
+        if (!warned) {
+            set_status_message("FLAC buffer full, recording may be truncated");
+            warned = 1;
+        }
+        return;
+    }
+    
+    // Append samples to accumulation buffer
+    int16_t *dest = (int16_t *)g_pcm_flac_accumulated_samples + 
+                   (g_pcm_flac_accumulated_frames * g_pcm_wav_channels);
+    
+    if (g_pcm_wav_channels == 1) {
+        // Mono - use left channel if available, otherwise right
+        int16_t *src = left ? left : right;
+        for (int i = 0; i < frames; i++) {
+            dest[i] = src[i];
+        }
+    } else {
+        // Stereo
+        for (int i = 0; i < frames; i++) {
+            dest[i * 2] = left ? left[i] : 0;
+            dest[i * 2 + 1] = right ? right[i] : 0;
+        }
+    }
+    
+    g_pcm_flac_accumulated_frames += frames;
+}
+#endif // USE_FLAC_ENCODER
 
 #endif // SUPPORT_MIDI_HW

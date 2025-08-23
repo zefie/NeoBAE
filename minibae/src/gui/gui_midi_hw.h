@@ -55,6 +55,9 @@ extern bool g_master_muted_for_midi_out;
 // PCM recording state
 extern bool g_pcm_wav_recording;
 extern bool g_pcm_mp3_recording;
+#if USE_FLAC_ENCODER != FALSE
+extern bool g_pcm_flac_recording;
+#endif
 extern FILE *g_pcm_wav_fp;
 extern uint64_t g_pcm_wav_data_bytes;
 extern int g_pcm_wav_channels;
@@ -76,6 +79,12 @@ bool pcm_wav_write_header(FILE *f, int channels, int sample_rate, int bits, uint
 bool pcm_wav_start(const char *path, int channels, int sample_rate, int bits);
 void pcm_wav_finalize(void);
 void pcm_wav_write_samples(int16_t *left, int16_t *right, int frames);
+
+#if USE_FLAC_ENCODER != FALSE
+bool pcm_flac_start(const char *path, int channels, int sample_rate, int bits);
+void pcm_flac_finalize(void);
+void pcm_flac_write_samples(int16_t *left, int16_t *right, int frames);
+#endif
 
 #endif // SUPPORT_MIDI_HW
 

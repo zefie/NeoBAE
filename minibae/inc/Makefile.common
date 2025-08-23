@@ -239,6 +239,17 @@ ifneq ($(FLAC_DEC),)
 	SRC += stream_decoder.c bitreader.c bitmath.c bitwriter.c cpu.c crc.c fixed.c format.c lpc.c md5.c memory.c metadata_iterators.c metadata_object.c stream_encoder_framing.c window.c
 endif
 
+# Add FLAC encoder source files  
+ifneq ($(FLAC_ENC),)
+	BAE_FLAGS += -DUSE_FLAC_ENCODER=1
+	# stream_encoder.c is the main encoding engine, other files already included above for decoder
+	SRC += stream_encoder.c
+	ifeq ($(FLAC_DEC),)
+		# Add required FLAC files for encoding, if decoding was disabled
+		SRC += bitreader.c bitmath.c bitwriter.c cpu.c crc.c fixed.c format.c lpc.c md5.c memory.c metadata_iterators.c metadata_object.c stream_encoder_framing.c window.c
+	endif
+endif
+
 
 # playbae = libMiniBAE srcs + playbae.c
 ifneq ($(BUILD_GUI),)

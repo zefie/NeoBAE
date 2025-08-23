@@ -366,6 +366,14 @@ int BAE_Platform_MP3Recorder_Start(const char *path, uint32_t channels, uint32_t
 // Stop the platform MP3 recorder and finalize/flush encoder. Safe to call if not active.
 void BAE_Platform_MP3Recorder_Stop(void);
 
+// Set a callback function to receive audio samples from the audio callback for FLAC recording.
+// The callback receives separate left/right channel arrays and frame count.
+// Pass NULL to clear the callback.
+void BAE_Platform_SetFlacRecorderCallback(void (*callback)(int16_t *left, int16_t *right, int frames));
+
+// Clear the FLAC recorder callback. Safe to call if no callback is set.
+void BAE_Platform_ClearFlacRecorderCallback(void);
+
 // **** Audio Engine feedback functions. These functions are used to direct or get
 //      information about the engine.
 //

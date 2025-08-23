@@ -2964,42 +2964,51 @@ int main(int argc, char *argv[])
                         /* export_allowed already ensures g_midi_output_enabled == false */
 #endif
                         // When export button clicked, open save dialog using extension depending on codec
-                        char *export_file = save_export_dialog(g_exportCodecIndex != 0);
+                        int export_dialog_type = 0; // Default to WAV
+                        
+                        // Determine export type based on codec index
+                        if (g_exportCodecIndex == 0) {
+                            export_dialog_type = 0; // WAV
+                        }
+#if USE_FLAC_ENCODER != FALSE
+                        else if (g_exportCodecIndex == 1) {
+                            export_dialog_type = 1; // FLAC
+                        }
+#endif
+#if USE_MPEG_ENCODER != FALSE
+                        else {
+                            export_dialog_type = 2; // MP3
+                        }
+#endif
+                        char *export_file = save_export_dialog(export_dialog_type);
                         if (export_file)
                         {
-                            // If user selected MP3 codec, ensure filename ends with .mp3 else .wav
-                            if (g_exportCodecIndex == 0)
-                            { // WAV
-                                // ensure .wav extension (basic)
-                                size_t L = strlen(export_file);
-                                if (L < 4 || strcasecmp(export_file + L - 4, ".wav") != 0)
-                                {
-                                    // naive realloc: append .wav
-                                    size_t n = L + 5;
-                                    char *tmp = malloc(n);
-                                    if (tmp)
-                                    {
-                                        snprintf(tmp, n, "%s.wav", export_file);
-                                        free(export_file);
-                                        export_file = tmp;
-                                    }
-                                }
+                            // Ensure correct file extension based on export type
+                            size_t L = strlen(export_file);
+                            const char *expected_ext = NULL;
+                            
+                            if (export_dialog_type == 1) {
+                                expected_ext = ".flac";
+                            } else if (export_dialog_type == 2) {
+                                expected_ext = ".mp3";
+                            } else {
+                                expected_ext = ".wav";
                             }
-                            else
+                            
+                            int ext_len = strlen(expected_ext);
+                            if (L < ext_len || strcasecmp(export_file + L - ext_len, expected_ext) != 0)
                             {
-                                size_t L = strlen(export_file);
-                                if (L < 4 || strcasecmp(export_file + L - 4, ".mp3") != 0)
+                                // Append the correct extension
+                                size_t n = L + ext_len + 1;
+                                char *tmp = malloc(n);
+                                if (tmp)
                                 {
-                                    size_t n = L + 5;
-                                    char *tmp = malloc(n);
-                                    if (tmp)
-                                    {
-                                        snprintf(tmp, n, "%s.mp3", export_file);
-                                        free(export_file);
-                                        export_file = tmp;
-                                    }
+                                    snprintf(tmp, n, "%s%s", export_file, expected_ext);
+                                    free(export_file);
+                                    export_file = tmp;
                                 }
                             }
+                            
                             // Start export using selected codec mapping
                             // Map our index to BAEMixer compression enums using table
                             BAECompressionType compression = BAE_COMPRESSION_NONE;
@@ -3028,8 +3037,25 @@ int main(int argc, char *argv[])
                                     g_bae.is_playing = false;
                                 }
                                 BAESong_SetMicrosecondPosition(g_bae.song, 0);
+                                BAEFileType export_file_type = BAE_WAVE_TYPE;
+                                
+                                // Determine file type based on compression type
+                                if (compression == BAE_COMPRESSION_NONE) {
+                                    export_file_type = BAE_WAVE_TYPE;
+                                }
+#if USE_FLAC_ENCODER != FALSE
+                                else if (compression == BAE_COMPRESSION_LOSSLESS) {
+                                    export_file_type = BAE_FLAC_TYPE;
+                                }
+#endif
+#if USE_MPEG_ENCODER != FALSE
+                                else if (compression >= BAE_COMPRESSION_MPEG_64 && compression <= BAE_COMPRESSION_MPEG_320) {
+                                    export_file_type = BAE_MPEG_TYPE;
+                                }
+#endif
+                                
                                 BAEResult result = BAEMixer_StartOutputToFile(g_bae.mixer, (BAEPathName)export_file,
-                                                                              (g_exportCodecIndex == 0) ? BAE_WAVE_TYPE : BAE_MPEG_TYPE,
+                                                                              export_file_type,
                                                                               (BAECompressionType)compression);
                                 if (result != BAE_NO_ERROR)
                                 {
@@ -3040,7 +3066,7 @@ int main(int argc, char *argv[])
                                 else
                                 {
                                     // Determine export file type so service loop can apply MPEG heuristics
-                                    g_export_file_type = (g_exportCodecIndex == 0) ? BAE_WAVE_TYPE : BAE_MPEG_TYPE;
+                                    g_export_file_type = export_file_type;
 
                                     // Reset virtual keyboard so no keys remain active during export
                                     if (g_show_virtual_keyboard)
@@ -3265,13 +3291,24 @@ int main(int argc, char *argv[])
                         else
                         {
                             // Choose save dialog and extension based on format
-                            bool isMp3 = (g_midiRecordFormatIndex >= 2);
-                            char *export_file = save_export_dialog(isMp3);
+                            int export_dialog_type = 0; // Default to WAV
+                            if (g_midiRecordFormatIndex == 1) {
+                                export_dialog_type = 0; // WAV
+                            }
+#if USE_FLAC_ENCODER != FALSE
+                            else if (g_midiRecordFormatIndex == 2) {
+                                export_dialog_type = 1; // FLAC
+                            }
+#endif
+                            else if (g_midiRecordFormatIndex >= 3) {
+                                export_dialog_type = 2; // MP3
+                            }
+                            char *export_file = save_export_dialog(export_dialog_type);
                             if (export_file)
                             {
                                 // ensure correct extension
                                 size_t L = strlen(export_file);
-                                if (!isMp3)
+                                if (g_midiRecordFormatIndex == 1)
                                 { // WAV
                                     if (L < 4 || strcasecmp(export_file + L - 4, ".wav") != 0)
                                     {
@@ -3285,7 +3322,23 @@ int main(int argc, char *argv[])
                                         }
                                     }
                                 }
-                                else
+#if USE_FLAC_ENCODER != FALSE
+                                else if (g_midiRecordFormatIndex == 2)
+                                { // FLAC
+                                    if (L < 5 || strcasecmp(export_file + L - 5, ".flac") != 0)
+                                    {
+                                        size_t n = L + 6;
+                                        char *tmp = malloc(n);
+                                        if (tmp)
+                                        {
+                                            snprintf(tmp, n, "%s.flac", export_file);
+                                            free(export_file);
+                                            export_file = tmp;
+                                        }
+                                    }
+                                }
+#endif
+                                else if (g_midiRecordFormatIndex >= 3)
                                 { // MP3
                                     if (L < 4 || strcasecmp(export_file + L - 4, ".mp3") != 0)
                                     {
@@ -3321,15 +3374,22 @@ int main(int argc, char *argv[])
                                 // Map selected format to BAE types
                                 BAECompressionType compression = BAE_COMPRESSION_NONE;
                                 int selectedCodecIndex = 0; // for UI state
-#if USE_MPEG_ENCODER != FALSE
+#if USE_MPEG_ENCODER != FALSE || USE_FLAC_ENCODER != FALSE
                                 if (g_midiRecordFormatIndex == 1)
                                 {                           // WAV
                                     selectedCodecIndex = 0; // WAV
                                 }
+#if USE_FLAC_ENCODER != FALSE
+                                else if (g_midiRecordFormatIndex == 2)
+                                {                           // FLAC
+                                    selectedCodecIndex = 1; // FLAC
+                                }
+#endif
                                 else
                                 {
-                                    // Map our index (2..n) to the compression map defined earlier
-                                    selectedCodecIndex = g_midiRecordFormatIndex; // aligns with g_exportCompressionMap indexes
+                                    // Map our index (3..n) to the compression map defined earlier
+                                    // Adjust for FLAC insertion: subtract 1 to account for FLAC at index 2
+                                    selectedCodecIndex = g_midiRecordFormatIndex - 1;
                                     if (selectedCodecIndex < 0)
                                         selectedCodecIndex = 0;
                                     if (selectedCodecIndex >= g_exportCompressionCount)
@@ -3347,8 +3407,8 @@ int main(int argc, char *argv[])
 
                                 if (export_file)
                                 {
-                                    // If WAV selected, use our PCM capture path instead of BAEMixer file output
-                                    if (g_midiRecordFormatIndex == 1)
+                                    // If WAV or FLAC selected, use our PCM capture path instead of BAEMixer file output
+                                    if (g_midiRecordFormatIndex == 1) // WAV
                                     {
                                         // start our own PCM WAV writer and start song/live-song to drive audio
                                         int wav_channels = g_stereo_output ? 2 : 1;
@@ -3400,6 +3460,64 @@ int main(int argc, char *argv[])
                                             }
                                         }
                                     }
+#if USE_FLAC_ENCODER != FALSE
+                                    else if (g_midiRecordFormatIndex == 2) // FLAC
+                                    {
+                                        // start our own PCM FLAC writer and start song/live-song to drive audio
+                                        int flac_channels = g_stereo_output ? 2 : 1;
+                                        int flac_sr = g_sample_rate_hz > 0 ? g_sample_rate_hz : 44100;
+                                        set_status_message("Attempting FLAC recording...");
+                                        BAE_PRINTF("GUI: Attempting FLAC recording - channels=%d, sr=%d, file=%s\n", flac_channels, flac_sr, export_file);
+                                        bool started = pcm_flac_start(export_file, flac_channels, flac_sr, 16);
+                                        if (!started)
+                                        {
+                                            set_status_message("Failed to open FLAC file for recording");
+                                            free(export_file);
+                                        }
+                                        else
+                                        {
+                                            // If not in MIDI-in mode, start/seek/preroll the target song to drive engine audio.
+                                            if (!g_midi_input_enabled)
+                                            {
+                                                if (target)
+                                                {
+                                                    BAESong_Stop(target, FALSE);
+                                                    BAESong_SetMicrosecondPosition(target, 0);
+                                                    BAESong_Preroll(target);
+                                                }
+                                                BAEResult rs = target ? BAESong_Start(target, 0) : BAE_NO_ERROR;
+                                                if (rs != BAE_NO_ERROR)
+                                                {
+                                                    set_status_message("Failed to start song for FLAC recording");
+                                                    pcm_flac_finalize();
+                                                    free(export_file);
+                                                }
+                                                else
+                                                {
+                                                    g_bae.is_playing = true;
+                                                    g_pcm_flac_recording = true;
+                                                    g_midi_recording = true;
+                                                    g_exporting = false; // use our own writer
+                                                    strncpy(g_export_path, export_file, sizeof(g_export_path) - 1);
+                                                    g_export_path[sizeof(g_export_path) - 1] = '\0';
+                                                    set_status_message("FLAC recording started");
+                                                    free(export_file);
+                                                }
+                                            }
+                                            else
+                                            {
+                                                // MIDI-in mode: do not change engine playback; just enable PCM writer.
+                                                g_pcm_flac_recording = true;
+                                                g_midi_recording = true;
+                                                g_exporting = false; // use our own writer
+                                                strncpy(g_export_path, export_file, sizeof(g_export_path) - 1);
+                                                g_export_path[sizeof(g_export_path) - 1] = '\0';
+                                                set_status_message("FLAC recording started");
+                                                free(export_file);
+                                            }
+                                        }
+                                    }
+#endif
                                     else
                                     {
                                         // MP3 selected
@@ -3409,9 +3527,9 @@ int main(int argc, char *argv[])
                                             // Use platform MP3 recorder for MIDI-in; do not start BAESong
                                             int mp3_channels = g_stereo_output ? 2 : 1;
                                             int mp3_sr = g_sample_rate_hz > 0 ? g_sample_rate_hz : 44100;
-                                            // Map MIDI record index (2..7) to bitrate table
+                                            // Map MIDI record index (3..8) to bitrate table (FLAC now at index 2)
                                             static const int mp3_rates[] = {96000, 128000, 160000, 192000, 256000, 320000};
-                                            int sel = g_midiRecordFormatIndex - 2;
+                                            int sel = g_midiRecordFormatIndex - 3; // Adjusted for FLAC at index 2
                                             if (sel < 0)
                                                 sel = 0;
                                             if (sel > 5)
@@ -3530,6 +3648,24 @@ int main(int argc, char *argv[])
                             set_status_message("No WAV export in progress");
                         }
                     }
+#if USE_FLAC_ENCODER != FALSE
+                    else if (g_midiRecordFormatIndex == 2)
+                    {
+                        // FLAC: if using our PCM writer, finalize it
+                        if (g_pcm_flac_recording)
+                        {
+                            pcm_flac_finalize();
+                        }
+                        else if (g_exporting)
+                        {
+                            bae_stop_wav_export(); // Falls back to normal export stop
+                        }
+                        else
+                        {
+                            set_status_message("No FLAC export in progress");
+                        }
+                    }
+#endif
                     else
                     {
                         // Other formats (MP3)

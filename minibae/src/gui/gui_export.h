@@ -43,7 +43,7 @@ bool bae_start_mpeg_export(const char *output_file, int codec_index);
 #endif
 void bae_stop_wav_export(void);
 void bae_service_wav_export(void);
-char *save_export_dialog(bool want_mp3);
+char *save_export_dialog(int export_type); // 0=WAV, 1=FLAC, 2=MP3
 char *save_midi_dialog(void);
 
 #endif // GUI_EXPORT_H

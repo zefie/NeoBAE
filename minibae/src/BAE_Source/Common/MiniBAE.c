@@ -161,6 +161,14 @@
 #include <limits.h>
 #include <stdint.h>
 #include "bankinfo.h"      // embedded bank metadata (hash -> friendly)
+
+#if USE_FLAC_ENCODER != FALSE
+#include "FLAC/stream_encoder.h"
+// Forward declaration of FLAC encoding function from GenSoundFiles.c
+OPErr PV_WriteFromMemoryFLACFile(XFILENAME *file, GM_Waveform const* pAudioData, XWORD formatTag);
+// Wave format constant
+#define X_WAVE_FORMAT_PCM 0x0001
+#endif
 #include "sha1mini.h"       // hashing for friendly name resolution
 
 #ifdef WASM
@@ -517,6 +525,18 @@ void                *mWritingEncoder;
 void                *mWritingDataBlock;
 uint32_t       mWritingDataBlockSize;
 
+#if USE_FLAC_ENCODER != FALSE
+// FLAC encoding state for streaming
+void                *mFLACEncoder;
+void                *mFLACAccumulatedSamples;
+uint32_t       mFLACAccumulatedFrames;
+uint32_t       mFLACMaxAccumulatedFrames;
+uint32_t       mFLACChannels;
+uint32_t       mFLACBitsPerSample;
+uint32_t       mFLACSampleRate;
+XFILENAME           mFLACOutputFile;
+#endif
+
 // Prototypes
 // ----------------------------------------------------------------------------
 BAEResult           BAE_TranslateOPErr(OPErr theErr);
@@ -777,7 +797,7 @@ AudioFileType BAE_TranslateBAEFileType(BAEFileType fileType)
             haeFileType = FILE_MPEG_TYPE;
             break;
 #endif
-#if USE_FLAC_DECODER != FALSE
+#if (USE_FLAC_DECODER != FALSE) || (USE_FLAC_ENCODER != FALSE)
         case BAE_FLAC_TYPE:
             haeFileType = FILE_FLAC_TYPE;
             break;
@@ -3235,10 +3255,40 @@ BAEResult BAEMixer_StartOutputToFile(BAEMixer theMixer,
 #else
         compressionType;
 #endif
+
+        case BAE_FLAC_TYPE:
         case BAE_WAVE_TYPE:
         case BAE_AIFF_TYPE:
         case BAE_AU_TYPE:
         {
+#if USE_FLAC_ENCODER != FALSE
+            if (outputType == BAE_FLAC_TYPE) {
+                // For FLAC, we'll accumulate audio in memory and then encode
+                mFLACChannels = (theModifiers & BAE_USE_STEREO) ? 2 : 1;
+                mFLACBitsPerSample = (theModifiers & BAE_USE_16) ? 16 : 8;
+                mFLACSampleRate = GM_ConvertFromOutputRateToRate(theRate);
+                mFLACAccumulatedFrames = 0;
+                // Allocate buffer for about 10 minutes worth of audio (should handle most songs)
+                mFLACMaxAccumulatedFrames = mFLACSampleRate * 600; // 10 minutes
+                mFLACAccumulatedSamples = XNewPtr(mFLACMaxAccumulatedFrames * mFLACChannels * (mFLACBitsPerSample / 8));
+                mFLACEncoder = NULL; // Will be created when we finish accumulating
+                mFLACOutputFile = theFile; // Store file path for later
+                
+                // Check if allocation succeeded
+                if (!mFLACAccumulatedSamples) {
+                    theErr = MEMORY_ERR;
+                } else {
+                    // Just open the file for later writing
+                    mWritingToFileReference = (void *)XFileOpenForWrite(&theFile, TRUE);
+                    if (mWritingToFileReference) {
+                        GM_StopHardwareSoundManager(NULL);
+                        mWritingToFile = TRUE;
+                    } else {
+                        theErr = BAD_FILE;
+                    }
+                }
+            } else {
+#endif
             GM_Waveform *w = GM_NewWaveform();
             char buf[4] = {0,0,0,0};
 
@@ -3274,6 +3324,9 @@ BAEResult BAEMixer_StartOutputToFile(BAEMixer theMixer,
             {
                 theErr = BAD_FILE;
             }
+#if USE_FLAC_ENCODER != FALSE
+            }
+#endif
         } break;
 
         case BAE_RAW_PCM:
@@ -3334,6 +3387,42 @@ void BAEMixer_StopOutputToFile(void)
             case BAE_AU_TYPE:
                 GM_FinalizeFileHeader((XFILE)mWritingToFileReference, BAE_TranslateBAEFileType(mWriteToFileType));
                 break;
+
+#if USE_FLAC_ENCODER != FALSE
+            case BAE_FLAC_TYPE:
+                // Encode accumulated audio data to FLAC and write to file
+                if (mFLACAccumulatedSamples && mFLACAccumulatedFrames > 0) {
+                    // Use the existing PV_WriteFromMemoryFLACFile function
+                    GM_Waveform tempWave;
+                    tempWave.theWaveform = mFLACAccumulatedSamples;
+                    tempWave.waveFrames = mFLACAccumulatedFrames;
+                    tempWave.channels = mFLACChannels;
+                    tempWave.bitSize = mFLACBitsPerSample;
+                    tempWave.sampledRate = LONG_TO_UNSIGNED_FIXED(mFLACSampleRate);
+                    tempWave.compressionType = C_NONE;
+                    tempWave.waveSize = mFLACAccumulatedFrames * mFLACChannels * (mFLACBitsPerSample / 8);
+                    
+                    // Close current file and rewrite with FLAC encoded data
+                    XFileClose((XFILE)mWritingToFileReference);
+                    mWritingToFileReference = NULL;
+                    
+                    // Write FLAC data using stored file path
+                    PV_WriteFromMemoryFLACFile(&mFLACOutputFile, &tempWave, X_WAVE_FORMAT_PCM);
+                }
+                
+                // Cleanup FLAC state
+                if (mFLACEncoder) {
+                    FLAC__stream_encoder_finish((FLAC__StreamEncoder *)mFLACEncoder);
+                    FLAC__stream_encoder_delete((FLAC__StreamEncoder *)mFLACEncoder);
+                    mFLACEncoder = NULL;
+                }
+                if (mFLACAccumulatedSamples) {
+                    XDisposePtr(mFLACAccumulatedSamples);
+                    mFLACAccumulatedSamples = NULL;
+                }
+                mFLACAccumulatedFrames = 0;
+                break;
+#endif
 
             default:
                 break;
@@ -3473,6 +3562,34 @@ BAEResult BAEMixer_ServiceAudioOutputToFile(BAEMixer theMixer)
                                                             sampleSize);
                     }
                     break;
+
+#if USE_FLAC_ENCODER != FALSE
+                    case BAE_FLAC_TYPE:
+                    {
+                        // Accumulate audio samples for FLAC encoding
+                        uint32_t framesToProcess = (uint32_t)(mWritingDataBlockSize / sampleSize / channels);
+                        
+                        BAE_BuildMixerSlice(NULL, mWritingDataBlock, mWritingDataBlockSize, framesToProcess);
+                        
+                        // Check if we have room in the accumulation buffer
+                        if (mFLACAccumulatedFrames + framesToProcess <= mFLACMaxAccumulatedFrames) {
+                            // Copy audio data to accumulation buffer
+                            char *destPtr = (char *)mFLACAccumulatedSamples + 
+                                          (mFLACAccumulatedFrames * mFLACChannels * (mFLACBitsPerSample / 8));
+                            memcpy(destPtr, mWritingDataBlock, mWritingDataBlockSize);
+                            mFLACAccumulatedFrames += framesToProcess;
+                        } else {
+                            // Buffer is full - this shouldn't happen with 10 minutes of buffer
+                            // But if it does, warn and stop accumulating (export will be truncated)
+                            static int warned = 0;
+                            if (!warned) {
+                                BAE_PRINTF("FLAC accumulation buffer full (>10 minutes), export will be truncated\n");
+                                warned = 1;
+                            }
+                        }
+                    }
+                    break;
+#endif
 
                     default:
                     {

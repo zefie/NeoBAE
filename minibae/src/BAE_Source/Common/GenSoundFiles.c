@@ -191,6 +191,9 @@
 #if USE_FLAC_DECODER != FALSE
 #include "FLAC/stream_decoder.h"
 #endif
+#if USE_FLAC_ENCODER != FALSE
+#include "FLAC/stream_encoder.h"
+#endif
 #include <stdint.h>
 #include <limits.h>
 
@@ -3850,6 +3853,113 @@ OPErr GM_ReadAndDecodeFileStream(XFILE fileReference,
     return fileError;
 }
 
+#if USE_FLAC_ENCODER != FALSE
+OPErr PV_WriteFromMemoryFLACFile(XFILENAME *file, GM_Waveform const* pAudioData, XWORD formatTag)
+{
+    FLAC__StreamEncoder *encoder = NULL;
+    XFILE theFile = NULL;
+    OPErr err = NO_ERR;
+    XBOOL ok = TRUE;
+    
+    if (!file || !pAudioData || formatTag != X_WAVE_FORMAT_PCM)
+    {
+        return PARAM_ERR;
+    }
+    
+    if (pAudioData->compressionType != C_NONE)
+    {
+        return PARAM_ERR;
+    }
+    
+    // Create FLAC encoder
+    encoder = FLAC__stream_encoder_new();
+    if (!encoder)
+    {
+        return MEMORY_ERR;
+    }
+    
+    // Configure encoder settings
+    ok &= FLAC__stream_encoder_set_verify(encoder, true);
+    ok &= FLAC__stream_encoder_set_compression_level(encoder, 5);
+    ok &= FLAC__stream_encoder_set_channels(encoder, pAudioData->channels);
+    ok &= FLAC__stream_encoder_set_bits_per_sample(encoder, pAudioData->bitSize);
+    ok &= FLAC__stream_encoder_set_sample_rate(encoder, XFIXED_TO_UNSIGNED_LONG(pAudioData->sampledRate));
+    ok &= FLAC__stream_encoder_set_total_samples_estimate(encoder, pAudioData->waveFrames);
+    
+    if (!ok)
+    {
+        FLAC__stream_encoder_delete(encoder);
+        return PARAM_ERR;
+    }
+    
+    // Initialize encoder to write to file
+    FLAC__StreamEncoderInitStatus init_status = FLAC__stream_encoder_init_file(encoder, file->theFile, NULL, NULL);
+    if (init_status != FLAC__STREAM_ENCODER_INIT_STATUS_OK)
+    {
+        FLAC__stream_encoder_delete(encoder);
+        return BAD_FILE;
+    }
+    
+    // Convert audio data to FLAC format and encode
+    if (pAudioData->theWaveform)
+    {
+        uint32_t frames = pAudioData->waveFrames;
+        uint32_t channels = pAudioData->channels;
+        uint32_t bitSize = pAudioData->bitSize;
+        
+        // Allocate buffer for converting to 32-bit samples
+        FLAC__int32 *buffer = (FLAC__int32*)XNewPtr(frames * channels * sizeof(FLAC__int32));
+        if (!buffer)
+        {
+            FLAC__stream_encoder_finish(encoder);
+            FLAC__stream_encoder_delete(encoder);
+            return MEMORY_ERR;
+        }
+        
+        // Convert samples to 32-bit for FLAC encoder
+        if (bitSize == 8)
+        {
+            unsigned char *src = (unsigned char*)pAudioData->theWaveform;
+            for (uint32_t i = 0; i < frames * channels; i++)
+            {
+                buffer[i] = (FLAC__int32)(src[i] - 128); // Convert unsigned 8-bit to signed
+            }
+        }
+        else if (bitSize == 16)
+        {
+            int16_t *src = (int16_t*)pAudioData->theWaveform;
+            for (uint32_t i = 0; i < frames * channels; i++)
+            {
+                buffer[i] = (FLAC__int32)src[i];
+            }
+        }
+        else
+        {
+            XDisposePtr((XPTR)buffer);
+            FLAC__stream_encoder_finish(encoder);
+            FLAC__stream_encoder_delete(encoder);
+            return PARAM_ERR;
+        }
+        
+        // Feed data to encoder
+        ok = FLAC__stream_encoder_process_interleaved(encoder, buffer, frames);
+        
+        XDisposePtr((XPTR)buffer);
+        
+        if (!ok)
+        {
+            err = BAD_FILE;
+        }
+    }
+    
+    // Finish encoding
+    FLAC__stream_encoder_finish(encoder);
+    FLAC__stream_encoder_delete(encoder);
+    
+    return err;
+}
+#endif // USE_FLAC_ENCODER != FALSE
+
 
 // write memory to a file
 OPErr GM_WriteFileFromMemory(XFILENAME *file, GM_Waveform const* pAudioData, AudioFileType fileType)
@@ -3871,6 +3981,11 @@ OPErr GM_WriteFileFromMemory(XFILENAME *file, GM_Waveform const* pAudioData, Aud
         case FILE_AU_TYPE:
             err = PV_WriteFromMemorySunAUFile(file, pAudioData, X_WAVE_FORMAT_PCM);
             break;
+#if USE_FLAC_ENCODER != FALSE
+        case FILE_FLAC_TYPE:
+            err = PV_WriteFromMemoryFLACFile(file, pAudioData, X_WAVE_FORMAT_PCM);
+            break;
+#endif
 #if USE_MPEG_DECODER != FALSE
         case FILE_MPEG_TYPE:
 #endif

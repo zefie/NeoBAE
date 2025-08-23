@@ -68,15 +68,25 @@ bool g_export_using_live_song = false;
 // Export dropdown state: controls encoding choice when exporting
 bool g_exportDropdownOpen = false;
 
-// Default export codec: prefer 128kbps MP3 if MPEG encoder is available
+// Default export codec: prefer 128kbps MP3 if MPEG encoder is available, otherwise FLAC if available
 #if USE_MPEG_ENCODER != FALSE
-int g_exportCodecIndex = 4; // 0 = PCM 16 WAV, 1..6 = MP3 bitrates (4 -> 128kbps MP3)
+int g_exportCodecIndex = 
+#if USE_FLAC_ENCODER != FALSE
+    5; // 0 = PCM 16 WAV, 1 = FLAC, 2..8 = MP3 bitrates (5 -> 128kbps MP3)
 #else
-int g_exportCodecIndex = 0; // fallback to WAV when MPEG encoder not present
+    4; // 0 = PCM 16 WAV, 1..7 = MP3 bitrates (4 -> 128kbps MP3)
+#endif
+#elif USE_FLAC_ENCODER != FALSE
+int g_exportCodecIndex = 1; // 0 = PCM 16 WAV, 1 = FLAC
+#else
+int g_exportCodecIndex = 0; // fallback to WAV when no encoders present
 #endif
 
 const char *g_exportCodecNames[] = {
     "PCM 16 WAV",
+#if USE_FLAC_ENCODER != FALSE
+    "FLAC Lossless",
+#endif
 #if USE_MPEG_ENCODER != FALSE
     "64kbps MP3",
     "96kbps MP3",
@@ -93,6 +103,9 @@ const int g_exportCodecCount = (int)(sizeof(g_exportCodecNames) / sizeof(g_expor
 // Direct mapping from dropdown index to BAE compression enum, half bitrate for per channel
 const BAECompressionType g_exportCompressionMap[] = {
     BAE_COMPRESSION_NONE,
+#if USE_FLAC_ENCODER != FALSE
+    BAE_COMPRESSION_LOSSLESS,
+#endif
 #if USE_MPEG_ENCODER != FALSE
     BAE_COMPRESSION_MPEG_64,
     BAE_COMPRESSION_MPEG_96,
@@ -104,7 +117,7 @@ const BAECompressionType g_exportCompressionMap[] = {
 #endif
 };
 
-#if USE_MPEG_ENCODER != FALSE
+#if USE_MPEG_ENCODER != FALSE || USE_FLAC_ENCODER != FALSE
 const int g_exportCompressionCount = (int)(sizeof(g_exportCompressionMap) / sizeof(g_exportCompressionMap[0]));
 #else
 const int g_exportCompressionCount = 1; // only WAV
@@ -117,6 +130,9 @@ int g_midiRecordFormatIndex = 0; // 0 = MIDI, 1 = WAV, 2..n = MP3 bitrates
 const char *g_midiRecordFormatNames[] = {
     "MIDI Sequence",
     "PCM 16 WAV",
+#if USE_FLAC_ENCODER != FALSE
+    "FLAC Lossless",
+#endif
 #if USE_MPEG_ENCODER != FALSE
     "96kbps MP3",
     "128kbps MP3",
@@ -757,7 +773,7 @@ void bae_service_wav_export()
 }
 
 // File dialog for save export
-char *save_export_dialog(bool want_mp3)
+char *save_export_dialog(int export_type) // 0=WAV, 1=FLAC, 2=MP3
 {
 #ifdef _WIN32
     char fileBuf[1024] = {0};
@@ -765,11 +781,19 @@ char *save_export_dialog(bool want_mp3)
     ZeroMemory(&ofn, sizeof(ofn));
     ofn.lStructSize = sizeof(ofn);
     ofn.hwndOwner = NULL;
-    ofn.lpstrFilter = want_mp3 ? "MP3 Files\0*.mp3\0All Files\0*.*\0" : "WAV Files\0*.wav\0All Files\0*.*\0";
+    if (export_type == 1) {
+        ofn.lpstrFilter = "FLAC Files\0*.flac\0All Files\0*.*\0";
+        ofn.lpstrDefExt = "flac";
+    } else if (export_type == 2) {
+        ofn.lpstrFilter = "MP3 Files\0*.mp3\0All Files\0*.*\0";
+        ofn.lpstrDefExt = "mp3";
+    } else {
+        ofn.lpstrFilter = "WAV Files\0*.wav\0All Files\0*.*\0";
+        ofn.lpstrDefExt = "wav";
+    }
     ofn.lpstrFile = fileBuf;
     ofn.nMaxFile = sizeof(fileBuf);
     ofn.Flags = OFN_PATHMUSTEXIST | OFN_OVERWRITEPROMPT;
-    ofn.lpstrDefExt = want_mp3 ? "mp3" : "wav";
     if (GetSaveFileNameA(&ofn))
     {
         size_t len = strlen(fileBuf);
@@ -787,12 +811,24 @@ char *save_export_dialog(bool want_mp3)
         "kdialog --getsavefilename . '*.wav' 2>/dev/null",
         "yad --file-selection --save --title='Save WAV Export' 2>/dev/null",
         NULL};
+    const char *cmds_flac[] = {
+        "zenity --file-selection --save --title='Save FLAC Export' --file-filter='FLAC Files | *.flac' 2>/dev/null",
+        "kdialog --getsavefilename . '*.flac' 2>/dev/null",
+        "yad --file-selection --save --title='Save FLAC Export' 2>/dev/null",
+        NULL};
     const char *cmds_mp3[] = {
         "zenity --file-selection --save --title='Save MP3 Export' --file-filter='MP3 Files | *.mp3' 2>/dev/null",
         "kdialog --getsavefilename . '*.mp3' 2>/dev/null",
         "yad --file-selection --save --title='Save MP3 Export' 2>/dev/null",
         NULL};
-    const char **use_cmds = want_mp3 ? cmds_mp3 : cmds_wav;
+    const char **use_cmds;
+    if (export_type == 1) {
+        use_cmds = cmds_flac;
+    } else if (export_type == 2) {
+        use_cmds = cmds_mp3;
+    } else {
+        use_cmds = cmds_wav;
+    }
     for (int i = 0; use_cmds[i]; ++i)
     {
         FILE *p = popen(use_cmds[i], "r");

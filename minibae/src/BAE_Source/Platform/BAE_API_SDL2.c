@@ -58,6 +58,10 @@ static uint32_t g_pcm_rec_channels = 0;
 static uint32_t g_pcm_rec_sample_rate = 0;
 static uint32_t g_pcm_rec_bits = 0;
 
+// FLAC recorder callback (called from audio callback to capture samples)
+typedef void (*FlacRecorderCallback)(int16_t *left, int16_t *right, int frames);
+static FlacRecorderCallback g_flac_recorder_callback = NULL;
+
 // MP3 recorder state: real-time encoding via ring buffer and encoder thread (no temp file)
 typedef struct MP3EncState_s
 {
@@ -160,6 +164,24 @@ void BAE_Platform_PCMRecorder_Stop(void)
     g_pcm_rec_sample_rate = 0;
     g_pcm_rec_bits = 0;
     BAE_PRINTF("Platform PCM recorder stopped\n");
+    if (g_audioDevice)
+        SDL_UnlockAudioDevice(g_audioDevice);
+}
+
+void BAE_Platform_SetFlacRecorderCallback(void (*callback)(int16_t *left, int16_t *right, int frames))
+{
+    if (g_audioDevice)
+        SDL_LockAudioDevice(g_audioDevice);
+    g_flac_recorder_callback = (FlacRecorderCallback)callback;
+    if (g_audioDevice)
+        SDL_UnlockAudioDevice(g_audioDevice);
+}
+
+void BAE_Platform_ClearFlacRecorderCallback(void)
+{
+    if (g_audioDevice)
+        SDL_LockAudioDevice(g_audioDevice);
+    g_flac_recorder_callback = NULL;
     if (g_audioDevice)
         SDL_UnlockAudioDevice(g_audioDevice);
 }
@@ -293,6 +315,43 @@ static void audio_callback(void *userdata, Uint8 *stream, int len)
             else
             {
                 BAE_PRINTF("Warning: platform pcm recorder write short: %zu/%ld\n", wrote, (long)sliceBytes);
+            }
+        }
+        // If FLAC recorder callback is active, call it with the audio data
+        if (g_flac_recorder_callback)
+        {
+            const uint32_t frames = (uint32_t)(sliceBytes / (g_channels * (g_bits / 8)));
+            if (frames && g_bits == 16)
+            {
+                int16_t *samples = (int16_t *)g_sliceStatic;
+                if (g_channels == 1)
+                {
+                    // Mono - pass the same data as both left and right
+                    g_flac_recorder_callback(samples, samples, frames);
+                }
+                else if (g_channels == 2)
+                {
+                    // Stereo - need to deinterleave
+                    static int16_t *left_temp = NULL, *right_temp = NULL;
+                    static uint32_t temp_frames = 0;
+                    
+                    if (frames > temp_frames)
+                    {
+                        left_temp = realloc(left_temp, frames * sizeof(int16_t));
+                        right_temp = realloc(right_temp, frames * sizeof(int16_t));
+                        temp_frames = frames;
+                    }
+                    
+                    if (left_temp && right_temp)
+                    {
+                        for (uint32_t i = 0; i < frames; i++)
+                        {
+                            left_temp[i] = samples[i * 2];
+                            right_temp[i] = samples[i * 2 + 1];
+                        }
+                        g_flac_recorder_callback(left_temp, right_temp, frames);
+                    }
+                }
             }
         }
         // If MP3 recorder is active, push PCM to encoder ring buffer
