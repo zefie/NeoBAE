@@ -3,7 +3,7 @@ TEST_OUT_DIR	:= tests/
 TARGET_OUT	:= bin/
 BAE_FLAGS	:=
 ifneq ($(WASM),1)
-	ifeq ($(NOAUTO),)
+	ifneq ($(NOAUTO),1)
 		MP3_DEC := 1
 		MP3_ENC := 1
 		FLAC_DEC := 1
@@ -11,13 +11,17 @@ ifneq ($(WASM),1)
 	endif
 endif
 
+# GUI Font
+EMBED_TTF_FONT := src/thirdparty/fonts/HelveticaNeue.ttf
+
+# Built-in Patches
+EMBED_PATCH_FILE := src/banks/patches111/patches111.hsb
+
 ifneq ($(filter 1,$(VERBOSE) $(V)),)
 	SILENT :=
 else
 	SILENT := @
 endif
-
-EMBED_TTF_FONT := src/thirdparty/fonts/HelveticaNeue.ttf
 
 # Begin Allow Overrides
 ifeq ($(TARGET_LIB),)
@@ -43,7 +47,7 @@ vpath	%.c src/BAE_Source/Common src/BAE_Source/Platform
 vpath	%.c src/banks/patches111
 vpath	%.c src/BAE_MPEG_Source_II
 
-ifneq ($(BUILD_GUI),) 
+ifeq ($(BUILD_GUI),1) 
 	vpath	%.c src/gui
 else
 	vpath	%.c src/playbae
@@ -62,15 +66,15 @@ endif
 # Ensure the legacy MPG API implementation is built when MP3 encoder or
 # decoder support is enabled. XMPEG_BAE_API.c implements MPG_* and
 # X* MPEG helper functions needed across the codebase.
-ifneq ($(filter 1,$(MP3_ENC) $(MP3_DEC)),)
+ifeq ($(filter 1,$(MP3_ENC) $(MP3_DEC)),1)
 	SRC += XMPEG_BAE_API.c
 endif
 
-ifneq ($(BAE_BUILT_IN_PATCHES),)
+ifeq ($(BAE_BUILT_IN_PATCHES),1)
 INC_PATH	+= -Isrc/banks/patches111
 endif
 
-ifneq ($(MP3_DEC),)
+ifeq ($(MP3_DEC),1)
 INC_PATH	+= -Isrc/thirdparty/minimp3
 endif
 
@@ -128,13 +132,6 @@ endif
 ## End Easy API -> X_PLATFORM
 ### End configure BAE API
 
-
-# Compile built-in patches by default
-ifeq ($(BAE_BUILT_IN_PATCHES),)
-	BAE_BUILT_IN_PATCHES	:= 1
-	BAE_FLAGS += -D_BUILT_IN_PATCHES=1
-endif
-
 # Debug
 ifeq ($(DEBUG),1)
 	BAE_FLAGS +=    -D_DEBUG=1
@@ -176,21 +173,15 @@ SRC		+=	DriverTools.c \
 			g72x.c \
 			sha1mini.c
 
-# Compile in patches if desired
-ifeq ($(BAE_BUILT_IN_PATCHES),1)
-	SRC +=		BAEPatches.c
-	BAE_FLAGS += 	-D_BUILT_IN_PATCHES=1
-endif
-
-ifneq ($(MP3_DEC),)
-# Enable minimp3 wrapper for MPG_* API (decoder only)
-BAE_FLAGS += -DUSE_MINIMP3_WRAPPER=1 -DUSE_MPEG_DECODER=1
-SRC += XMPEG_minimp3_wrapper.c
+ifeq ($(MP3_DEC),1)
+	# Enable minimp3 wrapper for MPG_* API (decoder only)
+	BAE_FLAGS += -DUSE_MINIMP3_WRAPPER=1 -DUSE_MPEG_DECODER=1
+	SRC += XMPEG_minimp3_wrapper.c
 endif
 
 # Include XMPEGFilesSun.c when either encoder or decoder is enabled
 ifneq ($(filter 1,$(MP3_ENC) $(MP3_DEC)),) 
-SRC += XMPEGFilesSun.c
+	SRC += XMPEGFilesSun.c
 endif
 
 # Optional MP3 encoder integration
@@ -245,17 +236,17 @@ ifeq ($(MP3_ENC),1)
 endif
 
 # Add FLAC decoder source files
-ifneq ($(FLAC_DEC),)
+ifeq ($(FLAC_DEC),1)
 	BAE_FLAGS += -DUSE_FLAC_DECODER=1
 	SRC += stream_decoder.c bitreader.c bitmath.c bitwriter.c cpu.c crc.c fixed.c format.c lpc.c md5.c memory.c metadata_iterators.c metadata_object.c stream_encoder_framing.c window.c
 endif
 
 # Add FLAC encoder source files  
-ifneq ($(FLAC_ENC),)
+ifeq ($(FLAC_ENC),1)
 	BAE_FLAGS += -DUSE_FLAC_ENCODER=1
 	# stream_encoder.c is the main encoding engine, and it depends on decoder for verification
 	SRC += stream_encoder.c
-	ifeq ($(FLAC_DEC),)
+	ifneq ($(FLAC_DEC),1)
 		# Add required FLAC files for encoding, including decoder support for verification
 		SRC += stream_decoder.c bitreader.c bitmath.c bitwriter.c cpu.c crc.c fixed.c format.c lpc.c md5.c memory.c metadata_iterators.c metadata_object.c stream_encoder_framing.c window.c
 	endif
@@ -263,7 +254,7 @@ endif
 
 
 # playbae = libMiniBAE srcs + playbae.c
-ifneq ($(BUILD_GUI),)
+ifeq ($(BUILD_GUI),1)
 	BAE_FLAGS += -DOUTPUT_TO_LOGFILE=1
 	SRC_BIN	:= $(SRC) gui_logging.c gui_theme.c gui_widgets.c gui_text.c gui_midi_vkbd.c gui_karaoke.c gui_export.c gui_dialogs.c gui_bae.c gui_settings.c gui_main.c
 else
@@ -278,9 +269,20 @@ ifeq ($(ENABLE_MIDI_HW),1)
 	endif
 endif
 
-ifneq ($(LOGFILE),)
+ifeq ($(LOGFILE),1)
 	BAE_FLAGS += -DOUTPUT_TO_LOGFILE=1
 endif
+
+ifeq ($(WINDOWS),1)
+	ifneq ($(filter 1,$(FLAC_DEC) $(FLAC_ENC)),)
+		vpath	%.c src/thirdparty/flac/src/share/win_utf8_io
+		INC_PATH += -Isrc/thirdparty/flac/src/share/win_utf8_io
+		BAE_FLAGS += -DFLAC__NO_DLL
+		SRC += win_utf8_io.c
+		SRC_BIN += win_utf8_io.c
+	endif
+endif
+
 
 OBJ_DIR 	:= $(BUILD_DIR)obj/
 OBJ 		:= $(addprefix $(OBJ_DIR),$(addsuffix .o,$(basename ${SRC})))
@@ -298,8 +300,23 @@ $(EMBED_FONT_HEADER): $(EMBED_TTF_FONT) ../scripts/create_embedded_font_h.py
 	@mkdir -p $(dir $(EMBED_FONT_HEADER))
 	@python3 ../scripts/create_embedded_font_h.py $(EMBED_TTF_FONT) $(EMBED_FONT_HEADER)
 
+$(OBJ_DIR)gui_main.o: $(EMBED_FONT_HEADER)
 endif # EMBED_FONT_HEADER
 
 endif # BUILD_GUI
+
+# If EMBED_PATCH_FILE specified, generate BAEPatches.h that embeds the binary bank
+ifdef EMBED_PATCH_FILE
+BAE_FLAGS += -D_BUILT_IN_PATCHES=1 -I$(OBJ_DIR)
+
+EMBED_PATCH_HEADER := $(OBJ_DIR)BAEPatches.h
+$(EMBED_PATCH_HEADER): $(EMBED_PATCH_FILE) ../scripts/create_embedded_patches_h.py
+	@echo @embed $<
+	@mkdir -p $(dir $(EMBED_PATCH_HEADER))
+	@python3 ../scripts/create_embedded_patches_h.py $(EMBED_PATCH_FILE) $(EMBED_PATCH_HEADER)
+$(OBJ_DIR)MiniBAE.o: $(EMBED_PATCH_HEADER)
+
+# Ensure generated header is available to build when EMBED_PATCH_FILE is used
+endif # EMBED_PATCH_FILE
 
 #### End Makefile.common

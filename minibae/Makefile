@@ -1,4 +1,3 @@
-BAE_BUILT_IN_PATCHES	:= 1
 BAE_API			:= SDL2
 DEBUG			:= 0
 include inc/Makefile.common
@@ -85,12 +84,12 @@ pack: ${TARGET_BIN}
 $(OBJ_DIR)%.o : %.cpp
 	@echo @compile $<
 	@mkdir -p $(OBJ_DIR)
-	@${CXX} -c ${CXXFLAGS} $< -o $@
+	$(SILENT)${CXX} -c ${CXXFLAGS} $< -o $@
 
 $(OBJ_DIR)%.o : %.c
 	@echo @compile $<
 	@mkdir -p $(OBJ_DIR)
-	@${CC} -c ${CFLAGS} $< -o $@
+	$(SILENT)${CC} -c ${CFLAGS} $< -o $@
 
 clean:
 	@rm -rf $(TARGET_OUT)

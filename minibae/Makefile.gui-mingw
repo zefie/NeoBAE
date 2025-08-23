@@ -2,6 +2,7 @@ BAE_BUILT_IN_PATCHES	:= 1
 BAE_API			:= SDL2
 DEBUG			:= 0
 BUILD_GUI   	:= 1
+WINDOWS 		:= 1
 ifneq ($(NOAUTO),1)
 ENABLE_MIDI_HW	:= 1
 endif
@@ -31,12 +32,6 @@ WINDRES		:= $(CROSS)windres
 OPTI            := -O2 -fPIC
 CFLAGS  	:= $(ARCH) $(OPTI) $(INC_PATH) -D_THREAD_SAFE -DEMBED_FONT_TTF -Wno-unused-value
 
-ifneq ($(filter 1,$(FLAC_DEC) $(FLAC_ENC)),)
-	vpath	%.c src/thirdparty/flac/src/share/win_utf8_io
-	CFLAGS	+= -Isrc/thirdparty/flac/src/share/win_utf8_io -DFLAC__NO_DLL
-	OBJ += $(OBJ_DIR)win_utf8_io.o
-	OBJ_BIN += $(OBJ_DIR)win_utf8_io.o
-endif
 
 ifneq ($(ENABLE_MIDI_HW),)
 	# WinMM MIDI HW Support
@@ -63,38 +58,33 @@ LDFLAGS += -L../SDL2-2.32.8/x86_64-w64-mingw32/lib -L../SDL2_ttf-2.24.0/x86_64-w
 endif
 
 LIBS = \
-			-lmingw32 \
-			-lSDL2main \
-			-lSDL2 \
-			-lSDL2_ttf \
-			-lusp10 \
-			-lrpcrt4 \
-			-lsetupapi \
-			-lcfgmgr32 \
-			-lversion \
-			-limm32 \
-			-lwinmm \
-			-lole32 \
-			-loleaut32 \
-			-ladvapi32 \
-			-luser32 \
-			-lgdi32 \
-			-lshell32 \
-			-lshlwapi \
-			-ldxguid \
-			-ldsound \
-			-luuid \
-			-lkernel32 \
-			-lcomdlg32 \
-			-lwinspool \
-			-lwinpthread \
-			-lodbc32 \
-			-lodbccp32
-
-ifdef EMBED_TTF_FONT
-# ensure gui_main.o is built after the generated header so the include is available
-$(OBJ_DIR)gui_main.o: $(EMBED_FONT_HEADER)
-endif
+	-lmingw32 \
+	-lSDL2main \
+	-lSDL2 \
+	-lSDL2_ttf \
+	-lusp10 \
+	-lrpcrt4 \
+	-lsetupapi \
+	-lcfgmgr32 \
+	-lversion \
+	-limm32 \
+	-lwinmm \
+	-lole32 \
+	-loleaut32 \
+	-ladvapi32 \
+	-luser32 \
+	-lgdi32 \
+	-lshell32 \
+	-lshlwapi \
+	-ldxguid \
+	-ldsound \
+	-luuid \
+	-lkernel32 \
+	-lcomdlg32 \
+	-lwinspool \
+	-lwinpthread \
+	-lodbc32 \
+	-lodbccp32
 
 all: $(TARGET_LIB).a ${TARGET_LIB}.dll $(TARGET_BIN)
 

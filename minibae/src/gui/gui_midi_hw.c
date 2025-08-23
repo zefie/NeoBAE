@@ -79,6 +79,8 @@ const uint32_t g_midi_record_tempo = 500000; // default microseconds per quarter
 bool g_midi_record_first_event = false;      // for first-event silence capture
 uint64_t g_midi_record_start_pc = 0;         // perf counter at record start
 SDL_mutex *g_midi_record_mutex = NULL;       // guard record file writes/close
+/* Refer to the single definition in gui_bae.c */
+extern double g_last_requested_master_volume;
 
 // MIDI service thread
 SDL_Thread *g_midi_service_thread = NULL;

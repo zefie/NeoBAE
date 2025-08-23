@@ -3188,13 +3188,57 @@ int main(int argc, char *argv[])
                     draw_frame(R, disr, g_panel_border);
                     draw_text(R, disr.x + 18, disr.y + 4, "Export", disabledTxt);
                 }
+
+            // Unroll button (only for rolled MIDI files)
+            if (g_bae.song)
+            {
+                BAE_BOOL isRolled = FALSE;
+                BAEResult result = BAESong_IsRolledMIDI(g_bae.song, &isRolled);
+                if (result == BAE_NO_ERROR && isRolled)
+                {
+                    bool unroll_allowed = !g_exporting && !modal_block;
+                    if (unroll_allowed)
+                    {
+                        if (ui_button(R, (Rect){405, 215, 80, 22}, "Unroll", ui_mx, ui_my, ui_mdown) && ui_mclick)
+                        {
+                            // TODO: Implement unroll functionality
+                            set_status_message("Unroll functionality not yet implemented");
+                        }
+                    }
+                    else
+                    {
+                        // Draw disabled Unroll button
+                        Rect unroll_rect = {405, 215, 80, 22};
+                        SDL_Color disabledBg = g_panel_bg;
+                        SDL_Color disabledTxt = g_panel_border;
+                        disabledBg.a = 200;
+                        disabledTxt.a = 200;
+                        draw_rect(R, unroll_rect, disabledBg);
+                        draw_frame(R, unroll_rect, g_panel_border);
+                        draw_text(R, unroll_rect.x + 18, unroll_rect.y + 4, "Unroll", disabledTxt);
+                    }
+                }
+            }
+
 #ifdef SUPPORT_MIDI_HW
             }
 #endif
             // RMF Info button (only for RMF files)
             if (g_bae.is_rmf_file)
             {
-                if (ui_button(R, (Rect){440, 215, 80, 22}, "RMF Info", ui_mx, ui_my, ui_mdown) && ui_mclick && !modal_block)
+                // Position RMF Info button further right if Unroll button is shown
+                int rmf_x_pos = 440;
+                if (g_bae.song)
+                {
+                    BAE_BOOL isRolled = FALSE;
+                    BAEResult result = BAESong_IsRolledMIDI(g_bae.song, &isRolled);
+                    if (result == BAE_NO_ERROR && isRolled)
+                    {
+                        rmf_x_pos = 490; // Move further right to avoid overlap with Unroll button
+                    }
+                }
+                
+                if (ui_button(R, (Rect){rmf_x_pos, 215, 80, 22}, "RMF Info", ui_mx, ui_my, ui_mdown) && ui_mclick && !modal_block)
                 {
                     if (g_show_rmf_info_dialog)
                     {

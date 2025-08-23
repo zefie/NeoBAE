@@ -395,7 +395,10 @@ char const usageString[] =
         "USAGE:  playbae  -p  {patches.hsb}\n"
         "                 -f  {Play a file (MIDI, RMF, WAV, AIFF, MPEG audio: MP2/MP3, FLAC)}\n"
         "                 -o  {write output to file}\n"
-        "                 -om {write MP3 output to file (requires MP3 encoder build)}\n"
+   "                 -om {write MP3 output to file (requires MP3 encoder build)}\n"
+#if defined(USE_FLAC_ENCODER) && (USE_FLAC_ENCODER != 0)
+   "                 -of {write FLAC output to file (requires FLAC encoder build)}\n"
+#endif
 #ifdef SUPPORT_KARAOKE
         "                 -k  {enable karaoke lyric display (MIDI/RMF with lyrics)}\n"
 #endif
@@ -1457,22 +1460,111 @@ int main(int argc, char *argv[])
             // do not update position timer as often since it will be much faster
             positionDisplayMultiplier = 100; // 1 update per second of media
 
-            err = BAEMixer_StartOutputToFile(theMixer,
-                                             (BAEPathName)parmFile,
-                                             BAE_WAVE_TYPE,
-                                             BAE_COMPRESSION_NONE);
-            if (err)
+            // Auto-detect by extension: .wav -> WAV, .mp3 -> MP3, .flac -> FLAC
+            if (PV_IsFileExtension(parmFile, ".mp3") || PV_IsFileExtension(parmFile, ".mp2") || PV_IsFileExtension(parmFile, ".mpg"))
             {
-               playbae_printf("Error %d accessing file for write: %s\n", err, parmFile);
+#if defined(USE_MPEG_ENCODER) && (USE_MPEG_ENCODER != 0)
+               /* Map total kbps directly to the compression enum (no per-channel inference).
+                * -b specifies TOTAL kbps. Pick the closest supported total kbps and use that. */
+               BAEAudioModifiers modsTmp;
+               BAEMixer_GetModifiers(theMixer, &modsTmp);
+               int channels = (modsTmp & BAE_USE_STEREO) ? 2 : 1;
+               int totalReq = gMP3BitrateKbps;
+               if (totalReq < 32)
+               {
+                  playbae_printf("MP3 export requires a minimum total bitrate of 32kbps; requested %dkbps. Aborting MP3 export.\n", totalReq);
+                  BAEMixer_Delete(theMixer);
+                  return 1;
+               }
+               if (totalReq > 320)
+                  totalReq = 320; /* clamp to practical max total */
+               BAECompressionType cType = BAE_COMPRESSION_MPEG_128; // default
+               struct
+               {
+                  int rate;
+                  BAECompressionType ct;
+               } mapTbl[] = {{32, BAE_COMPRESSION_MPEG_32}, {40, BAE_COMPRESSION_MPEG_40}, {48, BAE_COMPRESSION_MPEG_48}, {56, BAE_COMPRESSION_MPEG_56}, {64, BAE_COMPRESSION_MPEG_64}, {80, BAE_COMPRESSION_MPEG_80}, {96, BAE_COMPRESSION_MPEG_96}, {112, BAE_COMPRESSION_MPEG_112}, {128, BAE_COMPRESSION_MPEG_128}, {160, BAE_COMPRESSION_MPEG_160}, {192, BAE_COMPRESSION_MPEG_192}, {224, BAE_COMPRESSION_MPEG_224}, {256, BAE_COMPRESSION_MPEG_256}, {320, BAE_COMPRESSION_MPEG_320}};
+               int bestDiff = 100000;
+               for (size_t i = 0; i < sizeof(mapTbl) / sizeof(mapTbl[0]); ++i)
+               {
+                  int d = abs(mapTbl[i].rate - totalReq);
+                  if (d < bestDiff)
+                  {
+                     bestDiff = d;
+                     cType = mapTbl[i].ct;
+                  }
+               }
+               err = BAEMixer_StartOutputToFile(theMixer, (BAEPathName)parmFile, BAE_MPEG_TYPE, cType);
+               if (err)
+               {
+                  playbae_printf("Error %d starting MP3 export: %s\n", err, parmFile);
+                  /* Fail fast: user explicitly requested MP3 export, so do not fall back to playback. */
+                  BAEMixer_Delete(theMixer);
+                  return 1;
+               }
+               else
+               {
+                  gWriteToFile = TRUE;
+                  gWriteToFileType = BAE_MPEG_TYPE;
+                  int total = totalReq;
+                  if (channels > 1)
+                  {
+                     playbae_printf("Writing MP3 (CBR %d kbps, joint stereo) to %s\n", total, parmFile);
+                  }
+                  else
+                  {
+                     playbae_printf("Writing MP3 (CBR %d kbps, mono) to %s\n", total, parmFile);
+                  }
+               }
+#else
+               playbae_printf("MP3 encoder not built. Rebuild with MP3_ENC=1, e.g.: make clean && make MP3_ENC=1\n");
+               /* User explicitly requested MP3 export; fail rather than continuing to playback. */
+               BAEMixer_Delete(theMixer);
+               return 1;
+#endif
+            }
+            else if (PV_IsFileExtension(parmFile, ".flac"))
+            {
+#if defined(USE_FLAC_ENCODER) && (USE_FLAC_ENCODER != 0)
+               err = BAEMixer_StartOutputToFile(theMixer, (BAEPathName)parmFile, BAE_FLAC_TYPE, BAE_COMPRESSION_LOSSLESS);
+               if (err)
+               {
+                  playbae_printf("Error %d starting FLAC export: %s\n", err, parmFile);
+                  BAEMixer_Delete(theMixer);
+                  return 1;
+               }
+               else
+               {
+                  gWriteToFile = TRUE;
+                  gWriteToFileType = BAE_FLAC_TYPE;
+                  playbae_printf("Writing FLAC (lossless) to %s\n", parmFile);
+               }
+#else
+               playbae_printf("FLAC encoder not built. Rebuild with FLAC_ENC=1, e.g.: make clean && make FLAC_ENC=1 all\n");
+               BAEMixer_Delete(theMixer);
+               return 1;
+#endif
             }
             else
             {
-               gWriteToFile = TRUE;
-               gWriteToFileType = BAE_WAVE_TYPE;
+               // default/wav path
+               err = BAEMixer_StartOutputToFile(theMixer,
+                                                (BAEPathName)parmFile,
+                                                BAE_WAVE_TYPE,
+                                                BAE_COMPRESSION_NONE);
+               if (err)
+               {
+                  playbae_printf("Error %d accessing file for write: %s\n", err, parmFile);
+               }
+               else
+               {
+                  gWriteToFile = TRUE;
+                  gWriteToFileType = BAE_WAVE_TYPE;
 #ifdef SUPPORT_KARAOKE
-               gEnableKaraoke = 0; // disable karaoke during export
+                  gEnableKaraoke = 0; // disable karaoke during export
 #endif
-               playbae_printf("Writing to file %s\n", parmFile);
+                  playbae_printf("Writing to file %s\n", parmFile);
+               }
             }
          }
          if (PV_ParseCommands(argc, argv, "-om", TRUE, parmFile))
@@ -1540,6 +1632,33 @@ int main(int argc, char *argv[])
             return 1;
 #endif
          }
+
+      if (PV_ParseCommands(argc, argv, "-of", TRUE, parmFile))
+      {
+#if defined(USE_FLAC_ENCODER) && (USE_FLAC_ENCODER != 0)
+         positionDisplayMultiplier = 100;
+         /* Start FLAC (lossless) export via mixer output path. */
+         err = BAEMixer_StartOutputToFile(theMixer, (BAEPathName)parmFile, BAE_FLAC_TYPE, BAE_COMPRESSION_LOSSLESS);
+         if (err)
+         {
+            playbae_printf("Error %d starting FLAC export: %s\n", err, parmFile);
+            /* Fail fast: user explicitly requested FLAC export, so do not fall back to playback. */
+            BAEMixer_Delete(theMixer);
+            return 1;
+         }
+         else
+         {
+            gWriteToFile = TRUE;
+            gWriteToFileType = BAE_FLAC_TYPE;
+            playbae_printf("Writing FLAC (lossless) to %s\n", parmFile);
+         }
+#else
+         playbae_printf("FLAC encoder not built. Rebuild with FLAC_ENC=1, e.g.: make clean && make FLAC_ENC=1\n");
+         /* User explicitly requested FLAC export; fail rather than continuing to playback. */
+         BAEMixer_Delete(theMixer);
+         return 1;
+#endif
+      }
 
          if (argc > 1 && argv[1][0] != (char)'-')
          {

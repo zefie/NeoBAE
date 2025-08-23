@@ -1,6 +1,7 @@
 // gui_bae.c - BAE (Audio Engine) subsystem management
 
 #include "gui_bae.h"
+#include "BAEPatches.h"
 #include "bankinfo.h"
 #include "gui_widgets.h"
 #include "gui_midi.h"    // For gui_midi_event_callback and midi output functions
@@ -12,13 +13,10 @@
 #include <ctype.h>
 #include <errno.h>
 
-/* If MIDI HW support is not compiled in, provide a local definition of
-    g_last_requested_master_volume so modules that reference it (like
-    bae_set_volume and load routines) link correctly. When SUPPORT_MIDI_HW
-    is enabled, the real definition from gui_midi_hw.c is used instead. */
-#ifndef SUPPORT_MIDI_HW
+/* Single, unconditional definition of the remembered user master volume
+    intent. Declared extern in headers and other modules so all translation
+    units reference this one symbol regardless of build flags. */
 double g_last_requested_master_volume = 1.0; /* 0.0..1.0 per UI */
-#endif
 
 // Volume mapping configuration moved to gui_bae.h
 
@@ -124,7 +122,7 @@ bool load_bank(const char *path, bool current_playing_state, int transpose, int 
     if (strcmp(path, "__builtin__") == 0)
     {
         extern unsigned char BAE_PATCHES[];
-        extern unsigned int BAE_PATCHES_size;
+        extern unsigned long BAE_PATCHES_size;
         BAEBankToken t;
         BAEResult br = BAEMixer_AddBankFromMemory(g_bae.mixer, BAE_PATCHES, (uint32_t)BAE_PATCHES_size, &t);
         if (br == BAE_NO_ERROR)

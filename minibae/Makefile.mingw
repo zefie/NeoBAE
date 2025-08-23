@@ -1,6 +1,7 @@
 TARGET_BIN		:= playbae.exe
 TEST_BIN_PREFIX 	:= "wine "
 BAE_BUILT_IN_PATCHES	:= 1
+WINDOWS		:= 1
 
 ifneq ($(USE_SDL),)
 BAE_API			:= SDL2
@@ -47,55 +48,55 @@ LDFLAGS		:= $(ARCH) $(OPTI) -s -mconsole
 
 
 LIBS   = \
-                -ldxguid \
-                -ldsound \
-                -lole32 \
-                -lwinmm \
-                -lkernel32 \
-                -luser32 \
-                -loleaut32 \
-                -lwinspool \
-                -lcomdlg32 \
-                -ladvapi32 \
-                -loleaut32 \
-                -lodbc32 \
-                -lodbccp32
+    -ldxguid \
+    -ldsound \
+    -lole32 \
+    -lwinmm \
+    -lkernel32 \
+    -luser32 \
+    -loleaut32 \
+    -lwinspool \
+    -lcomdlg32 \
+    -ladvapi32 \
+    -loleaut32 \
+    -lodbc32 \
+    -lodbccp32
 
 ifneq ($(USE_SDL),)
     ifeq ($(BITS),32)
-        CFLAGS   += -I../SDL2-2.32.8/i686-w64-mingw32/include/SDL2
+        CFLAGS   += -I../SDL2-2.32.8/i686-w64-mingw32/include
         LDFLAGS  += -L../SDL2-2.32.8/i686-w64-mingw32/lib
         TARGET_NAME := playbae_sdl2_x32.exe
     else
-        CFLAGS    += -I../SDL2-2.32.8/x86_64-w64-mingw32/include/SDL2
+        CFLAGS    += -I../SDL2-2.32.8/x86_64-w64-mingw32/include
         LDFLAGS   += -L../SDL2-2.32.8/x86_64-w64-mingw32/lib
         TARGET_NAME := playbae_sdl2_x64.exe
     endif
     # Override LIBS completely for SDL build to enforce correct ordering
     LIBS = \
-                -lSDL2main \
-                -lSDL2 \
-                -lsetupapi \
-                -lcfgmgr32 \
-                -lversion \
-                -limm32 \
-                -lwinmm \
-                -lole32 \
-                -loleaut32 \
-                -ladvapi32 \
-                -luser32 \
-                -lgdi32 \
-                -lshell32 \
-                -lshlwapi \
-                -ldxguid \
-                -ldsound \
-                -luuid \
-                -lkernel32 \
-                -lcomdlg32 \
-                -lwinspool \
-                -lwinpthread \
-                -lodbc32 \
-                -lodbccp32
+        -lSDL2main \
+        -lSDL2 \
+        -lsetupapi \
+        -lcfgmgr32 \
+        -lversion \
+        -limm32 \
+        -lwinmm \
+        -lole32 \
+        -loleaut32 \
+        -ladvapi32 \
+        -luser32 \
+        -lgdi32 \
+        -lshell32 \
+        -lshlwapi \
+        -ldxguid \
+        -ldsound \
+        -luuid \
+        -lkernel32 \
+        -lcomdlg32 \
+        -lwinspool \
+        -lwinpthread \
+        -lodbc32 \
+        -lodbccp32
 endif
 
 
