@@ -1786,7 +1786,12 @@ int main(int argc, char *argv[])
             char buf[4];
             snprintf(buf, sizeof(buf), "%d", i + 1);
             // Handle toggle and clear VU when channel is muted
-            bool toggled = ui_toggle(R, r, &ch_enable[i], NULL, ui_mx, ui_my, ui_mclick && !modal_block);
+            // Disable channel toggles when playing audio files (sounds, not songs)
+            bool channel_toggle_enabled = !(playing && g_bae.is_audio_file && g_bae.sound);
+            bool toggled = ui_toggle(R, r, &ch_enable[i], NULL, 
+                                   channel_toggle_enabled ? ui_mx : -1, 
+                                   channel_toggle_enabled ? ui_my : -1, 
+                                   ui_mclick && !modal_block && channel_toggle_enabled);
             if (toggled && !ch_enable[i])
             {
                 // Muted -> immediately empty visible VU
@@ -1969,20 +1974,28 @@ int main(int argc, char *argv[])
 
         // Channel control buttons in a row
         int btnY = chStartY + 75;
-        if (ui_button(R, (Rect){20, btnY, 80, 26}, "Invert", ui_mx, ui_my, ui_mdown) && ui_mclick && !modal_block)
+        bool channel_controls_enabled = !(playing && g_bae.is_audio_file && g_bae.sound);
+        if (ui_button(R, (Rect){20, btnY, 80, 26}, "Invert", channel_controls_enabled ? ui_mx : -1, channel_controls_enabled ? ui_my : -1, channel_controls_enabled ? ui_mdown : false) && ui_mclick && !modal_block && channel_controls_enabled)
         {
             for (int i = 0; i < 16; i++)
                 ch_enable[i] = !ch_enable[i];
         }
-        if (ui_button(R, (Rect){110, btnY, 80, 26}, "Mute All", ui_mx, ui_my, ui_mdown) && ui_mclick && !modal_block)
+        if (ui_button(R, (Rect){110, btnY, 80, 26}, "Mute All", channel_controls_enabled ? ui_mx : -1, channel_controls_enabled ? ui_my : -1, channel_controls_enabled ? ui_mdown : false) && ui_mclick && !modal_block && channel_controls_enabled)
         {
             for (int i = 0; i < 16; i++)
                 ch_enable[i] = false;
         }
-        if (ui_button(R, (Rect){200, btnY, 90, 26}, "Unmute All", ui_mx, ui_my, ui_mdown) && ui_mclick && !modal_block)
+        if (ui_button(R, (Rect){200, btnY, 90, 26}, "Unmute All", channel_controls_enabled ? ui_mx : -1, channel_controls_enabled ? ui_my : -1, channel_controls_enabled ? ui_mdown : false) && ui_mclick && !modal_block && channel_controls_enabled)
         {
             for (int i = 0; i < 16; i++)
                 ch_enable[i] = true;
+        }
+
+        // If playing an audio file (sound, not song), dim the MIDI channels panel
+        if (playing && g_bae.is_audio_file && g_bae.sound)
+        {
+            SDL_Color dim = g_is_dark_mode ? (SDL_Color){0, 0, 0, 160} : (SDL_Color){255, 255, 255, 160};
+            draw_rect(R, channelPanel, dim);
         }
 
         // Control panel
@@ -1991,10 +2004,10 @@ int main(int argc, char *argv[])
         draw_text(R, 410, 20, "PLAYBACK CONTROLS", headerCol);
 
 #ifdef SUPPORT_MIDI_HW
-        // When external MIDI input is active we dim and disable most playback controls
-        bool playback_controls_enabled = !g_midi_input_enabled;
+        // When external MIDI input is active or playing audio files, dim and disable most playback controls
+        bool playback_controls_enabled = !g_midi_input_enabled && !(playing && g_bae.is_audio_file && g_bae.sound);
 #else
-        bool playback_controls_enabled = true;
+        bool playback_controls_enabled = !(playing && g_bae.is_audio_file && g_bae.sound);
 #endif
 
         // Transpose control
@@ -2065,14 +2078,21 @@ int main(int argc, char *argv[])
         SDL_Color dd_txt = g_button_text;
         SDL_Color dd_frame = g_button_border;
         bool overMain = point_in(ui_mx, ui_my, ddRect);
-        if (overMain)
+        // Disable reverb dropdown when playing audio files (sounds, not songs)
+        bool reverb_enabled = !(playing && g_bae.is_audio_file && g_bae.sound);
+        if (overMain && reverb_enabled)
             dd_bg = g_button_hover;
+        if (!reverb_enabled)
+        {
+            dd_bg.a = 180;
+            dd_txt.a = 180;
+        }
         draw_rect(R, ddRect, dd_bg);
         draw_frame(R, ddRect, dd_frame);
         const char *cur = (reverbType >= 1 && reverbType <= reverbCount) ? reverbNames[reverbType - 1] : "?";
         draw_text(R, ddRect.x + 6, ddRect.y + 3, cur, dd_txt);
         draw_text(R, ddRect.x + ddRect.w - 16, ddRect.y + 3, g_reverbDropdownOpen ? "^" : "v", dd_txt);
-        if (overMain && ui_mclick)
+        if (overMain && ui_mclick && reverb_enabled)
         {
             g_reverbDropdownOpen = !g_reverbDropdownOpen;
         }
@@ -2113,6 +2133,26 @@ int main(int argc, char *argv[])
             draw_text(R, 690, 25, "Reverb:", labelCol);
         }
 #endif
+        // If playing an audio file (sound, not song), dim the control panel except volume-related controls
+        if (playing && g_bae.is_audio_file && g_bae.sound)
+        {
+            SDL_Color dim = g_is_dark_mode ? (SDL_Color){0, 0, 0, 160} : (SDL_Color){255, 255, 255, 160};
+            draw_rect(R, controlPanel, dim);
+            // Only redraw Volume controls on top so they remain active/visible
+            // (Reverb is disabled when playing audio files)
+            draw_text(R, 687, 85, "Volume:", labelCol);
+            ui_slider(R, (Rect){687, 103, ddRect.w, 14}, &volume, 0, NEW_MAX_VOLUME_PCT,
+                      volume_enabled ? ui_mx : -1, volume_enabled ? ui_my : -1,
+                      volume_enabled ? ui_mdown : false, volume_enabled ? ui_mclick : false);
+            draw_text(R, vtxt_x, vtxt_y, vbuf, labelCol);
+            // Draw a notice in the bottom-right of the control panel
+            const char *notice = "Audio File Playing";
+            int n_w = 0, n_h = 0;
+            measure_text(notice, &n_w, &n_h);
+            int n_x = controlPanel.x + controlPanel.w - n_w - 8;
+            int n_y = controlPanel.y + controlPanel.h - n_h - 6;
+            draw_text(R, n_x, n_y, notice, g_highlight_color);
+        }
         // Transport panel
         draw_rect(R, transportPanel, panelBg);
         draw_frame(R, transportPanel, panelBorder);
