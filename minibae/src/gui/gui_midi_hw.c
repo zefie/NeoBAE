@@ -300,6 +300,16 @@ bool midi_record_stop(void)
     size_t r;
     while ((r = fread(buf, 1, sizeof(buf), tf)) > 0)
         fwrite(buf, 1, r, of);
+    // Append All Notes Off (Controller 123) for all 16 channels (delta=0)
+    for (unsigned char ch = 0; ch < 16; ++ch)
+    {
+        unsigned char anof[4];
+        anof[0] = 0x00; // delta 0
+        anof[1] = (unsigned char)(0xB0 | (ch & 0x0F));
+        anof[2] = 0x7B; // Controller 123 = All Notes Off
+        anof[3] = 0x00; // value
+        fwrite(anof, 1, 4, of);
+    }
     // Ensure track ends with End of Track meta event 00 FF 2F 00
     unsigned char eot[4] = {0x00, 0xFF, 0x2F, 0x00};
     fwrite(eot, 1, 4, of);
