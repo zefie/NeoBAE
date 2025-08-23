@@ -841,7 +841,8 @@ int main(int argc, char *argv[])
                 break;
             case SDL_MOUSEWHEEL:
             {
-                // Mouse wheel: when hovered over reverb or channel dropdowns, change selection by 1
+                // Mouse wheel: when hovered over certain controls, change selection/value by 1
+                // For dropdowns we keep existing semantics; for sliders we apply +1 for wheel up, -1 for wheel down.
                 int wy = e.wheel.y; // positive = scroll up, negative = scroll down
                 if (wy != 0)
                 {
@@ -860,8 +861,12 @@ int main(int argc, char *argv[])
                         if (reverbCount > (BAE_REVERB_TYPE_COUNT - 1))
                             reverbCount = (BAE_REVERB_TYPE_COUNT - 1);
 
+                        // Dropdown delta preserves previous behavior (wheel up -> move up in list)
                         int delta = (wy > 0) ? -1 : 1; // wheel up -> move up (decrement index)
+                        // Slider delta: user requested +1 for wheel up, -1 for wheel down
+                        int sdelta = (wy > 0) ? 1 : -1;
 
+                        // First handle dropdowns (existing behavior)
                         if (point_in(mx, my, ddRect))
                         {
                             int nt = reverbType + delta;
@@ -885,6 +890,83 @@ int main(int argc, char *argv[])
                             if (nt != g_keyboard_channel)
                             {
                                 g_keyboard_channel = nt;
+                            }
+                        }
+                        else
+                        {
+                            // Slider handling: respect the same modal/enable rules used elsewhere
+#ifdef SUPPORT_MIDI_HW
+                            bool playback_controls_enabled_local = !g_midi_input_enabled;
+#else
+                            bool playback_controls_enabled_local = true;
+#endif
+                            bool volume_enabled_local = !g_reverbDropdownOpen && playback_controls_enabled_local;
+
+                            // Transpose slider at {410,63,160,14}
+                            if (playback_controls_enabled_local && point_in(mx, my, (Rect){410, 63, 160, 14}))
+                            {
+                                int nt = transpose + sdelta;
+                                if (nt < -24)
+                                    nt = -24;
+                                if (nt > 24)
+                                    nt = 24;
+                                if (nt != transpose)
+                                {
+                                    transpose = nt;
+                                    bae_set_transpose(transpose);
+                                }
+                            }
+                            // Tempo slider at {410,103,160,14}
+                            else if (playback_controls_enabled_local && point_in(mx, my, (Rect){410, 103, 160, 14}))
+                            {
+                                int nt = tempo + sdelta;
+                                if (nt < 25)
+                                    nt = 25;
+                                if (nt > 200)
+                                    nt = 200;
+                                if (nt != tempo)
+                                {
+                                    int oldTempo = tempo;
+                                    int newTempo = nt;
+                                    tempo = nt;
+                                    bae_set_tempo(tempo);
+                                    // Get original song duration from BAE and calculate tempo-adjusted duration
+                                    if (g_bae.song)
+                                    {
+                                        uint32_t original_length_us = 0;
+                                        BAESong_GetMicrosecondLength(g_bae.song, &original_length_us);
+                                        int original_duration_ms = (int)(original_length_us / 1000UL);
+                                        int old_duration = duration;
+                                        duration = (int)((double)original_duration_ms * (100.0 / (double)tempo));
+                                        g_bae.song_length_us = duration * 1000UL;
+                                        // Preserve progress bar relative position
+                                        if (old_duration > 0)
+                                        {
+                                            float percent_through = (float)progress / (float)old_duration;
+                                            progress = (int)(percent_through * duration);
+                                        }
+                                    }
+                                    if (g_bae.preserve_position_on_next_start && g_bae.preserved_start_position_us)
+                                    {
+                                        uint32_t us = g_bae.preserved_start_position_us;
+                                        uint32_t newus = (uint32_t)((double)us * (100.0 / (double)tempo));
+                                        g_bae.preserved_start_position_us = newus;
+                                    }
+                                }
+                            }
+                            // Volume slider at {687,103,ddRect.w,14}
+                            else if (volume_enabled_local && point_in(mx, my, (Rect){687, 103, ddRect.w, 14}))
+                            {
+                                int nt = volume + sdelta;
+                                if (nt < 0)
+                                    nt = 0;
+                                if (nt > NEW_MAX_VOLUME_PCT)
+                                    nt = NEW_MAX_VOLUME_PCT;
+                                if (nt != volume)
+                                {
+                                    volume = nt;
+                                    bae_set_volume(volume);
+                                }
                             }
                         }
                     }
@@ -1755,7 +1837,7 @@ int main(int argc, char *argv[])
 
             // Prefer realtime estimated per-channel levels when available. Otherwise fall back to
             // the previous activity-driven heuristic (incoming MIDI or engine active notes).
-            
+
             // Immediately clear VU meters when not playing, regardless of other state
             if (!playing)
             {
