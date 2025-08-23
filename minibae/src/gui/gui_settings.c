@@ -681,64 +681,79 @@ void render_settings_dialog(SDL_Renderer *R, int mx, int my, bool mclick, bool m
 
     // MIDI output checkbox and device selector (placed next to input)
     Rect midiOutEnRect = {leftX, dlg.y + 168, 18, 18};
-    if (ui_toggle(R, midiOutEnRect, &g_midi_output_enabled, "MIDI Output", mx, my, mclick))
+    // Disable MIDI Output toggle while exporting or when export dropdown is open
+    bool midiOut_toggle_allowed = !g_exporting && !g_exportDropdownOpen;
+    if (!midiOut_toggle_allowed)
     {
-        if (g_midi_output_enabled)
+        // Draw disabled (dimmed) checkbox and label but do not allow toggling
+        bool over = point_in(mx, my, midiOutEnRect);
+        draw_custom_checkbox(R, midiOutEnRect, g_midi_output_enabled, over);
+        SDL_Color txt = g_text_color;
+        txt.a = 160;
+        draw_text(R, midiOutEnRect.x + midiOutEnRect.w + 6, midiOutEnRect.y + 2, "MIDI Output", txt);
+    }
+    else
+    {
+        // Normal interactive toggle (existing behavior)
+        if (ui_toggle(R, midiOutEnRect, &g_midi_output_enabled, "MIDI Output", mx, my, mclick))
         {
-            // try to init default output (will open first port or virtual)
-            // Ensure any previous output is cleanly silenced first
-            midi_output_init("miniBAE", -1, -1);
-            // After opening, send current instrument table so external device matches internal synth
-            if (g_bae.song)
+            if (g_midi_output_enabled)
             {
-                for (unsigned char ch = 0; ch < 16; ++ch)
+                // try to init default output (will open first port or virtual)
+                // Ensure any previous output is cleanly silenced first
+                midi_output_init("miniBAE", -1, -1);
+                // After opening, send current instrument table so external device matches internal synth
+                if (g_bae.song)
                 {
-                    unsigned char program = 0, bank = 0;
-                    if (BAESong_GetProgramBank(g_bae.song, ch, &program, &bank) == BAE_NO_ERROR)
+                    for (unsigned char ch = 0; ch < 16; ++ch)
                     {
-                        unsigned char buf[3];
-                        // Send Bank Select MSB (controller 0) if bank fits into MSB
-                        buf[0] = (unsigned char)(0xB0 | (ch & 0x0F));
-                        buf[1] = 0;
-                        buf[2] = (unsigned char)(bank & 0x7F);
-                        midi_output_send(buf, 3);
-                        // Program Change
-                        buf[0] = (unsigned char)(0xC0 | (ch & 0x0F));
-                        buf[1] = (unsigned char)(program & 0x7F);
-                        midi_output_send(buf, 2);
+                        unsigned char program = 0, bank = 0;
+                        if (BAESong_GetProgramBank(g_bae.song, ch, &program, &bank) == BAE_NO_ERROR)
+                        {
+                            unsigned char buf[3];
+                            // Send Bank Select MSB (controller 0) if bank fits into MSB
+                            buf[0] = (unsigned char)(0xB0 | (ch & 0x0F));
+                            buf[1] = 0;
+                            buf[2] = (unsigned char)(bank & 0x7F);
+                            midi_output_send(buf, 3);
+                            // Program Change
+                            buf[0] = (unsigned char)(0xC0 | (ch & 0x0F));
+                            buf[1] = (unsigned char)(program & 0x7F);
+                            midi_output_send(buf, 2);
+                        }
                     }
                 }
+                // Register engine MIDI event callback to mirror events
+                if (g_bae.song)
+                {
+                    BAESong_SetMidiEventCallback(g_bae.song, gui_midi_event_callback, NULL);
+                }
+                // Mute overall device (not just song) so internal synth is silent
+                if (g_bae.mixer)
+                {
+                    BAEMixer_SetMasterVolume(g_bae.mixer, FLOAT_TO_UNSIGNED_FIXED(0.0));
+                    g_master_muted_for_midi_out = true;
+                }
             }
-            // Register engine MIDI event callback to mirror events
-            if (g_bae.song)
+            else
             {
-                BAESong_SetMidiEventCallback(g_bae.song, gui_midi_event_callback, NULL);
+                // Before closing output, tell external device to silence and reset
+                midi_output_send_all_notes_off();
+                midi_output_shutdown();
+                // Unregister engine MIDI event callback
+                if (g_bae.song)
+                {
+                    BAESong_SetMidiEventCallback(g_bae.song, NULL, NULL);
+                }
+                // Restore master volume
+                if (g_bae.mixer)
+                {
+                    BAEMixer_SetMasterVolume(g_bae.mixer, FLOAT_TO_UNSIGNED_FIXED(g_last_requested_master_volume));
+                    g_master_muted_for_midi_out = false;
+                }
             }
-            // Mute overall device (not just song) so internal synth is silent
-            if (g_bae.mixer)
-            {
-                BAEMixer_SetMasterVolume(g_bae.mixer, FLOAT_TO_UNSIGNED_FIXED(0.0));
-                g_master_muted_for_midi_out = true;
-            }
+            save_settings(g_current_bank_path[0] ? g_current_bank_path : NULL, *reverbType, *loopPlay);
         }
-        else
-        {
-            // Before closing output, tell external device to silence and reset
-            midi_output_send_all_notes_off();
-            midi_output_shutdown();
-            // Unregister engine MIDI event callback
-            if (g_bae.song)
-            {
-                BAESong_SetMidiEventCallback(g_bae.song, NULL, NULL);
-            }
-            // Restore master volume
-            if (g_bae.mixer)
-            {
-                BAEMixer_SetMasterVolume(g_bae.mixer, FLOAT_TO_UNSIGNED_FIXED(g_last_requested_master_volume));
-                g_master_muted_for_midi_out = false;
-            }
-        }
-        save_settings(g_current_bank_path[0] ? g_current_bank_path : NULL, *reverbType, *loopPlay);
     }
     Rect midiOutDevRect = {controlRightX, dlg.y + 164, controlW + 200, 24};
     const char *curOutDev = (g_midi_output_device_index >= 0 && g_midi_output_device_index < g_midi_output_device_count) ? g_midi_device_name_cache[g_midi_input_device_count + g_midi_output_device_index] : "(Default)";

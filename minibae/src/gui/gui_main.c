@@ -2946,16 +2946,15 @@ int main(int argc, char *argv[])
             else
             {
 #endif
-                // Export button (unchanged behavior)
-                if (ui_button(R, (Rect){320, 215, 80, 22}, "Export", ui_mx, ui_my, ui_mdown) && ui_mclick && !g_exporting && !modal_block)
+                // Export button: mutually exclusive with external MIDI Output. When MIDI Output
+                // is enabled the Export button is shown disabled and does not accept clicks.
+                bool export_allowed = !g_midi_output_enabled && !g_exporting && !modal_block;
+                if (export_allowed)
                 {
+                    if (ui_button(R, (Rect){320, 215, 80, 22}, "Export", ui_mx, ui_my, ui_mdown) && ui_mclick)
+                    {
 #ifdef SUPPORT_MIDI_HW
-                    if (g_midi_output_enabled)
-                    {
-                        set_status_message("Export disabled while MIDI Output enabled");
-                    }
-                    else
-                    {
+                        /* export_allowed already ensures g_midi_output_enabled == false */
 #endif
                         // When export button clicked, open save dialog using extension depending on codec
                         char *export_file = save_export_dialog(g_exportCodecIndex != 0);
@@ -3105,9 +3104,19 @@ int main(int argc, char *argv[])
                             }
                             free(export_file);
                         }
-#ifdef SUPPORT_MIDI_HW
                     }
-#endif
+                }
+                else
+                {
+                    // Draw disabled Export button (no interaction)
+                    Rect disr = {320, 215, 80, 22};
+                    SDL_Color disabledBg = g_panel_bg;
+                    SDL_Color disabledTxt = g_panel_border;
+                    disabledBg.a = 200;
+                    disabledTxt.a = 200;
+                    draw_rect(R, disr, disabledBg);
+                    draw_frame(R, disr, g_panel_border);
+                    draw_text(R, disr.x + 18, disr.y + 4, "Export", disabledTxt);
                 }
 #ifdef SUPPORT_MIDI_HW
             }
