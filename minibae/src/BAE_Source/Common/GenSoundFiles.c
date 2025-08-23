@@ -203,7 +203,7 @@
     //                  rely on floating point. This needs to be changed in order to
     //                  read AIF files.
 #endif
-#if USE_MPEG_DECODER != 0
+#if USE_MPEG_DECODER != FALSE
     #include "XMPEG_BAE_API.h"
 #endif
 

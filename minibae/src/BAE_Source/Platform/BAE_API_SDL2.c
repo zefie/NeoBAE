@@ -1,7 +1,7 @@
 // BAE_API_SDL2.c - SDL2 audio backend for miniBAE
 // SDL2 platform implementation of subset of BAE_API.
 #define SDL_MAIN_HANDLED
-#include <SDL.h>
+#include <SDL2/SDL.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

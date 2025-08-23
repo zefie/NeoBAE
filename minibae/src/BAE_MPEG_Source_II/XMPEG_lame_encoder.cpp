@@ -186,4 +186,118 @@ extern "C" void MPG_EncodeFreeStream(void *stream){
     delete s;
 }
 
+#if USE_MPEG_DECODER == 0
+// Provide stub implementations of decoder functions needed by encoder code
+// when decoder is disabled. These are used just to get buffer size estimates.
+extern "C" XMPEGDecodedData * XOpenMPEGStreamFromMemory(XPTR pBlock, uint32_t blockSize, OPErr *pErr) {
+    // Simple stub: create a minimal structure with reasonable estimates
+    XMPEGDecodedData *stream = (XMPEGDecodedData*)XNewPtr(sizeof(XMPEGDecodedData));
+    if (!stream) {
+        if (pErr) *pErr = MEMORY_ERR;
+        return NULL;
+    }
+    
+    // Provide reasonable defaults for buffer sizing
+    stream->frameBufferSize = 1152 * 2 * 2; // 1152 samples * 2 channels * 2 bytes (16-bit)
+    stream->maxFrameBuffers = (blockSize / (stream->frameBufferSize / 8)) + 2; // Rough estimate + padding
+    stream->sampleRate = 44100; // Common default
+    stream->bitSize = 16;
+    stream->channels = 2;
+    stream->bitrate = 128000; // 128 kbps default
+    stream->lengthInBytes = stream->frameBufferSize * stream->maxFrameBuffers;
+    stream->lengthInSamples = stream->lengthInBytes / (stream->channels * 2);
+    stream->stream = NULL; // No actual decoder stream
+    
+    if (pErr) *pErr = NO_ERR;
+    return stream;
+}
+
+extern "C" OPErr XCloseMPEGStream(XMPEGDecodedData *stream) {
+    if (stream) {
+        XDisposePtr((XPTR)stream);
+    }
+    return NO_ERR;
+}
+
+// Stub implementation of XFillMPEGStreamBuffer for encoder-only builds
+extern "C" OPErr XFillMPEGStreamBuffer(XMPEGDecodedData *stream, void *pcmAudioBuffer, XBOOL *pDone) {
+    // Simple stub - this shouldn't be called in normal encoder-only operation
+    if (pDone) *pDone = TRUE;
+    return PARAM_ERR; // Signal that this is not a real decoder
+}
+
+// Additional encoder helper functions needed by XMPEGFilesSun.c
+extern "C" XMPEGEncodeRate XGetMPEGEncodeRate(SndCompressionType type) {
+    // Map compression types to bitrates
+    switch (type) {
+        case C_MPEG_32: return (XMPEGEncodeRate)32;
+        case C_MPEG_40: return (XMPEGEncodeRate)40;
+        case C_MPEG_48: return (XMPEGEncodeRate)48;
+        case C_MPEG_56: return (XMPEGEncodeRate)56;
+        case C_MPEG_64: return (XMPEGEncodeRate)64;
+        case C_MPEG_80: return (XMPEGEncodeRate)80;
+        case C_MPEG_96: return (XMPEGEncodeRate)96;
+        case C_MPEG_112: return (XMPEGEncodeRate)112;
+        case C_MPEG_128: return (XMPEGEncodeRate)128;
+        case C_MPEG_160: return (XMPEGEncodeRate)160;
+        case C_MPEG_192: return (XMPEGEncodeRate)192;
+        case C_MPEG_224: return (XMPEGEncodeRate)224;
+        case C_MPEG_256: return (XMPEGEncodeRate)256;
+        case C_MPEG_320: return (XMPEGEncodeRate)320;
+        default: return (XMPEGEncodeRate)128; // Default to 128 kbps
+    }
+}
+
+extern "C" SndCompressionType XGetMPEGCompressionType(XMPEGEncodeRate rate) {
+    // Map bitrates back to compression types
+    switch ((int)rate) {
+        case 32: return C_MPEG_32;
+        case 40: return C_MPEG_40;
+        case 48: return C_MPEG_48;
+        case 56: return C_MPEG_56;
+        case 64: return C_MPEG_64;
+        case 80: return C_MPEG_80;
+        case 96: return C_MPEG_96;
+        case 112: return C_MPEG_112;
+        case 128: return C_MPEG_128;
+        case 160: return C_MPEG_160;
+        case 192: return C_MPEG_192;
+        case 224: return C_MPEG_224;
+        case 256: return C_MPEG_256;
+        case 320: return C_MPEG_320;
+        default: return C_MPEG_128; // Default to 128 kbps
+    }
+}
+
+extern "C" XFIXED XGetClosestMPEGSampleRate(XFIXED sourceRate, SndCompressionSubType subType) {
+    // For simplicity, return common sample rates
+    (void)subType; // Unused
+    unsigned long rate = XFIXED_TO_UNSIGNED_LONG(sourceRate);
+    
+    // Common MPEG sample rates
+    if (rate <= 8000) return UNSIGNED_LONG_TO_XFIXED(8000);
+    if (rate <= 11025) return UNSIGNED_LONG_TO_XFIXED(11025);
+    if (rate <= 12000) return UNSIGNED_LONG_TO_XFIXED(12000);
+    if (rate <= 16000) return UNSIGNED_LONG_TO_XFIXED(16000);
+    if (rate <= 22050) return UNSIGNED_LONG_TO_XFIXED(22050);
+    if (rate <= 24000) return UNSIGNED_LONG_TO_XFIXED(24000);
+    if (rate <= 32000) return UNSIGNED_LONG_TO_XFIXED(32000);
+    if (rate <= 44100) return UNSIGNED_LONG_TO_XFIXED(44100);
+    return UNSIGNED_LONG_TO_XFIXED(48000); // Default to 48kHz for higher rates
+}
+
+extern "C" void XGetClosestMPEGSampleRateAndEncodeRate(XFIXED inSampleRate, 
+                                                      XMPEGEncodeRate inEncodeRate,
+                                                      XFIXED *outSampleRate,
+                                                      XMPEGEncodeRate *outEncodeRate,
+                                                      SndCompressionSubType subType) {
+    if (outSampleRate) {
+        *outSampleRate = XGetClosestMPEGSampleRate(inSampleRate, subType);
+    }
+    if (outEncodeRate) {
+        *outEncodeRate = inEncodeRate; // Just pass through the encode rate
+    }
+}
+#endif // USE_MPEG_DECODER == 0
+
 #endif /* USE_LAME_ENCODER && USE_MPEG_ENCODER */

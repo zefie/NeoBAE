@@ -35,7 +35,6 @@
 #include "gui_bae.h"
 #include "BAE_API.h" // for BAE_GetDeviceSamplesPlayedPosition diagnostics
 #include "X_Assert.h"
-#include <SDL_ttf.h>
 
 // GUI includes
 #include "gui_common.h"

@@ -167,9 +167,9 @@ typedef FLOAT sample_t;
 
 #if 1
 #define EQ(a,b) (\
-(fabs(a) > fabs(b)) \
- ? (fabs((a)-(b)) <= (fabs(a) * 1e-6f)) \
- : (fabs((a)-(b)) <= (fabs(b) * 1e-6f)))
+(fabs((double)(a)) > fabs((double)(b))) \
+ ? (fabs((double)(a)-(double)(b)) <= (fabs((double)(a)) * 1e-6f)) \
+ : (fabs((double)(a)-(double)(b)) <= (fabs((double)(b)) * 1e-6f)))
 #else
 #define EQ(a,b) (fabs((a)-(b))<1E-37)
 #endif

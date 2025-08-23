@@ -1,7 +1,7 @@
 #ifndef GUI_COMMON_H
 #define GUI_COMMON_H
 
-#include <SDL.h>
+#include <SDL2/SDL.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include "X_Assert.h"

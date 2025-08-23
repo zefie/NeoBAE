@@ -2177,7 +2177,7 @@ typedef enum
     ,
     FILE_MPEG_TYPE
 #endif
-#if USE_FLAC_DECODER != FALSE
+#if USE_FLAC_DECODER != FALSE || USE_FLAC_ENCODER != FALSE
     ,
     FILE_FLAC_TYPE
 #endif

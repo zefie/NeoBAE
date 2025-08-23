@@ -99,8 +99,8 @@ ifneq ($(USE_SDL),)
 endif
 
 
-# If MP3 encoder (Helix, C++) is enabled, link with C++ linker to pull in libstdc++
-ifeq ($(MP3_ENC),1)
+# Use C++ linker if we have any C++ sources
+ifneq ($(filter %.cpp,$(SRC) $(SRC_BIN)),)
     LD := $(CXX)
     LIBS += -lstdc++ -lsupc++
 endif
@@ -134,12 +134,12 @@ pack: ${TARGET_BIN}
 $(OBJ_DIR)%.o : %.cpp
 	@echo @compile $<
 	@mkdir -p $(OBJ_DIR)
-	@${CXX} -c ${CXXFLAGS} $< -o $@
+	$(SILENT)${CXX} -c ${CXXFLAGS} $< -o $@
 
 $(OBJ_DIR)%.o : %.c
 	@echo @compile $<
 	@mkdir -p $(OBJ_DIR)
-	@${CC} -c ${CFLAGS} $< -o $@
+	$(SILENT)${CC} -c ${CFLAGS} $< -o $@
 
 clean:
 	@rm -rf $(TARGET_OUT)

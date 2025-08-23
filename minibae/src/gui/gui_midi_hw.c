@@ -1,6 +1,7 @@
 // gui_midi_hw.c - MIDI hardware integration
 
 #include "gui_midi_hw.h"
+#include "gui_midi.h"
 #include "MiniBAE.h"
 
 #ifdef SUPPORT_MIDI_HW
@@ -95,7 +96,6 @@ unsigned char g_midi_bank_msb[16] = {0};
 unsigned char g_midi_bank_lsb[16] = {0};
 
 // MIDI output control
-double g_last_requested_master_volume = 1.0; // 0.0..1.0 per UI
 bool g_master_muted_for_midi_out = false;
 
 // PCM recording state

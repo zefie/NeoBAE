@@ -2,7 +2,9 @@ BAE_BUILT_IN_PATCHES	:= 1
 BAE_API			:= SDL2
 DEBUG			:= 0
 BUILD_GUI   	:= 1
+ifneq ($(NOAUTO),1)
 ENABLE_MIDI_HW	:= 1
+endif
 include inc/Makefile.common
 SOURCE_DIR = $(CURDIR)
 
@@ -15,7 +17,8 @@ endif
 ARCH		:= -static
 CC			:= $(CROSS)gcc
 CXX			:= $(CROSS)g++
-ifneq ($(MP3_ENC),)
+# Use C++ linker if we have any C++ sources
+ifneq ($(filter %.cpp,$(SRC) $(SRC_BIN)),)
 LD			:= $(CXX)
 else
 LD			:= $(CC)
@@ -28,7 +31,7 @@ WINDRES		:= $(CROSS)windres
 OPTI            := -O2 -fPIC
 CFLAGS  	:= $(ARCH) $(OPTI) $(INC_PATH) -D_THREAD_SAFE -DEMBED_FONT_TTF -Wno-unused-value
 
-ifneq ($(FLAC_DEC),)
+ifneq ($(filter 1,$(FLAC_DEC) $(FLAC_ENC)),)
 	vpath	%.c src/thirdparty/flac/src/share/win_utf8_io
 	CFLAGS	+= -Isrc/thirdparty/flac/src/share/win_utf8_io -DFLAC__NO_DLL
 	OBJ += $(OBJ_DIR)win_utf8_io.o
@@ -50,12 +53,12 @@ CFLAGS		+= -D_VERSION=\""$(VERSION)"\"
 CXXFLAGS 	:= $(CFLAGS)
 LDFLAGS		:= $(ARCH) $(OPTI) -s
 ifeq ($(BITS),32)
-CFLAGS  += -I../SDL2-2.32.8/i686-w64-mingw32/include/SDL2 -I../SDL2_ttf-2.24.0/i686-w64-mingw32/include/SDL2
-CXXFLAGS  += -I../SDL2-2.32.8/i686-w64-mingw32/include/SDL2 -I../SDL2_ttf-2.24.0/i686-w64-mingw32/include/SDL2
+CFLAGS  += -I../SDL2-2.32.8/i686-w64-mingw32/include -I../SDL2-2.32.8/i686-w64-mingw32/include/SDL2 -I../SDL2_ttf-2.24.0/i686-w64-mingw32/include
+CXXFLAGS  += -I../SDL2-2.32.8/i686-w64-mingw32/include -I../SDL2-2.32.8/i686-w64-mingw32/include/SDL2 -I../SDL2_ttf-2.24.0/i686-w64-mingw32/include
 LDFLAGS += -L../SDL2-2.32.8/i686-w64-mingw32/lib -L../SDL2_ttf-2.24.0/i686-w64-mingw32/lib
 else
-CFLAGS  += -I../SDL2-2.32.8/x86_64-w64-mingw32/include/SDL2 -I../SDL2_ttf-2.24.0/x86_64-w64-mingw32/include/SDL2
-CXXFLAGS  += -I../SDL2-2.32.8/x86_64-w64-mingw32/include/SDL2 -I../SDL2_ttf-2.24.0/x86_64-w64-mingw32/include/SDL2
+CFLAGS  += -I../SDL2-2.32.8/x86_64-w64-mingw32/include -I../SDL2-2.32.8/x86_64-w64-mingw32/include/SDL2 -I../SDL2_ttf-2.24.0/x86_64-w64-mingw32/include
+CXXFLAGS  += -I../SDL2-2.32.8/x86_64-w64-mingw32/include -I../SDL2-2.32.8/x86_64-w64-mingw32/include/SDL2 -I../SDL2_ttf-2.24.0/x86_64-w64-mingw32/include
 LDFLAGS += -L../SDL2-2.32.8/x86_64-w64-mingw32/lib -L../SDL2_ttf-2.24.0/x86_64-w64-mingw32/lib
 endif
 
@@ -126,12 +129,12 @@ pack: ${TARGET_BIN}
 $(OBJ_DIR)%.o : %.cpp
 	@echo @compile $<
 	@mkdir -p $(OBJ_DIR)
-	@${CXX} -c ${CXXFLAGS} $< -o $@
+	$(SILENT)${CXX} -c ${CXXFLAGS} $< -o $@
 
 $(OBJ_DIR)%.o : %.c
 	@echo @compile $<
 	@mkdir -p $(OBJ_DIR)
-	@${CC} -c ${CFLAGS} $< -o $@
+	$(SILENT)${CC} -c ${CFLAGS} $< -o $@
 
 clean:
 	@rm -rf $(TARGET_OUT)

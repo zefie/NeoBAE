@@ -57,7 +57,7 @@
 
 // #includes
 // ----------------------------------------------
-#include <SDL.h>
+#include <SDL2/SDL.h>
 #include <stdlib.h>
 #include <stdio.h>
 
@@ -84,7 +84,7 @@
 #define BAE_COMPLETE                    1
 #define USE_STREAM_API                  TRUE
 #define SUPPORT_IGOR_FEATURE            TRUE
-#define SUPPORT_KARAOKE			        TRUE
+#define SUPPORT_KARAOKE			        FALSE
 
 
 // Overwritable Flags -- default values
@@ -143,7 +143,7 @@
 #endif
 
 #ifndef USE_MPEG_DECODER
-    #define USE_MPEG_DECODER            TRUE
+    #define USE_MPEG_DECODER            FALSE
 #endif
 
 

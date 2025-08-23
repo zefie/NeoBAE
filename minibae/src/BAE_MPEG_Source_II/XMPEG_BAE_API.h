@@ -81,7 +81,7 @@
 #endif
 
 //#### decoder API
-
+#if USE_MPEG_DECODER != FALSE
 // create new mpeg stream from vaild MPG file. Returns NULL if failed.
 void * MPG_NewStream(void *fileName_in);
 void * MPG_NewStreamXFILENAME(XFILENAME *fileName_in);
@@ -123,7 +123,9 @@ uint32_t MPG_GetNumberOfSamples(void *stream);
 
 // return the size in bytes of the complete uncompressed MPEG file
 uint32_t MPG_GetSizeInBytes(void *reference);
+#endif
 
+#if USE_MPEG_ENCODER != FALSE
 //#### encoder API
 
 // create new mpeg stream to prepare for memory based encoding. Returns NULL if failed.
@@ -171,6 +173,7 @@ void XGetClosestMPEGSampleRateAndEncodeRate(XFIXED inSampleRate,
                                             XFIXED *outSampleRate,
                                             XMPEGEncodeRate *outEncodeRate,
                                             SndCompressionSubType subType);
+#endif
 
 #ifdef __cplusplus
     }

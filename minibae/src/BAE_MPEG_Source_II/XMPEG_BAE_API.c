@@ -121,6 +121,7 @@ typedef struct
     XFILE               m_streamFile;
     XBOOL               m_closeFileWhenDone;
 
+#if USE_MPEG_DECODER != FALSE
     // decoder variables
     struct
     {
@@ -144,6 +145,10 @@ typedef struct
         MPA_FRAME_INFO      m_frame_info;
         MPA_HEADER          m_header;
     } decode;
+#endif
+
+#if USE_MPEG_ENCODER != FALSE
+
     // encoder variables
     struct
     {
@@ -168,6 +173,9 @@ typedef struct
     } encode;
 } MPEGStreamData;
 
+#endif
+
+#if USE_MPEG_DECODER != FALSE
 // MPEG reader class. Private class functions
 static MPEGStreamData * MPEGDecoder_New(void);
 static void             MPEGDecoder_Delete(MPEGStreamData *data);
@@ -188,7 +196,8 @@ static uint32_t    MPEGDecoder_GetBufferSize(MPEGStreamData *data);
 static uint32_t    MPEGDecoder_GetChannels(MPEGStreamData *data);
 static uint32_t    MPEGDecoder_GetSampleRate(MPEGStreamData *data);
 static uint32_t    MPEGDecoder_GetBitSize(MPEGStreamData *data);
-
+#endif
+#if USE_MPEG_ENCODER != FALSE
 // MPEG Encoder class
 static MPEGStreamData * MPEGEncoder_New(uint32_t encodeRate, uint32_t sampleRate, uint32_t channels,
                                         XPTR pSampleData16Bits, uint32_t frames);
@@ -198,11 +207,13 @@ static uint32_t    MPEGEncoder_GetMaxFrames(MPEGStreamData *data);
 static uint32_t    MPEGEncoder_GetMaxFrameSize(MPEGStreamData *data);
 static void             MPEGEncoder_GetBits(MPEGStreamData *data, XPTR *pReturnedBuffer, uint32_t *pReturnedSize);
 static void             MPEGEncoder_SetRefillCallback(MPEGStreamData *data, MPEGFillBufferFn callback, void *userRef);
+#endif
 
 #if 0
     #pragma mark #### tool functions
 #endif
 
+#if USE_MPEG_DECODER != FALSE
 // returns the number of bytes used per frame in a file.
 static uint32_t PV_GetBytesPerFrame(MPA_HEADER *h, MPA_FRAME_INFO *i)
 {
@@ -643,6 +654,7 @@ decodeagain:
 
 #if 0
     #pragma mark #### encoder class
+#endif
 #endif
 
 #if USE_MPEG_ENCODER != FALSE

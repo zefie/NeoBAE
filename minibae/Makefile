@@ -58,7 +58,8 @@ else
 endif
 
 CXXFLAGS 	:= $(CFLAGS)
-ifneq ($(MP3_ENC),)
+# Use C++ linker if we have any C++ sources
+ifneq ($(filter %.cpp,$(SRC) $(SRC_BIN)),)
     LD := $(CXX)
     LIBS += -lstdc++ -lsupc++
 endif

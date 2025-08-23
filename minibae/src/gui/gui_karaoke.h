@@ -2,8 +2,8 @@
 #define GUI_KARAOKE_H
 
 #include "gui_common.h"
-#include <SDL.h>
-#include <SDL_mutex.h>
+#include <SDL2/SDL.h>
+#include <SDL2/SDL_mutex.h>
 
 #ifdef SUPPORT_KARAOKE
 

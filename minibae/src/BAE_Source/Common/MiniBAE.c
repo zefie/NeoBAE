@@ -278,54 +278,87 @@ const char *BAE_GetCurrentCPUArchitecture() { // Get current architecture, detec
     #if (X_PLATFORM == X_SDL2)
         #define BAE_SDL_SUFFIX "-SDL2"
     #elif (X_PLATFORM == X_WIN95)
-        #define BAE_SDL_SUFFIX "-DirectSound"        
+        #define BAE_SDL_SUFFIX "-DSound"        
     #else
         #define BAE_SDL_SUFFIX ""
     #endif
-    #if defined(__x86_64__) || defined(_M_X64)
-        return "x86_64" BAE_SDL_SUFFIX;
-    #elif defined(i386) || defined(__i386__) || defined(__i386) || defined(_M_IX86)
-        return "x86_32" BAE_SDL_SUFFIX;
-    #elif defined(__ARM_ARCH_2__)
-        return "ARM2" BAE_SDL_SUFFIX;
-    #elif defined(__ARM_ARCH_3__) || defined(__ARM_ARCH_3M__)
-        return "ARM3" BAE_SDL_SUFFIX;
-    #elif defined(__ARM_ARCH_4T__) || defined(__TARGET_ARM_4T)
-        return "ARM4T" BAE_SDL_SUFFIX;
-    #elif defined(__ARM_ARCH_5_) || defined(__ARM_ARCH_5E_)
-        return "ARM5" BAE_SDL_SUFFIX;
-    #elif defined(__ARM_ARCH_6T2__)
-        return "ARM6T2" BAE_SDL_SUFFIX;
-    #elif defined(__ARM_ARCH_6__) || defined(__ARM_ARCH_6J__) || defined(__ARM_ARCH_6K__) || defined(__ARM_ARCH_6Z__) || defined(__ARM_ARCH_6ZK__)
-        return "ARM6" BAE_SDL_SUFFIX;
-    #elif defined(__ARM_ARCH_7__) || defined(__ARM_ARCH_7A__) || defined(__ARM_ARCH_7R__) || defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7S__)
-        return "ARM7" BAE_SDL_SUFFIX;   // Generic ARMv7
-    #elif defined(__ARM_ARCH_7A__)
-        return "ARM7A" BAE_SDL_SUFFIX;
-    #elif defined(__ARM_ARCH_7R__)
-        return "ARM7R" BAE_SDL_SUFFIX;
-    #elif defined(__ARM_ARCH_7M__)
-        return "ARM7M" BAE_SDL_SUFFIX;
-    #elif defined(__ARM_ARCH_7S__)
-        return "ARM7S" BAE_SDL_SUFFIX;
-    #elif defined(__aarch64__) || defined(_M_ARM64)
-        return "ARM64" BAE_SDL_SUFFIX;
-    #elif defined(mips) || defined(__mips__) || defined(__mips)
-        return "MIPS" BAE_SDL_SUFFIX;
-    #elif defined(__sh__)
-        return "SUPERH" BAE_SDL_SUFFIX;
-    #elif defined(__powerpc64__) || defined(__PPC64__) || defined(__ppc64__) || defined(_ARCH_PPC64)
-        return "POWERPC64" BAE_SDL_SUFFIX;
-    #elif defined(__powerpc) || defined(__powerpc__) || defined(__POWERPC__) || defined(__ppc__) || defined(__PPC__) || defined(_ARCH_PPC)
-        return "POWERPC" BAE_SDL_SUFFIX;
-    #elif defined(__sparc__) || defined(__sparc)
-        return "SPARC" BAE_SDL_SUFFIX;
-    #elif defined(__m68k__)
-        return "M68K" BAE_SDL_SUFFIX;
-    #elif defined(WASM)
-        return "WASM" BAE_SDL_SUFFIX;
+
+    #if USE_MPEG_DECODER != TRUE && USE_MPEG_ENCODER != TRUE
+        #define BAE_MPEG_SUFFIX "-NoMP3"
     #else
-        return "UNKNOWN" BAE_SDL_SUFFIX;
+        #if USE_MPEG_DECODER == TRUE && USE_MPEG_ENCODER == TRUE
+            #define BAE_MPEG_SUFFIX "-MP3"
+        #elif USE_MPEG_DECODER == TRUE && USE_MPEG_ENCODER != TRUE
+            #define BAE_MPEG_SUFFIX "-MP3Dec"
+        #elif USE_MPEG_DECODER != TRUE && USE_MPEG_ENCODER == TRUE
+            #define BAE_MPEG_SUFFIX "-MP3Enc"
+        #endif
+    #endif
+
+    #if SUPPORT_MIDI_HW == TRUE
+        #define BAE_MIDI_SUFFIX "-MidiHW"
+    #else
+        #define BAE_MIDI_SUFFIX ""
+    #endif
+
+    #if USE_FLAC_DECODER != TRUE && USE_FLAC_ENCODER != TRUE
+        #define BAE_FLAC_SUFFIX ""
+    #else
+        #if USE_FLAC_DECODER == TRUE && USE_FLAC_ENCODER == TRUE
+            #define BAE_FLAC_SUFFIX "-FLAC"
+        #elif USE_FLAC_DECODER == TRUE && USE_FLAC_ENCODER != TRUE
+            #define BAE_FLAC_SUFFIX "-FLACDec"
+        #elif USE_FLAC_DECODER != TRUE && USE_FLAC_ENCODER == TRUE
+            #define BAE_FLAC_SUFFIX "-FLACEnc"
+        #endif
+    #endif
+
+    #define BAE_FEATURE_SUFFIX BAE_SDL_SUFFIX BAE_MPEG_SUFFIX BAE_MIDI_SUFFIX BAE_FLAC_SUFFIX
+
+    #if defined(__x86_64__) || defined(_M_X64)
+        return "x86_64" BAE_FEATURE_SUFFIX;
+    #elif defined(i386) || defined(__i386__) || defined(__i386) || defined(_M_IX86)
+        return "x86_32" BAE_FEATURE_SUFFIX;
+    #elif defined(__ARM_ARCH_2__)
+        return "ARM2" BAE_FEATURE_SUFFIX;
+    #elif defined(__ARM_ARCH_3__) || defined(__ARM_ARCH_3M__)
+        return "ARM3" BAE_FEATURE_SUFFIX;
+    #elif defined(__ARM_ARCH_4T__) || defined(__TARGET_ARM_4T)
+        return "ARM4T" BAE_FEATURE_SUFFIX;
+    #elif defined(__ARM_ARCH_5_) || defined(__ARM_ARCH_5E_)
+        return "ARM5" BAE_FEATURE_SUFFIX;
+    #elif defined(__ARM_ARCH_6T2__)
+        return "ARM6T2" BAE_FEATURE_SUFFIX;
+    #elif defined(__ARM_ARCH_6__) || defined(__ARM_ARCH_6J__) || defined(__ARM_ARCH_6K__) || defined(__ARM_ARCH_6Z__) || defined(__ARM_ARCH_6ZK__)
+        return "ARM6" BAE_FEATURE_SUFFIX;
+    #elif defined(__ARM_ARCH_7__) || defined(__ARM_ARCH_7A__) || defined(__ARM_ARCH_7R__) || defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7S__)
+        return "ARM7" BAE_FEATURE_SUFFIX;   // Generic ARMv7
+    #elif defined(__ARM_ARCH_7A__)
+        return "ARM7A" BAE_FEATURE_SUFFIX;
+    #elif defined(__ARM_ARCH_7R__)
+        return "ARM7R" BAE_FEATURE_SUFFIX;
+    #elif defined(__ARM_ARCH_7M__)
+        return "ARM7M" BAE_FEATURE_SUFFIX;
+    #elif defined(__ARM_ARCH_7S__)
+        return "ARM7S" BAE_FEATURE_SUFFIX;
+    #elif defined(__aarch64__) || defined(_M_ARM64)
+        return "ARM64" BAE_FEATURE_SUFFIX;
+    #elif defined(mips) || defined(__mips__) || defined(__mips)
+        return "MIPS" BAE_FEATURE_SUFFIX;
+    #elif defined(__sh__)
+        return "SUPERH" BAE_FEATURE_SUFFIX;
+    #elif defined(__powerpc64__) || defined(__PPC64__) || defined(__ppc64__) || defined(_ARCH_PPC64)
+        return "POWERPC64" BAE_FEATURE_SUFFIX;
+    #elif defined(__powerpc) || defined(__powerpc__) || defined(__POWERPC__) || defined(__ppc__) || defined(__PPC__) || defined(_ARCH_PPC)
+        return "POWERPC" BAE_FEATURE_SUFFIX;
+    #elif defined(__sparc__) || defined(__sparc)
+        return "SPARC" BAE_FEATURE_SUFFIX;
+    #elif defined(__m68k__)
+        return "M68K" BAE_FEATURE_SUFFIX;
+    #elif defined(WASM)
+        return "WASM" BAE_FEATURE_SUFFIX;
+    #else
+        return "UNKNOWN" BAE_FEATURE_SUFFIX;
     #endif
     #undef BAE_SDL_SUFFIX
 }
@@ -3214,7 +3247,7 @@ BAEResult BAEMixer_StartOutputToFile(BAEMixer theMixer,
             extern uint32_t BAE_TranslateMPEGTypeToBitrate(BAECompressionType ct);
             extern XBOOL PV_RefillMPEGEncodeBuffer(void *buffer, void *userRef);
             mWritingEncoder = MPG_EncodeNewStream(BAE_TranslateMPEGTypeToBitrate(compressionType),
-                              GM_ConvertFromOutputRateToRate(theRate),
+                              GM_ConvertFromOutputRateToRate((Rate)theRate),
                               channels,
                               mWritingDataBlock,
                               (uint32_t)(mWritingDataBlockSize / (sizeof(short) * channels)));
@@ -3222,7 +3255,7 @@ BAEResult BAEMixer_StartOutputToFile(BAEMixer theMixer,
                 BAE_PRINTF("audio: MPG_EncodeNewStream ok ch=");
                 char tmp[16]; XLongToStr(tmp,(int32_t)channels); BAE_PRINTF(tmp);
                 BAE_PRINTF(" framesPerCall="); XLongToStr(tmp,(int32_t)(mWritingDataBlockSize / (sizeof(short)*channels))); BAE_PRINTF(tmp);
-                BAE_PRINTF(" rate="); XLongToStr(tmp,(int32_t)GM_ConvertFromOutputRateToRate(theRate)); BAE_PRINTF(tmp); BAE_PRINTF("\n");
+                BAE_PRINTF(" rate="); XLongToStr(tmp,(int32_t)GM_ConvertFromOutputRateToRate((Rate)theRate)); BAE_PRINTF(tmp); BAE_PRINTF("\n");
                 // Prime first PCM buffer so first service call has audio content
                 PV_RefillMPEGEncodeBuffer(mWritingDataBlock, theMixer);
 
@@ -3268,7 +3301,7 @@ BAEResult BAEMixer_StartOutputToFile(BAEMixer theMixer,
                 // For FLAC, we'll accumulate audio in memory and then encode
                 mFLACChannels = (theModifiers & BAE_USE_STEREO) ? 2 : 1;
                 mFLACBitsPerSample = (theModifiers & BAE_USE_16) ? 16 : 8;
-                mFLACSampleRate = GM_ConvertFromOutputRateToRate(theRate);
+                mFLACSampleRate = GM_ConvertFromOutputRateToRate((Rate)theRate);
                 mFLACAccumulatedFrames = 0;
                 // Allocate buffer for about 10 minutes worth of audio (should handle most songs)
                 mFLACMaxAccumulatedFrames = mFLACSampleRate * 600; // 10 minutes
@@ -6275,10 +6308,9 @@ void BAESong_DisplayInfo(BAESong song)
             BAE_STDERR("    SomeTrackIsAlive %s\n", pSong->SomeTrackIsAlive ? "TRUE" : "FALSE");
             BAE_STDERR("    songFinished %s\n", pSong->songFinished ? "TRUE" : "FALSE");
             BAE_STDERR("    songLoopCount %d\n", pSong->songLoopCount);
-            BAE_STDERR("    songMaxLoopCount %d\n", pSong->songMaxLoopCount);                                                   // -1 means GM style bank select, -2 means allow program changes on percussion
-
-            BAE_STDERR("    songMidiTickLength %u\n", pSong->songMidiTickLength);
-            BAE_STDERR("    songMicrosecondLength %u\n", pSong->songMicrosecondLength);
+            BAE_STDERR("    songMaxLoopCount %d\n", pSong->songMaxLoopCount); 
+            BAE_STDERR("    songMidiTickLength %f\n", pSong->songMidiTickLength);
+            BAE_STDERR("    songMicrosecondLength %f\n", pSong->songMicrosecondLength);
 
             for (count = 0; count < 16; count++)
             {

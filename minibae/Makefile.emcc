@@ -18,7 +18,12 @@ EXTRA_FILES		:= \
 ARCH		:= -static
 CC		:= emcc
 CXX		:= emcc
+# Use C++ linker if we have any C++ sources
+ifneq ($(filter %.cpp,$(SRC) $(SRC_BIN)),)
+LD		:= $(CXX)
+else
 LD		:= $(CC)
+endif
 AR      	:= emar
 STRIP		:= strip
 
@@ -67,12 +72,12 @@ $(DST_FILES): ${TARGET_OUT}/% : %
 $(OBJ_DIR)%.o : %.cpp
 	@echo @compile $<
 	@mkdir -p $(OBJ_DIR)
-	@${CXX} -c ${CXXFLAGS} $< -o $@
+	$(SILENT)${CXX} -c ${CXXFLAGS} $< -o $@
 
 $(OBJ_DIR)%.o : %.c
 	@echo @compile $<
 	@mkdir -p $(OBJ_DIR)
-	@${CC} -c ${CFLAGS} $< -o $@
+	$(SILENT)${CC} -c ${CFLAGS} $< -o $@
 
 clean:
 	@rm -rf $(TARGET_OUT)

@@ -7,7 +7,13 @@ include inc/Makefile.common
 ARCH		:= -static
 CC		:= gcc
 CXX		:= g++
+# Use C++ linker if we have any C++ sources
+ifneq ($(filter %.cpp,$(SRC) $(SRC_BIN)),)
+LD		:= $(CXX)
+LIBS	:= $(LIBS) -lstdc++
+else
 LD		:= $(CC)
+endif
 AR      	:= ar
 STRIP		:= strip
 
@@ -24,7 +30,7 @@ include inc/Makefile.versioning
 CFLAGS		+= -D_VERSION=\""$(VERSION)"\"
 LDFLAGS		:= $(ARCH) $(OPTI) -s
 
-LIBS	= 	-lpthread -lm -LDFLAGS
+LIBS	= 	-lpthread -lm -ldl
 UNAME_S:=$(shell uname -s 2>/dev/null)
 # System SDL for Linux (dynamic) if pkg-config available
 ifneq (,$(findstring Linux,$(UNAME_S)))
@@ -133,12 +139,12 @@ pack: ${TARGET_BIN}
 $(OBJ_DIR)%.o : %.cpp
 	@echo @compile $<
 	@mkdir -p $(OBJ_DIR)
-	@${CXX} -c ${CXXFLAGS} $< -o $@
+	$(SILENT)${CXX} -c ${CXXFLAGS} $< -o $@
 
 $(OBJ_DIR)%.o : %.c
 	@echo @compile $<
 	@mkdir -p $(OBJ_DIR)
-	@${CC} -c ${CFLAGS} $< -o $@
+	$(SILENT)${CC} -c ${CFLAGS} $< -o $@
 
 clean:
 	@rm -rdf $(TARGET_OUT)

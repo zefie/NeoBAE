@@ -3,10 +3,18 @@ TEST_OUT_DIR	:= tests/
 TARGET_OUT	:= bin/
 BAE_FLAGS	:=
 ifneq ($(WASM),1)
-MP3_DEC := 1
-MP3_ENC := 1
-FLAC_DEC := 1
-FLAC_ENC := 1
+	ifeq ($(NOAUTO),)
+		MP3_DEC := 1
+		MP3_ENC := 1
+		FLAC_DEC := 1
+		FLAC_ENC := 1
+	endif
+endif
+
+ifneq ($(filter 1,$(VERBOSE) $(V)),)
+	SILENT :=
+else
+	SILENT := @
 endif
 
 EMBED_TTF_FONT := src/thirdparty/fonts/HelveticaNeue.ttf
@@ -43,8 +51,8 @@ endif
 
 
 INC_PATH	:= -Isrc/BAE_Source/Common
-INC_PATH	+= -Isrc/thirdparty/config
 INC_PATH	+= -Isrc/BAE_Source/Platform
+INC_PATH	+= -Isrc/thirdparty/config
 
 ifneq ($(filter 1,$(MP3_ENC) $(MP3_DEC)),) 
 	vpath	%.cpp src/BAE_MPEG_Source_II
@@ -66,19 +74,20 @@ ifneq ($(MP3_DEC),)
 INC_PATH	+= -Isrc/thirdparty/minimp3
 endif
 
-ifneq ($(ENABLE_MIDI_HW),)
+ifeq ($(ENABLE_MIDI_HW),1)
 INC_PATH	+= -Isrc/thirdparty/rtmidi
 	vpath	%.cpp src/thirdparty/rtmidi
 	vpath	%.c src/thirdparty/rtmidi
 endif
 
 ifneq ($(filter 1,$(FLAC_ENC) $(FLAC_DEC)),) 
-vpath	%.c src/thirdparty/flac/src/libFLAC
-INC_PATH	+= -Isrc/thirdparty/flac/include -Isrc/thirdparty/flac/src/libFLAC/include
+	vpath	%.c src/thirdparty/flac/src/libFLAC
+	INC_PATH	+= -Isrc/thirdparty/flac/include -Isrc/thirdparty/flac/src/libFLAC/include
 	# Build libFLAC sources into the binary/static library instead of
 	# expecting a DLL import. Ensure headers don't declare functions as
 	# __declspec(dllimport).
-	BAE_FLAGS += -DFLAC__NO_DLL
+	BAE_FLAGS += -DFLAC__NO_DLL -DHAVE_CONFIG_H=1
+	BAE_FLAGS += -DHAVE_STDINT_H=1 -DHAVE_INTTYPES_H=1 -DFLAC__HAS_OGG=0 -DSIZE_T_MAX=SIZE_MAX
 endif
 
 # default to ANSI
@@ -176,11 +185,12 @@ endif
 ifneq ($(MP3_DEC),)
 # Enable minimp3 wrapper for MPG_* API (decoder only)
 BAE_FLAGS += -DUSE_MINIMP3_WRAPPER=1 -DUSE_MPEG_DECODER=1
-SRC += XMPEG_minimp3_wrapper.c XMPEGFilesSun.c
+SRC += XMPEG_minimp3_wrapper.c
 endif
 
-ifneq ($(FLAC_DEC),) 
-	BAE_FLAGS += -DUSE_FLAC_DECODER=1
+# Include XMPEGFilesSun.c when either encoder or decoder is enabled
+ifneq ($(filter 1,$(MP3_ENC) $(MP3_DEC)),) 
+SRC += XMPEGFilesSun.c
 endif
 
 # Optional MP3 encoder integration
@@ -236,17 +246,18 @@ endif
 
 # Add FLAC decoder source files
 ifneq ($(FLAC_DEC),)
+	BAE_FLAGS += -DUSE_FLAC_DECODER=1
 	SRC += stream_decoder.c bitreader.c bitmath.c bitwriter.c cpu.c crc.c fixed.c format.c lpc.c md5.c memory.c metadata_iterators.c metadata_object.c stream_encoder_framing.c window.c
 endif
 
 # Add FLAC encoder source files  
 ifneq ($(FLAC_ENC),)
 	BAE_FLAGS += -DUSE_FLAC_ENCODER=1
-	# stream_encoder.c is the main encoding engine, other files already included above for decoder
+	# stream_encoder.c is the main encoding engine, and it depends on decoder for verification
 	SRC += stream_encoder.c
 	ifeq ($(FLAC_DEC),)
-		# Add required FLAC files for encoding, if decoding was disabled
-		SRC += bitreader.c bitmath.c bitwriter.c cpu.c crc.c fixed.c format.c lpc.c md5.c memory.c metadata_iterators.c metadata_object.c stream_encoder_framing.c window.c
+		# Add required FLAC files for encoding, including decoder support for verification
+		SRC += stream_decoder.c bitreader.c bitmath.c bitwriter.c cpu.c crc.c fixed.c format.c lpc.c md5.c memory.c metadata_iterators.c metadata_object.c stream_encoder_framing.c window.c
 	endif
 endif
 
@@ -254,15 +265,17 @@ endif
 # playbae = libMiniBAE srcs + playbae.c
 ifneq ($(BUILD_GUI),)
 	BAE_FLAGS += -DOUTPUT_TO_LOGFILE=1
-	SRC_BIN		:= $(SRC) gui_logging.c gui_theme.c gui_widgets.c gui_text.c gui_midi_vkbd.c gui_karaoke.c gui_export.c gui_dialogs.c gui_bae.c gui_settings.c gui_main.c
+	SRC_BIN	:= $(SRC) gui_logging.c gui_theme.c gui_widgets.c gui_text.c gui_midi_vkbd.c gui_karaoke.c gui_export.c gui_dialogs.c gui_bae.c gui_settings.c gui_main.c
 else
-	SRC_BIN		:= $(SRC) playbae.c
+	SRC_BIN	:= $(SRC) playbae.c
 endif
 
-ifneq ($(ENABLE_MIDI_HW),)
-	# RtMidi (C wrapper) - provide real-time MIDI input for GUI
-	BAE_FLAGS += -DSUPPORT_MIDI_HW=1
-	SRC_BIN +=  gui_midi_hw.c gui_midi_hw_input.c gui_midi_hw_output.c rtmidi_c.cpp RtMidi.cpp
+ifeq ($(ENABLE_MIDI_HW),1)
+	ifneq ($(BUILD_GUI),)
+		# RtMidi (C wrapper) - provide real-time MIDI input for GUI
+		BAE_FLAGS += -DSUPPORT_MIDI_HW=1
+		SRC_BIN +=  gui_midi_hw.c gui_midi_hw_input.c gui_midi_hw_output.c rtmidi_c.cpp RtMidi.cpp
+	endif
 endif
 
 ifneq ($(LOGFILE),)

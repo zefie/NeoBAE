@@ -7,7 +7,13 @@ include inc/Makefile.common
 ARCH		:= -static
 CC		:= clang
 CXX		:= clang++
+# Use C++ linker if we have any C++ sources
+ifneq ($(filter %.cpp,$(SRC) $(SRC_BIN)),)
+LD		:= $(CXX)
+LIBS	:= $(LIBS) -lstdc++
+else
 LD		:= $(CC)
+endif
 AR      	:= ar
 STRIP		:= strip
 
@@ -88,12 +94,12 @@ pack: ${TARGET_BIN}
 $(OBJ_DIR)%.o : %.cpp
 	@echo @compile $<
 	@mkdir -p $(OBJ_DIR)
-	@${CXX} -c ${CXXFLAGS} $< -o $@
+	$(SILENT)${CXX} -c ${CXXFLAGS} $< -o $@
 
 $(OBJ_DIR)%.o : %.c
 	@echo @compile $<
 	@mkdir -p $(OBJ_DIR)
-	@${CC} -c ${CFLAGS} $< -o $@
+	$(SILENT)${CC} -c ${CFLAGS} $< -o $@
 
 clean:
 	@rm -rf $(TARGET_OUT)

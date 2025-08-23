@@ -1808,7 +1808,7 @@ XSoundFormat1*      header;
         break;
     }
 
-#if USE_MPEG_ENCODER != 0
+#if USE_MPEG_ENCODER != FALSE
     // Beatnik MPEG
     case C_MPEG_32:
     case C_MPEG_40:

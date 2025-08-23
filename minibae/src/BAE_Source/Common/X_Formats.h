@@ -1089,7 +1089,7 @@ XBYTE * XConvert16BitTo8Bit(XWORD * p16BitPCMData, uint32_t frames, uint32_t cha
 
 
 // MPEG decoder
-#if USE_MPEG_DECODER != 0
+#if USE_MPEG_DECODER != FALSE || USE_MPEG_ENCODER != FALSE
 struct XMPEGDecodedData
 {
     void            *stream;
@@ -1105,16 +1105,21 @@ struct XMPEGDecodedData
 };
 typedef struct XMPEGDecodedData XMPEGDecodedData;
 
-XMPEGDecodedData * XOpenMPEGStreamFromXFILE(XFILE file, OPErr *pErr);
+// These functions are used by both encoder and decoder code
 XMPEGDecodedData * XOpenMPEGStreamFromMemory(XPTR pBlock, uint32_t blockSize, OPErr *pErr);
 OPErr XCloseMPEGStream(XMPEGDecodedData *stream);
-OPErr XFillMPEGStreamBuffer(XMPEGDecodedData *stream, void *pcmAudioBuffer, XBOOL *pDone);
 SndCompressionType XGetMPEGBitrateType(uint32_t bitrate);
+OPErr XFillMPEGStreamBuffer(XMPEGDecodedData *stream, void *pcmAudioBuffer, XBOOL *pDone);
+#endif
+
+#if USE_MPEG_DECODER != FALSE
+// Decoder-only functions
+XMPEGDecodedData * XOpenMPEGStreamFromXFILE(XFILE file, OPErr *pErr);
 
 #endif  // USE_MPEG_DECODER
 
 // MPEG encoder
-#if USE_MPEG_DECODER != 0
+#if USE_MPEG_ENCODER != FALSE
 // Encoder rates
 typedef enum
 {
@@ -1176,10 +1181,12 @@ OPErr XCompressMPEG(GM_Waveform const* pWave,
                     XPTR* pCompressedData, XDWORD* pCompressedBytes,
                     XDWORD* pFrameBufferCount, XDWORD* pFrameBufferBytes,
                     XDWORD* startFrame);
+#endif  // USE_MPEG_ENCODER
 
+#if USE_MPEG_ENCODER != 0 || USE_MPEG_DECODER != 0
 OPErr XExpandMPEG(GM_Waveform const* src, UINT32 startFrame, GM_Waveform* dst);
+#endif
 
-#endif  // USE_MPEG_DECODER
 
 #ifdef __cplusplus
     }

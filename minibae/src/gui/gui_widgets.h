@@ -2,7 +2,7 @@
 #define GUI_WIDGETS_H
 
 #include "gui_common.h"
-#include <SDL.h>
+#include <SDL2/SDL.h>
 
 // Basic drawing primitives
 void draw_rect(SDL_Renderer *R, Rect r, SDL_Color c);
