@@ -1338,7 +1338,7 @@ VBR_encode_granule(lame_internal_flags * gfc, gr_info * const cod_info, const FL
  ************************************************************************/
 
 static void
-get_framebits(lame_internal_flags * gfc, int frameBits[15])
+get_framebits(lame_internal_flags * gfc, int frameBits[16])
 {
     SessionConfig_t const *const cfg = &gfc->cfg;
     EncResult_t *const eov = &gfc->ov_enc;
@@ -1497,7 +1497,7 @@ VBR_old_iteration_loop(lame_internal_flags * gfc, const FLOAT pe[2][2],
 
     FLOAT   xrpow[576];
     int     bands[2][2];
-    int     frameBits[15];
+    int     frameBits[16];
     int     used_bits;
     int     bits;
     int     min_bits[2][2], max_bits[2][2];
@@ -1651,7 +1651,7 @@ VBR_new_iteration_loop(lame_internal_flags * gfc, const FLOAT pe[2][2],
     FLOAT   l3_xmin[2][2][SFBMAX];
 
     FLOAT   xrpow[2][2][576];
-    int     frameBits[15];
+    int     frameBits[16];
     int     used_bits;
     int     max_bits[2][2];
     int     ch, gr, analog_silence, pad;
