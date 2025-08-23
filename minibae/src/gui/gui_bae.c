@@ -629,7 +629,7 @@ bool bae_load_song(const char *path)
            we apply the same per-sound boost used in bae_set_volume. */
         {
             double stored = g_last_requested_master_volume; /* 0..1 engine space */
-            double soundGain = stored * 2.0; /* double for raw audio files */
+            double soundGain = stored * 2.0;                /* double for raw audio files */
             if (soundGain < 0.0)
                 soundGain = 0.0;
             if (g_bae.sound)
@@ -1023,7 +1023,7 @@ bool bae_play(bool *playing)
             // Set loop count: 0 for no looping, 0xFFFFFFFF for infinite looping
             uint32_t loopCount = g_bae.loop_enabled_gui ? 0xFFFFFFFF : 0;
             BAESound_SetLoopCount(g_bae.sound, loopCount);
-            
+
             BAE_PRINTF("Attempting BAESound_Start on '%s' (loop count: %u)\n", g_bae.loaded_path, loopCount);
             BAEResult sr = BAESound_Start(g_bae.sound, 0, FLOAT_TO_UNSIGNED_FIXED(1.0), 0);
             if (sr != BAE_NO_ERROR)
@@ -1454,5 +1454,5 @@ const char *get_bank_friendly_name()
             BAE_PRINTF("BAE API returned result %d for bank friendly name\n", result);
         }
     }
-    return NULL;  // Return NULL if no bank loaded or no friendly name found
+    return NULL; // Return NULL if no bank loaded or no friendly name found
 }

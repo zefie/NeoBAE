@@ -553,6 +553,11 @@ void render_about_dialog(SDL_Renderer *R, int mx, int my, bool mclick)
             "SDL2 & SDL2_ttf",
             "Copyright (C) 1997-2025 Sam Lantinga <slouken@libsdl.org>",
             "https://www.libsdl.org/",
+#ifdef USE_MPEG_ENCODER
+            "",
+            "libmp3lame",
+            "https://lame.sourceforge.io/",
+#endif
             "",
             NULL};
         for (int i = 0; credits_page1[i]; ++i)
@@ -596,8 +601,6 @@ void render_about_dialog(SDL_Renderer *R, int mx, int my, bool mclick)
     // Page 2: credits/licenses (part 2)
     else if (g_about_page == 2)
     {
-        draw_text(R, dlg.x + pad, y, "Additional credits and licenses:", g_text_color);
-        y += 18;
         const char *credits_page2[] = {
 #ifdef USE_MPEG_DECODER
             "",
@@ -605,17 +608,20 @@ void render_about_dialog(SDL_Renderer *R, int mx, int my, bool mclick)
             "Licensed under the CC0",
             "http://creativecommons.org/publicdomain/zero/1.0/",
 #endif
-#ifdef USE_MPEG_ENCODER
-            "",
-            "libmp3lame",
-            "https://lame.sourceforge.io/",
-#endif
 #ifdef SUPPORT_MIDI_HW
             "",
             "RtMidi: realtime MIDI i/o C++ classes",
             "Copyright (c) 2003-2023 Gary P. Scavone",
             "https://github.com/thestk/rtmidi",
 #endif
+#if defined(USE_FLAC_DECODER) || defined(USE_FLAC_ENCODER)
+            "",
+            "libFLAC",
+            "Copyright (C) 2000-2009  Josh Coalson",
+            "Copyright (C) 2011-2025  Xiph.Org Foundation",
+            "https://www.xiph.org/flac/",
+#endif
+            "",
             NULL};
         for (int i = 0; credits_page2[i]; ++i)
         {

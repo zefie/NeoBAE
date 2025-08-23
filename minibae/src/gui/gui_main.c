@@ -1387,7 +1387,7 @@ int main(int argc, char *argv[])
         // If this is an audio file (WAV/FLAC/MP3) and the GUI loop checkbox is enabled,
         // Note: With the new loop count feature, BAESound objects handle looping internally
         // so we no longer need manual loop detection and restart
-        
+
         // timing update
         Uint32 now = SDL_GetTicks();
         (void)now;
@@ -1782,15 +1782,20 @@ int main(int argc, char *argv[])
             int col = i % 8;
             int row = i / 8;
             Rect r = {chStartX + col * 45, chStartY + row * 35, 16, 16};
+            // Move checkboxes/labels/VU for channels 9-16 (row == 1) down by 1 pixel
+            if (row == 1)
+            {
+                r.y += 1;
+            }
             char buf[4];
             snprintf(buf, sizeof(buf), "%d", i + 1);
             // Handle toggle and clear VU when channel is muted
             // Disable channel toggles when playing audio files (sounds, not songs)
             bool channel_toggle_enabled = !(playing && g_bae.is_audio_file && g_bae.sound);
-            bool toggled = ui_toggle(R, r, &ch_enable[i], NULL, 
-                                   channel_toggle_enabled ? ui_mx : -1, 
-                                   channel_toggle_enabled ? ui_my : -1, 
-                                   ui_mclick && !modal_block && channel_toggle_enabled);
+            bool toggled = ui_toggle(R, r, &ch_enable[i], NULL,
+                                     channel_toggle_enabled ? ui_mx : -1,
+                                     channel_toggle_enabled ? ui_my : -1,
+                                     ui_mclick && !modal_block && channel_toggle_enabled);
             if (toggled && !ch_enable[i])
             {
                 // Muted -> immediately empty visible VU
@@ -1830,6 +1835,10 @@ int main(int argc, char *argv[])
             // the number doesn't visually collide with it. Center within checkbox width.
             int cx = r.x + (r.w - tw) / 2;
             int ty = r.y + r.h + 2; // label below box
+            // If this is the second row (channels 9-16) we nudged the checkbox down;
+            // apply the same 1px offset to the label so it stays aligned.
+            if (r.y != chStartY + row * 35)
+                ty += 0; // r.y already includes adjustment; keep explicit comment for clarity
             draw_text(R, cx, ty, buf, labelCol);
 
             // Draw a tiny vertical VU meter immediately to the right of the checkbox.
@@ -2108,7 +2117,7 @@ int main(int argc, char *argv[])
         int vtxt_x = ddRect.x + ddRect.w + 3;
         int vtxt_y = 101;
         draw_text(R, vtxt_x, vtxt_y, vbuf, labelCol);
-    /* Volume value is now non-interactive; clicking the percent label no longer resets to 100% */
+        /* Volume value is now non-interactive; clicking the percent label no longer resets to 100% */
 
 #ifdef SUPPORT_MIDI_HW
         // If MIDI input is enabled, paint a semi-transparent overlay over the control panel to dim it
@@ -2897,14 +2906,14 @@ int main(int argc, char *argv[])
                 {
                     bae_set_loop(loopPlay);
                     g_bae.loop_enabled_gui = loopPlay;
-                    
+
                     // Update loop count on currently loaded audio file if any
                     if (g_bae.is_audio_file && g_bae.sound)
                     {
                         uint32_t loopCount = loopPlay ? 0xFFFFFFFF : 0;
                         BAESound_SetLoopCount(g_bae.sound, loopCount);
                     }
-                    
+
                     // Save settings when loop is changed
                     if (g_current_bank_path[0] != '\0')
                     {
@@ -2991,7 +3000,7 @@ int main(int argc, char *argv[])
 #ifdef SUPPORT_MIDI_HW
                 bool export_allowed = !g_midi_output_enabled && !g_exporting && !modal_block;
 #else
-                bool export_allowed = !g_exporting && !modal_block;
+            bool export_allowed = !g_exporting && !modal_block;
 #endif
                 if (export_allowed)
                 {
@@ -3002,18 +3011,21 @@ int main(int argc, char *argv[])
 #endif
                         // When export button clicked, open save dialog using extension depending on codec
                         int export_dialog_type = 0; // Default to WAV
-                        
+
                         // Determine export type based on codec index
-                        if (g_exportCodecIndex == 0) {
+                        if (g_exportCodecIndex == 0)
+                        {
                             export_dialog_type = 0; // WAV
                         }
 #if USE_FLAC_ENCODER != FALSE
-                        else if (g_exportCodecIndex == 1) {
+                        else if (g_exportCodecIndex == 1)
+                        {
                             export_dialog_type = 1; // FLAC
                         }
 #endif
 #if USE_MPEG_ENCODER != FALSE
-                        else {
+                        else
+                        {
                             export_dialog_type = 2; // MP3
                         }
 #endif
@@ -3023,15 +3035,20 @@ int main(int argc, char *argv[])
                             // Ensure correct file extension based on export type
                             size_t L = strlen(export_file);
                             const char *expected_ext = NULL;
-                            
-                            if (export_dialog_type == 1) {
+
+                            if (export_dialog_type == 1)
+                            {
                                 expected_ext = ".flac";
-                            } else if (export_dialog_type == 2) {
+                            }
+                            else if (export_dialog_type == 2)
+                            {
                                 expected_ext = ".mp3";
-                            } else {
+                            }
+                            else
+                            {
                                 expected_ext = ".wav";
                             }
-                            
+
                             int ext_len = strlen(expected_ext);
                             if (L < ext_len || strcasecmp(export_file + L - ext_len, expected_ext) != 0)
                             {
@@ -3045,7 +3062,7 @@ int main(int argc, char *argv[])
                                     export_file = tmp;
                                 }
                             }
-                            
+
                             // Start export using selected codec mapping
                             // Map our index to BAEMixer compression enums using table
                             BAECompressionType compression = BAE_COMPRESSION_NONE;
@@ -3075,22 +3092,25 @@ int main(int argc, char *argv[])
                                 }
                                 BAESong_SetMicrosecondPosition(g_bae.song, 0);
                                 BAEFileType export_file_type = BAE_WAVE_TYPE;
-                                
+
                                 // Determine file type based on compression type
-                                if (compression == BAE_COMPRESSION_NONE) {
+                                if (compression == BAE_COMPRESSION_NONE)
+                                {
                                     export_file_type = BAE_WAVE_TYPE;
                                 }
 #if USE_FLAC_ENCODER != FALSE
-                                else if (compression == BAE_COMPRESSION_LOSSLESS) {
+                                else if (compression == BAE_COMPRESSION_LOSSLESS)
+                                {
                                     export_file_type = BAE_FLAC_TYPE;
                                 }
 #endif
 #if USE_MPEG_ENCODER != FALSE
-                                else if (compression >= BAE_COMPRESSION_MPEG_64 && compression <= BAE_COMPRESSION_MPEG_320) {
+                                else if (compression >= BAE_COMPRESSION_MPEG_64 && compression <= BAE_COMPRESSION_MPEG_320)
+                                {
                                     export_file_type = BAE_MPEG_TYPE;
                                 }
 #endif
-                                
+
                                 BAEResult result = BAEMixer_StartOutputToFile(g_bae.mixer, (BAEPathName)export_file,
                                                                               export_file_type,
                                                                               (BAECompressionType)compression);
@@ -3189,36 +3209,36 @@ int main(int argc, char *argv[])
                     draw_text(R, disr.x + 18, disr.y + 4, "Export", disabledTxt);
                 }
 
-            // Unroll button (only for rolled MIDI files)
-            if (g_bae.song)
-            {
-                BAE_BOOL isRolled = FALSE;
-                BAEResult result = BAESong_IsRolledMIDI(g_bae.song, &isRolled);
-                if (result == BAE_NO_ERROR && isRolled)
+                // Unroll button (only for rolled MIDI files)
+                if (g_bae.song)
                 {
-                    bool unroll_allowed = !g_exporting && !modal_block;
-                    if (unroll_allowed)
+                    BAE_BOOL isRolled = FALSE;
+                    BAEResult result = BAESong_IsRolledMIDI(g_bae.song, &isRolled);
+                    if (result == BAE_NO_ERROR && isRolled)
                     {
-                        if (ui_button(R, (Rect){405, 215, 80, 22}, "Unroll", ui_mx, ui_my, ui_mdown) && ui_mclick)
+                        bool unroll_allowed = !g_exporting && !modal_block;
+                        if (unroll_allowed)
                         {
-                            // TODO: Implement unroll functionality
-                            set_status_message("Unroll functionality not yet implemented");
+                            if (ui_button(R, (Rect){405, 215, 80, 22}, "Unroll", ui_mx, ui_my, ui_mdown) && ui_mclick)
+                            {
+                                // TODO: Implement unroll functionality
+                                set_status_message("Unroll functionality not yet implemented");
+                            }
+                        }
+                        else
+                        {
+                            // Draw disabled Unroll button
+                            Rect unroll_rect = {405, 215, 80, 22};
+                            SDL_Color disabledBg = g_panel_bg;
+                            SDL_Color disabledTxt = g_panel_border;
+                            disabledBg.a = 200;
+                            disabledTxt.a = 200;
+                            draw_rect(R, unroll_rect, disabledBg);
+                            draw_frame(R, unroll_rect, g_panel_border);
+                            draw_text(R, unroll_rect.x + 18, unroll_rect.y + 4, "Unroll", disabledTxt);
                         }
                     }
-                    else
-                    {
-                        // Draw disabled Unroll button
-                        Rect unroll_rect = {405, 215, 80, 22};
-                        SDL_Color disabledBg = g_panel_bg;
-                        SDL_Color disabledTxt = g_panel_border;
-                        disabledBg.a = 200;
-                        disabledTxt.a = 200;
-                        draw_rect(R, unroll_rect, disabledBg);
-                        draw_frame(R, unroll_rect, g_panel_border);
-                        draw_text(R, unroll_rect.x + 18, unroll_rect.y + 4, "Unroll", disabledTxt);
-                    }
                 }
-            }
 
 #ifdef SUPPORT_MIDI_HW
             }
@@ -3237,7 +3257,7 @@ int main(int argc, char *argv[])
                         rmf_x_pos = 490; // Move further right to avoid overlap with Unroll button
                     }
                 }
-                
+
                 if (ui_button(R, (Rect){rmf_x_pos, 215, 80, 22}, "RMF Info", ui_mx, ui_my, ui_mdown) && ui_mclick && !modal_block)
                 {
                     if (g_show_rmf_info_dialog)
@@ -3373,15 +3393,18 @@ int main(int argc, char *argv[])
                         {
                             // Choose save dialog and extension based on format
                             int export_dialog_type = 0; // Default to WAV
-                            if (g_midiRecordFormatIndex == 1) {
+                            if (g_midiRecordFormatIndex == 1)
+                            {
                                 export_dialog_type = 0; // WAV
                             }
 #if USE_FLAC_ENCODER != FALSE
-                            else if (g_midiRecordFormatIndex == 2) {
+                            else if (g_midiRecordFormatIndex == 2)
+                            {
                                 export_dialog_type = 1; // FLAC
                             }
 #endif
-                            else if (g_midiRecordFormatIndex >= 3) {
+                            else if (g_midiRecordFormatIndex >= 3)
+                            {
                                 export_dialog_type = 2; // MP3
                             }
                             char *export_file = save_export_dialog(export_dialog_type);
@@ -4750,7 +4773,7 @@ int main(int argc, char *argv[])
             bae_set_loop(loopPlay);
             lastLoop = loopPlay;
             g_bae.loop_enabled_gui = loopPlay;
-            
+
             // Update loop count on currently loaded audio file if any
             if (g_bae.is_audio_file && g_bae.sound)
             {
