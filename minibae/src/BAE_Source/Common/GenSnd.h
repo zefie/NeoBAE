@@ -417,6 +417,7 @@
 #ifndef G_SOUND
 #define G_SOUND
 #include <stdint.h>
+#include <math.h>
 
 #ifndef __X_API__
     #include "X_API.h"
@@ -2043,6 +2044,15 @@ struct GM_AudioInfo
 typedef struct GM_AudioInfo GM_AudioInfo;
 
 void GM_GetRealtimeAudioInformation(GM_AudioInfo *pInfo);
+
+/*
+ * Compute estimated per-MIDI-channel realtime levels derived from the
+ * internal per-voice amplitude accumulators. Outputs are normalized to
+ * the range 0.0 .. 1.0 relative to the loudest channel at the moment.
+ * These values are intended for UI VU meters and are not absolute audio
+ * power measurements.
+ */
+void GM_GetRealtimeChannelLevels(float left[16], float right[16]);
 
 
 /** Standard Midi constants.

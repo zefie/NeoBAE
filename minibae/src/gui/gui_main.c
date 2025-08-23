@@ -1675,35 +1675,20 @@ int main(int argc, char *argv[])
         for (int _i = 0; _i < 16; ++_i)
             realtime_channel_level[_i] = 0.0f;
         bool have_realtime_levels = false;
-        if (g_bae.mixer && !g_exporting)
+        if (g_bae.mixer && !g_exporting && playing)
         {
-            GM_AudioInfo ai;
-            GM_GetRealtimeAudioInformation(&ai);
-            // Sum squares of per-voice scaledVolume (0..MAX_NOTE_VOLUME) per channel and convert to RMS-ish value
-            float sumsq[16];
-            for (int _i = 0; _i < 16; ++_i)
-                sumsq[_i] = 0.0f;
-            int voices = (ai.voicesActive > 0) ? ai.voicesActive : 0;
-            if (voices > 0)
+            // Only get realtime levels when actually playing
+            // Prefer PCM-derived per-channel estimates when available from the engine.
+            float chL[16], chR[16];
+            GM_GetRealtimeChannelLevels(chL, chR);
+            // Merge stereo channels into a single mono level per MIDI channel
+            for (int ch = 0; ch < 16; ++ch)
             {
-                for (int v = 0; v < voices; ++v)
-                {
-                    int ch = ai.channel[v];
-                    if (ch < 0 || ch >= 16)
-                        continue;
-                    float vol = (float)ai.scaledVolume[v] / (float)MAX_NOTE_VOLUME;
-                    if (vol < 0.f)
-                        vol = 0.f;
-                    if (vol > 1.f)
-                        vol = 1.f;
-                    sumsq[ch] += vol * vol;
-                }
-                for (int ch = 0; ch < 16; ++ch)
-                {
-                    realtime_channel_level[ch] = sqrtf(MIN(1.0f, sumsq[ch]));
-                }
-                have_realtime_levels = true;
+                float lvl = (chL[ch] + chR[ch]) * 0.5f;
+                realtime_channel_level[ch] = lvl;
             }
+            // Always trust the engine's realtime levels when playing, even if they're all zero
+            have_realtime_levels = true;
         }
 
         for (int i = 0; i < 16; i++)
@@ -1770,7 +1755,16 @@ int main(int argc, char *argv[])
 
             // Prefer realtime estimated per-channel levels when available. Otherwise fall back to
             // the previous activity-driven heuristic (incoming MIDI or engine active notes).
-            if (have_realtime_levels)
+            
+            // Immediately clear VU meters when not playing, regardless of other state
+            if (!playing)
+            {
+                g_channel_vu[i] = 0.0f;
+                // Also clear peaks when stopped
+                g_channel_peak_level[i] = 0.0f;
+                g_channel_peak_hold_until[i] = 0;
+            }
+            else if (have_realtime_levels)
             {
                 float lvl = realtime_channel_level[i];
                 if (lvl < 0.f)
