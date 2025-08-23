@@ -2544,16 +2544,17 @@ int main(int argc, char *argv[])
             }
             // Second pass draw black keys
             wIndex = 0; // re-evaluate positions
-            // Build array mapping note->x base for white key underneath
-            int whitePos[128];
-            memset(whitePos, 0, sizeof(whitePos));
+            // Build array mapping note->x base for white key underneath (use float to reduce truncation)
+            float whitePosF[128];
+            for (int i = 0; i < 128; ++i)
+                whitePosF[i] = 0.0f;
             for (int n = firstNote; n <= lastNote; n++)
             {
                 int m = n % 12;
                 bool isWhite = (m == 0 || m == 2 || m == 4 || m == 5 || m == 7 || m == 9 || m == 11);
                 if (isWhite)
                 {
-                    whitePos[n] = kbX + (int)(wIndex * whiteWf);
+                    whitePosF[n] = (float)kbX + (wIndex * whiteWf);
                     wIndex++;
                 }
             }
@@ -2574,14 +2575,16 @@ int main(int argc, char *argv[])
                     }
                     if (prevWhite < firstNote)
                         continue;
-                    int wx = whitePos[prevWhite];
-                    int wxNext = wx + (int)whiteWf;
-                    int bx = wx + (int)(whiteWf * 0.66f);
+                    float wxf = whitePosF[prevWhite];
+                    float wxNextf = wxf + whiteWf;
+                    // Compute black key width first, then center it between wxf and wxNextf
                     int bw = (int)(whiteWf * 0.6f);
                     if (bw < 4)
                         bw = 4;
-                    if (bx + bw > wxNext - 2)
-                        bx = wxNext - 2 - bw;
+                    int bx = (int)(wxf + ((wxNextf - wxf - (float)bw) * 0.5f));
+                    // Shift every black key right by 12 pixels (reduced by 6px)
+                    bx += 10;
+                    // Intentionally do not clamp bx to wxNext so black keys hover over whites
                     int bh = (int)(kbH * 0.62f);
                     SDL_Color keyCol = g_is_dark_mode ? (SDL_Color){40, 40, 45, 255} : (SDL_Color){50, 50, 60, 255};
                     // Engine/MIDI active notes use accent by default for contrast
