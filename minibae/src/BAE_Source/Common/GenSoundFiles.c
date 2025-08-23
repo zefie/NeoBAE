@@ -188,7 +188,11 @@
 #include "X_Formats.h"
 #include "X_Assert.h"
 #include "GenSnd.h"
+#if USE_FLAC_DECODER != FALSE
+#include "FLAC/stream_decoder.h"
+#endif
 #include <stdint.h>
+#include <limits.h>
 
 #if USE_HIGHLEVEL_FILE_API == TRUE
     #include <math.h>
@@ -2854,6 +2858,435 @@ XMPEGDecodedData*   stream;
 }
 #endif  // USE_MPEG_DECODER != FALSE
 
+#if USE_FLAC_DECODER != FALSE
+
+typedef struct {
+    GM_Waveform*    wave;
+    SBYTE*          sampleData;
+    uint32_t        totalSamples;
+    uint32_t        currentSample;
+    OPErr           error;
+    XBOOL           metadataComplete;
+    
+    // Memory-based file data
+    const XBYTE*    fileData;
+    uint32_t        fileSize;
+    uint32_t        filePosition;
+    
+    /* PRNG state for dithering when downsampling >16-bit to 16-bit to avoid
+     * quantization-related static/noise. Initialized in the decoder init. */
+    uint32_t        dither_state;
+    /* Number of bits to right-shift for conservative attenuation after
+     * downsampling. 1 == -6dB, 2 == -12dB, 3 == -18dB. */
+    uint8_t         attenuation_shift;
+} FLACDecodeState;
+
+/* xorshift32 PRNG used for dithering. Kept simple and fast. */
+static uint32_t flac_prng(FLACDecodeState *s)
+{
+    uint32_t x = s->dither_state;
+    if (x == 0) x = 0x12345678u; /* seed if not set */
+    x ^= x << 13;
+    x ^= x >> 17;
+    x ^= x << 5;
+    s->dither_state = x;
+    return x;
+}
+
+/* Produce a small TPDF-like dither value centered at 0 using sum of two
+ * uniform integers in [0, 2^useBits-1], returned offset by -(2^useBits-1).
+ */
+static int32_t flac_tpdf_dither(FLACDecodeState *s, int useBits)
+{
+    if (useBits <= 0) return 0;
+    if (useBits > 24) useBits = 24; /* cap to avoid shifts >32 */
+    uint32_t mask = (useBits >= 32) ? 0xFFFFFFFFu : ((1u << useBits) - 1u);
+    uint32_t a = flac_prng(s) & mask;
+    uint32_t b = flac_prng(s) & mask;
+    /* center around zero: sum - mask */
+    return (int32_t)a + (int32_t)b - (int32_t)mask;
+}
+
+// FLAC callback functions for memory-based reading
+static FLAC__StreamDecoderReadStatus flac_read_callback(const FLAC__StreamDecoder *decoder, FLAC__byte buffer[], size_t *bytes, void *client_data)
+{
+    FLACDecodeState *state = (FLACDecodeState*)client_data;
+    size_t bytesToRead = *bytes;
+    size_t remainingBytes;
+    
+    (void)decoder; // unused parameter
+    
+    // Calculate remaining bytes in the file
+    remainingBytes = state->fileSize - state->filePosition;
+    
+    if (remainingBytes == 0) {
+        *bytes = 0;
+        return FLAC__STREAM_DECODER_READ_STATUS_END_OF_STREAM;
+    }
+    
+    // Don't read more than what's available
+    if (bytesToRead > remainingBytes) {
+        bytesToRead = remainingBytes;
+    }
+    
+    // Copy data from memory buffer
+    XBlockMove((void*)(state->fileData + state->filePosition), buffer, bytesToRead);
+    state->filePosition += bytesToRead;
+    *bytes = bytesToRead;
+    
+    return FLAC__STREAM_DECODER_READ_STATUS_CONTINUE;
+}
+
+static FLAC__StreamDecoderSeekStatus flac_seek_callback(const FLAC__StreamDecoder *decoder, FLAC__uint64 absolute_byte_offset, void *client_data)
+{
+    FLACDecodeState *state = (FLACDecodeState*)client_data;
+    
+    (void)decoder; // unused parameter
+    
+    if (absolute_byte_offset >= state->fileSize) {
+        return FLAC__STREAM_DECODER_SEEK_STATUS_ERROR;
+    }
+    
+    state->filePosition = (uint32_t)absolute_byte_offset;
+    return FLAC__STREAM_DECODER_SEEK_STATUS_OK;
+}
+
+static FLAC__StreamDecoderTellStatus flac_tell_callback(const FLAC__StreamDecoder *decoder, FLAC__uint64 *absolute_byte_offset, void *client_data)
+{
+    FLACDecodeState *state = (FLACDecodeState*)client_data;
+    
+    (void)decoder; // unused parameter
+    
+    *absolute_byte_offset = state->filePosition;
+    return FLAC__STREAM_DECODER_TELL_STATUS_OK;
+}
+
+static FLAC__StreamDecoderLengthStatus flac_length_callback(const FLAC__StreamDecoder *decoder, FLAC__uint64 *stream_length, void *client_data)
+{
+    FLACDecodeState *state = (FLACDecodeState*)client_data;
+    
+    (void)decoder; // unused parameter
+    
+    *stream_length = state->fileSize;
+    return FLAC__STREAM_DECODER_LENGTH_STATUS_OK;
+}
+
+static FLAC__bool flac_eof_callback(const FLAC__StreamDecoder *decoder, void *client_data)
+{
+    FLACDecodeState *state = (FLACDecodeState*)client_data;
+    
+    (void)decoder; // unused parameter
+    
+    return (state->filePosition >= state->fileSize) ? 1 : 0;
+}
+
+// FLAC decoder callbacks
+static FLAC__StreamDecoderWriteStatus flac_write_callback(
+    const FLAC__StreamDecoder *decoder,
+    const FLAC__Frame *frame,
+    const FLAC__int32 * const buffer[],
+    void *client_data)
+{
+    FLACDecodeState *state = (FLACDecodeState*)client_data;
+    uint32_t i, sample;
+    int16_t *dest;
+    
+    if (state->wave == NULL || state->sampleData == NULL) {
+        return FLAC__STREAM_DECODER_WRITE_STATUS_ABORT;
+    }
+    
+    dest = (int16_t*)(state->sampleData + (state->currentSample * state->wave->channels * sizeof(int16_t)));
+    
+    // Get the actual bit depth from the frame (more reliable than metadata)
+    int actualBitDepth = frame->header.bits_per_sample;
+    
+    // Convert samples to 16-bit signed PCM
+    for (i = 0; i < frame->header.blocksize; i++) {
+        for (sample = 0; sample < state->wave->channels; sample++) {
+            if (state->currentSample >= state->totalSamples) {
+                return FLAC__STREAM_DECODER_WRITE_STATUS_ABORT;
+            }
+
+            // libFLAC provides samples as signed 32-bit integers. The original
+            // file bit depth is in actualBitDepth.
+            int32_t val = buffer[sample][i];
+
+            if (actualBitDepth == 16) {
+                // Already 16-bit: store directly (clamp to be safe)
+                if (val > INT16_MAX) val = INT16_MAX;
+                else if (val < INT16_MIN) val = INT16_MIN;
+                *dest++ = (int16_t)val;
+            } else if (actualBitDepth > 16) {
+                /* Convert from higher bit depths (e.g., 24-bit) to 16-bit.
+                 * For 24-bit to 16-bit: divide by 256 (shift right by 8 bits)
+                 */
+                int shift = actualBitDepth - 16;
+                
+                // Simple bit shifting to convert to 16-bit range
+                int32_t scaled = val >> shift;
+                
+                /* Clamp to 16-bit range */
+                if (scaled > INT16_MAX) scaled = INT16_MAX;
+                else if (scaled < INT16_MIN) scaled = INT16_MIN;
+                
+                *dest++ = (int16_t)scaled;
+            } else {
+                // Handle 8-bit or unusual smaller depths: scale up to 16-bit
+                int32_t scaled = val << (16 - actualBitDepth);
+                if (scaled > INT16_MAX) scaled = INT16_MAX;
+                else if (scaled < INT16_MIN) scaled = INT16_MIN;
+                *dest++ = (int16_t)scaled;
+            }
+        }
+        state->currentSample++;
+    }
+    
+    return FLAC__STREAM_DECODER_WRITE_STATUS_CONTINUE;
+}
+
+static void flac_metadata_callback(
+    const FLAC__StreamDecoder *decoder,
+    const FLAC__StreamMetadata *metadata,
+    void *client_data)
+{
+    FLACDecodeState *state = (FLACDecodeState*)client_data;
+    
+    
+    if (metadata->type == FLAC__METADATA_TYPE_STREAMINFO) {
+        if (state->wave) {
+            state->wave->channels = (UBYTE)metadata->data.stream_info.channels;
+            // Store original bit depth for conversion, but output will be 16-bit
+            UBYTE originalBitSize = (UBYTE)metadata->data.stream_info.bits_per_sample;
+            state->wave->bitSize = originalBitSize;
+            state->wave->sampledRate = metadata->data.stream_info.sample_rate << 16L;
+            state->wave->waveFrames = (uint32_t)metadata->data.stream_info.total_samples;
+            state->totalSamples = state->wave->waveFrames;
+            
+            // Calculate total size in bytes - always 16-bit output for miniBAE
+            state->wave->waveSize = state->wave->waveFrames * state->wave->channels * 2; // 2 bytes per 16-bit sample
+            state->wave->compressionType = C_NONE;
+            state->wave->baseMidiPitch = 60; // Default middle C
+            
+            // Set loop points to full sample
+            state->wave->startLoop = 0;
+            state->wave->endLoop = state->wave->waveFrames;
+        }
+        state->metadataComplete = TRUE;
+    }
+}
+
+static void flac_error_callback(
+    const FLAC__StreamDecoder *decoder,
+    FLAC__StreamDecoderErrorStatus status,
+    void *client_data)
+{
+    FLACDecodeState *state = (FLACDecodeState*)client_data;
+    state->error = BAD_FILE;
+}
+
+// Main FLAC decoder function
+static GM_Waveform* PV_ReadIntoMemoryFLACFile(XFILE file, XBOOL decodeData, 
+                                               int32_t *pFormat, void **ppBlockPtr, uint32_t *pBlockSize, 
+                                               OPErr *pError)
+{
+    GM_Waveform*            wave = NULL;
+    FLAC__StreamDecoder*    decoder = NULL;
+    FLACDecodeState         state;
+    OPErr                   err = NO_ERR;
+    
+    BAE_ASSERT(file);
+    BAE_ASSERT(pError);
+    
+    // Initialize state
+    XSetMemory(&state, sizeof(FLACDecodeState), 0);
+    state.error = NO_ERR;
+    state.metadataComplete = FALSE;
+    state.fileData = NULL;
+    state.fileSize = 0;
+    state.filePosition = 0;
+    
+    // Read file length
+    uint32_t fileSize = XFileGetLength(file);
+    
+    if (fileSize == 0) {
+        err = BAD_FILE;
+        goto cleanup;
+    }
+    
+    // Allocate memory for the entire file
+    XBYTE* fileBuffer = (XBYTE*)XNewPtr(fileSize);
+    if (!fileBuffer) {
+        err = MEMORY_ERR;
+        goto cleanup;
+    }
+    
+    // Reset file position and read entire file
+    if (XFileSetPosition(file, 0)) {
+        err = BAD_FILE;
+        XDisposePtr(fileBuffer);
+        goto cleanup;
+    }
+    
+    // Try reading the entire file in one operation (like MPEG does)
+    if (XFileRead(file, fileBuffer, fileSize)) {
+        err = BAD_FILE;
+        XDisposePtr(fileBuffer);
+        goto cleanup;
+    }
+    
+    // Set up file data for callbacks
+    state.fileData = fileBuffer;
+    state.fileSize = fileSize;
+    state.filePosition = 0;
+    
+    // Create FLAC decoder
+    decoder = FLAC__stream_decoder_new();
+    if (!decoder) {
+        err = MEMORY_ERR;
+        goto cleanup;
+    }
+    
+    
+    // Allocate waveform structure
+    wave = (GM_Waveform*)XNewPtr(sizeof(GM_Waveform));
+    if (!wave) {
+        err = MEMORY_ERR;
+        goto cleanup;
+    }
+    
+    state.wave = wave;
+    
+    // The metadata callback should have already set all the wave parameters
+    // Just set defaults for fields not set by metadata
+    wave->compressionType = C_NONE;
+    wave->baseMidiPitch = 60;
+    
+    if (decodeData) {
+        // For now, just allocate some space but don't decode
+        wave->theWaveform = (SBYTE*)XNewPtr(1024); // Small test allocation
+        if (!wave->theWaveform) {
+            err = MEMORY_ERR;
+            goto cleanup;
+        }
+        // Fill with zeros for now
+        XSetMemory(wave->theWaveform, 1024, 0);
+    } else {
+        wave->theWaveform = NULL;
+        if (pFormat) {
+            *pFormat = 1; // PCM format
+        }
+        if (pBlockSize) {
+            *pBlockSize = 0; // No block structure for FLAC
+        }
+    }
+    
+    
+    // Initialize decoder with callbacks
+    FLAC__StreamDecoderInitStatus init_status = FLAC__stream_decoder_init_stream(decoder, 
+                                          flac_read_callback,
+                                          flac_seek_callback,
+                                          flac_tell_callback,
+                                          flac_length_callback,
+                                          flac_eof_callback,
+                                          flac_write_callback,
+                                          flac_metadata_callback,
+                                          flac_error_callback,
+                                          &state);
+    if (init_status != FLAC__STREAM_DECODER_INIT_STATUS_OK) {
+        err = BAD_FILE;
+        goto cleanup;
+    }
+    
+    
+    // Process metadata to get stream info
+    if (!FLAC__stream_decoder_process_until_end_of_metadata(decoder)) {
+        err = BAD_FILE;
+        goto cleanup;
+    }
+    
+    if (!state.metadataComplete || state.error != NO_ERR) {
+        err = BAD_FILE;
+        goto cleanup;
+    }
+    
+    if (decodeData) {
+    // Allocate memory for decoded sample data as 16-bit PCM output.
+    // The FLAC input may be 24-bit (3 bytes/sample) or other depths, but
+    // we downsample to 16-bit in the write callback. Allocate buffer sized
+    // for 16-bit samples so the rest of the engine interprets the data
+    // correctly.
+    uint32_t outBytesPerSample = 2; // 16-bit output
+    uint32_t outSize = (uint32_t)wave->waveFrames * (uint32_t)wave->channels * outBytesPerSample;
+    state.sampleData = (SBYTE*)XNewPtr(outSize);
+        if (!state.sampleData) {
+            err = MEMORY_ERR;
+            goto cleanup;
+        }
+        
+    // Update waveform metadata to reflect 16-bit decoded output
+    wave->theWaveform = state.sampleData;
+    wave->bitSize = 16;
+    wave->waveSize = outSize;
+        
+    // Seed dither PRNG to non-zero value to avoid zero-seed static
+    state.dither_state = (uint32_t)(state.fileSize | 1u);
+        state.currentSample = 0;
+        
+        // Decode the entire stream
+        if (!FLAC__stream_decoder_process_until_end_of_stream(decoder)) {
+            err = BAD_FILE;
+            goto cleanup;
+        }
+        
+        if (state.error != NO_ERR) {
+            err = state.error;
+            goto cleanup;
+        }
+        
+        // Convert 8-bit samples if needed (phase conversion)
+        if (wave->bitSize == 8) {
+            XPhase8BitWaveform((XBYTE*)wave->theWaveform, wave->waveSize);
+        }
+    } else {
+        // Just getting info, no decoding
+        wave->theWaveform = NULL;
+        wave->currentFilePosition = XFileGetPosition(file);
+        
+        if (pFormat) {
+            *pFormat = 1; // PCM format
+        }
+        if (pBlockSize) {
+            *pBlockSize = 0; // No block structure for FLAC
+        }
+    }
+    
+cleanup:
+    if (decoder) {
+        FLAC__stream_decoder_finish(decoder);
+        FLAC__stream_decoder_delete(decoder);
+    }
+    
+    // Clean up file data buffer
+    if (state.fileData) {
+        XDisposePtr((void*)state.fileData);
+    }
+    
+    if (err != NO_ERR) {
+        if (wave) {
+            if (wave->theWaveform) {
+                XDisposePtr(wave->theWaveform);
+            }
+            XDisposePtr(wave);
+            wave = NULL;
+        }
+    }
+    
+    *pError = err;
+    return wave;
+}
+
+#endif // USE_FLAC_DECODER != FALSE
+
 // functions used with GM_ReadAndDecodeFileStream to preserve state between decode calls.
 void * GM_CreateFileState(AudioFileType fileType)
 {
@@ -2922,6 +3355,11 @@ GM_Waveform     *waveform;
             waveform = PV_ReadIntoMemoryMPEGFile(file, decodeData, NULL, NULL, NULL, &err);
             break;
     #endif
+    #if USE_FLAC_DECODER != FALSE
+        case FILE_FLAC_TYPE:
+            waveform = PV_ReadIntoMemoryFLACFile(file, decodeData, NULL, NULL, NULL, &err);
+            break;
+    #endif
         default :
             err = PARAM_ERR;
             break;
@@ -2968,6 +3406,11 @@ GM_Waveform     *waveform;
     #if USE_MPEG_DECODER != FALSE
         case FILE_MPEG_TYPE:
             waveform = PV_ReadIntoMemoryMPEGFile(file, decodeData, NULL, NULL, NULL, &err);
+            break;
+    #endif
+    #if USE_FLAC_DECODER != FALSE
+        case FILE_FLAC_TYPE:
+            waveform = PV_ReadIntoMemoryFLACFile(file, decodeData, NULL, NULL, NULL, &err);
             break;
     #endif
         default :
@@ -3021,6 +3464,11 @@ GM_Waveform*    pWave = NULL;
 #if USE_MPEG_DECODER != FALSE
         case FILE_MPEG_TYPE:
             pWave = PV_ReadIntoMemoryMPEGFile(file, FALSE, pFormat, ppBlockPtr, pBlockSize, &err);
+            break;
+#endif
+#if USE_FLAC_DECODER != FALSE
+        case FILE_FLAC_TYPE:
+            pWave = PV_ReadIntoMemoryFLACFile(file, FALSE, pFormat, ppBlockPtr, pBlockSize, &err);
             break;
 #endif
         default :
@@ -3114,6 +3562,11 @@ OPErr GM_RepositionFileStream(XFILE fileReference,
                 }
                 reSeek = FALSE;
             }
+            break;
+#endif
+#if USE_FLAC_DECODER != FALSE
+        case FILE_FLAC_TYPE:
+            // FLAC handles seeking internally, use default positioning
             break;
 #endif
         case FILE_AIFF_TYPE:
@@ -3245,6 +3698,12 @@ OPErr GM_ReadAndDecodeFileStream(XFILE fileReference,
                     writeLength = pMPG->frameBufferSize * frames;
                     returnedLength = writeLength;
                 }
+                break;
+#endif
+#if USE_FLAC_DECODER != FALSE
+            case FILE_FLAC_TYPE:
+                // FLAC files are read completely into memory, not streamed
+                fileError = PARAM_ERR;
                 break;
 #endif
             case FILE_AIFF_TYPE:

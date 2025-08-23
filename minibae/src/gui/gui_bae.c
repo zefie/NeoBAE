@@ -12,6 +12,14 @@
 #include <ctype.h>
 #include <errno.h>
 
+/* If MIDI HW support is not compiled in, provide a local definition of
+    g_last_requested_master_volume so modules that reference it (like
+    bae_set_volume and load routines) link correctly. When SUPPORT_MIDI_HW
+    is enabled, the real definition from gui_midi_hw.c is used instead. */
+#ifndef SUPPORT_MIDI_HW
+double g_last_requested_master_volume = 1.0; /* 0.0..1.0 per UI */
+#endif
+
 // Volume mapping configuration moved to gui_bae.h
 
 // Global state variables (from main)
@@ -576,7 +584,8 @@ bool bae_load_song(const char *path)
     if (le)
     {
         if (strcmp(ext, ".wav") == 0 || strcmp(ext, ".aif") == 0 || strcmp(ext, ".aiff") == 0 ||
-            strcmp(ext, ".au") == 0 || strcmp(ext, ".mp2") == 0 || strcmp(ext, ".mp3") == 0)
+            strcmp(ext, ".au") == 0 || strcmp(ext, ".mp2") == 0 || strcmp(ext, ".mp3") == 0 ||
+            strcmp(ext, ".flac") == 0)
         {
             isAudio = true;
         }
@@ -599,6 +608,8 @@ bool bae_load_song(const char *path)
             ftype = BAE_MPEG_TYPE;
         else if (strcmp(ext, ".mp3") == 0)
             ftype = BAE_MPEG_TYPE;
+        else if (strcmp(ext, ".flac") == 0)
+            ftype = BAE_FLAC_TYPE;
 
         BAEResult sr = (ftype != BAE_INVALID_TYPE) ? BAESound_LoadFileSample(g_bae.sound, (BAEPathName)path, ftype) : BAE_BAD_FILE_TYPE;
         if (sr != BAE_NO_ERROR)
@@ -615,6 +626,26 @@ bool bae_load_song(const char *path)
         g_bae.is_audio_file = true;
         get_audio_total_frames();
         audio_current_position = 0;
+        /* Apply current user-requested master volume to the newly loaded sound
+           so UI volume state is respected immediately on load. For audio files
+           we apply the same per-sound boost used in bae_set_volume. */
+        {
+            double stored = g_last_requested_master_volume; /* 0..1 engine space */
+            double soundGain = stored * 2.0; /* double for raw audio files */
+            if (soundGain < 0.0)
+                soundGain = 0.0;
+            if (g_bae.sound)
+                BAESound_SetVolume(g_bae.sound, FLOAT_TO_UNSIGNED_FIXED(soundGain));
+
+#ifdef SUPPORT_MIDI_HW
+            if (g_bae.mixer && !g_master_muted_for_midi_out)
+#else
+            if (g_bae.mixer)
+#endif
+            {
+                BAEMixer_SetMasterVolume(g_bae.mixer, FLOAT_TO_UNSIGNED_FIXED(stored));
+            }
+        }
 
         const char *base = path;
         for (const char *p = path; *p; ++p)
@@ -660,6 +691,24 @@ bool bae_load_song(const char *path)
     g_bae.loaded_path[sizeof(g_bae.loaded_path) - 1] = '\0';
     g_bae.song_loaded = true;
     g_bae.is_audio_file = false; // is_rmf_file already set
+
+    /* Apply current user-requested master volume to the newly loaded song
+       so UI volume state is respected immediately on load. Songs do not get
+       the per-sound doubling applied to raw audio files. */
+    {
+        double stored = g_last_requested_master_volume; /* 0..1 engine space */
+        if (g_bae.song)
+            BAESong_SetVolume(g_bae.song, FLOAT_TO_UNSIGNED_FIXED(stored));
+
+#ifdef SUPPORT_MIDI_HW
+        if (g_bae.mixer && !g_master_muted_for_midi_out)
+#else
+        if (g_bae.mixer)
+#endif
+        {
+            BAEMixer_SetMasterVolume(g_bae.mixer, FLOAT_TO_UNSIGNED_FIXED(stored));
+        }
+    }
 
 #ifdef SUPPORT_KARAOKE
     // Prepare karaoke capture
@@ -729,7 +778,14 @@ void bae_set_volume(int volPct)
 
     if (g_bae.is_audio_file && g_bae.sound)
     {
-        BAESound_SetVolume(g_bae.sound, FLOAT_TO_UNSIGNED_FIXED(engineGain));
+        /* For raw audio files (WAV/MP3/etc.) boost the per-sound volume so
+           they play louder relative to MIDI/RMF songs. This doubles the
+           engine gain for the sound only; the remembered storedVol (used
+           by MIDI HW logic) remains the user's requested master intent. */
+        double soundGain = engineGain * 2.0;
+        if (soundGain < 0.0)
+            soundGain = 0.0;
+        BAESound_SetVolume(g_bae.sound, FLOAT_TO_UNSIGNED_FIXED(soundGain));
     }
     else if (!g_bae.is_audio_file && g_bae.song)
     {

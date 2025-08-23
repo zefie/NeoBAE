@@ -1,7 +1,7 @@
 BAE_BUILT_IN_PATCHES	:= 1
 BAE_API			:= SDL2
 DEBUG			:= 0
-BUILD_GUI   := 1
+BUILD_GUI   	:= 1
 include inc/Makefile.common
 
 ARCH		:= -static

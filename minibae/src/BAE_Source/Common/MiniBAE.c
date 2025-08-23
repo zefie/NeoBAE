@@ -777,6 +777,11 @@ AudioFileType BAE_TranslateBAEFileType(BAEFileType fileType)
             haeFileType = FILE_MPEG_TYPE;
             break;
 #endif
+#if USE_FLAC_DECODER != FALSE
+        case BAE_FLAC_TYPE:
+            haeFileType = FILE_FLAC_TYPE;
+            break;
+#endif
         case BAE_AU_TYPE:
             haeFileType = FILE_AU_TYPE;
             break;

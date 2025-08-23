@@ -2177,6 +2177,10 @@ typedef enum
     ,
     FILE_MPEG_TYPE
 #endif
+#if USE_FLAC_DECODER != FALSE
+    ,
+    FILE_FLAC_TYPE
+#endif
 } AudioFileType;
 
 // This will read into memory the entire file and return a GM_Waveform structure.

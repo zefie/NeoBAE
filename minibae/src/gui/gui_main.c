@@ -2948,7 +2948,11 @@ int main(int argc, char *argv[])
 #endif
                 // Export button: mutually exclusive with external MIDI Output. When MIDI Output
                 // is enabled the Export button is shown disabled and does not accept clicks.
+#ifdef SUPPORT_MIDI_HW
                 bool export_allowed = !g_midi_output_enabled && !g_exporting && !modal_block;
+#else
+                bool export_allowed = !g_exporting && !modal_block;
+#endif
                 if (export_allowed)
                 {
                     if (ui_button(R, (Rect){320, 215, 80, 22}, "Export", ui_mx, ui_my, ui_mdown) && ui_mclick)

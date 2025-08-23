@@ -4,3 +4,6 @@
 [submodule "minibae/src/thirdparty/rtmidi"]
 	path = minibae/src/thirdparty/rtmidi
 	url = https://github.com/thestk/rtmidi
+[submodule "minibae/src/thirdparty/flac"]
+	path = minibae/src/thirdparty/flac
+	url = https://github.com/xiph/flac

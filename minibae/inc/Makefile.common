@@ -3,7 +3,10 @@ TEST_OUT_DIR	:= tests/
 TARGET_OUT	:= bin/
 BAE_FLAGS	:=
 ifneq ($(WASM),1)
+MP3_DEC := 1
 MP3_ENC := 1
+FLAC_DEC := 1
+FLAC_ENC := 1
 endif
 
 EMBED_TTF_FONT := src/thirdparty/fonts/HelveticaNeue.ttf
@@ -38,23 +41,44 @@ else
 	vpath	%.c src/playbae
 endif
 
-ifneq ($(MP3_ENC),)
+
+INC_PATH	:= -Isrc/BAE_Source/Common
+INC_PATH	+= -Isrc/thirdparty/config
+INC_PATH	+= -Isrc/BAE_Source/Platform
+
+ifneq ($(filter 1,$(MP3_ENC) $(MP3_DEC)),) 
 	vpath	%.cpp src/BAE_MPEG_Source_II
+	INC_PATH  += -Isrc/BAE_MPEG_Source_II
 endif
 
-ifneq ($(BUILD_GUI),)
+# Ensure the legacy MPG API implementation is built when MP3 encoder or
+# decoder support is enabled. XMPEG_BAE_API.c implements MPG_* and
+# X* MPEG helper functions needed across the codebase.
+ifneq ($(filter 1,$(MP3_ENC) $(MP3_DEC)),)
+	SRC += XMPEG_BAE_API.c
+endif
+
+ifneq ($(BAE_BUILT_IN_PATCHES),)
+INC_PATH	+= -Isrc/banks/patches111
+endif
+
+ifneq ($(MP3_DEC),)
+INC_PATH	+= -Isrc/thirdparty/minimp3
+endif
+
+ifneq ($(ENABLE_MIDI_HW),)
+INC_PATH	+= -Isrc/thirdparty/rtmidi
 	vpath	%.cpp src/thirdparty/rtmidi
 	vpath	%.c src/thirdparty/rtmidi
 endif
 
-INC_PATH	:= -Isrc/BAE_Source/Common
-INC_PATH	+= -Isrc/BAE_Source/Platform
-INC_PATH	+= -Isrc/BAE_MPEG_Source_II
-INC_PATH	+= -Isrc/banks/patches111
-INC_PATH	+= -Isrc/thirdparty/minimp3
-INC_PATH	+= -Isrc/thirdparty/rtmidi
-ifneq ($(MP3_ENC),)
-	# LAME include path is added in the MP3_ENC block for LAME
+ifneq ($(filter 1,$(FLAC_ENC) $(FLAC_DEC)),) 
+vpath	%.c src/thirdparty/flac/src/libFLAC
+INC_PATH	+= -Isrc/thirdparty/flac/include -Isrc/thirdparty/flac/src/libFLAC/include
+	# Build libFLAC sources into the binary/static library instead of
+	# expecting a DLL import. Ensure headers don't declare functions as
+	# __declspec(dllimport).
+	BAE_FLAGS += -DFLAC__NO_DLL
 endif
 
 # default to ANSI
@@ -149,9 +173,15 @@ ifeq ($(BAE_BUILT_IN_PATCHES),1)
 	BAE_FLAGS += 	-D_BUILT_IN_PATCHES=1
 endif
 
+ifneq ($(MP3_DEC),)
 # Enable minimp3 wrapper for MPG_* API (decoder only)
 BAE_FLAGS += -DUSE_MINIMP3_WRAPPER=1 -DUSE_MPEG_DECODER=1
 SRC += XMPEG_minimp3_wrapper.c XMPEGFilesSun.c
+endif
+
+ifneq ($(FLAC_DEC),) 
+	BAE_FLAGS += -DUSE_FLAC_DECODER=1
+endif
 
 # Optional MP3 encoder integration
 # Enable with make MP3_ENC=1 (or set in environment)
@@ -202,6 +232,11 @@ ifeq ($(MP3_ENC),1)
 			tabinit.c
 	endif
 	SRC += XMPEG_lame_encoder.cpp
+endif
+
+# Add FLAC decoder source files
+ifneq ($(FLAC_DEC),)
+	SRC += stream_decoder.c bitreader.c bitmath.c bitwriter.c cpu.c crc.c fixed.c format.c lpc.c md5.c memory.c metadata_iterators.c metadata_object.c stream_encoder_framing.c window.c
 endif
 
 

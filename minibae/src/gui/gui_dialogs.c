@@ -176,10 +176,10 @@ char *open_file_dialog(void)
     ZeroMemory(&ofn, sizeof(ofn));
     ofn.lStructSize = sizeof(ofn);
     ofn.hwndOwner = NULL;
-    ofn.lpstrFilter = "All Supported\0*.mid;*.midi;*.kar;*.rmf;*.wav;*.aif;*.aiff;*.au;*.mp2;*.mp3\0"
+    ofn.lpstrFilter = "All Supported\0*.mid;*.midi;*.kar;*.rmf;*.wav;*.aif;*.aiff;*.au;*.mp2;*.mp3;*.flac\0"
                       "MIDI Files\0*.mid;*.midi;*.kar\0"
                       "RMF Files\0*.rmf\0"
-                      "Audio Files\0*.wav;*.aif;*.aiff;*.au;*.mp2;*.mp3\0"
+                      "Audio Files\0*.wav;*.aif;*.aiff;*.au;*.mp2;*.mp3;*.flac\0"
                       "All Files\0*.*\0";
     ofn.lpstrFile = fileBuf;
     ofn.nMaxFile = sizeof(fileBuf);
@@ -197,8 +197,8 @@ char *open_file_dialog(void)
     return NULL;
 #else
     const char *cmds[] = {
-        "zenity --file-selection --title='Open Media File' --file-filter='Supported Files | *.mid *.midi *.kar *.rmf *.wav *.aif *.aiff *.au *.mp2 *.mp3' --file-filter='All Files | *' 2>/dev/null",
-        "kdialog --getopenfilename . '*.mid *.midi *.kar *.rmf *.wav *.aif *.aiff *.au *.mp2 *.mp3' 2>/dev/null",
+        "zenity --file-selection --title='Open Media File' --file-filter='Supported Files | *.mid *.midi *.kar *.rmf *.wav *.aif *.aiff *.au *.mp2 *.mp3 *.flac' --file-filter='All Files | *' 2>/dev/null",
+        "kdialog --getopenfilename . '*.mid *.midi *.kar *.rmf *.wav *.aif *.aiff *.au *.mp2 *.mp3 *.flac' 2>/dev/null",
         "yad --file-selection --title='Open Media File' 2>/dev/null",
         NULL};
     for (int i = 0; cmds[i]; ++i)

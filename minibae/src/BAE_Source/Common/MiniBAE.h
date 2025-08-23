@@ -270,6 +270,7 @@ typedef enum
     BAE_MPEG_TYPE,
     BAE_AU_TYPE,
     BAE_MIDI_TYPE,
+    BAE_FLAC_TYPE,
 
     // meta types
     BAE_GROOVOID,

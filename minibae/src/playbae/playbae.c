@@ -393,7 +393,7 @@ char const copyrightInfo[] =
 char const usageString[] =
     {
         "USAGE:  playbae  -p  {patches.hsb}\n"
-        "                 -f  {Play a file (MIDI, RMF, WAV, AIFF, MPEG audio: MP2/MP3)}\n"
+        "                 -f  {Play a file (MIDI, RMF, WAV, AIFF, MPEG audio: MP2/MP3, FLAC)}\n"
         "                 -o  {write output to file}\n"
         "                 -om {write MP3 output to file (requires MP3 encoder build)}\n"
 #ifdef SUPPORT_KARAOKE
@@ -1136,12 +1136,21 @@ BAEResult playFile(BAEMixer theMixer, char *parmFile, BAE_UNSIGNED_FIXED volume,
          playbae_printf("Playing WAVE %s\n", parmFile);
          err = PlayPCM(theMixer, parmFile, BAE_AIFF_TYPE, volume, timeLimit);
       }
+#ifdef USE_MPEG_DECODER      
       else if (PV_IsLikelyMP3Header((unsigned char *)fileHeader) ||
                PV_IsFileExtension(parmFile, ".mp3") || PV_IsFileExtension(parmFile, ".mp2") || PV_IsFileExtension(parmFile, ".mpg"))
       {
          playbae_printf("Playing MPEG audio (MP2/MP3) %s\n", parmFile);
          err = PlayPCM(theMixer, parmFile, BAE_MPEG_TYPE, volume, timeLimit);
       }
+#endif
+#ifdef USE_FLAC_DECODER
+      else if (PV_IsFileExtension(parmFile, ".flac"))
+      {
+         playbae_printf("Playing FLAC %s\n", parmFile);
+         err = PlayPCM(theMixer, parmFile, BAE_FLAC_TYPE, volume, timeLimit);
+      }
+#endif      
       else
       {
          err = (BAEResult)10069;

@@ -28,6 +28,12 @@ WINDRES		:= $(CROSS)windres
 OPTI            := -O2 -fPIC
 CFLAGS  	:= $(ARCH) $(OPTI) $(INC_PATH) -D_THREAD_SAFE -DEMBED_FONT_TTF -Wno-unused-value
 
+ifneq ($(FLAC_DEC),)
+	vpath	%.c src/thirdparty/flac/src/share/win_utf8_io
+	CFLAGS	+= -Isrc/thirdparty/flac/src/share/win_utf8_io -DFLAC__NO_DLL
+	OBJ += $(OBJ_DIR)win_utf8_io.o
+	OBJ_BIN += $(OBJ_DIR)win_utf8_io.o
+endif
 
 ifneq ($(ENABLE_MIDI_HW),)
 	# WinMM MIDI HW Support
@@ -46,11 +52,11 @@ LDFLAGS		:= $(ARCH) $(OPTI) -s
 ifeq ($(BITS),32)
 CFLAGS  += -I../SDL2-2.32.8/i686-w64-mingw32/include/SDL2 -I../SDL2_ttf-2.24.0/i686-w64-mingw32/include/SDL2
 CXXFLAGS  += -I../SDL2-2.32.8/i686-w64-mingw32/include/SDL2 -I../SDL2_ttf-2.24.0/i686-w64-mingw32/include/SDL2
-LDFLAGS += -L../SDL2-2.32.8/i686-w64-mingw32/lib -L ../SDL2_ttf-2.24.0/i686-w64-mingw32/lib
+LDFLAGS += -L../SDL2-2.32.8/i686-w64-mingw32/lib -L../SDL2_ttf-2.24.0/i686-w64-mingw32/lib
 else
 CFLAGS  += -I../SDL2-2.32.8/x86_64-w64-mingw32/include/SDL2 -I../SDL2_ttf-2.24.0/x86_64-w64-mingw32/include/SDL2
 CXXFLAGS  += -I../SDL2-2.32.8/x86_64-w64-mingw32/include/SDL2 -I../SDL2_ttf-2.24.0/x86_64-w64-mingw32/include/SDL2
-LDFLAGS += -L../SDL2-2.32.8/x86_64-w64-mingw32/lib -L ../SDL2_ttf-2.24.0/x86_64-w64-mingw32/lib
+LDFLAGS += -L../SDL2-2.32.8/x86_64-w64-mingw32/lib -L../SDL2_ttf-2.24.0/x86_64-w64-mingw32/lib
 endif
 
 LIBS = \
