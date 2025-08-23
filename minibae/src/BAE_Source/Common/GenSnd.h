@@ -1137,6 +1137,7 @@ struct GM_Song
     XBOOL               songPrerolled;              // if TRUE, instruments are loaded, midi queued
     XBOOL               checkedForAliases;          // if FALSE, then aliases from bank have not been
                                                     // incorporated into the remapArray yet.
+    XBOOL               isRolledMIDI;               // if TRUE, this is a "rolled" MIDI format (no dominant track)
 
     XBOOL               songEndAtFade;              // when true, stop song at end of fade
     XFIXED              songFadeRate;               // when non-zero fading is enabled
@@ -1955,6 +1956,9 @@ XBOOL   GM_GetSongLoopFlag(GM_Song *theSong);
 void    GM_SetSongMetaLoopFlag(GM_Song *theSong, XBOOL loopSong);
 // return the meta loop status for a song
 XBOOL   GM_GetSongMetaLoopFlag(GM_Song *theSong);
+
+// return TRUE if this is a "rolled" MIDI format (no dominant track)
+XBOOL   GM_IsRolledMIDI(GM_Song *pSong);
 
 int16_t GM_GetSongLoopMax(GM_Song *theSong);
 void    GM_SetSongLoopMax(GM_Song *theSong, int16_t maxLoopCount);

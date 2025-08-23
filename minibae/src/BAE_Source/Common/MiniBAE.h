@@ -2483,6 +2483,17 @@ BAEResult           BAESong_AreMidiEventsPending(BAESong song,
                             BAE_BOOL *outPending);
 
 
+// BAESong_IsRolledMIDI()
+// --------------------------------------
+// Upon return, the BAE_BOOL pointed at by parameter outIsRolled will indicate
+// whether this song uses a "rolled" MIDI format (no dominant master track).
+// In rolled MIDI files, tracks are more evenly distributed in terms of content,
+// allowing the BAE engine to play one track at a time for special playback modes.
+//
+BAEResult           BAESong_IsRolledMIDI(BAESong song,
+                            BAE_BOOL *outIsRolled);
+
+
 // BAESong_SetLoops()
 // ------------------------------------
 // Sets the loop repeat counter for the indicated BAESong to the indicated 

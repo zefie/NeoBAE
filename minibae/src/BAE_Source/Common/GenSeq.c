@@ -402,6 +402,7 @@ System Exclusive ID number:
 #if SUPPORT_IGOR_FEATURE
 static void PV_SetSampleIntoCache(GM_Song *pSong, XSampleID theID, XBankToken bankToken, XPTR pSndFormatData, OPErr *pErr);
 #endif
+static XBOOL PV_DetectRolledMIDI(GM_Song *pSong);
 
 // Scale the division amount by the current tempo:
 static void PV_ScaleDivision(GM_Song *pSong, UFLOAT div)
@@ -668,6 +669,9 @@ OPErr PV_ConfigureMusic(GM_Song *pSong)
                     {
                         theErr = NO_ERR; // all is well in midi land
                         BAE_PRINTF("DEBUG: PV_ConfigureMusic: Parsed %u tracks successfully.\n", (unsigned)numtracks);
+                        
+                        // Detect rolled MIDI format
+                        pSong->isRolledMIDI = PV_DetectRolledMIDI(pSong);
                     }
                     else
                     {
@@ -683,6 +687,9 @@ OPErr PV_ConfigureMusic(GM_Song *pSong)
                             BAE_PRINTF("WARN: PV_ConfigureMusic: Declared %u tracks but found %u. Parsing %u extra track(s).\n", (unsigned)realtracks, (unsigned)numtracks, (unsigned)(numtracks - realtracks));
                             realtracks = numtracks;
                             theErr = NO_ERR;
+                            
+                            // Detect rolled MIDI format
+                            pSong->isRolledMIDI = PV_DetectRolledMIDI(pSong);
                         }
                         else
                         {
@@ -706,6 +713,191 @@ OPErr PV_ConfigureMusic(GM_Song *pSong)
         }
     }
     return theErr;
+}
+
+// Analyze track content to detect "rolled" MIDI format
+// Returns TRUE if this appears to be a rolled MIDI file
+static XBOOL PV_DetectRolledMIDI(GM_Song *pSong)
+{
+    XSWORD trackCount = 0;
+    XDWORD trackSizes[MAX_TRACKS];
+    XDWORD noteEvents[MAX_TRACKS];
+    XDWORD totalNoteEvents = 0;
+    XDWORD totalTrackSize = 0;
+    XDWORD maxTrackSize = 0;
+    XDWORD maxNoteEvents = 0;
+    XBYTE *pTrack;
+    XSWORD track;
+    
+    if (!pSong)
+        return FALSE;
+    
+    BAE_PRINTF("DEBUG: PV_DetectRolledMIDI: Starting analysis...\n");
+    
+    // Count active tracks and analyze their content
+    for (track = 0; track < MAX_TRACKS; track++)
+    {
+        if (pSong->ptrack[track] && pSong->tracklen[track] > 0)
+        {
+            trackSizes[trackCount] = pSong->tracklen[track];
+            noteEvents[trackCount] = 0;
+            
+            // Analyze track content to count MIDI note events only
+            pTrack = pSong->trackstart[track];
+            XBYTE *pTrackEnd = pTrack + pSong->tracklen[track];
+            XDWORD noteEventCount = 0;
+            XBYTE runningStatus = 0;
+            
+            BAE_PRINTF("DEBUG: PV_DetectRolledMIDI: Analyzing track %d, size=%u bytes\n", trackCount, trackSizes[trackCount]);
+            
+            while (pTrack < pTrackEnd)
+            {
+                // Read variable-length delta time
+                XDWORD deltaTime = 0;
+                XBYTE c;
+                do {
+                    if (pTrack >= pTrackEnd) break;
+                    c = *pTrack++;
+                    deltaTime = (deltaTime << 7) | (c & 0x7F);
+                } while (c & 0x80);
+                
+                if (pTrack >= pTrackEnd) break;
+                
+                XBYTE event = *pTrack++;
+                if (event == 0xFF) // Meta event
+                {
+                    if (pTrack < pTrackEnd)
+                    {
+                        XBYTE metaType = *pTrack++;
+                        // Read variable-length data length
+                        XDWORD dataLen = 0;
+                        do {
+                            if (pTrack >= pTrackEnd) break;
+                            c = *pTrack++;
+                            dataLen = (dataLen << 7) | (c & 0x7F);
+                        } while (c & 0x80);
+                        
+                        pTrack += dataLen; // Skip meta event data
+                        if (metaType == 0x2F) // End of track
+                            break;
+                    }
+                }
+                else if (event == 0xF0 || event == 0xF7) // SysEx
+                {
+                    // Read variable-length SysEx length
+                    XDWORD sysexLen = 0;
+                    do {
+                        if (pTrack >= pTrackEnd) break;
+                        c = *pTrack++;
+                        sysexLen = (sysexLen << 7) | (c & 0x7F);
+                    } while (c & 0x80);
+                    pTrack += sysexLen; // Skip SysEx data
+                }
+                else if ((event & 0x80) == 0) // Running status
+                {
+                    // Back up one byte, this is data for running status
+                    pTrack--;
+                    event = runningStatus;
+                    if (event == 0) continue; // No valid running status
+                }
+                else // Regular MIDI event
+                {
+                    runningStatus = event;
+                }
+                
+                // Count ONLY note events (note on/off) as these indicate musical content
+                if (event >= 0x80 && event < 0xF0)
+                {
+                    XBYTE eventType = event & 0xF0;
+                    if (eventType == 0x80 || eventType == 0x90) // Note off/on
+                    {
+                        if (pTrack + 2 <= pTrackEnd)
+                        {
+                            XBYTE velocity = pTrack[1]; // Check velocity for note on
+                            // Count note on with velocity > 0, and all note offs
+                            if (eventType == 0x80 || (eventType == 0x90 && velocity > 0))
+                            {
+                                noteEventCount++;
+                            }
+                            pTrack += 2; // Skip note and velocity
+                        }
+                    }
+                    else if (eventType == 0xA0 || eventType == 0xB0 || eventType == 0xE0) // Polyphonic aftertouch, control change, pitch bend
+                    {
+                        if (pTrack + 2 <= pTrackEnd)
+                            pTrack += 2; // Skip two data bytes
+                    }
+                    else if (eventType == 0xC0 || eventType == 0xD0) // Program change, channel aftertouch
+                    {
+                        if (pTrack + 1 <= pTrackEnd)
+                            pTrack += 1; // Skip one data byte
+                    }
+                }
+            }
+            
+            noteEvents[trackCount] = noteEventCount;
+            totalNoteEvents += noteEventCount;
+            totalTrackSize += trackSizes[trackCount];
+            
+            if (trackSizes[trackCount] > maxTrackSize)
+                maxTrackSize = trackSizes[trackCount];
+            if (noteEventCount > maxNoteEvents)
+                maxNoteEvents = noteEventCount;
+                
+            BAE_PRINTF("DEBUG: PV_DetectRolledMIDI: Track %d has %u note events\n", trackCount, noteEventCount);
+            trackCount++;
+        }
+    }
+    
+    BAE_PRINTF("DEBUG: PV_DetectRolledMIDI: Found %d tracks, total size=%u, total note events=%u\n", 
+               trackCount, totalTrackSize, totalNoteEvents);
+    
+    // Need at least 3 tracks and significant note events to consider rolled format
+    if (trackCount < 3 || totalNoteEvents < 10)
+    {
+        BAE_PRINTF("DEBUG: PV_DetectRolledMIDI: Not enough tracks (%d) or note events (%u) for rolled format\n", 
+                   trackCount, totalNoteEvents);
+        return FALSE;
+    }
+    
+    // Calculate dominance ratios
+    float maxTrackSizeRatio = (totalTrackSize > 0) ? (float)maxTrackSize / (float)totalTrackSize : 0.0f;
+    float maxNoteEventsRatio = (totalNoteEvents > 0) ? (float)maxNoteEvents / (float)totalNoteEvents : 0.0f;
+    
+    // In a typical MIDI file, one track usually dominates (contains most of the musical content)
+    // In a rolled MIDI, the content should be more evenly distributed
+    // For rolled MIDI: max track should have < 10% of note events AND we need many tracks (25+)
+    XBOOL isRolled = (maxNoteEventsRatio < 0.10f) && (trackCount >= 25);
+    
+    BAE_PRINTF("DEBUG: PV_DetectRolledMIDI: tracks=%d, maxSizeRatio=%.2f, maxNoteEventsRatio=%.2f, isRolled=%s\n", 
+               trackCount, maxTrackSizeRatio, maxNoteEventsRatio, isRolled ? "YES" : "NO");
+    
+    // Additional check: in rolled MIDI, we expect fairly even distribution
+    // Count how many tracks have significant note content
+    XSWORD tracksWithSignificantNotes = 0;
+    XDWORD avgNotesPerTrack = totalNoteEvents / trackCount;
+    for (XSWORD i = 0; i < trackCount; i++)
+    {
+        if (noteEvents[i] >= (avgNotesPerTrack / 3)) // At least 1/3 of average
+        {
+            tracksWithSignificantNotes++;
+        }
+        BAE_PRINTF("DEBUG: PV_DetectRolledMIDI: Track %d: %u note events (avg=%u)\n", 
+                   i, noteEvents[i], avgNotesPerTrack);
+    }
+    
+    // For rolled MIDI, expect at least 70% of tracks to have significant content
+    XBOOL evenDistribution = (tracksWithSignificantNotes >= (trackCount * 7 / 10));
+    
+    BAE_PRINTF("DEBUG: PV_DetectRolledMIDI: %d/%d tracks have significant notes, evenDistribution=%s\n", 
+               tracksWithSignificantNotes, trackCount, evenDistribution ? "YES" : "NO");
+    
+    // Final decision: rolled if both conditions are met
+    isRolled = isRolled && evenDistribution;
+    
+    BAE_PRINTF("DEBUG: PV_DetectRolledMIDI: FINAL RESULT: %s\n", isRolled ? "ROLLED" : "NORMAL");
+    
+    return isRolled;
 }
 
 // Process any fading song voices
@@ -1210,6 +1402,16 @@ XBOOL GM_GetSongMetaLoopFlag(GM_Song *theSong)
     if (theSong)
     {
         return (XBOOL)(theSong->metaLoopDisabled) ? FALSE : TRUE;
+    }
+    return FALSE;
+}
+
+// return TRUE if this is a "rolled" MIDI format (no dominant track)
+XBOOL GM_IsRolledMIDI(GM_Song *pSong)
+{
+    if (pSong)
+    {
+        return pSong->isRolledMIDI;
     }
     return FALSE;
 }

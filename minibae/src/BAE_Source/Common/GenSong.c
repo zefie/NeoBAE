@@ -241,10 +241,14 @@ static GM_Song * PV_CreateSongFromMidi(XLongResourceID theID,
         theSong = (GM_Song *)XNewPtr((int32_t)sizeof(GM_Song));
         if (theSong)
         {
+            // Initialize the structure to zero to avoid garbage values
+            XSetMemory(theSong, sizeof(GM_Song), 0);
+            
             theSong->sequenceData = theMidiData;
             theSong->sequenceDataSize = midiSize;
             theSong->seqType = SEQ_MIDI;
             theSong->disposeSongDataWhenDone = (useThisMidiData == NULL) ? TRUE : FALSE;
+            theSong->isRolledMIDI = FALSE; // Initialize rolled MIDI detection flag
             // Fill in remap first
             GM_SetupSongRemaps(theSong, FALSE);
         }
@@ -808,7 +812,11 @@ GM_Song * GM_CreateLiveSong(void *context, XShortResourceID songID)
     pSong = (GM_Song *)XNewPtr((int32_t)sizeof(GM_Song));
     if (pSong)
     {
+        // Initialize the structure to zero to avoid garbage values
+        XSetMemory(pSong, sizeof(GM_Song), 0);
+        
         pSong->context = context;
+        pSong->isRolledMIDI = FALSE; // Initialize rolled MIDI detection flag
         // Fill in remap first
         GM_SetupSongRemaps(pSong, FALSE);
 

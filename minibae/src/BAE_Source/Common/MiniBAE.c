@@ -8876,6 +8876,40 @@ BAEResult BAESong_AreMidiEventsPending(BAESong song, BAE_BOOL *outPending)
 }
 
 
+// BAESong_IsRolledMIDI()
+// --------------------------------------
+// returns TRUE if this song uses a "rolled" MIDI format (no dominant master track)
+//
+BAEResult BAESong_IsRolledMIDI(BAESong song, BAE_BOOL *outIsRolled)
+{
+    OPErr err;
+
+    err = NO_ERR;
+    if ( (song) && (song->mID == OBJECT_ID) )
+    {
+        BAE_AcquireMutex(song->mLock);
+        if (outIsRolled)
+        {
+            *outIsRolled = FALSE;
+            if (song->pSong)
+            {
+                *outIsRolled = (BAE_BOOL)GM_IsRolledMIDI(song->pSong);
+            }
+        }
+        else
+        {
+            err = PARAM_ERR;
+        }
+        BAE_ReleaseMutex(song->mLock);
+    }
+    else
+    {
+        err = NULL_OBJECT;
+    }
+    return BAE_TranslateOPErr(err);
+}
+
+
 // BAESong_SetMasterTempo()
 // --------------------------------------
 //
