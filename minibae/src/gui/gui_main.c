@@ -3294,7 +3294,9 @@ int main(int argc, char *argv[])
             // Redraw Stop button on top of the dim overlay so the user can stop
             Rect stopRect = {90, 215, 60, 22};
             // Use raw mouse coords so the Stop button remains clickable even when modal_block is true
-            if (ui_button(R, stopRect, "Stop", mx, my, mdown) && mclick)
+            // When MIDI-in is active the Stop button actually stops external playback (external/"♪s"), so label it accordingly.
+            const char *stop_label = g_midi_input_enabled ? "Stop ♪s" : "Stop";
+            if (ui_button(R, stopRect, stop_label, mx, my, mdown) && mclick)
             {
                 bae_stop(&playing, &progress);
                 // Ensure engine releases any held notes when user stops playback (panic)
