@@ -2101,21 +2101,7 @@ int main(int argc, char *argv[])
         int vtxt_x = ddRect.x + ddRect.w + 3;
         int vtxt_y = 101;
         draw_text(R, vtxt_x, vtxt_y, vbuf, labelCol);
-        /* Make the volume value clickable: clicking the percent label resets to 100% */
-        if (volume_enabled && !modal_block)
-        {
-            int vtw = 0, vth = 0;
-            measure_text(vbuf, &vtw, &vth);
-            Rect volLabelRect = {vtxt_x, vtxt_y, vtw, vth};
-            if (point_in(ui_mx, ui_my, volLabelRect) && ui_mclick)
-            {
-                if (volume != 100)
-                {
-                    volume = 100;
-                    bae_set_volume(volume);
-                }
-            }
-        }
+    /* Volume value is now non-interactive; clicking the percent label no longer resets to 100% */
 
 #ifdef SUPPORT_MIDI_HW
         // If MIDI input is enabled, paint a semi-transparent overlay over the control panel to dim it
