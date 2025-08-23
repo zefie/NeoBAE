@@ -421,6 +421,8 @@ struct sBAESound
     int                     mRouteBus;
     BAE_BOOL                mAutoBuzz;
     BAE_BOOL                mAutoFlash;
+    uint32_t                mLoopCount;     // loop count for infinite/finite looping
+    uint32_t                mCurrentLoop;   // current loop iteration
 #if !TRACKING
     BAE_BOOL                mValid;
 #endif  
@@ -3650,6 +3652,8 @@ BAESound BAESound_New(BAEMixer mixer)
                 sound->mVolume = BAE_FIXED_1;
                 sound->mID = OBJECT_ID;
                 sound->voiceRef = DEAD_VOICE;
+                sound->mLoopCount = 0;  // default: no looping
+                sound->mCurrentLoop = 0; // initialize current loop counter
 #if TRACKING
                 PV_BAEMixer_AddObject(mixer, sound, BAE_SOUND_OBJECT);
 #else
@@ -4193,6 +4197,75 @@ BAEResult BAESound_Fade(BAESound sound, BAE_FIXED sourceVolume, BAE_FIXED destVo
     return BAE_TranslateOPErr(err);
 }
 
+// Sound done callback that handles looping for BAESound objects
+static void PV_LoopingSoundDoneCallback(void *reference)
+{
+    BAESound                sound;
+    BAE_SoundCallbackPtr    userCallback;
+    void                    *userCallbackReference;
+    XBOOL                   shouldRestart = FALSE;
+
+    sound = (BAESound)reference;
+    userCallback = NULL;
+    userCallbackReference = NULL;
+    
+    if ( (sound) && (sound->mID == OBJECT_ID) )
+    {
+        BAE_AcquireMutex(sound->mLock);
+        if (sound->mixer && (sound->mixer->mID == OBJECT_ID))
+        {
+#if TRACKING
+            if (PV_BAEMixer_ValidateObject(sound->mixer, sound, BAE_SOUND_OBJECT))
+#else
+            if(sound->mValid)
+#endif
+            {
+                userCallback = sound->mCallback;
+                userCallbackReference = sound->mCallbackReference;
+                sound->voiceRef = DEAD_VOICE;
+                
+                // Check if we should loop
+                if (sound->mLoopCount == 0xFFFFFFFF)
+                {
+                    // Infinite looping
+                    shouldRestart = TRUE;
+                }
+                else if (sound->mLoopCount > 0 && sound->mCurrentLoop < sound->mLoopCount)
+                {
+                    // Finite looping - continue if we haven't reached the limit
+                    sound->mCurrentLoop++;
+                    shouldRestart = TRUE;
+                }
+                
+                if (shouldRestart)
+                {
+                    // Restart the sound from the beginning
+                    XSDWORD volume = UNSIGNED_FIXED_TO_LONG_ROUNDED(sound->mVolume * MAX_NOTE_VOLUME);
+                    sound->voiceRef = GM_SetupSampleFromInfo(sound->pWave, (void *)sound, 
+                                                        volume,
+                                                        0,
+                                                        NULL, 
+                                                        PV_LoopingSoundDoneCallback,
+                                                        0); // start from beginning
+                    if (sound->voiceRef != DEAD_VOICE)
+                    {
+                        GM_SetSampleRouteBus(sound->voiceRef, sound->mRouteBus);
+                        GM_ChangeSampleVolume(sound->voiceRef, volume);
+                        GM_StartSample(sound->voiceRef);
+                    }
+                }
+            }
+        }
+        BAE_ReleaseMutex(sound->mLock);
+        
+        // If we're not restarting or if this is the final iteration, call the user callback
+        if (!shouldRestart && userCallback)
+        {
+            (*userCallback)(userCallbackReference);
+        }
+    }
+}
+
 static void PV_DefaultSoundDoneCallback(void *reference)
 {
     BAESound                sound;
@@ -4335,12 +4408,18 @@ BAEResult BAESound_Start(BAESound sound,
     
             sound->voiceRef = DEAD_VOICE;
             sound->mVolume = sampleVolume;
+            sound->mCurrentLoop = 0; // reset loop counter on start
             volume = UNSIGNED_FIXED_TO_LONG_ROUNDED(sampleVolume * MAX_NOTE_VOLUME);
+            
+            // Choose callback based on whether looping is enabled
+            GM_SoundDoneCallbackPtr doneCallback = (sound->mLoopCount > 0) ? 
+                PV_LoopingSoundDoneCallback : PV_DefaultSoundDoneCallback;
+                
             sound->voiceRef = GM_SetupSampleFromInfo(sound->pWave, (void *)sound, 
                                                 volume,
                                                 0,
                                                 NULL, 
-                                                NULL,
+                                                doneCallback,
                                                 startOffsetFrame);
             if (sound->voiceRef == DEAD_VOICE)
             {
@@ -4348,8 +4427,7 @@ BAEResult BAESound_Start(BAESound sound,
             }
             else
             {
-                // set our default done callback with the object            
-                GM_SetSampleDoneCallback(sound->voiceRef, PV_DefaultSoundDoneCallback, (void *)sound);
+                // Note: callback is already set in GM_SetupSampleFromInfo
                 GM_SetSampleRouteBus(sound->voiceRef, sound->mRouteBus);
                 GM_ChangeSampleVolume(sound->voiceRef, volume);
                 GM_StartSample(sound->voiceRef);
@@ -5030,6 +5108,59 @@ BAEResult BAESound_GetSampleLoopPoints(BAESound sound, uint32_t *outStart, uint3
             err = PARAM_ERR;
         }
         BAE_ReleaseMutex(sound->mLock);
+    }
+    else
+    {
+        err = NULL_OBJECT;
+    }
+    return BAE_TranslateOPErr(err);
+}
+
+
+// BAESound_SetLoopCount()
+// --------------------------------------
+//
+//
+BAEResult BAESound_SetLoopCount(BAESound sound, uint32_t loops)
+{
+    OPErr err;
+    
+    err = NO_ERR;
+    if ( (sound) && (sound->mID == OBJECT_ID) )
+    {
+        BAE_AcquireMutex(sound->mLock);
+        sound->mLoopCount = loops;
+        BAE_ReleaseMutex(sound->mLock);
+    }
+    else
+    {
+        err = NULL_OBJECT;
+    }
+    return BAE_TranslateOPErr(err);
+}
+
+
+// BAESound_GetLoopCount()
+// --------------------------------------
+//
+//
+BAEResult BAESound_GetLoopCount(BAESound sound, uint32_t *outLoops)
+{
+    OPErr err;
+    
+    err = NO_ERR;
+    if ( (sound) && (sound->mID == OBJECT_ID) )
+    {
+        if (outLoops)
+        {
+            BAE_AcquireMutex(sound->mLock);
+            *outLoops = sound->mLoopCount;
+            BAE_ReleaseMutex(sound->mLock);
+        }
+        else
+        {
+            err = PARAM_ERR;
+        }
     }
     else
     {

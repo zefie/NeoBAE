@@ -599,7 +599,7 @@ static void displayCurrentPosition(uint32_t currentPosition, uint32_t totalPlaye
 // ---------------------------------------------------------------------
 //
 //
-static BAEResult PlayPCM(BAEMixer theMixer, char *fileName, BAEFileType type, BAE_UNSIGNED_FIXED volume, unsigned int timeLimit)
+static BAEResult PlayPCM(BAEMixer theMixer, char *fileName, BAEFileType type, BAE_UNSIGNED_FIXED volume, unsigned int timeLimit, unsigned int loopCount)
 {
    BAEResult err;
    BAESound sound = BAESound_New(theMixer);
@@ -614,6 +614,14 @@ static BAEResult PlayPCM(BAEMixer theMixer, char *fileName, BAEFileType type, BA
       if (err == BAE_NO_ERROR)
       {
          BAESound_SetVolume(sound, calculateVolume(volume, TRUE));
+         
+         // Set loop count for testing
+         if (loopCount > 0)
+         {
+            BAESound_SetLoopCount(sound, loopCount);
+            playbae_printf("Sound loop count set to %u\n", loopCount);
+         }
+         
          err = BAESound_Start(sound, 0, BAE_FIXED_1, 0);
          if (err == BAE_NO_ERROR)
          {
@@ -1129,26 +1137,26 @@ BAEResult playFile(BAEMixer theMixer, char *parmFile, BAE_UNSIGNED_FIXED volume,
       else if (strcmp(fileHeader, X_FILETYPE_AIFF) == 0)
       {
          playbae_printf("Playing AIFF %s\n", parmFile);
-         err = PlayPCM(theMixer, parmFile, BAE_AIFF_TYPE, volume, timeLimit);
+         err = PlayPCM(theMixer, parmFile, BAE_AIFF_TYPE, volume, timeLimit, loopCount);
       }
       else if (strcmp(fileHeader, X_FILETYPE_WAVE) == 0)
       {
          playbae_printf("Playing WAVE %s\n", parmFile);
-         err = PlayPCM(theMixer, parmFile, BAE_AIFF_TYPE, volume, timeLimit);
+         err = PlayPCM(theMixer, parmFile, BAE_AIFF_TYPE, volume, timeLimit, loopCount);
       }
 #ifdef USE_MPEG_DECODER      
       else if (PV_IsLikelyMP3Header((unsigned char *)fileHeader) ||
                PV_IsFileExtension(parmFile, ".mp3") || PV_IsFileExtension(parmFile, ".mp2") || PV_IsFileExtension(parmFile, ".mpg"))
       {
          playbae_printf("Playing MPEG audio (MP2/MP3) %s\n", parmFile);
-         err = PlayPCM(theMixer, parmFile, BAE_MPEG_TYPE, volume, timeLimit);
+         err = PlayPCM(theMixer, parmFile, BAE_MPEG_TYPE, volume, timeLimit, loopCount);
       }
 #endif
 #ifdef USE_FLAC_DECODER
       else if (PV_IsFileExtension(parmFile, ".flac"))
       {
          playbae_printf("Playing FLAC %s\n", parmFile);
-         err = PlayPCM(theMixer, parmFile, BAE_FLAC_TYPE, volume, timeLimit);
+         err = PlayPCM(theMixer, parmFile, BAE_FLAC_TYPE, volume, timeLimit, loopCount);
       }
 #endif      
       else
@@ -1551,7 +1559,7 @@ int main(int argc, char *argv[])
          {
             fileSpecified = TRUE;
             playbae_printf("Playing AIFF %s\n", parmFile);
-            err = PlayPCM(theMixer, parmFile, BAE_AIFF_TYPE, volume, timeLimit);
+            err = PlayPCM(theMixer, parmFile, BAE_AIFF_TYPE, volume, timeLimit, loopCount);
             doneCommand = 1;
          }
          if (PV_ParseCommands(argc, argv, "-sa", TRUE, parmFile) && !fileSpecified)
@@ -1565,7 +1573,7 @@ int main(int argc, char *argv[])
          {
             fileSpecified = TRUE;
             playbae_printf("Playing WAVE %s\n", parmFile);
-            err = PlayPCM(theMixer, parmFile, BAE_WAVE_TYPE, volume, timeLimit);
+            err = PlayPCM(theMixer, parmFile, BAE_WAVE_TYPE, volume, timeLimit, loopCount);
             doneCommand = 1;
          }
          if (PV_ParseCommands(argc, argv, "-sw", TRUE, parmFile) && !fileSpecified)

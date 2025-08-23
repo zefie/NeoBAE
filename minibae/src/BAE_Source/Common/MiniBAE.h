@@ -1757,6 +1757,30 @@ BAEResult           BAESound_GetSampleLoopPoints(BAESound sound,
                             uint32_t *outEnd);
 
 
+// BAESound_SetLoopCount()
+// --------------------------------------
+// Sets the loop count for the indicated BAESound. A loop count of 0 means no looping,
+// any positive value means that many loops, and 0xFFFFFFFF means infinite looping.
+// This works similar to song looping but applies to individual sound effects.
+// ------------------------------------
+// BAEResult codes:
+//           BAE_NULL_OBJECT -- Null sound object pointer
+// ------------------------------------
+BAEResult           BAESound_SetLoopCount(BAESound sound, uint32_t loops);
+
+
+// BAESound_GetLoopCount()
+// --------------------------------------
+// Upon return, the uint32_t pointed at by parameter outLoops will hold
+// a copy of the indicated BAESound's loop count setting.
+// ------------------------------------
+// BAEResult codes:
+//           BAE_NULL_OBJECT -- Null sound object pointer
+//           BAE_PARAM_ERR   -- Null parameter
+// ------------------------------------
+BAEResult           BAESound_GetLoopCount(BAESound sound, uint32_t *outLoops);
+
+
 // BAESound_SetSamplePlaybackPosition()
 // --------------------------------------
 //

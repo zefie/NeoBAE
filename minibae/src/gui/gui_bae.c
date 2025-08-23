@@ -1022,7 +1022,11 @@ bool bae_play(bool *playing)
         // Handle audio files (WAV, MP2/MP3, etc.)
         if (!*playing)
         {
-            BAE_PRINTF("Attempting BAESound_Start on '%s'\n", g_bae.loaded_path);
+            // Set loop count: 0 for no looping, 0xFFFFFFFF for infinite looping
+            uint32_t loopCount = g_bae.loop_enabled_gui ? 0xFFFFFFFF : 0;
+            BAESound_SetLoopCount(g_bae.sound, loopCount);
+            
+            BAE_PRINTF("Attempting BAESound_Start on '%s' (loop count: %u)\n", g_bae.loaded_path, loopCount);
             BAEResult sr = BAESound_Start(g_bae.sound, 0, FLOAT_TO_UNSIGNED_FIXED(1.0), 0);
             if (sr != BAE_NO_ERROR)
             {
