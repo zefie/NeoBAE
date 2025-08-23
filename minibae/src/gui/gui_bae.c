@@ -1396,4 +1396,5 @@ const char *get_bank_friendly_name()
             BAE_PRINTF("BAE API returned result %d for bank friendly name\n", result);
         }
     }
+    return NULL;  // Return NULL if no bank loaded or no friendly name found
 }

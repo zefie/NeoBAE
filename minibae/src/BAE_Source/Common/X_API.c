@@ -1421,6 +1421,10 @@ XFILE XFileOpenResourceFromMemory(XPTR pResource, uint32_t resourceLength, XBOOL
         //pReference->allowMemCopy = allowCopy;
 
         pReference->fileValidID = XPI_BLOCK_3_ID;
+        pReference->fileReference = 0;  // Initialize file reference for memory-based resources
+        pReference->pCache = NULL;      // Initialize cache pointer
+        pReference->readOnly = TRUE;    // Memory-based resources are read-only
+        XSetMemory(&pReference->memoryCacheEntry, sizeof(XFILE_CACHED_ITEM), 0);  // Zero cache entry
         if (pReference)
         {
             if (PV_AddResourceFileToOpenFiles(pReference))
@@ -1429,7 +1433,6 @@ XFILE XFileOpenResourceFromMemory(XPTR pResource, uint32_t resourceLength, XBOOL
             }
             else
             {
-                pReference->pCache = NULL;
                 // since we are pointer based, we don't care about caching.
 
                 // validate resource file

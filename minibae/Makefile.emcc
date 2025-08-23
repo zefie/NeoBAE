@@ -1,5 +1,6 @@
 BAE_BUILT_IN_PATCHES	:= 1
 BAE_API			:= Ansi
+WASM			:=	1
 DEBUG			:= 0
 
 TARGET_LIB	:= libminiBAE.js

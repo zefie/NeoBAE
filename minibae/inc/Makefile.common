@@ -2,7 +2,10 @@ BUILD_DIR	:= build/
 TEST_OUT_DIR	:= tests/
 TARGET_OUT	:= bin/
 BAE_FLAGS	:=
+ifneq ($(WASM),1)
 MP3_ENC := 1
+endif
+
 EMBED_TTF_FONT := src/thirdparty/fonts/HelveticaNeue.ttf
 
 # Begin Allow Overrides
