@@ -617,6 +617,7 @@ int main(int argc, char *argv[])
     int progress = 0;
     int duration = 0;
     bool playing = false;
+    bool prev_playing = false; // track previous engine playing state for audio-file loop handling
     int reverbType = 7;
 
     Settings settings = load_settings();
@@ -1383,6 +1384,22 @@ int main(int argc, char *argv[])
         if (playing != g_bae.is_playing)
         {
             playing = g_bae.is_playing;
+        }
+
+        // If this is an audio file (WAV/FLAC/MP3) and the GUI loop checkbox is enabled,
+        // the engine does not automatically loop BAESound streams. Detect a transition
+        // from playing->stopped and restart playback from zero when loop is requested.
+        if (g_bae.is_audio_file)
+        {
+            if (prev_playing && !g_bae.is_playing && g_bae.loop_enabled_gui)
+            {
+                // Restart playback from start
+                bae_seek_ms(0);
+                bool playFlag = false;
+                bae_play(&playFlag);
+                // playing will be updated by engine; we'll pick it up on next frame
+            }
+            prev_playing = g_bae.is_playing;
         }
         // timing update
         Uint32 now = SDL_GetTicks();

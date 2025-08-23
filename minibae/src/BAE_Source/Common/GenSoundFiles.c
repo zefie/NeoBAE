@@ -3067,9 +3067,9 @@ static void flac_metadata_callback(
             state->wave->compressionType = C_NONE;
             state->wave->baseMidiPitch = 60; // Default middle C
             
-            // Set loop points to full sample
+            // No loop points by default for FLAC (avoid treating full-file as a loop)
             state->wave->startLoop = 0;
-            state->wave->endLoop = state->wave->waveFrames;
+            state->wave->endLoop = 0;
         }
         state->metadataComplete = TRUE;
     }
