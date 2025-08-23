@@ -2140,10 +2140,12 @@ int main(int argc, char *argv[])
             draw_rect(R, controlPanel, dim);
             // Only redraw Volume controls on top so they remain active/visible
             // (Reverb is disabled when playing audio files)
+            // Use raw mouse coordinates and recalculate volume_enabled for audio files
+            bool audio_volume_enabled = !g_reverbDropdownOpen; // Volume should work when playing audio files
             draw_text(R, 687, 85, "Volume:", labelCol);
             ui_slider(R, (Rect){687, 103, ddRect.w, 14}, &volume, 0, NEW_MAX_VOLUME_PCT,
-                      volume_enabled ? ui_mx : -1, volume_enabled ? ui_my : -1,
-                      volume_enabled ? ui_mdown : false, volume_enabled ? ui_mclick : false);
+                      audio_volume_enabled ? mx : -1, audio_volume_enabled ? my : -1,
+                      audio_volume_enabled ? mdown : false, audio_volume_enabled ? mclick : false);
             draw_text(R, vtxt_x, vtxt_y, vbuf, labelCol);
             // Draw a notice in the bottom-right of the control panel
             const char *notice = "Audio File Playing";
