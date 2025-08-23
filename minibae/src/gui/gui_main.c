@@ -2130,7 +2130,7 @@ int main(int argc, char *argv[])
             int n_y = controlPanel.y + controlPanel.h - n_h - 6;
             draw_text(R, n_x, n_y, notice, g_highlight_color);
             // Ensure the "Reverb:" label itself is also drawn above the dim layer
-            draw_text(R, 690, 25, "Reverb:", labelCol);
+            draw_text(R, 687, 25, "Reverb:", labelCol);
         }
 #endif
         // If playing an audio file (sound, not song), dim the control panel except volume-related controls

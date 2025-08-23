@@ -4447,6 +4447,10 @@ static void PV_BAESound_Stop(BAESound sound, BAE_BOOL startFade)
     int16_t   sampleVolume;
 
     sound->mPauseVariable = 0;
+    
+    // Reset loop state when stopping to prevent callbacks from restarting the sound
+    sound->mCurrentLoop = 0;
+    sound->mLoopCount = 0;  // Disable looping when explicitly stopped
 
     if (sound->voiceRef != DEAD_VOICE)
     {
