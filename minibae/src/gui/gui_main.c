@@ -798,7 +798,7 @@ int main(int argc, char *argv[])
     // Load bank database AFTER mixer so load_bank can succeed
     load_bankinfo();
 
-    // Initialize playlist system
+#if SUPPORT_PLAYLISTS == TRUE    // Initialize playlist system
     playlist_init();
 
     // Apply playlist settings AFTER playlist_init() to avoid being reset
@@ -812,14 +812,18 @@ int main(int argc, char *argv[])
     }
 
     // Auto-load playlist.m3u from application directory if it exists
+#endif
+
     char exe_dir[512];
     get_executable_directory(exe_dir, sizeof(exe_dir));
+#if SUPPORT_PLAYLISTS == TRUE    // Initialize playlist system
     char playlist_path[768];
 #ifdef _WIN32
     snprintf(playlist_path, sizeof(playlist_path), "%s\\playlist.m3u", exe_dir);
 #else
     snprintf(playlist_path, sizeof(playlist_path), "%s/playlist.m3u", exe_dir);
 #endif
+
 
     // Check if file exists and load it
     FILE *test_file = fopen(playlist_path, "r");
@@ -829,6 +833,7 @@ int main(int argc, char *argv[])
         BAE_PRINTF("Auto-loading playlist: %s\n", playlist_path);
         playlist_load(playlist_path);
     }
+#endif
 
     if (!g_bae.bank_loaded)
     {
@@ -900,9 +905,10 @@ int main(int argc, char *argv[])
     {
         if (bae_load_song_with_settings(argv[1], transpose, tempo, volume, loopPlay, reverbType, ch_enable))
         {
+#if SUPPORT_PLAYLISTS == TRUE            
             // Add file to playlist and set as current
             playlist_update_current_file(argv[1]);
-
+#endif
             duration = bae_get_len_ms();
             playing = false;    // Ensure we start from stopped state
             bae_play(&playing); // Auto-start playback
@@ -981,9 +987,10 @@ int main(int argc, char *argv[])
 #endif
                             if (bae_load_song_with_settings(incoming, transpose, tempo, volume, loopPlay, reverbType, ch_enable))
                             {
+#if SUPPORT_PLAYLISTS == TRUE                                
                                 // Add file to playlist and set as current
                                 playlist_update_current_file(incoming);
-
+#endif
                                 duration = bae_get_len_ms();
                                 progress = 0;
                                 playing = false;
@@ -1021,8 +1028,10 @@ int main(int argc, char *argv[])
                     mdown = false;
                     mclick = true;
 
+#if SUPPORT_PLAYLISTS == TRUE
                     // Handle playlist drag end
                     playlist_handle_drag_end();
+#endif
                 }
                 else if (e.button.button == SDL_BUTTON_RIGHT)
                 {
@@ -1034,8 +1043,10 @@ int main(int argc, char *argv[])
                 mx = e.motion.x;
                 my = e.motion.y;
 
+#if SUPPORT_PLAYLISTS == TRUE
                 // Handle playlist drag update
                 playlist_handle_drag_update(mx, my);
+#endif
                 break;
             case SDL_MOUSEWHEEL:
             {
@@ -1214,6 +1225,7 @@ int main(int argc, char *argv[])
                                         send_bank_select_for_current_channel();
                                     }
                                     // If not over LSB/MSB, fall through to playlist handling
+#if SUPPORT_PLAYLISTS == TRUE
                                     else
                                     {
                                         // Playlist scroll handling
@@ -1300,6 +1312,7 @@ int main(int argc, char *argv[])
                                             }
                                         }
                                     }
+#endif                              
                                 }
                             }
                         }
@@ -1341,6 +1354,7 @@ int main(int argc, char *argv[])
                             set_status_message("Failed to load dropped bank file");
                         }
                     }
+#if SUPPORT_PLAYLISTS == TRUE
                     else if (is_playlist_file)
                     {
                         // Load as playlist
@@ -1348,6 +1362,7 @@ int main(int argc, char *argv[])
                         playlist_load(dropped);
                         set_status_message("Playlist loaded");
                     }
+#endif
                     else
                     {
 #ifdef SUPPORT_MIDI_HW
@@ -1364,9 +1379,10 @@ int main(int argc, char *argv[])
                             BAE_PRINTF("Drag and drop: Loading media file: %s\n", dropped);
                             if (bae_load_song_with_settings(dropped, transpose, tempo, volume, loopPlay, reverbType, ch_enable))
                             {
+#if SUPPORT_PLAYLISTS == TRUE
                                 // Add file to playlist and set as current
                                 playlist_update_current_file(dropped);
-
+#endif
                                 duration = bae_get_len_ms();
                                 progress = 0;
                                 playing = false;    // Ensure we start from stopped state
@@ -2029,6 +2045,7 @@ int main(int argc, char *argv[])
                     BAESong_SetMicrosecondPosition(g_bae.song, 0);
                 }
 
+#if SUPPORT_PLAYLISTS == TRUE
                 // Handle playlist advancement
                 if (g_playlist.count > 0 && g_playlist.current_index >= 0)
                 {
@@ -2092,6 +2109,7 @@ int main(int argc, char *argv[])
                         BAE_PRINTF("Playlist: end of playlist reached\n");
                     }
                 }
+#endif                
             }
         }
 
@@ -2127,14 +2145,17 @@ int main(int argc, char *argv[])
         // Service WAV export if active
         bae_service_wav_export();
 
+#if SUPPORT_PLAYLISTS == TRUE
         // Handle pending playlist loads
         if (playlist_has_pending_load())
         {
             const char *pending_file = playlist_get_pending_load_file();
             if (pending_file && bae_load_song_with_settings(pending_file, transpose, tempo, volume, loopPlay, reverbType, ch_enable))
             {
+#if SUPPORT_PLAYLISTS == TRUE
                 // Successfully loaded the song from playlist
                 playlist_update_current_file(pending_file);
+#endif
                 duration = bae_get_len_ms();
                 progress = 0;
 
@@ -2159,6 +2180,7 @@ int main(int argc, char *argv[])
             }
             playlist_clear_pending_load();
         }
+#endif        
 
         // Draw UI with improved layout and styling
 #ifdef _WIN32
@@ -2221,13 +2243,14 @@ int main(int argc, char *argv[])
             statusY = karaokePanel.y + karaokePanel.h + 5;
         }
 #endif
+#if SUPPORT_PLAYLISTS == TRUE
         // Add playlist panel right above status panel
         int playlistPanelHeight = 300; // Reduced from 500px to 300px
         int playlistPanelY = statusY;
         statusY += playlistPanelHeight + 10; // Move status down by playlist height + gap
         Rect playlistPanel = {10, playlistPanelY, 880, playlistPanelHeight};
         bool showPlaylist = true; // Always show playlist
-
+#endif
         int neededH = statusY + 115; // status panel + bottom padding
         if (neededH != g_window_h)
         {
@@ -3920,9 +3943,10 @@ int main(int argc, char *argv[])
                 {
                     if (bae_load_song_with_settings(sel, transpose, tempo, volume, loopPlay, reverbType, ch_enable))
                     {
+#if SUPPORT_PLAYLISTS == TRUE
                         // Add file to playlist and set as current
                         playlist_update_current_file(sel);
-
+#endif
                         duration = bae_get_len_ms();
                         progress = 0;
                         // Robust auto-start sequence: ensure at position 0, preroll again (defensive), then start
@@ -4841,12 +4865,14 @@ int main(int argc, char *argv[])
                 SDL_UnlockMutex(g_lyric_mutex);
         }
 #endif
+#if SUPPORT_PLAYLISTS == TRUE
         // Playlist panel - sync with currently playing file first
         if (g_bae.song_loaded && g_bae.loaded_path[0])
         {
             playlist_update_current_file(g_bae.loaded_path);
         }
         playlist_render(R, playlistPanel, ui_mx, ui_my, ui_mdown, ui_mclick, ui_rclick, modal_block);
+#endif
 
         // Status panel
         draw_rect(R, statusPanel, panelBg);
@@ -5926,6 +5952,8 @@ int main(int argc, char *argv[])
 
     // Auto-save playlist to application directory
     get_executable_directory(exe_dir, sizeof(exe_dir));
+#if SUPPORT_PLAYLISTS == TRUE    // Initialize playlist system
+
 #ifdef _WIN32
     snprintf(playlist_path, sizeof(playlist_path), "%s\\playlist.m3u", exe_dir);
 #else
@@ -5945,12 +5973,15 @@ int main(int argc, char *argv[])
             BAE_PRINTF("Removed empty playlist file: %s\n", playlist_path);
         }
     }
+#endif
 
     SDL_DestroyRenderer(R);
     SDL_DestroyWindow(win);
     g_main_window = NULL; // Clear global reference
     bae_shutdown();
+#if SUPPORT_PLAYLISTS == TRUE
     playlist_cleanup();
+#endif
     if (g_font)
         TTF_CloseFont(g_font);
     TTF_Quit();

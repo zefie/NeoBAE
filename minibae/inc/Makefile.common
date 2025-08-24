@@ -9,6 +9,7 @@ ifneq ($(WASM),1)
 		FLAC_DEC := 1
 		FLAC_ENC := 1
 		KARAOKE := 1
+		PLAYLIST :=1
 	endif
 endif
 
@@ -257,7 +258,7 @@ endif
 # playbae = libMiniBAE srcs + playbae.c
 ifeq ($(BUILD_GUI),1)
 	BAE_FLAGS += -DOUTPUT_TO_LOGFILE=1
-	SRC_BIN	:= $(SRC) gui_logging.c gui_theme.c gui_widgets.c gui_text.c gui_midi_vkbd.c gui_karaoke.c gui_export.c gui_dialogs.c gui_bae.c gui_settings.c gui_playlist.c gui_main.c
+	SRC_BIN	:= $(SRC) gui_logging.c gui_theme.c gui_widgets.c gui_text.c gui_midi_vkbd.c gui_karaoke.c gui_export.c gui_dialogs.c gui_bae.c gui_settings.c gui_main.c
 else
 	SRC_BIN	:= $(SRC) playbae.c
 endif
@@ -269,6 +270,14 @@ ifeq ($(ENABLE_MIDI_HW),1)
 		SRC_BIN +=  gui_midi_hw.c gui_midi_hw_input.c gui_midi_hw_output.c rtmidi_c.cpp RtMidi.cpp
 	endif
 endif
+
+ifeq ($(PLAYLIST),1)
+	ifneq ($(BUILD_GUI),)
+		BAE_FLAGS += -DSUPPORT_PLAYLISTS=1
+		SRC_BIN +=  gui_playlist.c
+	endif
+endif
+
 
 ifeq ($(LOGFILE),1)
 	BAE_FLAGS += -DOUTPUT_TO_LOGFILE=1

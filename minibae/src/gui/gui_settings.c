@@ -168,9 +168,10 @@ void save_settings(const char *last_bank_path, int reverb_type, bool loop_enable
         fprintf(f, "show_keyboard=%d\n", g_show_virtual_keyboard ? 1 : 0);
         fprintf(f, "disable_webtv_progress_bar=%d\n", g_disable_webtv_progress_bar ? 1 : 0);
         fprintf(f, "export_codec_index=%d\n", g_exportCodecIndex);
+#if SUPPORT_PLAYLISTS == TRUE        
         fprintf(f, "shuffle_enabled=%d\n", g_playlist.shuffle_enabled ? 1 : 0);
         fprintf(f, "repeat_mode=%d\n", g_playlist.repeat_mode);
-        
+#endif
         // Save window position if available
         extern SDL_Window *g_main_window;
         if (g_main_window)
@@ -298,6 +299,7 @@ void apply_settings_to_ui(const Settings *settings, int *transpose, int *tempo, 
     {
         g_disable_webtv_progress_bar = settings->disable_webtv_progress_bar;
     }
+#if SUPPORT_PLAYLISTS == TRUE
     if (settings->has_shuffle)
     {
         g_playlist.shuffle_enabled = settings->shuffle_enabled;
@@ -306,8 +308,10 @@ void apply_settings_to_ui(const Settings *settings, int *transpose, int *tempo, 
     {
         g_playlist.repeat_mode = settings->repeat_mode;
     }
+#endif
 }
 
+#if SUPPORT_PLAYLISTS == TRUE
 void save_playlist_settings(void)
 {
     // Load current settings and update just the playlist ones
@@ -318,6 +322,7 @@ void save_playlist_settings(void)
     settings.repeat_mode = g_playlist.repeat_mode;
     save_full_settings(&settings);
 }
+#endif
 
 // Settings dialog rendering
 void render_settings_dialog(SDL_Renderer *R, int mx, int my, bool mclick, bool mdown,
