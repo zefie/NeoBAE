@@ -78,6 +78,10 @@ bool g_loop_tooltip_visible = false;
 Rect g_loop_tooltip_rect;
 char g_loop_tooltip_text[520];
 
+bool g_voice_tooltip_visible = false;
+Rect g_voice_tooltip_rect;
+char g_voice_tooltip_text[520];
+
 // External references
 extern bool g_exporting;
 extern bool g_exportDropdownOpen;

@@ -304,6 +304,10 @@ extern bool g_loop_tooltip_visible;
 extern Rect g_loop_tooltip_rect;
 extern char g_loop_tooltip_text[520];
 
+extern bool g_voice_tooltip_visible;
+extern Rect g_voice_tooltip_rect;
+extern char g_voice_tooltip_text[520];
+
 // WAV export state
 
 static const uint32_t EXPORT_MPEG_STABLE_THRESHOLD = 8; // matches playbae heuristic
@@ -2295,6 +2299,97 @@ int main(int argc, char *argv[])
         {
             for (int i = 0; i < 16; i++)
                 ch_enable[i] = true;
+        }
+
+        // Voice count VU meter - vertical meter aligned with channel VUs
+        BAEAudioInfo audioInfo;
+        int voiceCount = 0;
+        if (g_bae.mixer && BAEMixer_GetRealtimeStatus(g_bae.mixer, &audioInfo) == BAE_NO_ERROR)
+        {
+            voiceCount = audioInfo.voicesActive;
+        }
+        
+        // Calculate VU position and dimensions to align with channel VUs
+        int vuX = 375; // positioned to the right of "Unmute All" button
+        int vuY = chStartY; // align with top of channel grid
+        int vuW = 8; // slightly wider than channel VUs for visibility
+        int vuH = 71; // span both rows: row height + checkbox + gap + text + row spacing adjustment
+        
+        // Draw VU background/frame
+        Rect vuBg = {vuX, vuY, vuW, vuH};
+        draw_rect(R, vuBg, g_panel_bg);
+        draw_frame(R, vuBg, g_panel_border);
+        
+        // Calculate fill level (0-64 voices mapped to 0-1)
+        float voiceFill = (float)voiceCount / 64.0f;
+        if (voiceFill > 1.0f) voiceFill = 1.0f;
+        if (voiceFill < 0.0f) voiceFill = 0.0f;
+        
+        int innerPad = 2;
+        int innerH = vuH - (innerPad * 2);
+        int fillH = (int)(voiceFill * innerH);
+        
+        if (fillH > 0)
+        {
+            // Draw voice VU with gradient similar to channel VUs
+            int gx = vuX + innerPad;
+            int gw = vuW - (innerPad * 2);
+            for (int yoff = 0; yoff < fillH; yoff++)
+            {
+                float frac = (float)yoff / (float)(innerH > 0 ? innerH : 1);
+                SDL_Color col;
+                if (frac < 0.5f)
+                { // green to yellow
+                    float p = frac / 0.5f;
+                    col.r = (Uint8)(g_highlight_color.r * p + 20 * (1.0f - p));
+                    col.g = (Uint8)(200 * (1.0f - (1.0f - p) * 0.2f));
+                    col.b = (Uint8)(20);
+                }
+                else
+                { // yellow to red
+                    float p = (frac - 0.5f) / 0.5f;
+                    col.r = (Uint8)(200 + (55 * p));
+                    col.g = (Uint8)(200 * (1.0f - p));
+                    col.b = 20;
+                }
+                // Draw from bottom upwards
+                SDL_SetRenderDrawColor(R, col.r, col.g, col.b, 255);
+                SDL_RenderDrawLine(R, gx, vuY + vuH - innerPad - 1 - yoff, gx + gw - 1, vuY + vuH - innerPad - 1 - yoff);
+            }
+        }
+
+        // Handle tooltip for Voice VU meter
+        if (point_in(ui_mx, ui_my, vuBg) && !modal_block)
+        {
+            char tooltip_text[64];
+            snprintf(tooltip_text, sizeof(tooltip_text), "Active Voices: %d", voiceCount);
+
+            // Measure actual text width and height
+            int text_w, text_h;
+            measure_text(tooltip_text, &text_w, &text_h);
+
+            int tooltip_w = text_w + 8; // 4px padding on each side
+            int tooltip_h = text_h + 8; // 4px padding top and bottom
+            if (tooltip_w > 500)
+                tooltip_w = 500; // Maximum width constraint
+
+            int tooltip_x = ui_mx + 10;
+            int tooltip_y = ui_my - 30;
+
+            // Keep tooltip on screen
+            if (tooltip_x + tooltip_w > WINDOW_W - 4)
+                tooltip_x = WINDOW_W - tooltip_w - 4;
+            if (tooltip_y < 4)
+                tooltip_y = ui_my + 25; // Show below cursor if no room above
+
+            g_voice_tooltip_rect = (Rect){tooltip_x, tooltip_y, tooltip_w, tooltip_h};
+            strncpy(g_voice_tooltip_text, tooltip_text, sizeof(g_voice_tooltip_text) - 1);
+            g_voice_tooltip_text[sizeof(g_voice_tooltip_text) - 1] = '\0';
+            g_voice_tooltip_visible = true;
+        }
+        else
+        {
+            g_voice_tooltip_visible = false;
         }
 
         // If playing an audio file (sound, not song), dim the MIDI channels panel
@@ -5126,6 +5221,38 @@ int main(int argc, char *argv[])
             draw_rect(R, tipRect, tbg);
             draw_frame(R, tipRect, tbd);
             draw_text(R, tipRect.x + 4, tipRect.y + 4, g_loop_tooltip_text, tfg);
+        }
+
+        // Draw voice tooltip
+        if (g_voice_tooltip_visible)
+        {
+            Rect tipRect = g_voice_tooltip_rect;
+            SDL_Color shadow = {0, 0, 0, g_is_dark_mode ? 140 : 100};
+            Rect shadowRect = {tipRect.x + 2, tipRect.y + 2, tipRect.w, tipRect.h};
+            draw_rect(R, shadowRect, shadow);
+            SDL_Color tbg;
+            if (g_is_dark_mode)
+            {
+                int r = g_panel_bg.r + 25;
+                if (r > 255)
+                    r = 255;
+                int g = g_panel_bg.g + 25;
+                if (g > 255)
+                    g = 255;
+                int b = g_panel_bg.b + 25;
+                if (b > 255)
+                    b = 255;
+                tbg = (SDL_Color){r, g, b, 255};
+            }
+            else
+            {
+                tbg = (SDL_Color){255, 255, 220, 255}; // Light yellow background
+            }
+            SDL_Color tbd = g_is_dark_mode ? g_button_border : (SDL_Color){128, 128, 128, 255};
+            SDL_Color tfg = g_is_dark_mode ? g_text_color : (SDL_Color){32, 32, 32, 255};
+            draw_rect(R, tipRect, tbg);
+            draw_frame(R, tipRect, tbd);
+            draw_text(R, tipRect.x + 4, tipRect.y + 4, g_voice_tooltip_text, tfg);
         }
 
         // Render dropdown list on top of everything else if open
