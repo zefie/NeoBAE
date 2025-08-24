@@ -1143,6 +1143,7 @@ void playlist_render(SDL_Renderer *R, Rect panel_rect, int mx, int my, bool mdow
     playlist_handle_scrollbar_drag(mx, my, mdown, panel_rect);
 
     // Draw playlist entries
+
     for (int i = 0; i < visible_entries && (g_playlist.scroll_offset + i) < g_playlist.count; i++)
     {
         int entry_index = g_playlist.scroll_offset + i;
@@ -1154,32 +1155,55 @@ void playlist_render(SDL_Renderer *R, Rect panel_rect, int mx, int my, bool mdow
 
         Rect item_rect = {item_x, item_y, item_w, entry_height - 1};
 
-        // Background color
+        // Alternating row background color
         SDL_Color item_bg = panelBg;
-        if (entry_index == g_playlist.current_index)
-        {
+        SDL_Color alt_bg = panelBg;
+        if (g_is_dark_mode) {
+            // Slightly lighter for alt row in dark mode
+            alt_bg.r = (Uint8)(panelBg.r + 10 > 255 ? 255 : panelBg.r + 10);
+            alt_bg.g = (Uint8)(panelBg.g + 10 > 255 ? 255 : panelBg.g + 10);
+            alt_bg.b = (Uint8)(panelBg.b + 10 > 255 ? 255 : panelBg.b + 10);
+        } else {
+            // Slightly darker for alt row in light mode
+            alt_bg.r = (Uint8)(panelBg.r - 8 < 0 ? 0 : panelBg.r - 8);
+            alt_bg.g = (Uint8)(panelBg.g - 8 < 0 ? 0 : panelBg.g - 8);
+            alt_bg.b = (Uint8)(panelBg.b - 8 < 0 ? 0 : panelBg.b - 8);
+        }
+        if (i % 2 == 1) {
+            item_bg = alt_bg;
+        }
+
+        // Highlight/hover/selection logic
+        bool is_highlight = false;
+        if (entry_index == g_playlist.current_index) {
             item_bg = g_accent_color;
-        }
-        else if (g_playlist.context_menu_open && entry_index == g_playlist.context_menu_target_index)
-        {
-            // Keep the row highlighted when context menu is open for it (takes priority over hover)
-            item_bg = g_button_hover;
-        }
-        else if (g_playlist.is_dragging && entry_index == g_playlist.drag_start_index)
-        {
-            // Dragged item gets a special color
+        } else if ((g_playlist.context_menu_open && entry_index == g_playlist.context_menu_target_index) ||
+                   (entry_index == g_playlist.hover_index && !g_playlist.context_menu_open)) {
+            // Use highlight color for both hover and right-click/context menu
+            item_bg = g_highlight_color;
+            is_highlight = true;
+        } else if (g_playlist.is_dragging && entry_index == g_playlist.drag_start_index) {
             item_bg = (SDL_Color){150, 150, 150, 100}; // Semi-transparent gray
-        }
-        else if (entry_index == g_playlist.hover_index && !g_playlist.context_menu_open)
-        {
-            // Only show hover highlight when context menu is not open
-            item_bg = g_button_hover;
         }
 
         draw_rect(R, item_rect, item_bg);
 
-        // Entry text
-        SDL_Color text_color = (entry_index == g_playlist.current_index) ? (SDL_Color){255, 255, 255, 255} : labelCol;
+
+        // Entry text color
+        SDL_Color text_color;
+        if (entry_index == g_playlist.current_index) {
+            text_color = (SDL_Color){255, 255, 255, 255};
+        } else {
+            text_color = labelCol;
+        }
+        // Invert text color for highlight: light text for light mode, dark text for dark mode
+        if (is_highlight) {
+            if (g_is_dark_mode) {
+                text_color = (SDL_Color){32, 32, 32, 255}; // dark text for highlight in dark mode
+            } else {
+                text_color = (SDL_Color){255, 255, 255, 255}; // light text for highlight in light mode
+            }
+        }
         if (midi_disabled) {
             text_color = (SDL_Color){text_color.r/2, text_color.g/2, text_color.b/2, text_color.a};
         }
