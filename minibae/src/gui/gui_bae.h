@@ -151,6 +151,9 @@ void bae_set_master_muted_for_midi_out(bool muted);
 void save_settings(const char *last_bank_path, int reverb_type, bool loop_enabled);
 // Settings load_settings(void);  // TODO: Define Settings type
 
+// MSB/LSB update function (from gui_main.c)
+void update_msb_lsb_for_channel(void);
+
 // Rate conversion
 // BAERate map_rate_from_hz(int hz);  // TODO: Define if needed
 

@@ -86,6 +86,80 @@ bool recreate_mixer_and_restore(int sampleRateHz, bool stereo, int reverbType,
 bool load_bank(const char *path, bool current_playing_state, int transpose, int tempo, int volume, bool loop_enabled, int reverb_type, bool ch_enable[16], bool save_to_settings);
 bool load_bank_simple(const char *path, bool save_to_settings, int reverb_type, bool loop_enabled);
 
+// Helper function to update MSB/LSB display values based on current channel's bank settings
+void update_msb_lsb_for_channel(void)
+{
+#ifdef SUPPORT_MIDI_HW
+    // Check if we're actually in MIDI input mode
+    if (g_midi_input_enabled)
+    {
+        // Use the tracked MIDI bank values for the current channel when MIDI input is active
+        g_keyboard_msb = g_midi_bank_msb[g_keyboard_channel];
+        g_keyboard_lsb = g_midi_bank_lsb[g_keyboard_channel];
+        return;
+    }
+#endif
+    // When MIDI input is not active, try to query the engine
+    // for the current program/bank settings for this channel
+    BAESong target = g_bae.song ? g_bae.song : g_live_song;
+    if (target)
+    {
+        unsigned char program = 0;
+        unsigned char bank = 0;
+        BAEResult result = BAESong_GetProgramBank(target, (unsigned char)g_keyboard_channel, &program, &bank);
+        if (result == BAE_NO_ERROR)
+        {
+            // For General MIDI compatibility, bank 0 typically maps to MSB=0, LSB=0
+            // Higher banks may use different MSB/LSB combinations depending on the sound bank
+            g_keyboard_msb = bank;
+            g_keyboard_lsb = program;
+        }
+        else
+        {
+            // Fallback to default values if query fails
+            g_keyboard_msb = 0;
+            g_keyboard_lsb = 0;
+        }
+    }
+    else
+    {
+        // No song available, use default values
+        g_keyboard_msb = 0;
+        g_keyboard_lsb = 0;
+    }
+}
+
+// Helper function to send bank select messages when MSB/LSB values change
+void send_bank_select_for_current_channel(void)
+{
+#ifdef SUPPORT_MIDI_HW
+    // Update the tracked bank values for the current channel
+    g_midi_bank_msb[g_keyboard_channel] = g_keyboard_msb;
+    g_midi_bank_lsb[g_keyboard_channel] = g_keyboard_lsb;
+#endif
+
+    BAE_PRINTF("Bank Select - Channel %d: MSB=%d, LSB=%d\n", g_keyboard_channel + 1, g_keyboard_msb, g_keyboard_lsb);
+
+    // Send bank select messages to both the engine and external MIDI output
+    BAESong target = g_bae.song ? g_bae.song : g_live_song;
+    if (target)
+    {
+        BAESong_ProgramBankChange(target, (unsigned char)g_keyboard_channel, g_keyboard_lsb, g_keyboard_msb, 0);
+        BAESong_LoadInstrument(target, g_keyboard_lsb);
+    }
+
+#ifdef SUPPORT_MIDI_HW
+    // Also send to external MIDI output if enabled
+    if (g_midi_output_enabled)
+    {
+        unsigned char msb_msg[3] = {(unsigned char)(0xB0 | (g_keyboard_channel & 0x0F)), 0, (unsigned char)g_keyboard_msb};
+        unsigned char lsb_msg[3] = {(unsigned char)(0xB0 | (g_keyboard_channel & 0x0F)), 32, (unsigned char)g_keyboard_lsb};
+        midi_output_send(msb_msg, 3);
+        midi_output_send(lsb_msg, 3);
+    }
+#endif
+}
+
 // Calculate the required window height based on visible panels
 int calculate_window_height(void)
 {
@@ -307,6 +381,14 @@ extern char g_loop_tooltip_text[520];
 extern bool g_voice_tooltip_visible;
 extern Rect g_voice_tooltip_rect;
 extern char g_voice_tooltip_text[520];
+
+extern bool g_lsb_tooltip_visible;
+extern Rect g_lsb_tooltip_rect;
+extern char g_lsb_tooltip_text[520];
+
+extern bool g_msb_tooltip_visible;
+extern Rect g_msb_tooltip_rect;
+extern char g_msb_tooltip_text[520];
 
 // WAV export state
 
@@ -810,6 +892,9 @@ int main(int argc, char *argv[])
         load_bank_simple(NULL, false, reverbType, loopPlay); // Load default bank without saving
     }
 
+    // Initialize MSB/LSB values for the default channel
+    update_msb_lsb_for_channel();
+
     // Load command line file if provided
     if (argc > 1)
     {
@@ -1003,6 +1088,8 @@ int main(int argc, char *argv[])
                             if (nt != g_keyboard_channel)
                             {
                                 g_keyboard_channel = nt;
+                                // Update MSB/LSB display values for the newly selected channel
+                                update_msb_lsb_for_channel();
                             }
                         }
                         else
@@ -1085,47 +1172,134 @@ int main(int argc, char *argv[])
                                     bae_set_volume(volume);
                                 }
                             }
-                            // Playlist scroll handling
+                            // LSB/MSB number pickers wheel handling
                             else
                             {
-                                // For playlist scroll, we need to match the actual rendered coordinates
-                                // The playlist panel coordinates are calculated in the main rendering loop
-                                // Let's just use a simple approximation and let playlist module do detailed check
+                                // Calculate the LSB/MSB rects the same way as in rendering
+                                int keyboardPanelY_wheel = transportPanel.y + transportPanel.h + 10;
+                                Rect keyboardPanel_wheel = {10, keyboardPanelY_wheel, 880, 110};
+                                bool showKeyboard_wheel = g_show_virtual_keyboard && g_bae.song && !g_bae.is_audio_file && g_bae.song_loaded;
+                                bool showWaveform_wheel = g_bae.is_audio_file && g_bae.sound;
+                                if (showWaveform_wheel)
+                                    showKeyboard_wheel = false;
 
-#if SUPPORT_KARAOKE == TRUE
-                                bool showKaraoke = g_karaoke_enabled && !g_karaoke_suspended &&
-                                                   (g_lyric_count > 0 || g_karaoke_line_current[0] || g_karaoke_line_previous[0]) &&
-                                                   !g_bae.is_audio_file && g_bae.song;
-#endif
-                                // Compute the exact playlist panel rect the same way it is calculated
-                                // during rendering so wheel handling matches the visible list area.
-                                int playlistPanelHeight = 300; // same as rendering
-                                int keyboardPanelY_local = transportPanel.y + transportPanel.h + 10;
-                                Rect keyboardPanel_local = {10, keyboardPanelY_local, 880, 110};
-                                bool showKeyboard_local = g_show_virtual_keyboard && g_bae.song && !g_bae.is_audio_file && g_bae.song_loaded;
-                                bool showWaveform_local = g_bae.is_audio_file && g_bae.sound;
-                                if (showWaveform_local)
-                                    showKeyboard_local = false;
-#if SUPPORT_KARAOKE == TRUE
-                                bool showKaraoke_local = g_karaoke_enabled && !g_karaoke_suspended &&
-                                                         (g_lyric_count > 0 || g_karaoke_line_current[0] || g_karaoke_line_previous[0]) &&
-                                                         g_bae.song_loaded && !g_bae.is_audio_file;
-                                int karaokePanelHeight_local = 40;
-#endif
-                                int statusY_local = ((showKeyboard_local || showWaveform_local) ? (keyboardPanel_local.y + keyboardPanel_local.h + 10) : (transportPanel.y + transportPanel.h + 10));
-#if SUPPORT_KARAOKE == TRUE
-                                if (showKaraoke_local)
-                                    statusY_local = statusY_local + karaokePanelHeight_local + 5;
-#endif
-                                int playlistPanelY = statusY_local;
-                                Rect playlistPanel = {10, playlistPanelY, 880, playlistPanelHeight};
-
-                                // Let the playlist module decide whether the wheel event is inside
-                                // the actual list area (not the whole panel). It will compute the
-                                // list rect using the same layout math and handle scrolling.
-                                if (!playlist_handle_mouse_wheel(mx, my, wy, playlistPanel))
+                                if (showKeyboard_wheel && !(g_bae.is_audio_file && g_bae.sound))
                                 {
-                                    // not in playlist list area - ignore here
+                                    // Calculate MSB/LSB rects to match the actual rendering coordinates
+                                    int picker_y_wheel = keyboardPanel_wheel.y + 56; // below channel dropdown  
+                                    int picker_w_wheel = 35;                         // compact width for 3-digit numbers
+                                    int picker_h_wheel = 18;
+                                    int spacing_wheel = 5;
+
+                                    // MSB and LSB number picker rects (match rendering exactly)
+                                    Rect msbRect_wheel = {keyboardPanel_wheel.x + 10, picker_y_wheel, picker_w_wheel, picker_h_wheel};
+                                    Rect lsbRect_wheel = {msbRect_wheel.x + picker_w_wheel + spacing_wheel, picker_y_wheel, picker_w_wheel, picker_h_wheel};
+
+                                    if (point_in(mx, my, msbRect_wheel))
+                                    {
+                                        g_keyboard_msb += sdelta; // sdelta is +1 for wheel up, -1 for wheel down
+                                        if (g_keyboard_msb < 0)
+                                            g_keyboard_msb = 127; // wrap to 127 when decrementing below 0
+                                        if (g_keyboard_msb > 127)
+                                            g_keyboard_msb = 0; // wrap to 0 when incrementing past 127
+                                        send_bank_select_for_current_channel();
+                                    }
+                                    else if (point_in(mx, my, lsbRect_wheel))
+                                    {
+                                        g_keyboard_lsb += sdelta; // sdelta is +1 for wheel up, -1 for wheel down
+                                        if (g_keyboard_lsb < 0)
+                                            g_keyboard_lsb = 127; // wrap to 127 when decrementing below 0
+                                        if (g_keyboard_lsb > 127)
+                                            g_keyboard_lsb = 0; // wrap to 0 when incrementing past 127
+                                        send_bank_select_for_current_channel();
+                                    }
+                                    // If not over LSB/MSB, fall through to playlist handling
+                                    else
+                                    {
+                                        // Playlist scroll handling
+                                        // For playlist scroll, we need to match the actual rendered coordinates
+                                        // The playlist panel coordinates are calculated in the main rendering loop
+                                        // Let's just use a simple approximation and let playlist module do detailed check
+
+#if SUPPORT_KARAOKE == TRUE
+                                        bool showKaraoke = g_karaoke_enabled && !g_karaoke_suspended &&
+                                                           (g_lyric_count > 0 || g_karaoke_line_current[0] || g_karaoke_line_previous[0]) &&
+                                                           !g_bae.is_audio_file && g_bae.song;
+#endif
+                                        // Compute the exact playlist panel rect the same way it is calculated
+                                        // during rendering so wheel handling matches the visible list area.
+                                        int playlistPanelHeight = 300; // same as rendering
+                                        int keyboardPanelY_local = transportPanel.y + transportPanel.h + 10;
+                                        Rect keyboardPanel_local = {10, keyboardPanelY_local, 880, 110};
+                                        bool showKeyboard_local = g_show_virtual_keyboard && g_bae.song && !g_bae.is_audio_file && g_bae.song_loaded;
+                                        bool showWaveform_local = g_bae.is_audio_file && g_bae.sound;
+                                        if (showWaveform_local)
+                                            showKeyboard_local = false;
+#if SUPPORT_KARAOKE == TRUE
+                                        bool showKaraoke_local = g_karaoke_enabled && !g_karaoke_suspended &&
+                                                                 (g_lyric_count > 0 || g_karaoke_line_current[0] || g_karaoke_line_previous[0]) &&
+                                                                 g_bae.song_loaded && !g_bae.is_audio_file;
+                                        int karaokePanelHeight_local = 40;
+#endif
+                                        int statusY_local = ((showKeyboard_local || showWaveform_local) ? (keyboardPanel_local.y + keyboardPanel_local.h + 10) : (transportPanel.y + transportPanel.h + 10));
+#if SUPPORT_KARAOKE == TRUE
+                                        if (showKaraoke_local)
+                                            statusY_local = statusY_local + karaokePanelHeight_local + 5;
+#endif
+                                        int playlistPanelY = statusY_local;
+                                        Rect playlistPanel = {10, playlistPanelY, 880, playlistPanelHeight};
+
+                                        // Let the playlist module decide whether the wheel event is inside
+                                        // the actual list area (not the whole panel). It will compute the
+                                        // list rect using the same layout math and handle scrolling.
+                                        if (!playlist_handle_mouse_wheel(mx, my, wy, playlistPanel))
+                                        {
+                                            // not in playlist list area - ignore here
+                                        }
+                                        else
+                                        {
+                                            // Playlist scroll handling when keyboard is not visible
+                                            // For playlist scroll, we need to match the actual rendered coordinates
+                                            // The playlist panel coordinates are calculated in the main rendering loop
+                                            // Let's just use a simple approximation and let playlist module do detailed check
+
+#if SUPPORT_KARAOKE == TRUE
+                                            bool showKaraoke = g_karaoke_enabled && !g_karaoke_suspended &&
+                                                               (g_lyric_count > 0 || g_karaoke_line_current[0] || g_karaoke_line_previous[0]) &&
+                                                               !g_bae.is_audio_file && g_bae.song;
+#endif
+                                            // Compute the exact playlist panel rect the same way it is calculated
+                                            // during rendering so wheel handling matches the visible list area.
+                                            int playlistPanelHeight_fallback = 300; // same as rendering
+                                            int keyboardPanelY_fallback = transportPanel.y + transportPanel.h + 10;
+                                            Rect keyboardPanel_fallback = {10, keyboardPanelY_fallback, 880, 110};
+                                            bool showKeyboard_fallback = g_show_virtual_keyboard && g_bae.song && !g_bae.is_audio_file && g_bae.song_loaded;
+                                            bool showWaveform_fallback = g_bae.is_audio_file && g_bae.sound;
+                                            if (showWaveform_fallback)
+                                                showKeyboard_fallback = false;
+#if SUPPORT_KARAOKE == TRUE
+                                            bool showKaraoke_fallback = g_karaoke_enabled && !g_karaoke_suspended &&
+                                                                        (g_lyric_count > 0 || g_karaoke_line_current[0] || g_karaoke_line_previous[0]) &&
+                                                                        g_bae.song_loaded && !g_bae.is_audio_file;
+                                            int karaokePanelHeight_fallback = 40;
+#endif
+                                            int statusY_fallback = ((showKeyboard_fallback || showWaveform_fallback) ? (keyboardPanel_fallback.y + keyboardPanel_fallback.h + 10) : (transportPanel.y + transportPanel.h + 10));
+#if SUPPORT_KARAOKE == TRUE
+                                            if (showKaraoke_fallback)
+                                                statusY_fallback = statusY_fallback + karaokePanelHeight_fallback + 5;
+#endif
+                                            int playlistPanelY_fallback = statusY_fallback;
+                                            Rect playlistPanel_fallback = {10, playlistPanelY_fallback, 880, playlistPanelHeight_fallback};
+
+                                            // Let the playlist module decide whether the wheel event is inside
+                                            // the actual list area (not the whole panel). It will compute the
+                                            // list rect using the same layout math and handle scrolling.
+                                            if (!playlist_handle_mouse_wheel(mx, my, wy, playlistPanel_fallback))
+                                            {
+                                                // not in playlist list area - ignore here
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -1508,6 +1682,8 @@ int main(int argc, char *argv[])
                             if (nt != g_keyboard_channel)
                             {
                                 g_keyboard_channel = nt;
+                                // Update MSB/LSB display values for the newly selected channel
+                                update_msb_lsb_for_channel();
                             }
                         }
                     }
@@ -1705,10 +1881,20 @@ int main(int argc, char *argv[])
                         if (cc == 0)
                         {
                             g_midi_bank_msb[mch] = val;
+                            // Update MSB/LSB display if this affects the current keyboard channel
+                            if (mch == g_keyboard_channel)
+                            {
+                                update_msb_lsb_for_channel();
+                            }
                         }
                         else if (cc == 32)
                         {
                             g_midi_bank_lsb[mch] = val;
+                            // Update MSB/LSB display if this affects the current keyboard channel
+                            if (mch == g_keyboard_channel)
+                            {
+                                update_msb_lsb_for_channel();
+                            }
                         }
                         {
                             unsigned char target_ch = (unsigned char)mch;
@@ -1749,12 +1935,19 @@ int main(int argc, char *argv[])
                             unsigned char target_ch = (unsigned char)mch;
                             if (target)
                             {
-                                BAESong_ProgramBankChange(target, target_ch, program, bank, 0);
+                                // Send both MSB and LSB before program change
+                                BAESong_ControlChange(target, target_ch, 0, g_midi_bank_msb[mch], 0);   // CC 0 = Bank Select MSB
+                                BAESong_ControlChange(target, target_ch, 32, g_midi_bank_lsb[mch], 0);  // CC 32 = Bank Select LSB
                                 BAESong_ProgramChange(target, target_ch, program, 0);
                             }
                         }
                         unsigned char out[2] = {(unsigned char)(0xC0 | (mch & 0x0F)), program};
                         FORWARD_OUT(out, 2);
+                        // Update MSB/LSB display if this program change affects the current keyboard channel
+                        if (mch == g_keyboard_channel)
+                        {
+                            update_msb_lsb_for_channel();
+                        }
                     }
                     break;
                 case 0xD0: // Channel Pressure (Aftertouch)
@@ -1974,6 +2167,10 @@ int main(int argc, char *argv[])
         SDL_SetRenderDrawColor(R, g_bg_color.r, g_bg_color.g, g_bg_color.b, g_bg_color.a);
 #endif
         SDL_RenderClear(R);
+
+        // Clear tooltips each frame
+        g_lsb_tooltip_visible = false;
+        g_msb_tooltip_visible = false;
 
         // Colors driven by theme globals
         SDL_Color labelCol = g_text_color;
@@ -2308,27 +2505,29 @@ int main(int argc, char *argv[])
         {
             voiceCount = audioInfo.voicesActive;
         }
-        
+
         // Calculate VU position and dimensions to align with channel VUs
-        int vuX = 375; // positioned to the right of "Unmute All" button
+        int vuX = 375;      // positioned to the right of "Unmute All" button
         int vuY = chStartY; // align with top of channel grid
-        int vuW = 8; // slightly wider than channel VUs for visibility
-        int vuH = 71; // span both rows: row height + checkbox + gap + text + row spacing adjustment
-        
+        int vuW = 8;        // slightly wider than channel VUs for visibility
+        int vuH = 71;       // span both rows: row height + checkbox + gap + text + row spacing adjustment
+
         // Draw VU background/frame
         Rect vuBg = {vuX, vuY, vuW, vuH};
         draw_rect(R, vuBg, g_panel_bg);
         draw_frame(R, vuBg, g_panel_border);
-        
+
         // Calculate fill level (0-64 voices mapped to 0-1)
         float voiceFill = (float)voiceCount / 64.0f;
-        if (voiceFill > 1.0f) voiceFill = 1.0f;
-        if (voiceFill < 0.0f) voiceFill = 0.0f;
-        
+        if (voiceFill > 1.0f)
+            voiceFill = 1.0f;
+        if (voiceFill < 0.0f)
+            voiceFill = 0.0f;
+
         int innerPad = 2;
         int innerH = vuH - (innerPad * 2);
         int fillH = (int)(voiceFill * innerH);
-        
+
         if (fillH > 0)
         {
             // Draw voice VU with gradient similar to channel VUs
@@ -3154,6 +3353,107 @@ int main(int argc, char *argv[])
                 // (Dropdown list itself drawn later for proper z-order)
                 if (!g_keyboard_channel_dd_open && ui_mclick && !overDD)
                 { /* no-op */
+                }
+
+                // LSB/MSB number pickers - compact layout below channel dropdown
+                if (!(g_bae.is_audio_file && g_bae.sound))
+                {
+                    int picker_y = keyboardPanel.y + 56; // below channel dropdown
+                    int picker_w = 35;                   // compact width for 3-digit numbers
+                    int picker_h = 18;
+                    int spacing = 5;
+
+                    // MSB picker (now first)
+                    Rect msbRect = {keyboardPanel.x + 10, picker_y, picker_w, picker_h};
+                    bool msbHover = !g_keyboard_channel_dd_open && point_in(ui_mx, ui_my, msbRect);
+                    SDL_Color msbBg = msbHover ? g_button_hover : g_button_base;
+                    if (g_keyboard_channel_dd_open)
+                        msbBg.a = 180; // Make it appear disabled when channel dropdown is open
+                    draw_rect(R, msbRect, msbBg);
+                    draw_frame(R, msbRect, g_button_border);
+
+                    char msbText[8];
+                    snprintf(msbText, sizeof(msbText), "%d", g_keyboard_msb);
+                    int msb_tw = 0, msb_th = 0;
+                    measure_text(msbText, &msb_tw, &msb_th);
+                    SDL_Color msbTextColor = g_button_text;
+                    if (g_keyboard_channel_dd_open)
+                        msbTextColor.a = 180; // Dim text when disabled
+                    draw_text(R, msbRect.x + (msbRect.w - msb_tw) / 2, msbRect.y + (msbRect.h - msb_th) / 2, msbText, msbTextColor);
+
+                    // LSB picker (now second)
+                    Rect lsbRect = {msbRect.x + picker_w + spacing, picker_y, picker_w, picker_h};
+                    bool lsbHover = !g_keyboard_channel_dd_open && point_in(ui_mx, ui_my, lsbRect);
+                    SDL_Color lsbBg = lsbHover ? g_button_hover : g_button_base;
+                    if (g_keyboard_channel_dd_open)
+                        lsbBg.a = 180; // Make it appear disabled when channel dropdown is open
+                    draw_rect(R, lsbRect, lsbBg);
+                    draw_frame(R, lsbRect, g_button_border);
+
+                    char lsbText[8];
+                    snprintf(lsbText, sizeof(lsbText), "%d", g_keyboard_lsb);
+                    int lsb_tw = 0, lsb_th = 0;
+                    measure_text(lsbText, &lsb_tw, &lsb_th);
+                    SDL_Color lsbTextColor = g_button_text;
+                    if (g_keyboard_channel_dd_open)
+                        lsbTextColor.a = 180; // Dim text when disabled
+                    draw_text(R, lsbRect.x + (lsbRect.w - lsb_tw) / 2, lsbRect.y + (lsbRect.h - lsb_th) / 2, lsbText, lsbTextColor);
+
+                    // Handle tooltips (disabled when channel dropdown is open)
+                    if (!g_keyboard_channel_dd_open)
+                    {
+                        if (lsbHover)
+                        {
+                            g_lsb_tooltip_visible = true;
+                            g_lsb_tooltip_rect = (Rect){ui_mx + 10, ui_my - 25, 0, 0};
+                            snprintf(g_lsb_tooltip_text, sizeof(g_lsb_tooltip_text), "LSB");
+                        }
+                        else if (msbHover)
+                        {
+                            g_msb_tooltip_visible = true;
+                            g_msb_tooltip_rect = (Rect){ui_mx + 10, ui_my - 25, 0, 0};
+                            snprintf(g_msb_tooltip_text, sizeof(g_msb_tooltip_text), "MSB");
+                        }
+                    }
+
+                    // Handle clicks (disabled when channel dropdown is open)
+                    if (!modal_block && !g_keyboard_channel_dd_open)
+                    {
+                        if (msbHover)
+                        {
+                            if (ui_mclick) // Left click increments
+                            {
+                                g_keyboard_msb++;
+                                if (g_keyboard_msb > 127)
+                                    g_keyboard_msb = 0; // wrap to 0 when incrementing past 127
+                                send_bank_select_for_current_channel();
+                            }
+                            else if (ui_rclick) // Right click decrements
+                            {
+                                g_keyboard_msb--;
+                                if (g_keyboard_msb < 0)
+                                    g_keyboard_msb = 127; // wrap to 127 when decrementing below 0
+                                send_bank_select_for_current_channel();
+                            }
+                        }
+                        else if (lsbHover)
+                        {
+                            if (ui_mclick) // Left click increments
+                            {
+                                g_keyboard_lsb++;
+                                if (g_keyboard_lsb > 127)
+                                    g_keyboard_lsb = 0; // wrap to 0 when incrementing past 127
+                                send_bank_select_for_current_channel();
+                            }
+                            else if (ui_rclick) // Right click decrements
+                            {
+                                g_keyboard_lsb--;
+                                if (g_keyboard_lsb < 0)
+                                    g_keyboard_lsb = 127; // wrap to 127 when decrementing below 0
+                                send_bank_select_for_current_channel();
+                            }
+                        }
+                    }
                 }
             }
             // Merge engine-driven active notes with notes coming from external
@@ -5255,6 +5555,40 @@ int main(int argc, char *argv[])
             draw_text(R, tipRect.x + 4, tipRect.y + 4, g_voice_tooltip_text, tfg);
         }
 
+        // Draw LSB tooltip
+        if (g_lsb_tooltip_visible)
+        {
+            int tooltip_w = 0, tooltip_h = 0;
+            measure_text(g_lsb_tooltip_text, &tooltip_w, &tooltip_h);
+            Rect tipRect = {g_lsb_tooltip_rect.x, g_lsb_tooltip_rect.y, tooltip_w + 8, tooltip_h + 8};
+            SDL_Color shadow = {0, 0, 0, g_is_dark_mode ? 140 : 100};
+            Rect shadowRect = {tipRect.x + 2, tipRect.y + 2, tipRect.w, tipRect.h};
+            draw_rect(R, shadowRect, shadow);
+            SDL_Color tbg = g_is_dark_mode ? (SDL_Color){g_panel_bg.r + 25, g_panel_bg.g + 25, g_panel_bg.b + 25, 255} : (SDL_Color){255, 255, 220, 255};
+            SDL_Color tbd = g_is_dark_mode ? g_button_border : (SDL_Color){128, 128, 128, 255};
+            SDL_Color tfg = g_is_dark_mode ? g_text_color : (SDL_Color){32, 32, 32, 255};
+            draw_rect(R, tipRect, tbg);
+            draw_frame(R, tipRect, tbd);
+            draw_text(R, tipRect.x + 4, tipRect.y + 4, g_lsb_tooltip_text, tfg);
+        }
+
+        // Draw MSB tooltip
+        if (g_msb_tooltip_visible)
+        {
+            int tooltip_w = 0, tooltip_h = 0;
+            measure_text(g_msb_tooltip_text, &tooltip_w, &tooltip_h);
+            Rect tipRect = {g_msb_tooltip_rect.x, g_msb_tooltip_rect.y, tooltip_w + 8, tooltip_h + 8};
+            SDL_Color shadow = {0, 0, 0, g_is_dark_mode ? 140 : 100};
+            Rect shadowRect = {tipRect.x + 2, tipRect.y + 2, tipRect.w, tipRect.h};
+            draw_rect(R, shadowRect, shadow);
+            SDL_Color tbg = g_is_dark_mode ? (SDL_Color){g_panel_bg.r + 25, g_panel_bg.g + 25, g_panel_bg.b + 25, 255} : (SDL_Color){255, 255, 220, 255};
+            SDL_Color tbd = g_is_dark_mode ? g_button_border : (SDL_Color){128, 128, 128, 255};
+            SDL_Color tfg = g_is_dark_mode ? g_text_color : (SDL_Color){32, 32, 32, 255};
+            draw_rect(R, tipRect, tbg);
+            draw_frame(R, tipRect, tbd);
+            draw_text(R, tipRect.x + 4, tipRect.y + 4, g_msb_tooltip_text, tfg);
+        }
+
         // Render dropdown list on top of everything else if open
         if (g_reverbDropdownOpen)
         {
@@ -5367,6 +5701,8 @@ int main(int argc, char *argv[])
                     }
                     g_keyboard_channel = i;
                     g_keyboard_channel_dd_open = false;
+                    // Update MSB/LSB display values for the newly selected channel
+                    update_msb_lsb_for_channel();
                 }
             }
             if (mclick && !point_in(mx, my, box) && !point_in(mx, my, chanDD))

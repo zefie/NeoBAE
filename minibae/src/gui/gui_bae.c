@@ -151,6 +151,9 @@ bool load_bank(const char *path, bool current_playing_state, int transpose, int 
             BAE_PRINTF("Loaded built-in bank\n");
             set_status_message("Loaded built-in bank");
 
+            // Update MSB/LSB values for the current channel after loading a new bank
+            update_msb_lsb_for_channel();
+
 #ifdef SUPPORT_MIDI_HW
             // If external MIDI input is enabled, recreate mixer so live MIDI
             // continues to route into the new mixer with the new bank.
@@ -220,6 +223,9 @@ bool load_bank(const char *path, bool current_playing_state, int transpose, int 
         strncpy(g_current_bank_path, path, sizeof(g_current_bank_path) - 1);
         g_current_bank_path[sizeof(g_current_bank_path) - 1] = '\0';
         BAE_PRINTF("Loaded bank %s\n", path);
+
+        // Update MSB/LSB values for the current channel after loading a new bank
+        update_msb_lsb_for_channel();
 
         // Save this as the last used bank only if requested
         if (save_to_settings)
@@ -692,6 +698,9 @@ bool bae_load_song(const char *path)
     g_bae.loaded_path[sizeof(g_bae.loaded_path) - 1] = '\0';
     g_bae.song_loaded = true;
     g_bae.is_audio_file = false; // is_rmf_file already set
+
+    // Update MSB/LSB values for the current channel after loading a new song
+    update_msb_lsb_for_channel();
 
     /* Apply current user-requested master volume to the newly loaded song
        so UI volume state is respected immediately on load. Songs do not get

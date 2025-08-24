@@ -14,6 +14,8 @@ Uint32 g_keyboard_suppress_until = 0;
 int g_keyboard_pressed_note[512]; // SDL_NUM_SCANCODES
 int g_keyboard_base_octave = 4;
 bool g_keyboard_map_initialized = false;
+int g_keyboard_lsb = 0; // LSB (Least Significant Byte) 0-127
+int g_keyboard_msb = 0; // MSB (Most Significant Byte) 0-127
 
 // Functions that should always be available (not MIDI hardware dependent)
 void gui_panic_all_notes(BAESong s)
