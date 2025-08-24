@@ -720,35 +720,51 @@ OPErr PV_ConfigureMusic(GM_Song *pSong)
 static XBOOL PV_DetectRolledMIDI(GM_Song *pSong)
 {
     XSWORD trackCount = 0;
-    XDWORD trackSizes[MAX_TRACKS];
+    XDWORD trackEndTimes[MAX_TRACKS]; // Track end times in ticks
     XDWORD noteEvents[MAX_TRACKS];
     XDWORD totalNoteEvents = 0;
-    XDWORD totalTrackSize = 0;
-    XDWORD maxTrackSize = 0;
-    XDWORD maxNoteEvents = 0;
     XBYTE *pTrack;
     XSWORD track;
+    XDWORD ticksPerQuarter = 480; // Default, will be updated from header
     
     if (!pSong)
         return FALSE;
     
     BAE_PRINTF("DEBUG: PV_DetectRolledMIDI: Starting analysis...\n");
     
-    // Count active tracks and analyze their content
+    // Get ticks per quarter note from MIDI header for time calculations
+    if (pSong->sequenceData && pSong->sequenceDataSize > 12)
+    {
+        XBYTE *pHeader = (XBYTE *)pSong->sequenceData;
+        // Find MThd header
+        for (XDWORD i = 0; i <= pSong->sequenceDataSize - 14; i++)
+        {
+            if (XGetLong(&pHeader[i]) == ID_MTHD)
+            {
+                ticksPerQuarter = XGetShort(&pHeader[i + 12]);
+                if (ticksPerQuarter == 0) ticksPerQuarter = 480; // Safety fallback
+                BAE_PRINTF("DEBUG: PV_DetectRolledMIDI: Found ticks per quarter: %u\n", ticksPerQuarter);
+                break;
+            }
+        }
+    }
+    
+    // Analyze each track to find end times and note events
     for (track = 0; track < MAX_TRACKS; track++)
     {
         if (pSong->ptrack[track] && pSong->tracklen[track] > 0)
         {
-            trackSizes[trackCount] = pSong->tracklen[track];
+            trackEndTimes[trackCount] = 0;
             noteEvents[trackCount] = 0;
             
-            // Analyze track content to count MIDI note events only
+            // Analyze track content
             pTrack = pSong->trackstart[track];
             XBYTE *pTrackEnd = pTrack + pSong->tracklen[track];
+            XDWORD currentTicks = 0;
             XDWORD noteEventCount = 0;
             XBYTE runningStatus = 0;
             
-            BAE_PRINTF("DEBUG: PV_DetectRolledMIDI: Analyzing track %d, size=%u bytes\n", trackCount, trackSizes[trackCount]);
+            BAE_PRINTF("DEBUG: PV_DetectRolledMIDI: Analyzing track %d, size=%u bytes\n", trackCount, pSong->tracklen[track]);
             
             while (pTrack < pTrackEnd)
             {
@@ -760,6 +776,8 @@ static XBOOL PV_DetectRolledMIDI(GM_Song *pSong)
                     c = *pTrack++;
                     deltaTime = (deltaTime << 7) | (c & 0x7F);
                 } while (c & 0x80);
+                
+                currentTicks += deltaTime;
                 
                 if (pTrack >= pTrackEnd) break;
                 
@@ -777,9 +795,13 @@ static XBOOL PV_DetectRolledMIDI(GM_Song *pSong)
                             dataLen = (dataLen << 7) | (c & 0x7F);
                         } while (c & 0x80);
                         
-                        pTrack += dataLen; // Skip meta event data
                         if (metaType == 0x2F) // End of track
+                        {
+                            trackEndTimes[trackCount] = currentTicks;
+                            BAE_PRINTF("DEBUG: PV_DetectRolledMIDI: Track %d ends at %u ticks\n", trackCount, currentTicks);
                             break;
+                        }
+                        pTrack += dataLen; // Skip meta event data
                     }
                 }
                 else if (event == 0xF0 || event == 0xF7) // SysEx
@@ -805,7 +827,7 @@ static XBOOL PV_DetectRolledMIDI(GM_Song *pSong)
                     runningStatus = event;
                 }
                 
-                // Count ONLY note events (note on/off) as these indicate musical content
+                // Count note events
                 if (event >= 0x80 && event < 0xF0)
                 {
                     XBYTE eventType = event & 0xF0;
@@ -814,7 +836,6 @@ static XBOOL PV_DetectRolledMIDI(GM_Song *pSong)
                         if (pTrack + 2 <= pTrackEnd)
                         {
                             XBYTE velocity = pTrack[1]; // Check velocity for note on
-                            // Count note on with velocity > 0, and all note offs
                             if (eventType == 0x80 || (eventType == 0x90 && velocity > 0))
                             {
                                 noteEventCount++;
@@ -837,22 +858,13 @@ static XBOOL PV_DetectRolledMIDI(GM_Song *pSong)
             
             noteEvents[trackCount] = noteEventCount;
             totalNoteEvents += noteEventCount;
-            totalTrackSize += trackSizes[trackCount];
             
-            if (trackSizes[trackCount] > maxTrackSize)
-                maxTrackSize = trackSizes[trackCount];
-            if (noteEventCount > maxNoteEvents)
-                maxNoteEvents = noteEventCount;
-                
-            BAE_PRINTF("DEBUG: PV_DetectRolledMIDI: Track %d has %u note events\n", trackCount, noteEventCount);
+            BAE_PRINTF("DEBUG: PV_DetectRolledMIDI: Track %d has %u note events, ends at %u ticks\n", 
+                       trackCount, noteEventCount, trackEndTimes[trackCount]);
             trackCount++;
         }
     }
     
-    BAE_PRINTF("DEBUG: PV_DetectRolledMIDI: Found %d tracks, total size=%u, total note events=%u\n", 
-               trackCount, totalTrackSize, totalNoteEvents);
-    
-    // Need at least 3 tracks and significant note events to consider rolled format
     if (trackCount < 3 || totalNoteEvents < 10)
     {
         BAE_PRINTF("DEBUG: PV_DetectRolledMIDI: Not enough tracks (%d) or note events (%u) for rolled format\n", 
@@ -860,41 +872,44 @@ static XBOOL PV_DetectRolledMIDI(GM_Song *pSong)
         return FALSE;
     }
     
-    // Calculate dominance ratios
-    float maxTrackSizeRatio = (totalTrackSize > 0) ? (float)maxTrackSize / (float)totalTrackSize : 0.0f;
-    float maxNoteEventsRatio = (totalNoteEvents > 0) ? (float)maxNoteEvents / (float)totalNoteEvents : 0.0f;
-    
-    // In a typical MIDI file, one track usually dominates (contains most of the musical content)
-    // In a rolled MIDI, the content should be more evenly distributed
-    // For rolled MIDI: max track should have < 10% of note events AND we need many tracks (25+)
-    XBOOL isRolled = (maxNoteEventsRatio < 0.10f) && (trackCount >= 25);
-    
-    BAE_PRINTF("DEBUG: PV_DetectRolledMIDI: tracks=%d, maxSizeRatio=%.2f, maxNoteEventsRatio=%.2f, isRolled=%s\n", 
-               trackCount, maxTrackSizeRatio, maxNoteEventsRatio, isRolled ? "YES" : "NO");
-    
-    // Additional check: in rolled MIDI, we expect fairly even distribution
-    // Count how many tracks have significant note content
-    XSWORD tracksWithSignificantNotes = 0;
-    XDWORD avgNotesPerTrack = totalNoteEvents / trackCount;
+    // Find maximum track end time
+    XDWORD maxEndTime = 0;
     for (XSWORD i = 0; i < trackCount; i++)
     {
-        if (noteEvents[i] >= (avgNotesPerTrack / 3)) // At least 1/3 of average
-        {
-            tracksWithSignificantNotes++;
-        }
-        BAE_PRINTF("DEBUG: PV_DetectRolledMIDI: Track %d: %u note events (avg=%u)\n", 
-                   i, noteEvents[i], avgNotesPerTrack);
+        if (trackEndTimes[i] > maxEndTime)
+            maxEndTime = trackEndTimes[i];
     }
     
-    // For rolled MIDI, expect at least 70% of tracks to have significant content
-    XBOOL evenDistribution = (tracksWithSignificantNotes >= (trackCount * 7 / 10));
+    // Convert to seconds (approximate)
+    float songLengthSeconds = (float)maxEndTime / (float)ticksPerQuarter / 2.0f; // Assuming 120 BPM default
     
-    BAE_PRINTF("DEBUG: PV_DetectRolledMIDI: %d/%d tracks have significant notes, evenDistribution=%s\n", 
-               tracksWithSignificantNotes, trackCount, evenDistribution ? "YES" : "NO");
+    BAE_PRINTF("DEBUG: PV_DetectRolledMIDI: Max end time: %u ticks, approx %.1f seconds\n", 
+               maxEndTime, songLengthSeconds);
     
-    // Final decision: rolled if both conditions are met
-    isRolled = isRolled && evenDistribution;
+    // Criteria for rolled MIDI:
+    // 1. Many tracks (15+) - lower threshold than before
+    // 2. Short duration (< 60 seconds) - rolled files are designed to loop
+    // 3. Similar track end times - most tracks should end within 20% of max length
+    XBOOL hasEnoughTracks = (trackCount >= 15);
+    XBOOL isShortDuration = (songLengthSeconds > 0 && songLengthSeconds < 60.0f);
     
+    // Count tracks that end within 20% of the maximum time
+    XDWORD endTimeThreshold = maxEndTime - (maxEndTime / 5); // 80% of max time
+    XSWORD tracksEndingNearMax = 0;
+    for (XSWORD i = 0; i < trackCount; i++)
+    {
+        if (trackEndTimes[i] >= endTimeThreshold)
+            tracksEndingNearMax++;
+    }
+    XBOOL hasSimilarEndTimes = (tracksEndingNearMax >= (trackCount * 6 / 10)); // 60% of tracks
+    
+    // Final decision
+    XBOOL isRolled = hasEnoughTracks && isShortDuration && hasSimilarEndTimes;
+    
+    BAE_PRINTF("DEBUG: PV_DetectRolledMIDI: tracks=%d, songLength=%.1fs, tracksEndingNearMax=%d/%d\n", 
+               trackCount, songLengthSeconds, tracksEndingNearMax, trackCount);
+    BAE_PRINTF("DEBUG: PV_DetectRolledMIDI: hasEnoughTracks=%s, isShortDuration=%s, hasSimilarEndTimes=%s\n",
+               hasEnoughTracks ? "YES" : "NO", isShortDuration ? "YES" : "NO", hasSimilarEndTimes ? "YES" : "NO");
     BAE_PRINTF("DEBUG: PV_DetectRolledMIDI: FINAL RESULT: %s\n", isRolled ? "ROLLED" : "NORMAL");
     
     return isRolled;

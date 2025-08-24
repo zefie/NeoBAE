@@ -583,8 +583,8 @@ static void displayCurrentPosition(uint32_t currentPosition, uint32_t totalPlaye
          {
             int tm, ts, tms = 0;
             tm = (totalPlayedTime / 60000);
-            ts = (totalPlayedTime - (m * 60000)) / 1000;
-            tms = (totalPlayedTime - (60000 * m) - (s * 1000));
+            ts = (totalPlayedTime - (tm * 60000)) / 1000;
+            tms = (totalPlayedTime - (60000 * tm) - (ts * 1000));
             playbae_printf("Playback position: %02d:%02d.%03d (Total: %02d:%02d.%03d)\r", m, s, ms, tm, ts, tms);
          }
          else

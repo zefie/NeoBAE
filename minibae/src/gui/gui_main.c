@@ -894,16 +894,16 @@ int main(int argc, char *argv[])
                         else
                         {
                             // Slider handling: respect the same modal/enable rules used elsewhere
-                                     bool playback_controls_enabled_local =
+                            bool playback_controls_enabled_local =
 #ifdef SUPPORT_MIDI_HW
-                                          !g_midi_input_enabled;
+                                !g_midi_input_enabled;
 #else
-                                          true;
+                                true;
 #endif
-                                     /* Allow the user to adjust master volume even when MIDI input
-                                         is enabled so incoming MIDI velocity can be scaled. Keep
-                                         other playback controls disabled as before. */
-                                     bool volume_enabled_local = !g_reverbDropdownOpen;
+                            /* Allow the user to adjust master volume even when MIDI input
+                                is enabled so incoming MIDI velocity can be scaled. Keep
+                                other playback controls disabled as before. */
+                            bool volume_enabled_local = !g_reverbDropdownOpen;
 
                             // Transpose slider at {410,63,160,14}
                             if (playback_controls_enabled_local && point_in(mx, my, (Rect){410, 63, 160, 14}))
@@ -2112,9 +2112,9 @@ int main(int argc, char *argv[])
 
         // Volume control (aligned with Tempo)
         draw_text(R, 687, 85, "Volume:", labelCol);
-    // Allow volume slider interaction when reverb dropdown is closed. We want
-    // users to adjust master volume even while external MIDI input is active.
-    bool volume_enabled = !g_reverbDropdownOpen;
+        // Allow volume slider interaction when reverb dropdown is closed. We want
+        // users to adjust master volume even while external MIDI input is active.
+        bool volume_enabled = !g_reverbDropdownOpen;
         ui_slider(R, (Rect){687, 103, ddRect.w, 14}, &volume, 0, NEW_MAX_VOLUME_PCT,
                   volume_enabled ? ui_mx : -1, volume_enabled ? ui_my : -1,
                   volume_enabled ? ui_mdown : false, volume_enabled ? ui_mclick : false);
