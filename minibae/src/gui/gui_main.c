@@ -49,6 +49,7 @@
 #include "gui_text.h"     // for text rendering functions
 #include "gui_midi.h"     // for virtual keyboard functions
 #include "gui_playlist.h" // for playlist panel functions
+#include "gui_panels.h"
 
 /* Forward-declare dialog renderer from gui_dialogs.c to avoid including the
     full header (which defines globals that conflict with this file's statics). */
@@ -190,6 +191,8 @@ int calculate_window_height(void)
 
     return statusY + 115; // status panel + bottom padding
 }
+
+// Panel and slider helpers moved to gui_panels.{c,h}
 
 // Embedded TTF font (generated header). Define EMBED_TTF_FONT and
 // generate embedded_font.h via scripts/create_embedded_font_h.py to enable.
@@ -652,27 +655,10 @@ int main(int argc, char *argv[])
                 // Title we expect
                 const char *want = "miniBAE Player";
                 // Enumerator callback
-                struct EnumCtx
-                {
-                    const char *want;
-                    HWND found;
-                } ctx;
+                struct EnumCtx ctx;
                 ctx.want = want;
                 ctx.found = NULL;
-                BOOL CALLBACK enumProc(HWND hwnd, LPARAM lparam)
-                {
-                    char title[512];
-                    if (GetWindowTextA(hwnd, title, sizeof(title)) > 0)
-                    {
-                        if (strstr(title, want))
-                        {
-                            ((struct EnumCtx *)lparam)->found = hwnd;
-                            return FALSE; // stop enumeration
-                        }
-                    }
-                    return TRUE; // continue
-                }
-                // Enumerate windows
+                // Enumerate windows using the global helper
                 EnumWindows(miniBAE_EnumProc, (LPARAM)&ctx);
                 found = ctx.found;
                 if (found)
@@ -798,7 +784,7 @@ int main(int argc, char *argv[])
     // Load bank database AFTER mixer so load_bank can succeed
     load_bankinfo();
 
-#if SUPPORT_PLAYLIST == TRUE    // Initialize playlist system
+#if SUPPORT_PLAYLIST == TRUE // Initialize playlist system
     playlist_init();
 
     // Apply playlist settings AFTER playlist_init() to avoid being reset
@@ -816,14 +802,13 @@ int main(int argc, char *argv[])
 
     char exe_dir[512];
     get_executable_directory(exe_dir, sizeof(exe_dir));
-#if SUPPORT_PLAYLIST == TRUE    // Initialize playlist system
+#if SUPPORT_PLAYLIST == TRUE // Initialize playlist system
     char playlist_path[768];
 #ifdef _WIN32
     snprintf(playlist_path, sizeof(playlist_path), "%s\\playlist.m3u", exe_dir);
 #else
     snprintf(playlist_path, sizeof(playlist_path), "%s/playlist.m3u", exe_dir);
 #endif
-
 
     // Check if file exists and load it
     FILE *test_file = fopen(playlist_path, "r");
@@ -905,7 +890,7 @@ int main(int argc, char *argv[])
     {
         if (bae_load_song_with_settings(argv[1], transpose, tempo, volume, loopPlay, reverbType, ch_enable))
         {
-#if SUPPORT_PLAYLIST == TRUE            
+#if SUPPORT_PLAYLIST == TRUE
             // Add file to playlist and set as current
             playlist_update_current_file(argv[1]);
 #endif
@@ -987,7 +972,7 @@ int main(int argc, char *argv[])
 #endif
                             if (bae_load_song_with_settings(incoming, transpose, tempo, volume, loopPlay, reverbType, ch_enable))
                             {
-#if SUPPORT_PLAYLIST == TRUE                                
+#if SUPPORT_PLAYLIST == TRUE
                                 // Add file to playlist and set as current
                                 playlist_update_current_file(incoming);
 #endif
@@ -1055,20 +1040,15 @@ int main(int argc, char *argv[])
                 int wy = e.wheel.y; // positive = scroll up, negative = scroll down
                 if (wy != 0)
                 {
-                    bool modal_block_local = g_show_settings_dialog || g_show_about_dialog || (g_show_rmf_info_dialog && g_bae.is_rmf_file) || g_exporting;
-                    if (!modal_block_local)
+                    if (!ui_modal_blocking())
                     {
                         // Recompute rects/layout used by UI so hit tests match rendering
-                        Rect transportPanel = {10, 160, 880, 85};
-                        int keyboardPanelY = transportPanel.y + transportPanel.h + 10;
-                        Rect chanDD = {10 + 10, keyboardPanelY + 28, 90, 22};
-                        Rect ddRect = {687, 43, 160, 24};
-
-                        // Reverb list count
-                        static const char *reverbNames[] = {"None", "Igor's Closet", "Igor's Garage", "Igor's Acoustic Lab", "Igor's Cavern", "Igor's Dungeon", "Small Reflections", "Early Reflections", "Basement", "Banquet Hall", "Catacombs"};
-                        int reverbCount = (int)(sizeof(reverbNames) / sizeof(reverbNames[0]));
-                        if (reverbCount > (BAE_REVERB_TYPE_COUNT - 1))
-                            reverbCount = (BAE_REVERB_TYPE_COUNT - 1);
+                        UiLayout L;
+                        compute_ui_layout(&L);
+                        Rect transportPanel = L.transportPanel;
+                        Rect chanDD = L.chanDD;
+                        Rect ddRect = L.ddRect;
+                        int reverbCount = get_reverb_count();
 
                         // Dropdown delta preserves previous behavior (wheel up -> move up in list)
                         int delta = (wy > 0) ? -1 : 1; // wheel up -> move up (decrement index)
@@ -1117,70 +1097,14 @@ int main(int argc, char *argv[])
                                 other playback controls disabled as before. */
                             bool volume_enabled_local = !g_reverbDropdownOpen;
 
-                            // Transpose slider at {410,63,160,14}
-                            if (playback_controls_enabled_local && point_in(mx, my, (Rect){410, 63, 160, 14}))
+                            // Try transpose/tempo/volume helpers in order
+                            if (!ui_adjust_transpose(mx, my, sdelta, playback_controls_enabled_local, &transpose))
                             {
-                                int nt = transpose + sdelta;
-                                if (nt < -24)
-                                    nt = -24;
-                                if (nt > 24)
-                                    nt = 24;
-                                if (nt != transpose)
+                                if (!ui_adjust_tempo(mx, my, sdelta, playback_controls_enabled_local, &tempo, &duration, &progress))
                                 {
-                                    transpose = nt;
-                                    bae_set_transpose(transpose);
-                                }
-                            }
-                            // Tempo slider at {410,103,160,14}
-                            else if (playback_controls_enabled_local && point_in(mx, my, (Rect){410, 103, 160, 14}))
-                            {
-                                int nt = tempo + sdelta;
-                                if (nt < 25)
-                                    nt = 25;
-                                if (nt > 200)
-                                    nt = 200;
-                                if (nt != tempo)
-                                {
-                                    int oldTempo = tempo;
-                                    int newTempo = nt;
-                                    tempo = nt;
-                                    bae_set_tempo(tempo);
-                                    // Get original song duration from BAE and calculate tempo-adjusted duration
-                                    if (g_bae.song)
-                                    {
-                                        uint32_t original_length_us = 0;
-                                        BAESong_GetMicrosecondLength(g_bae.song, &original_length_us);
-                                        int original_duration_ms = (int)(original_length_us / 1000UL);
-                                        int old_duration = duration;
-                                        duration = (int)((double)original_duration_ms * (100.0 / (double)tempo));
-                                        g_bae.song_length_us = duration * 1000UL;
-                                        // Preserve progress bar relative position
-                                        if (old_duration > 0)
-                                        {
-                                            float percent_through = (float)progress / (float)old_duration;
-                                            progress = (int)(percent_through * duration);
-                                        }
-                                    }
-                                    if (g_bae.preserve_position_on_next_start && g_bae.preserved_start_position_us)
-                                    {
-                                        uint32_t us = g_bae.preserved_start_position_us;
-                                        uint32_t newus = (uint32_t)((double)us * (100.0 / (double)tempo));
-                                        g_bae.preserved_start_position_us = newus;
-                                    }
-                                }
-                            }
-                            // Volume slider at {687,103,ddRect.w,14}
-                            else if (volume_enabled_local && point_in(mx, my, (Rect){687, 103, ddRect.w, 14}))
-                            {
-                                int nt = volume + sdelta;
-                                if (nt < 0)
-                                    nt = 0;
-                                if (nt > NEW_MAX_VOLUME_PCT)
-                                    nt = NEW_MAX_VOLUME_PCT;
-                                if (nt != volume)
-                                {
-                                    volume = nt;
-                                    bae_set_volume(volume);
+                                    // For volume we pass the ddRect width as currently used in rendering
+                                    // ui_adjust_volume will test using a fixed rect matching rendering
+                                    ui_adjust_volume(mx, my, sdelta, volume_enabled_local, &volume);
                                 }
                             }
                             // LSB/MSB number pickers wheel handling
@@ -1197,7 +1121,7 @@ int main(int argc, char *argv[])
                                 if (showKeyboard_wheel && !(g_bae.is_audio_file && g_bae.sound))
                                 {
                                     // Calculate MSB/LSB rects to match the actual rendering coordinates
-                                    int picker_y_wheel = keyboardPanel_wheel.y + 56; // below channel dropdown  
+                                    int picker_y_wheel = keyboardPanel_wheel.y + 56; // below channel dropdown
                                     int picker_w_wheel = 35;                         // compact width for 3-digit numbers
                                     int picker_h_wheel = 18;
                                     int spacing_wheel = 5;
@@ -1208,21 +1132,11 @@ int main(int argc, char *argv[])
 
                                     if (point_in(mx, my, msbRect_wheel))
                                     {
-                                        g_keyboard_msb += sdelta; // sdelta is +1 for wheel up, -1 for wheel down
-                                        if (g_keyboard_msb < 0)
-                                            g_keyboard_msb = 127; // wrap to 127 when decrementing below 0
-                                        if (g_keyboard_msb > 127)
-                                            g_keyboard_msb = 0; // wrap to 0 when incrementing past 127
-                                        send_bank_select_for_current_channel();
+                                        change_bank_value_for_current_channel(true, sdelta);
                                     }
                                     else if (point_in(mx, my, lsbRect_wheel))
                                     {
-                                        g_keyboard_lsb += sdelta; // sdelta is +1 for wheel up, -1 for wheel down
-                                        if (g_keyboard_lsb < 0)
-                                            g_keyboard_lsb = 127; // wrap to 127 when decrementing below 0
-                                        if (g_keyboard_lsb > 127)
-                                            g_keyboard_lsb = 0; // wrap to 0 when incrementing past 127
-                                        send_bank_select_for_current_channel();
+                                        change_bank_value_for_current_channel(false, sdelta);
                                     }
                                     // If not over LSB/MSB, fall through to playlist handling
 #if SUPPORT_PLAYLIST == TRUE
@@ -1312,7 +1226,7 @@ int main(int argc, char *argv[])
                                             }
                                         }
                                     }
-#endif                              
+#endif
                                 }
                             }
                         }
@@ -1434,8 +1348,7 @@ int main(int argc, char *argv[])
                 // the same enable/disable rules used when rendering the sliders.
                 if (isDown && (sym == SDLK_LEFT || sym == SDLK_RIGHT))
                 {
-                    bool modal_block_local = g_show_settings_dialog || g_show_about_dialog || (g_show_rmf_info_dialog && g_bae.is_rmf_file) || g_exporting;
-                    if (!modal_block_local)
+                    if (!ui_modal_blocking())
                     {
                         // Match playback_controls_enabled logic used during rendering
 #ifdef SUPPORT_MIDI_HW
@@ -1448,74 +1361,12 @@ int main(int argc, char *argv[])
 
                         int delta = (sym == SDLK_RIGHT) ? 1 : -1;
 
-                        // Transpose slider at {410,63,160,14}
-                        if (playback_controls_enabled_local && point_in(mx, my, (Rect){410, 63, 160, 14}))
+                        // Try centralized slider handlers in order (transpose, tempo, volume)
+                        if (!ui_adjust_transpose(mx, my, delta, playback_controls_enabled_local, &transpose))
                         {
-                            int nt = transpose + delta;
-                            if (nt < -24)
-                                nt = -24;
-                            if (nt > 24)
-                                nt = 24;
-                            if (nt != transpose)
+                            if (!ui_adjust_tempo(mx, my, delta, playback_controls_enabled_local, &tempo, &duration, &progress))
                             {
-                                transpose = nt;
-                                bae_set_transpose(transpose);
-                            }
-                        }
-                        // Tempo slider at {410,103,160,14}
-                        else if (playback_controls_enabled_local && point_in(mx, my, (Rect){410, 103, 160, 14}))
-                        {
-                            int nt = tempo + delta;
-                            if (nt < 25)
-                                nt = 25;
-                            if (nt > 200)
-                                nt = 200;
-                            if (nt != tempo)
-                            {
-                                int oldTempo = tempo;
-                                int newTempo = nt;
-                                tempo = nt;
-                                bae_set_tempo(tempo);
-                                // Get original song duration from BAE and calculate tempo-adjusted duration
-                                // Higher tempo = shorter duration, lower tempo = longer duration
-                                // Formula: adjusted_duration = original_duration * (100 / tempo_percent)
-                                if (g_bae.song)
-                                {
-                                    uint32_t original_length_us = 0;
-                                    BAESong_GetMicrosecondLength(g_bae.song, &original_length_us);
-                                    int original_duration_ms = (int)(original_length_us / 1000UL);
-                                    int old_duration = duration;
-                                    duration = (int)((double)original_duration_ms * (100.0 / (double)tempo));
-                                    g_bae.song_length_us = duration * 1000UL;
-                                    // Calculate progress bar position based on percentage through song
-                                    // without seeking BAE - preserve relative position
-                                    if (old_duration > 0)
-                                    {
-                                        float percent_through = (float)progress / (float)old_duration;
-                                        progress = (int)(percent_through * duration);
-                                    }
-                                }
-                                // Preserve microsecond-based preserved position across tempo change
-                                if (g_bae.preserve_position_on_next_start && g_bae.preserved_start_position_us)
-                                {
-                                    uint32_t us = g_bae.preserved_start_position_us;
-                                    uint32_t newus = (uint32_t)((double)us * (100.0 / (double)tempo));
-                                    g_bae.preserved_start_position_us = newus;
-                                }
-                            }
-                        }
-                        // Volume slider at {687,103,160,14}
-                        else if (volume_enabled_local && point_in(mx, my, (Rect){687, 103, 160, 14}))
-                        {
-                            int nt = volume + delta;
-                            if (nt < 0)
-                                nt = 0;
-                            if (nt > NEW_MAX_VOLUME_PCT)
-                                nt = NEW_MAX_VOLUME_PCT;
-                            if (nt != volume)
-                            {
-                                volume = nt;
-                                bae_set_volume(volume);
+                                ui_adjust_volume(mx, my, delta, volume_enabled_local, &volume);
                             }
                         }
                     }
@@ -1658,20 +1509,14 @@ int main(int argc, char *argv[])
                 // Up/Down arrow control for hovered dropdowns (keydown only)
                 if (isDown && (sym == SDLK_UP || sym == SDLK_DOWN))
                 {
-                    bool modal_block_local = g_show_settings_dialog || g_show_about_dialog || (g_show_rmf_info_dialog && g_bae.is_rmf_file) || g_exporting;
-                    if (!modal_block_local)
+                    if (!ui_modal_blocking())
                     {
-                        // Recompute dd rects/layout consistent with rendering
-                        Rect transportPanel = {10, 160, 880, 85};
-                        int keyboardPanelY = transportPanel.y + transportPanel.h + 10;
-                        Rect chanDD = {10 + 10, keyboardPanelY + 28, 90, 22};
-                        Rect ddRect = {687, 43, 160, 24};
-
-                        // Reverb list count
-                        static const char *reverbNames[] = {"None", "Igor's Closet", "Igor's Garage", "Igor's Acoustic Lab", "Igor's Cavern", "Igor's Dungeon", "Small Reflections", "Early Reflections", "Basement", "Banquet Hall", "Catacombs"};
-                        int reverbCount = (int)(sizeof(reverbNames) / sizeof(reverbNames[0]));
-                        if (reverbCount > (BAE_REVERB_TYPE_COUNT - 1))
-                            reverbCount = (BAE_REVERB_TYPE_COUNT - 1);
+                        UiLayout L;
+                        compute_ui_layout(&L);
+                        Rect transportPanel = L.transportPanel;
+                        Rect chanDD = L.chanDD;
+                        Rect ddRect = L.ddRect;
+                        int reverbCount = get_reverb_count();
 
                         int delta = (sym == SDLK_DOWN) ? 1 : -1;
 
@@ -1952,8 +1797,8 @@ int main(int argc, char *argv[])
                             if (target)
                             {
                                 // Send both MSB and LSB before program change
-                                BAESong_ControlChange(target, target_ch, 0, g_midi_bank_msb[mch], 0);   // CC 0 = Bank Select MSB
-                                BAESong_ControlChange(target, target_ch, 32, g_midi_bank_lsb[mch], 0);  // CC 32 = Bank Select LSB
+                                BAESong_ControlChange(target, target_ch, 0, g_midi_bank_msb[mch], 0);  // CC 0 = Bank Select MSB
+                                BAESong_ControlChange(target, target_ch, 32, g_midi_bank_lsb[mch], 0); // CC 32 = Bank Select LSB
                                 BAESong_ProgramChange(target, target_ch, program, 0);
                             }
                         }
@@ -2109,7 +1954,7 @@ int main(int argc, char *argv[])
                         BAE_PRINTF("Playlist: end of playlist reached\n");
                     }
                 }
-#endif                
+#endif
             }
         }
 
@@ -2180,7 +2025,7 @@ int main(int argc, char *argv[])
             }
             playlist_clear_pending_load();
         }
-#endif        
+#endif
 
         // Draw UI with improved layout and styling
 #ifdef _WIN32
@@ -2190,9 +2035,9 @@ int main(int argc, char *argv[])
 #endif
         SDL_RenderClear(R);
 
-        // Clear tooltips each frame
-        g_lsb_tooltip_visible = false;
-        g_msb_tooltip_visible = false;
+    // Clear tooltips each frame
+    ui_clear_tooltip(&g_lsb_tooltip_visible);
+    ui_clear_tooltip(&g_msb_tooltip_visible);
 
         // Colors driven by theme globals
         SDL_Color labelCol = g_text_color;
@@ -2604,14 +2449,11 @@ int main(int argc, char *argv[])
             if (tooltip_y < 4)
                 tooltip_y = ui_my + 25; // Show below cursor if no room above
 
-            g_voice_tooltip_rect = (Rect){tooltip_x, tooltip_y, tooltip_w, tooltip_h};
-            strncpy(g_voice_tooltip_text, tooltip_text, sizeof(g_voice_tooltip_text) - 1);
-            g_voice_tooltip_text[sizeof(g_voice_tooltip_text) - 1] = '\0';
-            g_voice_tooltip_visible = true;
+            ui_set_tooltip((Rect){tooltip_x, tooltip_y, tooltip_w, tooltip_h}, tooltip_text, &g_voice_tooltip_visible, &g_voice_tooltip_rect, g_voice_tooltip_text, sizeof(g_voice_tooltip_text));
         }
         else
         {
-            g_voice_tooltip_visible = false;
+            ui_clear_tooltip(&g_voice_tooltip_visible);
         }
 
         // If playing an audio file (sound, not song), dim the MIDI channels panel
@@ -2690,11 +2532,7 @@ int main(int argc, char *argv[])
         draw_text(R, 687, 25, "Reverb:", labelCol);
         // Removed non-functional 'No Change' option; first entry now 'Default' (engine type 0)
         // Removed engine reverb index 0 (NO_CHANGE). UI list now maps i -> engine index (i+1)
-        static const char *reverbNames[] = {"None", "Igor's Closet", "Igor's Garage", "Igor's Acoustic Lab", "Igor's Cavern", "Igor's Dungeon", "Small Reflections", "Early Reflections", "Basement", "Banquet Hall", "Catacombs"};
-        int reverbCount = (int)(sizeof(reverbNames) / sizeof(reverbNames[0]));
-        // Limit by (BAE_REVERB_TYPE_COUNT - 1) because we've removed NO_CHANGE entry
-        if (reverbCount > (BAE_REVERB_TYPE_COUNT - 1))
-            reverbCount = (BAE_REVERB_TYPE_COUNT - 1);
+        int reverbCount = get_reverb_count();
         Rect ddRect = {687, 43, 160, 24}; // moved left 3px and down 3px
         // Closed dropdown: use theme globals
         SDL_Color dd_bg = g_button_base;
@@ -2712,7 +2550,7 @@ int main(int argc, char *argv[])
         }
         draw_rect(R, ddRect, dd_bg);
         draw_frame(R, ddRect, dd_frame);
-        const char *cur = (reverbType >= 1 && reverbType <= reverbCount) ? reverbNames[reverbType - 1] : "?";
+        const char *cur = (reverbType >= 1 && reverbType <= reverbCount) ? get_reverb_name(reverbType - 1) : "?";
         draw_text(R, ddRect.x + 6, ddRect.y + 3, cur, dd_txt);
         draw_text(R, ddRect.x + ddRect.w - 16, ddRect.y + 3, g_reverbDropdownOpen ? "^" : "v", dd_txt);
         if (overMain && ui_mclick && reverb_enabled)
@@ -3427,15 +3265,11 @@ int main(int argc, char *argv[])
                     {
                         if (lsbHover)
                         {
-                            g_lsb_tooltip_visible = true;
-                            g_lsb_tooltip_rect = (Rect){ui_mx + 10, ui_my - 25, 0, 0};
-                            snprintf(g_lsb_tooltip_text, sizeof(g_lsb_tooltip_text), "LSB");
+                            ui_set_tooltip((Rect){ui_mx + 10, ui_my - 25, 0, 0}, "LSB", &g_lsb_tooltip_visible, &g_lsb_tooltip_rect, g_lsb_tooltip_text, sizeof(g_lsb_tooltip_text));
                         }
                         else if (msbHover)
                         {
-                            g_msb_tooltip_visible = true;
-                            g_msb_tooltip_rect = (Rect){ui_mx + 10, ui_my - 25, 0, 0};
-                            snprintf(g_msb_tooltip_text, sizeof(g_msb_tooltip_text), "MSB");
+                            ui_set_tooltip((Rect){ui_mx + 10, ui_my - 25, 0, 0}, "MSB", &g_msb_tooltip_visible, &g_msb_tooltip_rect, g_msb_tooltip_text, sizeof(g_msb_tooltip_text));
                         }
                     }
 
@@ -3446,34 +3280,22 @@ int main(int argc, char *argv[])
                         {
                             if (ui_mclick) // Left click increments
                             {
-                                g_keyboard_msb++;
-                                if (g_keyboard_msb > 127)
-                                    g_keyboard_msb = 0; // wrap to 0 when incrementing past 127
-                                send_bank_select_for_current_channel();
+                                change_bank_value_for_current_channel(true, +1);
                             }
                             else if (ui_rclick) // Right click decrements
                             {
-                                g_keyboard_msb--;
-                                if (g_keyboard_msb < 0)
-                                    g_keyboard_msb = 127; // wrap to 127 when decrementing below 0
-                                send_bank_select_for_current_channel();
+                                change_bank_value_for_current_channel(true, -1);
                             }
                         }
                         else if (lsbHover)
                         {
                             if (ui_mclick) // Left click increments
                             {
-                                g_keyboard_lsb++;
-                                if (g_keyboard_lsb > 127)
-                                    g_keyboard_lsb = 0; // wrap to 0 when incrementing past 127
-                                send_bank_select_for_current_channel();
+                                change_bank_value_for_current_channel(false, +1);
                             }
                             else if (ui_rclick) // Right click decrements
                             {
-                                g_keyboard_lsb--;
-                                if (g_keyboard_lsb < 0)
-                                    g_keyboard_lsb = 127; // wrap to 127 when decrementing below 0
-                                send_bank_select_for_current_channel();
+                                change_bank_value_for_current_channel(false, -1);
                             }
                         }
                     }
@@ -3886,14 +3708,11 @@ int main(int argc, char *argv[])
                 if (tooltip_y < 4)
                     tooltip_y = ui_my + 25; // Show below cursor if no room above
 
-                g_loop_tooltip_rect = (Rect){tooltip_x, tooltip_y, tooltip_w, tooltip_h};
-                strncpy(g_loop_tooltip_text, tooltip_text, sizeof(g_loop_tooltip_text) - 1);
-                g_loop_tooltip_text[sizeof(g_loop_tooltip_text) - 1] = '\0';
-                g_loop_tooltip_visible = true;
+                ui_set_tooltip((Rect){tooltip_x, tooltip_y, tooltip_w, tooltip_h}, tooltip_text, &g_loop_tooltip_visible, &g_loop_tooltip_rect, g_loop_tooltip_text, sizeof(g_loop_tooltip_text));
             }
             else
             {
-                g_loop_tooltip_visible = false;
+                ui_clear_tooltip(&g_loop_tooltip_visible);
             }
 
             if (clicked)
@@ -4934,15 +4753,12 @@ int main(int argc, char *argv[])
                         tx = WINDOW_W - tw - 4;
                     if (ty + th > g_window_h - 4)
                         ty = g_window_h - th - 4;
-                    g_file_tooltip_rect = (Rect){tx, ty, tw, th};
-                    strncpy(g_file_tooltip_text, tip, sizeof(g_file_tooltip_text) - 1);
-                    g_file_tooltip_text[sizeof(g_file_tooltip_text) - 1] = '\0';
-                    g_file_tooltip_visible = true;
+                    ui_set_tooltip((Rect){tx, ty, tw, th}, tip, &g_file_tooltip_visible, &g_file_tooltip_rect, g_file_tooltip_text, sizeof(g_file_tooltip_text));
                 }
             }
             else
             {
-                g_file_tooltip_visible = false;
+                ui_clear_tooltip(&g_file_tooltip_visible);
             }
         }
         else
@@ -4997,15 +4813,12 @@ int main(int argc, char *argv[])
                         tx = WINDOW_W - tw - 4;
                     if (ty + th > g_window_h - 4)
                         ty = g_window_h - th - 4;
-                    g_bank_tooltip_rect = (Rect){tx, ty, tw, th};
-                    strncpy(g_bank_tooltip_text, tip, sizeof(g_bank_tooltip_text) - 1);
-                    g_bank_tooltip_text[sizeof(g_bank_tooltip_text) - 1] = '\0';
-                    g_bank_tooltip_visible = true;
+                    ui_set_tooltip((Rect){tx, ty, tw, th}, tip, &g_bank_tooltip_visible, &g_bank_tooltip_rect, g_bank_tooltip_text, sizeof(g_bank_tooltip_text));
                 }
             }
             else
             {
-                g_bank_tooltip_visible = false;
+                ui_clear_tooltip(&g_bank_tooltip_visible);
             }
         }
         else
@@ -5381,10 +5194,13 @@ int main(int argc, char *argv[])
         else
         {
 #endif
-            if (playing) {
+            if (playing)
+            {
                 status = "♪ Playing";
                 statusCol = g_highlight_color;
-            } else {
+            }
+            else
+            {
                 // Draw a square instead of the '■' character for 'Stopped'
                 int stoppedBoxSize = 8;
                 int stoppedBoxX = 20;
@@ -5400,7 +5216,8 @@ int main(int argc, char *argv[])
 #ifdef SUPPORT_MIDI_HW
         }
 #endif
-        if (status) {
+        if (status)
+        {
             draw_text(R, 20, lineY3, status, statusCol);
         }
 
@@ -5462,139 +5279,25 @@ int main(int argc, char *argv[])
 
         if (g_file_tooltip_visible)
         {
-            Rect tipRect = g_file_tooltip_rect;
-            SDL_Color shadow = {0, 0, 0, g_is_dark_mode ? 140 : 100};
-            Rect shadowRect = {tipRect.x + 2, tipRect.y + 2, tipRect.w, tipRect.h};
-            draw_rect(R, shadowRect, shadow);
-            SDL_Color tbg;
-            if (g_is_dark_mode)
-            {
-                int r = g_panel_bg.r + 25;
-                if (r > 255)
-                    r = 255;
-                int g = g_panel_bg.g + 25;
-                if (g > 255)
-                    g = 255;
-                int b = g_panel_bg.b + 25;
-                if (b > 255)
-                    b = 255;
-                tbg = (SDL_Color){(Uint8)r, (Uint8)g, (Uint8)b, 255};
-            }
-            else
-            {
-                tbg = (SDL_Color){255, 255, 225, 255};
-            }
-            SDL_Color tbd = g_is_dark_mode ? g_panel_border : (SDL_Color){180, 180, 130, 255};
-            SDL_Color tfg = g_is_dark_mode ? g_text_color : (SDL_Color){32, 32, 32, 255};
-            draw_rect(R, tipRect, tbg);
-            draw_frame(R, tipRect, tbd);
-
-            // Center text vertically in tooltip
-            int text_w, text_h;
-            measure_text(g_file_tooltip_text, &text_w, &text_h);
-            int text_y = tipRect.y + (tipRect.h - text_h) / 2;
-            draw_text(R, tipRect.x + 4, text_y, g_file_tooltip_text, tfg);
+            ui_draw_tooltip(R, g_file_tooltip_rect, g_file_tooltip_text, true, true);
         }
 
         // Draw deferred bank tooltip last so it appears above status text and other UI
         if (g_bank_tooltip_visible)
         {
-            Rect tipRect = g_bank_tooltip_rect;
-            SDL_Color shadow = {0, 0, 0, g_is_dark_mode ? 140 : 100};
-            Rect shadowRect = {tipRect.x + 2, tipRect.y + 2, tipRect.w, tipRect.h};
-            draw_rect(R, shadowRect, shadow);
-            SDL_Color tbg;
-            if (g_is_dark_mode)
-            {
-                int r = g_panel_bg.r + 25;
-                if (r > 255)
-                    r = 255;
-                int g = g_panel_bg.g + 25;
-                if (g > 255)
-                    g = 255;
-                int b = g_panel_bg.b + 25;
-                if (b > 255)
-                    b = 255;
-                tbg = (SDL_Color){(Uint8)r, (Uint8)g, (Uint8)b, 255};
-            }
-            else
-            {
-                tbg = (SDL_Color){255, 255, 225, 255};
-            }
-            SDL_Color tbd = g_is_dark_mode ? g_panel_border : (SDL_Color){180, 180, 130, 255};
-            SDL_Color tfg = g_is_dark_mode ? g_text_color : (SDL_Color){32, 32, 32, 255};
-            draw_rect(R, tipRect, tbg);
-            draw_frame(R, tipRect, tbd);
-
-            // Center text vertically in tooltip
-            int text_w, text_h;
-            measure_text(g_bank_tooltip_text, &text_w, &text_h);
-            int text_y = tipRect.y + (tipRect.h - text_h) / 2;
-            draw_text(R, tipRect.x + 4, text_y, g_bank_tooltip_text, tfg);
+            ui_draw_tooltip(R, g_bank_tooltip_rect, g_bank_tooltip_text, true, true);
         }
 
         // Draw loop tooltip
         if (g_loop_tooltip_visible)
         {
-            Rect tipRect = g_loop_tooltip_rect;
-            SDL_Color shadow = {0, 0, 0, g_is_dark_mode ? 140 : 100};
-            Rect shadowRect = {tipRect.x + 2, tipRect.y + 2, tipRect.w, tipRect.h};
-            draw_rect(R, shadowRect, shadow);
-            SDL_Color tbg;
-            if (g_is_dark_mode)
-            {
-                int r = g_panel_bg.r + 25;
-                if (r > 255)
-                    r = 255;
-                int g = g_panel_bg.g + 25;
-                if (g > 255)
-                    g = 255;
-                int b = g_panel_bg.b + 25;
-                if (b > 255)
-                    b = 255;
-                tbg = (SDL_Color){r, g, b, 255};
-            }
-            else
-            {
-                tbg = (SDL_Color){255, 255, 220, 255}; // Light yellow background
-            }
-            SDL_Color tbd = g_is_dark_mode ? g_button_border : (SDL_Color){128, 128, 128, 255};
-            SDL_Color tfg = g_is_dark_mode ? g_text_color : (SDL_Color){32, 32, 32, 255};
-            draw_rect(R, tipRect, tbg);
-            draw_frame(R, tipRect, tbd);
-            draw_text(R, tipRect.x + 4, tipRect.y + 4, g_loop_tooltip_text, tfg);
+            ui_draw_tooltip(R, g_loop_tooltip_rect, g_loop_tooltip_text, false, false);
         }
 
         // Draw voice tooltip
         if (g_voice_tooltip_visible)
         {
-            Rect tipRect = g_voice_tooltip_rect;
-            SDL_Color shadow = {0, 0, 0, g_is_dark_mode ? 140 : 100};
-            Rect shadowRect = {tipRect.x + 2, tipRect.y + 2, tipRect.w, tipRect.h};
-            draw_rect(R, shadowRect, shadow);
-            SDL_Color tbg;
-            if (g_is_dark_mode)
-            {
-                int r = g_panel_bg.r + 25;
-                if (r > 255)
-                    r = 255;
-                int g = g_panel_bg.g + 25;
-                if (g > 255)
-                    g = 255;
-                int b = g_panel_bg.b + 25;
-                if (b > 255)
-                    b = 255;
-                tbg = (SDL_Color){r, g, b, 255};
-            }
-            else
-            {
-                tbg = (SDL_Color){255, 255, 220, 255}; // Light yellow background
-            }
-            SDL_Color tbd = g_is_dark_mode ? g_button_border : (SDL_Color){128, 128, 128, 255};
-            SDL_Color tfg = g_is_dark_mode ? g_text_color : (SDL_Color){32, 32, 32, 255};
-            draw_rect(R, tipRect, tbg);
-            draw_frame(R, tipRect, tbd);
-            draw_text(R, tipRect.x + 4, tipRect.y + 4, g_voice_tooltip_text, tfg);
+            ui_draw_tooltip(R, g_voice_tooltip_rect, g_voice_tooltip_text, false, false);
         }
 
         // Draw LSB tooltip
@@ -5603,15 +5306,7 @@ int main(int argc, char *argv[])
             int tooltip_w = 0, tooltip_h = 0;
             measure_text(g_lsb_tooltip_text, &tooltip_w, &tooltip_h);
             Rect tipRect = {g_lsb_tooltip_rect.x, g_lsb_tooltip_rect.y, tooltip_w + 8, tooltip_h + 8};
-            SDL_Color shadow = {0, 0, 0, g_is_dark_mode ? 140 : 100};
-            Rect shadowRect = {tipRect.x + 2, tipRect.y + 2, tipRect.w, tipRect.h};
-            draw_rect(R, shadowRect, shadow);
-            SDL_Color tbg = g_is_dark_mode ? (SDL_Color){g_panel_bg.r + 25, g_panel_bg.g + 25, g_panel_bg.b + 25, 255} : (SDL_Color){255, 255, 220, 255};
-            SDL_Color tbd = g_is_dark_mode ? g_button_border : (SDL_Color){128, 128, 128, 255};
-            SDL_Color tfg = g_is_dark_mode ? g_text_color : (SDL_Color){32, 32, 32, 255};
-            draw_rect(R, tipRect, tbg);
-            draw_frame(R, tipRect, tbd);
-            draw_text(R, tipRect.x + 4, tipRect.y + 4, g_lsb_tooltip_text, tfg);
+            ui_draw_tooltip(R, tipRect, g_lsb_tooltip_text, false, false);
         }
 
         // Draw MSB tooltip
@@ -5620,24 +5315,13 @@ int main(int argc, char *argv[])
             int tooltip_w = 0, tooltip_h = 0;
             measure_text(g_msb_tooltip_text, &tooltip_w, &tooltip_h);
             Rect tipRect = {g_msb_tooltip_rect.x, g_msb_tooltip_rect.y, tooltip_w + 8, tooltip_h + 8};
-            SDL_Color shadow = {0, 0, 0, g_is_dark_mode ? 140 : 100};
-            Rect shadowRect = {tipRect.x + 2, tipRect.y + 2, tipRect.w, tipRect.h};
-            draw_rect(R, shadowRect, shadow);
-            SDL_Color tbg = g_is_dark_mode ? (SDL_Color){g_panel_bg.r + 25, g_panel_bg.g + 25, g_panel_bg.b + 25, 255} : (SDL_Color){255, 255, 220, 255};
-            SDL_Color tbd = g_is_dark_mode ? g_button_border : (SDL_Color){128, 128, 128, 255};
-            SDL_Color tfg = g_is_dark_mode ? g_text_color : (SDL_Color){32, 32, 32, 255};
-            draw_rect(R, tipRect, tbg);
-            draw_frame(R, tipRect, tbd);
-            draw_text(R, tipRect.x + 4, tipRect.y + 4, g_msb_tooltip_text, tfg);
+            ui_draw_tooltip(R, tipRect, g_msb_tooltip_text, false, false);
         }
 
         // Render dropdown list on top of everything else if open
         if (g_reverbDropdownOpen)
         {
-            static const char *reverbNames[] = {"None", "Igor's Closet", "Igor's Garage", "Igor's Acoustic Lab", "Igor's Cavern", "Igor's Dungeon", "Small Reflections", "Early Reflections", "Basement", "Banquet Hall", "Catacombs"};
-            int reverbCount = (int)(sizeof(reverbNames) / sizeof(reverbNames[0]));
-            if (reverbCount > (BAE_REVERB_TYPE_COUNT - 1))
-                reverbCount = (BAE_REVERB_TYPE_COUNT - 1);
+            int reverbCount = get_reverb_count();
             Rect ddRect = {690, 40, 160, 24}; // Moved up 20 pixels from y=60 to y=40
 
             // Draw the dropdown list using theme globals
@@ -5668,7 +5352,7 @@ int main(int argc, char *argv[])
                     itemTxt = g_button_text;
                 if (over)
                     itemTxt = g_button_text;
-                draw_text(R, ir.x + 6, ir.y + 6, reverbNames[i], itemTxt);
+                draw_text(R, ir.x + 6, ir.y + 6, get_reverb_name(i), itemTxt);
                 if (over && mclick)
                 {
                     reverbType = i + 1;
@@ -5968,7 +5652,7 @@ int main(int argc, char *argv[])
 
     // Auto-save playlist to application directory
     get_executable_directory(exe_dir, sizeof(exe_dir));
-#if SUPPORT_PLAYLIST == TRUE    // Initialize playlist system
+#if SUPPORT_PLAYLIST == TRUE // Initialize playlist system
 
 #ifdef _WIN32
     snprintf(playlist_path, sizeof(playlist_path), "%s\\playlist.m3u", exe_dir);

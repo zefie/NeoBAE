@@ -104,7 +104,7 @@
 #if (USE_8_BIT_OUTPUT == TRUE) && (USE_STEREO_OUTPUT == TRUE)
 void PV_Generate8outputStereo(OUTSAMPLE8 * dest8)
 {
-    register INT32          b, c;
+    
     register INT32          *sourceLR;
     register LOOPCOUNT      count;
 
@@ -130,7 +130,8 @@ void PV_Generate8outputStereo(OUTSAMPLE8 * dest8)
         }
     }
     else
-    {                   
+    {            
+        register INT32          b, c;       
         // 11k terped to 22k, and 22k terped to 44k
         for (count = MusicGlobals->Four_Loop; count > 0; --count)
         {

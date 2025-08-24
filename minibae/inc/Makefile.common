@@ -258,7 +258,7 @@ endif
 # playbae = libMiniBAE srcs + playbae.c
 ifeq ($(BUILD_GUI),1)
 	BAE_FLAGS += -DOUTPUT_TO_LOGFILE=1
-	SRC_BIN	:= $(SRC) gui_logging.c gui_theme.c gui_widgets.c gui_text.c gui_midi_vkbd.c gui_karaoke.c gui_export.c gui_dialogs.c gui_bae.c gui_settings.c gui_main.c
+	SRC_BIN	:= $(SRC) gui_logging.c gui_theme.c gui_widgets.c gui_text.c gui_midi_vkbd.c gui_karaoke.c gui_export.c gui_dialogs.c gui_bae.c gui_settings.c gui_panels.c gui_main.c
 else
 	SRC_BIN	:= $(SRC) playbae.c
 endif

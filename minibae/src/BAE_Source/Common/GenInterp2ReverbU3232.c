@@ -185,7 +185,7 @@ void PV_ServeU3232PartialBufferNewReverb (GM_Voice *this_voice, XBOOL looping)
     register UBYTE          *source, *calculated_source;
     register INT32          b, c, sample;
     register U32            cur_wave_i, cur_wave_f;
-    register U32            end_wave, wave_adjust;
+    register U32            end_wave, wave_adjust = 0;
     U3232                   wave_increment;
     register INT32          amplitude, amplitudeAdjust;
     register INT32          amplitudeReverb, amplitudeChorus;
@@ -401,7 +401,7 @@ void PV_ServeU3232StereoPartialBufferNewReverb (GM_Voice *this_voice, XBOOL loop
     register UBYTE          *source, *calculated_source;
     register INT32          b, c, sample;
     register U32            cur_wave_i, cur_wave_f;
-    register U32            end_wave, wave_adjust;
+    register U32            end_wave, wave_adjust = 0;
     U3232                   wave_increment;
     INT32                   ampValueL, ampValueR;
     register INT32          amplitudeL;
@@ -650,7 +650,7 @@ void PV_ServeU3232PartialBuffer16NewReverb (GM_Voice *this_voice, XBOOL looping)
     register INT16          *source, *calculated_source;
     register INT32          b, c, sample;
     register U32            cur_wave_i, cur_wave_f;
-    register U32            end_wave, wave_adjust;
+    register U32            end_wave, wave_adjust = 0;
     U3232                   wave_increment;
     register INT32          amplitude, amplitudeAdjust;
     register INT32          amplitudeReverb, amplitudeChorus;
@@ -915,7 +915,7 @@ void PV_ServeU3232StereoPartialBuffer16NewReverb (GM_Voice *this_voice, XBOOL lo
     register INT16          *source, *calculated_source;
     register INT32          b, c, sample;
     register U32            cur_wave_i, cur_wave_f;
-    register U32            end_wave, wave_adjust;
+    register U32            end_wave, wave_adjust = 0;
     U3232                   wave_increment;
     INT32                   ampValueL, ampValueR;
     register INT32          amplitudeL;

@@ -265,6 +265,7 @@ const char *BAE_GetVersion()
 {
     size_t maxStrSize = 64;
     char *versionString = (char *)malloc(sizeof(char) * maxStrSize);
+    if (!versionString) return "";
 #ifdef _VERSION
     snprintf(versionString, maxStrSize, "version %s", _VERSION);
 #else
@@ -277,6 +278,7 @@ const char *BAE_GetCompileInfo()
 {
     size_t maxStrSize = 128;
     char *versionString = (char *)malloc(sizeof(char) * maxStrSize);
+    if (!versionString) return "";
 #ifdef __EMSCRIPTEN__
 #ifdef __cplusplus
     snprintf(versionString, maxStrSize, "clang++ v%d.%d, emscripten v%d.%d", __clang_major__, __clang_minor__, __EMSCRIPTEN_major__, __EMSCRIPTEN_minor__);
@@ -5379,7 +5381,8 @@ BAEStream BAEStream_New(BAEMixer mixer)
 #if TRACKING
             PV_BAEMixer_AddObject(mixer, stream, BAE_STREAM_OBJECT);
 #else
-            stream->mValid = 1;
+            if (stream)
+                stream->mValid = 1;
 #endif
         }
     }
@@ -5631,7 +5634,7 @@ BAEResult BAEStream_GetLoopFlag(BAEStream stream, BAE_BOOL *outLoop)
 BAEResult BAEStream_GetInfo(BAEStream stream,
                             BAESampleInfo *outInfo)
 {
-    BAEResult err;
+    BAEResult err = BAE_NO_ERROR;
 
     if (stream)
     {

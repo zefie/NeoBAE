@@ -42,9 +42,11 @@ void bitmap_draw(SDL_Renderer *R, int x, int y, const char *text, SDL_Color col)
             for (int row = 0; row < 7; row++)
             {
                 unsigned char bits = g[row];
-                for (int bit = 0; bit < 6; bit++)
+                for (int bit = 0; bit < 5; bit++)
                 { // 5 columns (bit4..0)
-                    if (bits & (1 << (4 - bit)))
+                    /* use unsigned shift and explicit mask to avoid negative shift UB */
+                    unsigned int mask = 1u << (4 - bit);
+                    if (bits & mask)
                     {
                         SDL_Rect rr = {x + bit * g_bitmap_font_scale, y + row * g_bitmap_font_scale, g_bitmap_font_scale, g_bitmap_font_scale};
                         SDL_RenderFillRect(R, &rr);
@@ -52,7 +54,7 @@ void bitmap_draw(SDL_Renderer *R, int x, int y, const char *text, SDL_Color col)
                 }
             }
         }
-        x += (handled ? 5 : 5) * g_bitmap_font_scale + g_bitmap_font_scale; // glyph width + spacing
+    x += 6 * g_bitmap_font_scale; // glyph width (5) + spacing (1)
     }
 }
 

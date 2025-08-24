@@ -5,6 +5,7 @@
 #include "gui_widgets.h"
 #include "gui_text.h"
 #include "gui_theme.h"
+#include "gui_panels.h"
 #include "MiniBAE.h"
 #include "BAE_API.h"
 #include <stdio.h>
@@ -941,11 +942,11 @@ void dialogs_init(void)
     g_rmf_info_loaded = false;
     g_show_about_dialog = false;
     g_about_page = 0;
-    g_bank_tooltip_visible = false;
-    g_file_tooltip_visible = false;
-    g_loop_tooltip_visible = false;
-    g_lsb_tooltip_visible = false;
-    g_msb_tooltip_visible = false;
+    ui_clear_tooltip(&g_bank_tooltip_visible);
+    ui_clear_tooltip(&g_file_tooltip_visible);
+    ui_clear_tooltip(&g_loop_tooltip_visible);
+    ui_clear_tooltip(&g_lsb_tooltip_visible);
+    ui_clear_tooltip(&g_msb_tooltip_visible);
 }
 
 // Dialog cleanup
@@ -953,9 +954,9 @@ void dialogs_cleanup(void)
 {
     g_show_rmf_info_dialog = false;
     g_show_about_dialog = false;
-    g_bank_tooltip_visible = false;
-    g_file_tooltip_visible = false;
-    g_loop_tooltip_visible = false;
-    g_lsb_tooltip_visible = false;
-    g_msb_tooltip_visible = false;
+    ui_clear_tooltip(&g_bank_tooltip_visible);
+    ui_clear_tooltip(&g_file_tooltip_visible);
+    ui_clear_tooltip(&g_loop_tooltip_visible);
+    ui_clear_tooltip(&g_lsb_tooltip_visible);
+    ui_clear_tooltip(&g_msb_tooltip_visible);
 }

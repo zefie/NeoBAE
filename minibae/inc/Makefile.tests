@@ -48,3 +48,9 @@ test10: $(TARGET_BIN)
 	@mkdir -p tests
 	$(TEST_BIN) ../extras/TestSuite/allthethingsshesaid.kar -mr 44100 -d -o $(TEST_OUT_DIR)test_karaoke.wav
 
+cppcheck:
+	@mkdir -p $(TARGET_OUT)
+	cppcheck $(INC_PATH) --std=c99 --template='{file}:{line}:{severity}:{id}:{message}' -DX_PLATFORM=X_SDL2 \
+	-DUSE_MPEG_DECODER=1 -DUSE_MPEG_ENCODER=1 -DUSE_FLAC_DECODER=1 -DUSE_FLAC_ENCODER=1 -DSUPPORT_KARAOKE=1 -DSUPPORT_PLAYLIST=1 \
+	--inconclusive --suppress=missingIncludeSystem --suppress=syntaxError -I inc -I src/gui src/BAE_Source --check-level=exhaustive \
+	--enable=performance --cppcheck-build-dir=$(OBJ_DIR) -j 4 --force --output-file=bin/cppcheck.log minibae

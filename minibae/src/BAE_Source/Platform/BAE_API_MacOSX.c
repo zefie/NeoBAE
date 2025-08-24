@@ -188,6 +188,7 @@ void *BAE_Allocate(uint32_t size)
 {
     assert(size > 0);
     void* data = (void*)malloc(size);
+    if (!data) return NULL;
     memset(data, 0, size);
     return data;
 }

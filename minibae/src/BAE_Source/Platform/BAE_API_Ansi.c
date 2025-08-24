@@ -374,11 +374,12 @@ int32_t BAE_FileCreate(void *fileName)
 	}
 	return (file != -1) ? 0 : -1;
 #elif USE_ANSI_IO
-	FILE *fp = fopen((char *)fileName, "wb");
-	return (int32_t)fp;
-	if(fp)
 	{
+		FILE *fp = fopen((char *)fileName, "wb");
+		if (!fp)
+			return -1;
 		fclose(fp);
+		return 0;
 	}
 #elif USE_WINDOWS_IO
 	HANDLE	file;

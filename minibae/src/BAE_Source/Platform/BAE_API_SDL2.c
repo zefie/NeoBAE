@@ -337,9 +337,28 @@ static void audio_callback(void *userdata, Uint8 *stream, int len)
                     
                     if (frames > temp_frames)
                     {
-                        left_temp = realloc(left_temp, frames * sizeof(int16_t));
-                        right_temp = realloc(right_temp, frames * sizeof(int16_t));
-                        temp_frames = frames;
+                        /*
+                         * Avoid assigning realloc() directly to the tracked pointer
+                         * because a failing realloc() would lose the original pointer
+                         * and cause a leak. Allocate new buffers and only replace
+                         * the old ones if allocation succeeds for both.
+                         */
+                        int16_t *new_left = (int16_t *)malloc(frames * sizeof(int16_t));
+                        int16_t *new_right = (int16_t *)malloc(frames * sizeof(int16_t));
+                        if (new_left && new_right)
+                        {
+                            free(left_temp);
+                            free(right_temp);
+                            left_temp = new_left;
+                            right_temp = new_right;
+                            temp_frames = frames;
+                        }
+                        else
+                        {
+                            /* Allocation failed; free any partial alloc and keep existing buffers */
+                            free(new_left);
+                            free(new_right);
+                        }
                     }
                     
                     if (left_temp && right_temp)

@@ -113,7 +113,7 @@ void PV_ServeU3232FilterPartialBufferNewReverb (GM_Voice *this_voice, XBOOL loop
     register UBYTE          b, c;
 #endif
     register U32            cur_wave_i, cur_wave_f;
-    register U32            end_wave, wave_adjust;
+    register U32            end_wave, wave_adjust = 0;
     U3232                   wave_increment;
     register INT32          amplitudeL, amplitudeReverb, amplitudeChorus;
     register INT32          inner;
@@ -232,7 +232,7 @@ void PV_ServeU3232StereoFilterPartialBufferNewReverb (GM_Voice *this_voice, XBOO
     register UBYTE          b, c;
 #endif
     register U32            cur_wave_i, cur_wave_f;
-    register U32            end_wave, wave_adjust;
+    register U32            end_wave, wave_adjust = 0;
     U3232                   wave_increment;
     register INT32          amplitudeL;
     register INT32          amplitudeR;
@@ -592,7 +592,7 @@ void PV_ServeU3232FilterPartialBufferNewReverb16 (GM_Voice *this_voice, XBOOL lo
     register INT16          *source;
     register INT16          b, c;
     register U32            cur_wave_i, cur_wave_f;
-    register U32            end_wave, wave_adjust;
+    register U32            end_wave, wave_adjust = 0;
     U3232                   wave_increment;
     register INT32          amplitudeL;
     register INT32          amplitudeReverb, amplitudeChorus;
@@ -711,7 +711,7 @@ void PV_ServeU3232StereoFilterPartialBufferNewReverb16 (GM_Voice *this_voice, XB
     register INT16          *source;
     register INT16          b, c;
     register U32            cur_wave_i, cur_wave_f;
-    register U32            end_wave, wave_adjust;
+    register U32            end_wave, wave_adjust = 0;
     U3232                   wave_increment;
     register INT32          amplitudeL;
     register INT32          amplitudeR;
