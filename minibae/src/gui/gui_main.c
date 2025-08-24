@@ -15,6 +15,7 @@
 #include <errno.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <stdint.h>
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN 1
 #include <windows.h>
@@ -750,6 +751,7 @@ int main(int argc, char *argv[])
     bool mclick = false;
     int mx = 0, my = 0;
     int last_drag_progress = -1; // Track last dragged position to avoid repeated seeks
+    int last_wave_drag_progress = -1; // Track waveform drag seek to avoid repeated seeks while holding
 
     while (running)
     {
@@ -1713,9 +1715,9 @@ int main(int argc, char *argv[])
         int keyboardPanelY = transportPanel.y + transportPanel.h + 10;
         Rect keyboardPanel = {10, keyboardPanelY, 880, 110};
 #ifdef SUPPORT_MIDI_HW
-        bool showKeyboard = g_show_virtual_keyboard && (g_midi_input_enabled || (g_bae.song_loaded && !g_bae.is_audio_file));
+    bool showKeyboard = g_show_virtual_keyboard && (g_midi_input_enabled || (g_bae.song_loaded && !g_bae.is_audio_file));
 #else
-        bool showKeyboard = g_show_virtual_keyboard && (g_bae.song_loaded && !g_bae.is_audio_file);
+    bool showKeyboard = g_show_virtual_keyboard && (g_bae.song_loaded && !g_bae.is_audio_file);
 #endif
 #ifdef SUPPORT_KARAOKE
         // Insert karaoke panel (if active) above status panel; dynamic window height
@@ -1728,9 +1730,15 @@ int main(int argc, char *argv[])
         bool showKaraoke = g_karaoke_enabled && !g_karaoke_suspended &&
                            (g_lyric_count > 0 || g_karaoke_line_current[0] || g_karaoke_line_previous[0]) &&
                            g_bae.song_loaded && !g_bae.is_audio_file;
-        // Karaoke now appears after keyboard panel
-        Rect karaokePanel = {10, (showKeyboard ? (keyboardPanel.y + keyboardPanel.h + 10) : (transportPanel.y + transportPanel.h + 10)), 880, karaokePanelHeight};
-        int statusY = (showKeyboard ? (keyboardPanel.y + keyboardPanel.h + 10) : (transportPanel.y + transportPanel.h + 10));
+    // Karaoke now appears after keyboard panel or waveform (for audio files)
+    bool showWaveform = g_bae.is_audio_file && g_bae.sound;
+    // Always hide the virtual keyboard when waveform is active (including when MIDI input is enabled)
+    if (showWaveform)
+    {
+        showKeyboard = false;
+    }
+    Rect karaokePanel = {10, ((showKeyboard || showWaveform) ? (keyboardPanel.y + keyboardPanel.h + 10) : (transportPanel.y + transportPanel.h + 10)), 880, karaokePanelHeight};
+    int statusY = ((showKeyboard || showWaveform) ? (keyboardPanel.y + keyboardPanel.h + 10) : (transportPanel.y + transportPanel.h + 10));
         if (showKaraoke)
         {
             statusY = karaokePanel.y + karaokePanel.h + 5;
@@ -2115,7 +2123,8 @@ int main(int argc, char *argv[])
         draw_text(R, 687, 85, "Volume:", labelCol);
         // Allow volume slider interaction when reverb dropdown is closed. We want
         // users to adjust master volume even while external MIDI input is active.
-        bool volume_enabled = !g_reverbDropdownOpen;
+    // Disable volume interaction when a modal/dialog is open
+    bool volume_enabled = !g_reverbDropdownOpen && !modal_block;
         ui_slider(R, (Rect){687, 103, ddRect.w, 14}, &volume, 0, NEW_MAX_VOLUME_PCT,
                   volume_enabled ? ui_mx : -1, volume_enabled ? ui_my : -1,
                   volume_enabled ? ui_mdown : false, volume_enabled ? ui_mclick : false);
@@ -2161,12 +2170,12 @@ int main(int argc, char *argv[])
             draw_rect(R, controlPanel, dim);
             // Only redraw Volume controls on top so they remain active/visible
             // (Reverb is disabled when playing audio files)
-            // Use raw mouse coordinates and recalculate volume_enabled for audio files
-            bool audio_volume_enabled = !g_reverbDropdownOpen; // Volume should work when playing audio files
+            // Respect modal_block here so volume cannot be adjusted while a dialog is open
+            bool audio_volume_enabled = !g_reverbDropdownOpen && !modal_block; // Volume should work when playing audio files
             draw_text(R, 687, 85, "Volume:", labelCol);
             ui_slider(R, (Rect){687, 103, ddRect.w, 14}, &volume, 0, NEW_MAX_VOLUME_PCT,
-                      audio_volume_enabled ? mx : -1, audio_volume_enabled ? my : -1,
-                      audio_volume_enabled ? mdown : false, audio_volume_enabled ? mclick : false);
+                      audio_volume_enabled ? ui_mx : -1, audio_volume_enabled ? ui_my : -1,
+                      audio_volume_enabled ? ui_mdown : false, audio_volume_enabled ? ui_mclick : false);
             draw_text(R, vtxt_x, vtxt_y, vbuf, labelCol);
             // Draw a notice in the bottom-right of the control panel
             const char *notice = "Audio File Playing";
@@ -2306,6 +2315,7 @@ int main(int argc, char *argv[])
         {
             // Reset when not dragging
             last_drag_progress = -1;
+            last_wave_drag_progress = -1;
         }
 
         // Time display (add milliseconds to current position)
@@ -2502,39 +2512,264 @@ int main(int argc, char *argv[])
             }
         }
 
-        // Virtual MIDI Keyboard Panel (always shown for songs, hidden for audio files)
-        if (showKeyboard)
+        // Virtual MIDI Keyboard Panel (shown for songs) or waveform for audio files
+        if (showKeyboard || (g_bae.is_audio_file && g_bae.sound))
         {
             draw_rect(R, keyboardPanel, panelBg);
             draw_frame(R, keyboardPanel, panelBorder);
-            draw_text(R, keyboardPanel.x + 10, keyboardPanel.y + 8, "VIRTUAL MIDI KEYBOARD", headerCol);
-            // Channel dropdown
-            const char *chanItems[16];
-            char chanBuf[16][8];
-            for (int i = 0; i < 16; i++)
+            if (g_bae.is_audio_file && g_bae.sound)
             {
-                snprintf(chanBuf[i], sizeof(chanBuf[i]), "Ch %d", i + 1);
-                chanItems[i] = chanBuf[i];
+                draw_text(R, keyboardPanel.x + 10, keyboardPanel.y + 8, "WAVEFORM", headerCol);
+                // Waveform area
+                int wfX = keyboardPanel.x + 10;
+                int wfY = keyboardPanel.y + 32;
+                int wfW = keyboardPanel.w - 20;
+                int wfH = keyboardPanel.h - 46;
+                Rect wfRect = {wfX, wfY, wfW, wfH};
+                draw_rect(R, wfRect, g_panel_bg);
+                draw_frame(R, wfRect, g_panel_border);
+                // Inset inner drawing rect by 1px on each side so waveform lines don't overwrite the border
+                int inWfX = wfX + 1;
+                int inWfY = wfY + 1;
+                int inWfW = wfW - 2;
+                int inWfH = wfH - 2;
+                if (inWfW < 1) inWfW = 1;
+                if (inWfH < 1) inWfH = 1;
+
+                // Try to get raw sample pointer and length (in frames)
+                uint32_t frames = 0;
+                void *raw = BAESound_GetSamplePlaybackPointer(g_bae.sound, &frames);
+                if (raw && frames > 0)
+                {
+                    // Determine bit depth/channels via BAESound_GetInfo
+                    BAESampleInfo info;
+                    if (BAESound_GetInfo(g_bae.sound, &info) == BAE_NO_ERROR)
+                    {
+                        int channels = info.channels;
+                        int bitDepth = info.bitSize;
+                        // We'll treat samples as 16-bit signed if bitDepth>=16, else 8-bit unsigned
+                        if (bitDepth >= 16)
+                        {
+                            int16_t *s16 = (int16_t *)raw; // interleaved if stereo
+                            // Compute samples per pixel (use frames -> pixels)
+                            uint32_t frames_per_px = frames / (uint32_t)inWfW;
+                            if (frames_per_px < 1)
+                                frames_per_px = 1;
+                            for (int x = 0; x < inWfW; x++)
+                            {
+                                uint32_t start = (uint32_t)x * frames_per_px;
+                                uint32_t end = start + frames_per_px;
+                                if (end > frames)
+                                    end = frames;
+                                int16_t minv = 0, maxv = 0;
+                                bool inited = false;
+                                for (uint32_t f = start; f < end; f++)
+                                {
+                                    int idx = (int)f * channels; // take first channel for visualization
+                                    int16_t v = s16[idx];
+                                    if (!inited)
+                                    {
+                                        minv = maxv = v;
+                                        inited = true;
+                                    }
+                                    if (v < minv)
+                                        minv = v;
+                                    if (v > maxv)
+                                        maxv = v;
+                                }
+                                // Map min/max to pixel Y
+                                float minf = (float)minv / 32768.0f;
+                                float maxf = (float)maxv / 32768.0f;
+                                int y0 = inWfY + (int)((1.0f - (maxf * 0.5f + 0.5f)) * (inWfH - 2));
+                                int y1 = inWfY + (int)((1.0f - (minf * 0.5f + 0.5f)) * (inWfH - 2));
+                                if (y0 < wfY)
+                                    y0 = inWfY;
+                                if (y1 > inWfY + inWfH - 1)
+                                    y1 = inWfY + inWfH - 1;
+                                SDL_SetRenderDrawColor(R, g_accent_color.r, g_accent_color.g, g_accent_color.b, 255);
+                                SDL_RenderDrawLine(R, inWfX + x, y0, inWfX + x, y1);
+                            }
+                        }
+                        else
+                        {
+                            // 8-bit samples (unsigned)
+                            uint8_t *s8 = (uint8_t *)raw;
+                            uint32_t frames_per_px = frames / (uint32_t)inWfW;
+                            if (frames_per_px < 1)
+                                frames_per_px = 1;
+                            for (int x = 0; x < inWfW; x++)
+                            {
+                                uint32_t start = (uint32_t)x * frames_per_px;
+                                uint32_t end = start + frames_per_px;
+                                if (end > frames)
+                                    end = frames;
+                                uint8_t minv = 128, maxv = 128;
+                                for (uint32_t f = start; f < end; f++)
+                                {
+                                    uint8_t v = s8[f * info.channels];
+                                    if (v < minv)
+                                        minv = v;
+                                    if (v > maxv)
+                                        maxv = v;
+                                }
+                                float minf = ((float)minv - 128.0f) / 128.0f;
+                                float maxf = ((float)maxv - 128.0f) / 128.0f;
+                                int y0 = inWfY + (int)((1.0f - (maxf * 0.5f + 0.5f)) * (inWfH - 2));
+                                int y1 = inWfY + (int)((1.0f - (minf * 0.5f + 0.5f)) * (inWfH - 2));
+                                if (y0 < inWfY)
+                                    y0 = inWfY;
+                                if (y1 > inWfY + inWfH - 1)
+                                    y1 = inWfY + inWfH - 1;
+                                SDL_SetRenderDrawColor(R, g_accent_color.r, g_accent_color.g, g_accent_color.b, 255);
+                                SDL_RenderDrawLine(R, inWfX + x, y0, inWfX + x, y1);
+                            }
+                        }
+                    }
+                }
+
+                // Waveform click-to-seek handling: compute target ms for hover/drag preview
+                // and only perform the actual engine seek on mouse-up. This avoids
+                // repeated seeks while the user holds the mouse in place.
+                int wf_relx = -1;
+                // Use inner waveform rect for hit-testing so clicks near the border
+                // don't map onto waveform pixels that would overdraw the frame.
+                if (ui_mx >= inWfX && ui_mx < inWfX + inWfW && ui_my >= inWfY && ui_my < inWfY + inWfH)
+                {
+                    wf_relx = ui_mx - inWfX;
+                    if (wf_relx < 0)
+                        wf_relx = 0;
+                    if (wf_relx > inWfW - 1)
+                        wf_relx = inWfW - 1;
+                }
+
+                // Helper to map pixel->ms
+                int computed_ms = -1;
+                if (wf_relx >= 0)
+                {
+                    BAESampleInfo info2;
+                    if (BAESound_GetInfo(g_bae.sound, &info2) == BAE_NO_ERROR)
+                    {
+                        double sampleRate = (double)(info2.sampledRate >> 16) + (double)(info2.sampledRate & 0xFFFF) / 65536.0;
+                        if (sampleRate > 0 && audio_total_frames > 0)
+                        {
+                            double frac = (double)wf_relx / (double)(inWfW);
+                            if (frac < 0.0) frac = 0.0;
+                            if (frac > 1.0) frac = 1.0;
+                            uint32_t frame_position = (uint32_t)((double)audio_total_frames * frac);
+                            if (frame_position >= audio_total_frames) frame_position = audio_total_frames - 1;
+                            computed_ms = (int)((double)frame_position * 1000.0 / sampleRate);
+                        }
+                    }
+                }
+
+                // Dragging: update preview but don't call engine seek until mouse-up
+                static int waveform_preview_ms = -1;
+                const int WAVEFORM_SEEK_DEADZONE_MS = 40; // avoid tiny-seek jitter while holding
+                if (ui_mdown && computed_ms >= 0)
+                {
+                    // Only update preview/progress if it changed beyond deadzone
+                    if (waveform_preview_ms < 0 || abs(computed_ms - waveform_preview_ms) > WAVEFORM_SEEK_DEADZONE_MS)
+                    {
+                        waveform_preview_ms = computed_ms;
+                        progress = waveform_preview_ms; // show preview position in UI
+                        last_wave_drag_progress = waveform_preview_ms;
+                    }
+                }
+                else if (!mdown)
+                {
+                    // If mouse released over waveform, perform actual seek on mouse-up
+                    if (ui_mclick && computed_ms >= 0)
+                    {
+                        int target_ms = computed_ms;
+                        // prefer preview if it exists
+                        if (waveform_preview_ms >= 0)
+                            target_ms = waveform_preview_ms;
+                        bae_seek_ms(target_ms);
+                        progress = target_ms;
+                        // User-initiated seek -> set total-play timer to the new position
+                        g_total_play_ms = target_ms;
+                        g_last_engine_pos_ms = target_ms;
+                        // Clear any sounding virtual keyboard notes on user-initiated seek
+                        if (g_show_virtual_keyboard)
+                        {
+                            BAESong target = g_bae.song ? g_bae.song : g_live_song;
+                            if (target)
+                            {
+                                for (int n = 0; n < 128; n++)
+                                {
+                                    BAESong_NoteOff(target, (unsigned char)g_keyboard_channel, (unsigned char)n, 0, 0);
+                                }
+                            }
+                            g_keyboard_mouse_note = -1;
+                            memset(g_keyboard_active_notes, 0, sizeof(g_keyboard_active_notes));
+                            g_keyboard_suppress_until = SDL_GetTicks() + 250;
+                        }
+                    }
+                    // Reset preview state when not dragging
+                    waveform_preview_ms = -1;
+                    last_wave_drag_progress = -1;
+                }
+
+                // Draw a playhead indicator for the preview or current position
+                int playhead_ms = (waveform_preview_ms >= 0) ? waveform_preview_ms : progress;
+                if (playhead_ms >= 0 && audio_total_frames > 0)
+                {
+                    BAESampleInfo info3;
+                    if (BAESound_GetInfo(g_bae.sound, &info3) == BAE_NO_ERROR)
+                    {
+                        double sampleRate = (double)(info3.sampledRate >> 16) + (double)(info3.sampledRate & 0xFFFF) / 65536.0;
+                        if (sampleRate > 0)
+                        {
+                            uint32_t frame_pos = (uint32_t)((double)playhead_ms * sampleRate / 1000.0);
+                            if (frame_pos >= audio_total_frames) frame_pos = audio_total_frames - 1;
+                            double frac = (double)frame_pos / (double)audio_total_frames;
+                            int phx = inWfX + (int)(frac * inWfW);
+                            SDL_SetRenderDrawColor(R, g_highlight_color.r, g_highlight_color.g, g_highlight_color.b, 220);
+                            SDL_RenderDrawLine(R, phx, inWfY, phx, inWfY + inWfH - 1);
+                        }
+                    }
+                }
+                // If we're showing waveform only, skip rest of keyboard rendering
+                if (g_bae.is_audio_file && g_bae.sound)
+                {
+                    goto SKIP_KEYBOARD_RENDER;
+                }
             }
-            Rect chanDD = {keyboardPanel.x + 10, keyboardPanel.y + 28, 90, 22};
-            // Render main dropdown box
-            SDL_Color ddBg = g_button_base;
-            SDL_Color ddTxt = g_button_text;
-            SDL_Color ddFrame = g_button_border;
-            bool overDD = point_in(ui_mx, ui_my, chanDD);
-            if (overDD)
-                ddBg = g_button_hover;
-            draw_rect(R, chanDD, ddBg);
-            draw_frame(R, chanDD, ddFrame);
-            draw_text(R, chanDD.x + 6, chanDD.y + 2, chanItems[g_keyboard_channel], ddTxt);
-            draw_text(R, chanDD.x + chanDD.w - 16, chanDD.y + 1, g_keyboard_channel_dd_open ? "^" : "v", ddTxt);
-            if (!modal_block && ui_mclick && overDD)
+            else
             {
-                g_keyboard_channel_dd_open = !g_keyboard_channel_dd_open;
+                draw_text(R, keyboardPanel.x + 10, keyboardPanel.y + 8, "VIRTUAL MIDI KEYBOARD", headerCol);
             }
-            // (Dropdown list itself drawn later for proper z-order)
-            if (!g_keyboard_channel_dd_open && ui_mclick && !overDD)
-            { /* no-op */
+            // When waveform is shown we don't render the virtual keyboard controls
+            if (!(g_bae.is_audio_file && g_bae.sound))
+            {
+                // Channel dropdown
+                const char *chanItems[16];
+                char chanBuf[16][8];
+                for (int i = 0; i < 16; i++)
+                {
+                    snprintf(chanBuf[i], sizeof(chanBuf[i]), "Ch %d", i + 1);
+                    chanItems[i] = chanBuf[i];
+                }
+                Rect chanDD = {keyboardPanel.x + 10, keyboardPanel.y + 28, 90, 22};
+                // Render main dropdown box
+                SDL_Color ddBg = g_button_base;
+                SDL_Color ddTxt = g_button_text;
+                SDL_Color ddFrame = g_button_border;
+                bool overDD = point_in(ui_mx, ui_my, chanDD);
+                if (overDD)
+                    ddBg = g_button_hover;
+                draw_rect(R, chanDD, ddBg);
+                draw_frame(R, chanDD, ddFrame);
+                draw_text(R, chanDD.x + 6, chanDD.y + 2, chanItems[g_keyboard_channel], ddTxt);
+                draw_text(R, chanDD.x + chanDD.w - 16, chanDD.y + 1, g_keyboard_channel_dd_open ? "^" : "v", ddTxt);
+                if (!modal_block && ui_mclick && overDD)
+                {
+                    g_keyboard_channel_dd_open = !g_keyboard_channel_dd_open;
+                }
+                // (Dropdown list itself drawn later for proper z-order)
+                if (!g_keyboard_channel_dd_open && ui_mclick && !overDD)
+                { /* no-op */
+                }
             }
             // Merge engine-driven active notes with notes coming from external
             // MIDI input so incoming MIDI lights the virtual keys even when
@@ -2875,6 +3110,7 @@ int main(int argc, char *argv[])
                 }
             }
         }
+    SKIP_KEYBOARD_RENDER:        
         {
             Rect loopR = {160, 215, 20, 20};
             bool clicked = false;
@@ -4382,7 +4618,7 @@ int main(int argc, char *argv[])
         if (showKeyboard)
         {
             {
-                Rect allR = {20, 337, 16, 16}; // chStartX=20, chStartY=40, y offset +200 (+5px)
+                Rect allR = {20, keyboardPanel.y + 82, 16, 16}; // position relative to keyboard panel
                 bool allHover = point_in(ui_mx, ui_my, allR);
                 bool allClickable = (!g_keyboard_channel_dd_open && !modal_block);
                 if (allClickable && ui_mclick && allHover)
