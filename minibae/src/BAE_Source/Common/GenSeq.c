@@ -402,7 +402,6 @@ System Exclusive ID number:
 #if SUPPORT_IGOR_FEATURE
 static void PV_SetSampleIntoCache(GM_Song *pSong, XSampleID theID, XBankToken bankToken, XPTR pSndFormatData, OPErr *pErr);
 #endif
-static XBOOL PV_DetectRolledMIDI(GM_Song *pSong);
 
 // Scale the division amount by the current tempo:
 static void PV_ScaleDivision(GM_Song *pSong, UFLOAT div)
@@ -669,9 +668,6 @@ OPErr PV_ConfigureMusic(GM_Song *pSong)
                     {
                         theErr = NO_ERR; // all is well in midi land
                         BAE_PRINTF("DEBUG: PV_ConfigureMusic: Parsed %u tracks successfully.\n", (unsigned)numtracks);
-                        
-                        // Detect rolled MIDI format
-                        pSong->isRolledMIDI = PV_DetectRolledMIDI(pSong);
                     }
                     else
                     {
@@ -687,9 +683,6 @@ OPErr PV_ConfigureMusic(GM_Song *pSong)
                             BAE_PRINTF("WARN: PV_ConfigureMusic: Declared %u tracks but found %u. Parsing %u extra track(s).\n", (unsigned)realtracks, (unsigned)numtracks, (unsigned)(numtracks - realtracks));
                             realtracks = numtracks;
                             theErr = NO_ERR;
-                            
-                            // Detect rolled MIDI format
-                            pSong->isRolledMIDI = PV_DetectRolledMIDI(pSong);
                         }
                         else
                         {
@@ -713,15 +706,6 @@ OPErr PV_ConfigureMusic(GM_Song *pSong)
         }
     }
     return theErr;
-}
-
-// Analyze track content to detect "rolled" MIDI format
-// Returns TRUE if this appears to be a rolled MIDI file
-static XBOOL PV_DetectRolledMIDI(GM_Song *pSong)
-{
-    (void)pSong; // parameter retained for API compatibility
-    // Rolled-MIDI support removed; always treat as normal MIDI
-    return FALSE;
 }
 
 // Process any fading song voices
@@ -1226,16 +1210,6 @@ XBOOL GM_GetSongMetaLoopFlag(GM_Song *theSong)
     if (theSong)
     {
         return (XBOOL)(theSong->metaLoopDisabled) ? FALSE : TRUE;
-    }
-    return FALSE;
-}
-
-// return TRUE if this is a "rolled" MIDI format (no dominant track)
-XBOOL GM_IsRolledMIDI(GM_Song *pSong)
-{
-    if (pSong)
-    {
-        return pSong->isRolledMIDI;
     }
     return FALSE;
 }

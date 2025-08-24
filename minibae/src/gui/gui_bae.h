@@ -137,7 +137,6 @@ void bae_set_song_finished(bool finished);
 bool bae_is_playing(void);
 void bae_set_is_playing(bool playing);
 uint32_t bae_get_song_length_us(void);
-uint32_t bae_get_rolled_midi_loop_length_us(void);
 void bae_create_live_song(void);
 void bae_delete_live_song(void);
 bool bae_get_bank_name(char *name, size_t name_size);

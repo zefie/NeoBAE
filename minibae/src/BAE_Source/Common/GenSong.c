@@ -1,21 +1,21 @@
 /*
     Copyright (c) 2009 Beatnik, Inc All rights reserved.
-    
+
     Redistribution and use in source and binary forms, with or without
     modification, are permitted provided that the following conditions are
     met:
-    
+
     Redistributions of source code must retain the above copyright notice,
     this list of conditions and the following disclaimer.
-    
+
     Redistributions in binary form must reproduce the above copyright
     notice, this list of conditions and the following disclaimer in the
     documentation and/or other materials provided with the distribution.
-    
+
     Neither the name of the Beatnik, Inc nor the names of its contributors
     may be used to endorse or promote products derived from this software
     without specific prior written permission.
-    
+
     THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS
     IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
     TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
@@ -127,15 +127,15 @@
 **  6/5/98      Jim Nitchals RIP    1/15/62 - 6/5/98
 **              I'm going to miss your irreverent humor. Your coding style and desire
 **              to make things as fast as possible. Your collaboration behind this entire
-**              codebase. Your absolute belief in creating the best possible relationships 
-**              from honesty and integrity. Your ability to enjoy conversation. Your business 
-**              savvy in understanding the big picture. Your gentleness. Your willingness 
-**              to understand someone else's way of thinking. Your debates on the latest 
-**              political issues. Your generosity. Your great mimicking of cartoon voices. 
+**              codebase. Your absolute belief in creating the best possible relationships
+**              from honesty and integrity. Your ability to enjoy conversation. Your business
+**              savvy in understanding the big picture. Your gentleness. Your willingness
+**              to understand someone else's way of thinking. Your debates on the latest
+**              political issues. Your generosity. Your great mimicking of cartoon voices.
 **              Your friendship. - Steve Hales
 **
 **  6/30/98     Removed INT16 casting in GM_MergeExternalSong
-**              Changed GM_LoadSong/GM_CreateLiveSong to accept a int32_t rather than a short for 
+**              Changed GM_LoadSong/GM_CreateLiveSong to accept a int32_t rather than a short for
 **              the songID
 **  7/6/98      Added GM_IsSongInstrumentLoaded
 **              Fixed type problems with GM_LoadSong & PV_CreateSongFromMidi
@@ -180,17 +180,17 @@
 **              alias link for the current patch bank.
 **  4/25/2000   msd: added GM_GetProgramBank() to support MiniBAE API lego.
 **  2000.05.16 AER  Completed modifications for new sample cache
-**  2000.05.25 sh   Use GM_SetSongLoopFlag/GM_GetSongLoopFlag instead of touching 
+**  2000.05.25 sh   Use GM_SetSongLoopFlag/GM_GetSongLoopFlag instead of touching
 **                  the structure GM_Song directly
-**  6/19/2000   jsc: in GM_SetSongTickPosition, if song was paused, then don't resume song  
+**  6/19/2000   jsc: in GM_SetSongTickPosition, if song was paused, then don't resume song
 **  2000.07.14 AER  Modified access to XBankTokens for new system
-**  8/27/2000   sh  Changed GM_SetSongTickPosition & GM_SetSongMicrosecondPosition to return 
+**  8/27/2000   sh  Changed GM_SetSongTickPosition & GM_SetSongMicrosecondPosition to return
 **                  a error code correctly.
 **  12/7/2000   sh  Changed GM_GetSongTickLength & GM_GetSongMicrosecondLength to return
 **                  an overflow error.
 **  1/25/2001   sh  Added GM_IsSongPrerolled.
 **  2/14/2001   se  Found pause/resume bug in GM_SetSongTickPosition/GM_SetSongMicrosecondPosition
-**  2/16/2001   se  Modified GM_SetSongMicrosecondPosition to kill current notes rather than 
+**  2/16/2001   se  Modified GM_SetSongMicrosecondPosition to kill current notes rather than
 **                  allow them to release.
 **  3/8/2001    se  Modified GM_GetSongTickLength to stop calculation
 **                  when the song being operated on has a duration of over one hour.
@@ -211,14 +211,13 @@
 
 // Functions
 
-
-static GM_Song * PV_CreateSongFromMidi(XLongResourceID theID,
-                                        XPTR useThisMidiData, int32_t midiSize,
-                                        OPErr *pErr)
+static GM_Song *PV_CreateSongFromMidi(XLongResourceID theID,
+                                      XPTR useThisMidiData, int32_t midiSize,
+                                      OPErr *pErr)
 {
-    XPTR        theMidiData;
-    GM_Song     *theSong;
-    OPErr       err;
+    XPTR theMidiData;
+    GM_Song *theSong;
+    OPErr err;
 
     err = NO_ERR;
     theSong = NULL;
@@ -243,7 +242,7 @@ static GM_Song * PV_CreateSongFromMidi(XLongResourceID theID,
         {
             // Initialize the structure to zero to avoid garbage values
             XSetMemory(theSong, sizeof(GM_Song), 0);
-            
+
             theSong->sequenceData = theMidiData;
             theSong->sequenceDataSize = midiSize;
             theSong->seqType = SEQ_MIDI;
@@ -273,82 +272,83 @@ static void PV_SetTempo(GM_Song *pSong, int32_t masterTempo)
             masterTempo = 16667;
         }
         masterTempo = (100L * masterTempo) / 16667;
-        if (masterTempo < 25) masterTempo = 25;
-        if (masterTempo > 300) masterTempo = 300;
+        if (masterTempo < 25)
+            masterTempo = 25;
+        if (masterTempo > 300)
+            masterTempo = 300;
         GM_SetMasterSongTempo(pSong, (masterTempo << 16L) / 100L);
     }
 }
 
 void GM_MergeExternalSong(void *theExternalSong, XShortResourceID theSongID, GM_Song *theSong)
 {
-    int16_t           maps;
-    int16_t           count;
-    int16_t           number;
-    SongResource_SMS    *songSMS;
-    SongResource_RMF    *songRMF;
-    Remap               *pMap;
+    int16_t maps;
+    int16_t count;
+    int16_t number;
+    SongResource_SMS *songSMS;
+    SongResource_RMF *songRMF;
+    Remap *pMap;
 
     if (theExternalSong && theSong)
     {
         switch (((SongResource_SMS *)theExternalSong)->songType)
         {
-            case SONG_TYPE_SMS:
-                songSMS = (SongResource_SMS *)theExternalSong;
-                theSong->songID = theSongID;
-                theSong->songPitchShift = songSMS->songPitchShift;
-                theSong->allowProgramChanges = (songSMS->flags1 & XBF_enableMIDIProgram) ? TRUE : FALSE;
-                theSong->defaultPercusionProgram = songSMS->defaultPercusionProgram;
+        case SONG_TYPE_SMS:
+            songSMS = (SongResource_SMS *)theExternalSong;
+            theSong->songID = theSongID;
+            theSong->songPitchShift = songSMS->songPitchShift;
+            theSong->allowProgramChanges = (songSMS->flags1 & XBF_enableMIDIProgram) ? TRUE : FALSE;
+            theSong->defaultPercusionProgram = songSMS->defaultPercusionProgram;
 #if REVERB_USED != REVERB_DISABLED
-                theSong->defaultReverbType = songSMS->reverbType;
+            theSong->defaultReverbType = songSMS->reverbType;
 #endif
-                theSong->maxSongVoices = songSMS->maxNotes;
-                theSong->mixLevel = XGetShort(&songSMS->mixLevel);
-                theSong->maxEffectVoices = songSMS->maxEffects;
-                theSong->ignoreBadInstruments = (songSMS->flags2 & XBF_ignoreBadPatches) ? TRUE : FALSE;
-                maps = XGetShort(&songSMS->remapCount);
-                PV_SetTempo(theSong, XGetShort(&songSMS->songTempo));
-                theSong->songVolume = XGetSongVolume((SongResource *)theExternalSong);
+            theSong->maxSongVoices = songSMS->maxNotes;
+            theSong->mixLevel = XGetShort(&songSMS->mixLevel);
+            theSong->maxEffectVoices = songSMS->maxEffects;
+            theSong->ignoreBadInstruments = (songSMS->flags2 & XBF_ignoreBadPatches) ? TRUE : FALSE;
+            maps = XGetShort(&songSMS->remapCount);
+            PV_SetTempo(theSong, XGetShort(&songSMS->songTempo));
+            theSong->songVolume = XGetSongVolume((SongResource *)theExternalSong);
 
-        // Load instruments
-                if (maps)
+            // Load instruments
+            if (maps)
+            {
+                pMap = (Remap *)&songSMS->remaps;
+                for (count = 0; count < maps; count++)
                 {
-                    pMap = (Remap *)&songSMS->remaps;
-                    for (count = 0; count < maps; count++)
-                    {
-                        number = XGetShort(&pMap[count].instrumentNumber) & ((MAX_INSTRUMENTS*MAX_BANKS)-1);
-                        theSong->remapArray[number] = XGetShort(&pMap[count].ResourceINSTID);
-                    }
+                    number = XGetShort(&pMap[count].instrumentNumber) & ((MAX_INSTRUMENTS * MAX_BANKS) - 1);
+                    theSong->remapArray[number] = XGetShort(&pMap[count].ResourceINSTID);
                 }
-                break;
-        
-            case SONG_TYPE_RMF:
-                songRMF = (SongResource_RMF *)theExternalSong;
-                theSong->songID = theSongID;
-                theSong->songPitchShift = songRMF->songPitchShift;
-                theSong->allowProgramChanges = TRUE;            // aloways allow program changes
-                theSong->defaultPercusionProgram = -1;          // GM percussion only
+            }
+            break;
+
+        case SONG_TYPE_RMF:
+            songRMF = (SongResource_RMF *)theExternalSong;
+            theSong->songID = theSongID;
+            theSong->songPitchShift = songRMF->songPitchShift;
+            theSong->allowProgramChanges = TRUE;   // aloways allow program changes
+            theSong->defaultPercusionProgram = -1; // GM percussion only
 #if REVERB_USED != REVERB_DISABLED
-                theSong->defaultReverbType = songRMF->reverbType;
+            theSong->defaultReverbType = songRMF->reverbType;
 #endif
-                theSong->maxSongVoices = XGetShort(&songRMF->maxNotes);
-                theSong->mixLevel = XGetShort(&songRMF->mixLevel);
-                theSong->maxEffectVoices = XGetShort(&songRMF->maxEffects);
-                theSong->ignoreBadInstruments = TRUE;
-                PV_SetTempo(theSong, XGetShort(&songRMF->songTempo));
-                theSong->songVolume = XGetSongVolume((SongResource *)theExternalSong);
-                break;
+            theSong->maxSongVoices = XGetShort(&songRMF->maxNotes);
+            theSong->mixLevel = XGetShort(&songRMF->mixLevel);
+            theSong->maxEffectVoices = XGetShort(&songRMF->maxEffects);
+            theSong->ignoreBadInstruments = TRUE;
+            PV_SetTempo(theSong, XGetShort(&songRMF->songTempo));
+            theSong->songVolume = XGetSongVolume((SongResource *)theExternalSong);
+            break;
         }
     }
 }
 
-
 static void PV_ClearSongInstruments(GM_Song *pSong)
 {
-    int32_t    count;
+    int32_t count;
 
     if (pSong)
     {
-        for (count = 0; count < (MAX_INSTRUMENTS*MAX_BANKS); count++)
+        for (count = 0; count < (MAX_INSTRUMENTS * MAX_BANKS); count++)
         {
             pSong->instrumentData[count] = NULL;
         }
@@ -356,9 +356,9 @@ static void PV_ClearSongInstruments(GM_Song *pSong)
 }
 
 // return valid context for song that was passed in when calling GM_LoadSong or GM_CreateLiveSong
-void * GM_GetSongContext(GM_Song *pSong)
+void *GM_GetSongContext(GM_Song *pSong)
 {
-    void    *context;
+    void *context;
 
     context = NULL;
     if (pSong)
@@ -378,7 +378,7 @@ void GM_SetSongContext(GM_Song *pSong, void *context)
 }
 
 // return associated Mixer from Song
-GM_Mixer * GM_GetSongMixer(GM_Song *pSong)
+GM_Mixer *GM_GetSongMixer(GM_Song *pSong)
 {
     if (pSong)
     {
@@ -390,7 +390,7 @@ GM_Mixer * GM_GetSongMixer(GM_Song *pSong)
 // Associate a Mixer to a Song
 OPErr GM_SetSongMixer(GM_Song *pSong, GM_Mixer *pMixer)
 {
-    OPErr   err;
+    OPErr err;
 
     err = NO_ERR;
     if (pSong && pMixer)
@@ -433,9 +433,9 @@ static int16_t PV_GetMaxVoicesPlayingFromAllSongs(void)
 // This will walk through all active songs and return a max mix level used for midi
 static int16_t PV_GetMixLevelPlayingFromAllSongs(void)
 {
-    register GM_Mixer       *pMixer;
-    register GM_Song        *pSong;
-    register int16_t      count, mix;
+    register GM_Mixer *pMixer;
+    register GM_Song *pSong;
+    register int16_t count, mix;
 
     mix = 0;
     pMixer = MusicGlobals;
@@ -461,12 +461,12 @@ static int16_t PV_GetMixLevelPlayingFromAllSongs(void)
 // Returns -1, if failure.
 static int16_t PV_FindEmptySongSlot(GM_Mixer *pMixer, GM_Song *pSong)
 {
-    int16_t   songSlot = -1;
-    int16_t   count;
+    int16_t songSlot = -1;
+    int16_t count;
 
     if (pSong)
     {
-// first find a slot in the song queue
+        // first find a slot in the song queue
         for (count = 0; count < MAX_SONGS; count++)
         {
             // Reuse slot, if song already playing
@@ -495,12 +495,12 @@ static int16_t PV_FindEmptySongSlot(GM_Mixer *pMixer, GM_Song *pSong)
 }
 
 // preroll song but don't start
-OPErr GM_PrerollSong(GM_Song *pSong, GM_SongCallbackProcPtr theCallbackProc, 
-                    XBOOL useEmbeddedMixerSettings, XBOOL autoLevel)
+OPErr GM_PrerollSong(GM_Song *pSong, GM_SongCallbackProcPtr theCallbackProc,
+                     XBOOL useEmbeddedMixerSettings, XBOOL autoLevel)
 {
-    OPErr       theErr;
-    int16_t   count;
-    INT16       sMaxSong, sMixLevel, sMaxEffect;
+    OPErr theErr;
+    int16_t count;
+    INT16 sMaxSong, sMixLevel, sMaxEffect;
 
     theErr = NO_ERR;
     if (pSong)
@@ -518,7 +518,7 @@ OPErr GM_PrerollSong(GM_Song *pSong, GM_SongCallbackProcPtr theCallbackProc,
             theErr = BAD_FILE;
         }
         if (theErr == NO_ERR)
-        {   
+        {
             pSong->SomeTrackIsAlive = TRUE;
             pSong->songFinished = FALSE;
 
@@ -541,14 +541,14 @@ OPErr GM_PrerollSong(GM_Song *pSong, GM_SongCallbackProcPtr theCallbackProc,
                 XClearBit(&pSong->soloChannelMuted, count);
                 XSetBit(&pSong->allowPitchShift, count);
             }
-            XClearBit(&pSong->allowPitchShift, PERCUSSION_CHANNEL);     // don't allow pitch changes on percussion
+            XClearBit(&pSong->allowPitchShift, PERCUSSION_CHANNEL); // don't allow pitch changes on percussion
 
             pSong->velocityCurveType = DEFAULT_VELOCITY_CURVE;
 
 #if REVERB_USED != REVERB_DISABLED
-            // reconfigure reverb settings if desired   
+            // reconfigure reverb settings if desired
             // Set reverb type now.
-            GM_SetReverbType(pSong->defaultReverbType); 
+            GM_SetReverbType(pSong->defaultReverbType);
 #endif
 #if 0
             autoLevel = TRUE;
@@ -557,15 +557,15 @@ OPErr GM_PrerollSong(GM_Song *pSong, GM_SongCallbackProcPtr theCallbackProc,
             if (autoLevel)
             {
 
-                pSong->mixLevel = (pSong->averageVoiceUsage * 90) / 100;    // reduce by 10%
+                pSong->mixLevel = (pSong->averageVoiceUsage * 90) / 100; // reduce by 10%
                 if (pSong->mixLevel < 1)
                 {
                     pSong->mixLevel = 1;
                 }
                 pSong->maxSongVoices = MAX_VOICES - pSong->maxEffectVoices;
 
-                //BAE_PRINTF("audio::max voices from all songs %d\n", PV_GetMaxVoicesPlayingFromAllSongs());
-                //BAE_PRINTF("audio::mix level from all songs %d\n", PV_GetMixLevelPlayingFromAllSongs());
+                // BAE_PRINTF("audio::max voices from all songs %d\n", PV_GetMaxVoicesPlayingFromAllSongs());
+                // BAE_PRINTF("audio::mix level from all songs %d\n", PV_GetMixLevelPlayingFromAllSongs());
 
                 GM_GetSystemVoices(&sMaxSong, &sMixLevel, &sMaxEffect);
                 // if the mix level for all currently playing songs is not 0, then reconfigure mix level only up
@@ -580,18 +580,18 @@ OPErr GM_PrerollSong(GM_Song *pSong, GM_SongCallbackProcPtr theCallbackProc,
                     }
                 }
 
-                //BAE_PRINTF("audio::Song mix %d midi %d pcm %d\n", pSong->mixLevel, pSong->maxSongVoices, pSong->maxEffectVoices);
-                //BAE_PRINTF("audio::Mixer mix %d midi %d pcm %d\n", sMixLevel, sMaxSong, sMaxEffect);
-                useEmbeddedMixerSettings = TRUE;    // force a reconfigure
+                // BAE_PRINTF("audio::Song mix %d midi %d pcm %d\n", pSong->mixLevel, pSong->maxSongVoices, pSong->maxEffectVoices);
+                // BAE_PRINTF("audio::Mixer mix %d midi %d pcm %d\n", sMixLevel, sMaxSong, sMaxEffect);
+                useEmbeddedMixerSettings = TRUE; // force a reconfigure
             }
-            // reconfigure global mixer settings if desired 
+            // reconfigure global mixer settings if desired
             if (useEmbeddedMixerSettings)
             {
                 theErr = GM_ChangeSystemVoices(pSong->maxSongVoices,
-                                            pSong->mixLevel,
-                                            pSong->maxEffectVoices);
+                                               pSong->mixLevel,
+                                               pSong->maxEffectVoices);
                 GM_GetSystemVoices(&sMaxSong, &sMixLevel, &sMaxEffect);
-                //BAE_PRINTF("audio::mixer settings: mix %d midi %d pcm %d\n", sMixLevel, sMaxSong, sMaxEffect);
+                // BAE_PRINTF("audio::mixer settings: mix %d midi %d pcm %d\n", sMixLevel, sMaxSong, sMaxEffect);
             }
             // allocate song song, but don't play sequencer
             pSong->songPaused = TRUE;
@@ -604,7 +604,7 @@ OPErr GM_PrerollSong(GM_Song *pSong, GM_SongCallbackProcPtr theCallbackProc,
 // return preroll status
 XBOOL GM_IsSongPrerolled(GM_Song *pSong)
 {
-    XBOOL   roll;
+    XBOOL roll;
 
     roll = FALSE;
     if (pSong)
@@ -615,12 +615,12 @@ XBOOL GM_IsSongPrerolled(GM_Song *pSong)
 }
 
 // Set up the system to start playing a song
-OPErr GM_BeginSong(GM_Song *pSong, GM_SongCallbackProcPtr theCallbackProc, 
-                    XBOOL useEmbeddedMixerSettings, XBOOL autoLevel)
+OPErr GM_BeginSong(GM_Song *pSong, GM_SongCallbackProcPtr theCallbackProc,
+                   XBOOL useEmbeddedMixerSettings, XBOOL autoLevel)
 {
-    OPErr       theErr;
-    GM_Mixer    *pMixer = GM_GetCurrentMixer();
-    int16_t   songSlot;
+    OPErr theErr;
+    GM_Mixer *pMixer = GM_GetCurrentMixer();
+    int16_t songSlot;
 
     theErr = NO_ERR;
     if (pSong)
@@ -640,7 +640,7 @@ OPErr GM_BeginSong(GM_Song *pSong, GM_SongCallbackProcPtr theCallbackProc,
             {
                 pMixer->pSongsToPlay[songSlot] = pSong;
                 pSong->songPrerolled = FALSE;
-                pSong->songPaused = FALSE;      // start sequencer
+                pSong->songPaused = FALSE; // start sequencer
             }
             else
             {
@@ -657,7 +657,7 @@ OPErr GM_BeginSong(GM_Song *pSong, GM_SongCallbackProcPtr theCallbackProc,
 
 XSWORD GM_GetSongRouteBus(GM_Song *pSong)
 {
-    XSWORD  routeBus;
+    XSWORD routeBus;
 
     routeBus = 0;
     if (pSong)
@@ -669,7 +669,7 @@ XSWORD GM_GetSongRouteBus(GM_Song *pSong)
 
 OPErr GM_SetSongRouteBus(GM_Song *pSong, XSWORD routeBus)
 {
-    OPErr   theErr = NO_ERR;
+    OPErr theErr = NO_ERR;
 
     if (pSong)
     {
@@ -685,7 +685,7 @@ OPErr GM_SetSongRouteBus(GM_Song *pSong, XSWORD routeBus)
 // Get song priority level. Higher values will allow for better note stealing.
 XSWORD GM_GetSongPriority(GM_Song *pSong)
 {
-    XSWORD  priority;
+    XSWORD priority;
 
     priority = 0;
     if (pSong)
@@ -698,7 +698,7 @@ XSWORD GM_GetSongPriority(GM_Song *pSong)
 // Set song priority level. Higher values will allow for better note stealing.
 OPErr GM_SetSongPriority(GM_Song *pSong, XSWORD songPriority)
 {
-    OPErr   theErr = NO_ERR;
+    OPErr theErr = NO_ERR;
 
     if (pSong)
     {
@@ -715,10 +715,10 @@ OPErr GM_SetSongPriority(GM_Song *pSong, XSWORD songPriority)
 
 OPErr GM_SetupSongRemaps(GM_Song *pSong, XBOOL checkForAliases)
 {
-    int16_t           count;
-    XAliasLinkResource  *pAlias;
-    XLongResourceID     newInstrumentID;
-    OPErr               err;
+    int16_t count;
+    XAliasLinkResource *pAlias;
+    XLongResourceID newInstrumentID;
+    OPErr err;
 
     err = NO_ERR;
     if (pSong)
@@ -728,11 +728,11 @@ OPErr GM_SetupSongRemaps(GM_Song *pSong, XBOOL checkForAliases)
         // Fill in remap first
         if (checkForAliases)
         {
-            pAlias = XGetAliasLink();   // get current aliases
+            pAlias = XGetAliasLink(); // get current aliases
         }
-        for (count = 0; count < MAX_INSTRUMENTS*MAX_BANKS; count++)
+        for (count = 0; count < MAX_INSTRUMENTS * MAX_BANKS; count++)
         {
-            pSong->remapArray[count] = (XLongResourceID)count;      // no remap
+            pSong->remapArray[count] = (XLongResourceID)count; // no remap
             if (checkForAliases)
             {
                 if (XLookupAlias(pAlias, (XLongResourceID)count, &newInstrumentID) == 0)
@@ -755,7 +755,7 @@ OPErr GM_SetupSongRemaps(GM_Song *pSong, XBOOL checkForAliases)
 
 OPErr GM_GetSongInstrumentRemap(GM_Song *pSong, XLongResourceID fromInstrument, XLongResourceID *pToInstrument)
 {
-    OPErr               err;
+    OPErr err;
 
     err = NO_ERR;
     if (pSong && pToInstrument)
@@ -772,12 +772,12 @@ OPErr GM_GetSongInstrumentRemap(GM_Song *pSong, XLongResourceID fromInstrument, 
 // This will remap the 'from' instrument into the 'to' instrument.
 OPErr GM_RemapInstrument(GM_Song *pSong, XLongResourceID from, XLongResourceID to)
 {
-    OPErr           theErr;
+    OPErr theErr;
 
     theErr = BAD_INSTRUMENT;
-    if (pSong && (from >= 0) && (from < MAX_INSTRUMENTS*MAX_BANKS) )
+    if (pSong && (from >= 0) && (from < MAX_INSTRUMENTS * MAX_BANKS))
     {
-        if ( (to >= 0) && (to < MAX_INSTRUMENTS*MAX_BANKS) )
+        if ((to >= 0) && (to < MAX_INSTRUMENTS * MAX_BANKS))
         {
             if (to != from)
             {
@@ -802,10 +802,10 @@ OPErr GM_RemapInstrument(GM_Song *pSong, XLongResourceID from, XLongResourceID t
 //  context             context of song creation. C++ 'this' pointer, thread, etc.
 //                      Its just stored in the GM_Song->context variable
 //  songID              unique ID for song structure
-GM_Song * GM_CreateLiveSong(void *context, XShortResourceID songID)
+GM_Song *GM_CreateLiveSong(void *context, XShortResourceID songID)
 {
-    GM_Song             *pSong;
-    int16_t           count;
+    GM_Song *pSong;
+    int16_t count;
 
     pSong = NULL;
 
@@ -814,7 +814,7 @@ GM_Song * GM_CreateLiveSong(void *context, XShortResourceID songID)
     {
         // Initialize the structure to zero to avoid garbage values
         XSetMemory(pSong, sizeof(GM_Song), 0);
-        
+
         pSong->context = context;
         pSong->isRolledMIDI = FALSE; // Initialize rolled MIDI detection flag
         // Fill in remap first
@@ -847,13 +847,13 @@ GM_Song * GM_CreateLiveSong(void *context, XShortResourceID songID)
 
 OPErr GM_StartLiveSong(GM_Song *pSong, XBOOL loadPatches, XBankToken bankToken)
 {
-    OPErr       theErr;
-    int16_t   songSlot, count;
+    OPErr theErr;
+    int16_t songSlot, count;
 
     theErr = NO_ERR;
     if (pSong)
     {
-// first find a slot in the song queue
+        // first find a slot in the song queue
         songSlot = -1;
         for (count = 0; count < MAX_SONGS; count++)
         {
@@ -867,7 +867,7 @@ OPErr GM_StartLiveSong(GM_Song *pSong, XBOOL loadPatches, XBankToken bankToken)
         {
             if (loadPatches)
             {
-                for (count = 0; count < (MAX_INSTRUMENTS*MAX_BANKS); count++)
+                for (count = 0; count < (MAX_INSTRUMENTS * MAX_BANKS); count++)
                 {
                     GM_LoadSongInstrument(pSong, (XLongResourceID)count, bankToken);
                 }
@@ -878,8 +878,8 @@ OPErr GM_StartLiveSong(GM_Song *pSong, XBOOL loadPatches, XBankToken bankToken)
             pSong->AnalyzeMode = SCAN_NORMAL;
 
             theErr = GM_ChangeSystemVoices(pSong->maxSongVoices,
-                                        pSong->mixLevel,
-                                        pSong->maxEffectVoices);
+                                           pSong->mixLevel,
+                                           pSong->maxEffectVoices);
 
 #if REVERB_USED != REVERB_DISABLED
             // Set reverb type now.
@@ -904,7 +904,7 @@ OPErr GM_StartLiveSong(GM_Song *pSong, XBOOL loadPatches, XBankToken bankToken)
                 XClearBit(&pSong->soloChannelMuted, count);
                 XSetBit(&pSong->allowPitchShift, count);
             }
-            XClearBit(&pSong->allowPitchShift, PERCUSSION_CHANNEL);     // don't allow pitch changes on percussion
+            XClearBit(&pSong->allowPitchShift, PERCUSSION_CHANNEL); // don't allow pitch changes on percussion
 
             pSong->velocityCurveType = DEFAULT_VELOCITY_CURVE;
 
@@ -921,16 +921,16 @@ OPErr GM_LoadSongInstrument(GM_Song *pSong,
                             XBankToken bankToken)
 {
     XLongResourceID realInstrument;
-    OPErr           theErr;
+    OPErr theErr;
 
     theErr = BAD_INSTRUMENT;
-    if ( pSong && (instrument >= 0) && (instrument < (MAX_INSTRUMENTS*MAX_BANKS)) )
+    if (pSong && (instrument >= 0) && (instrument < (MAX_INSTRUMENTS * MAX_BANKS)))
     {
-        GM_SetupSongRemaps(pSong, TRUE);    // always reset alias links
-        
+        GM_SetupSongRemaps(pSong, TRUE); // always reset alias links
+
         if (GM_GetSongInstrumentRemap(pSong, instrument, &realInstrument) != NO_ERR)
         {
-            realInstrument = instrument;    // failed, no alias, so try to load instrument passed
+            realInstrument = instrument; // failed, no alias, so try to load instrument passed
         }
         theErr = GM_LoadInstrument(pSong, realInstrument, bankToken);
         GM_RemapInstrument(pSong, instrument, realInstrument);
@@ -942,14 +942,14 @@ OPErr GM_LoadSongInstrument(GM_Song *pSong,
 OPErr GM_UnloadSongInstrument(GM_Song *pSong, XLongResourceID instrument)
 {
     XLongResourceID realInstrument;
-    OPErr           theErr;
+    OPErr theErr;
 
     theErr = BAD_INSTRUMENT;
-    if ( pSong && (instrument >= 0) && (instrument < (MAX_INSTRUMENTS*MAX_BANKS)) )
+    if (pSong && (instrument >= 0) && (instrument < (MAX_INSTRUMENTS * MAX_BANKS)))
     {
         if (GM_GetSongInstrumentRemap(pSong, instrument, &realInstrument) != NO_ERR)
         {
-            realInstrument = instrument;    // failed, no alias, so try to load instrument passed
+            realInstrument = instrument; // failed, no alias, so try to load instrument passed
         }
         theErr = GM_UnloadInstrument(pSong, realInstrument);
     }
@@ -961,14 +961,14 @@ OPErr GM_UnloadSongInstrument(GM_Song *pSong, XLongResourceID instrument)
 XBOOL GM_IsSongInstrumentRemapped(GM_Song *pSong, XLongResourceID instrument)
 {
     XLongResourceID realInstrument;
-    XBOOL           aliased;
+    XBOOL aliased;
 
     aliased = FALSE;
-    if (pSong && (instrument >= 0) && (instrument < (MAX_INSTRUMENTS*MAX_BANKS)))
+    if (pSong && (instrument >= 0) && (instrument < (MAX_INSTRUMENTS * MAX_BANKS)))
     {
         if (GM_GetSongInstrumentRemap(pSong, instrument, &realInstrument) != NO_ERR)
         {
-            realInstrument = instrument;    // failed, no alias, so try to load instrument passed
+            realInstrument = instrument; // failed, no alias, so try to load instrument passed
         }
         if (realInstrument != instrument)
         {
@@ -983,14 +983,14 @@ XBOOL GM_IsSongInstrumentRemapped(GM_Song *pSong, XLongResourceID instrument)
 XBOOL GM_IsSongInstrumentLoaded(GM_Song *pSong, XLongResourceID instrument)
 {
     XLongResourceID realInstrument;
-    XBOOL           loaded;
+    XBOOL loaded;
 
     loaded = FALSE;
-    if (pSong && (instrument >= 0) && (instrument < (MAX_INSTRUMENTS*MAX_BANKS)))
+    if (pSong && (instrument >= 0) && (instrument < (MAX_INSTRUMENTS * MAX_BANKS)))
     {
         if (GM_GetSongInstrumentRemap(pSong, instrument, &realInstrument) != NO_ERR)
         {
-            realInstrument = instrument;    // failed, no alias, so try to load instrument passed
+            realInstrument = instrument; // failed, no alias, so try to load instrument passed
         }
         if (pSong->instrumentData[realInstrument])
         {
@@ -999,7 +999,6 @@ XBOOL GM_IsSongInstrumentLoaded(GM_Song *pSong, XLongResourceID instrument)
     }
     return loaded;
 }
-
 
 // Load the SongID from an external SONG resource and or a extneral midi resource.
 //
@@ -1021,22 +1020,22 @@ XBOOL GM_IsSongInstrumentLoaded(GM_Song *pSong, XLongResourceID instrument)
 //  loadInstruments     if not zero, then instruments and samples will be loaded
 //  pErr                pointer to an OPErr
 
-GM_Song * GM_LoadSong(struct GM_Mixer *pMixer,
-                      void *threadContext,
-                      void *context,
-                      XShortResourceID songID,
-                      void *theExternalSong,
-                      void *theExternalMidiData,
-                      int32_t midiSize,
-                      XShortResourceID *pInstrumentArray,
-                      XBOOL loadInstruments,
-                      XBOOL ignoreBadInstruments,
-                      XBankToken bankToken,
-                      OPErr *pErr)
+GM_Song *GM_LoadSong(struct GM_Mixer *pMixer,
+                     void *threadContext,
+                     void *context,
+                     XShortResourceID songID,
+                     void *theExternalSong,
+                     void *theExternalMidiData,
+                     int32_t midiSize,
+                     XShortResourceID *pInstrumentArray,
+                     XBOOL loadInstruments,
+                     XBOOL ignoreBadInstruments,
+                     XBankToken bankToken,
+                     OPErr *pErr)
 {
-    GM_Song             *pSong;
-    XLongResourceID     songObjectID;
-    OPErr               err;
+    GM_Song *pSong;
+    XLongResourceID songObjectID;
+    OPErr err;
 
     err = NO_ERR;
     pSong = NULL;
@@ -1045,22 +1044,22 @@ GM_Song * GM_LoadSong(struct GM_Mixer *pMixer,
         songObjectID = (XLongResourceID)XGetSongResourceObjectID(theExternalSong);
         switch (XGetSongResourceObjectType(theExternalSong))
         {
-            case SONG_TYPE_SMS:
+        case SONG_TYPE_SMS:
+            pSong = PV_CreateSongFromMidi(songObjectID, theExternalMidiData, midiSize, &err);
+            break;
+        case SONG_TYPE_RMF:
+            if (theExternalMidiData == NULL)
+            {
+                pSong = PV_CreateSongFromMidi(songObjectID, NULL, 0, &err);
+            }
+            else
+            {
                 pSong = PV_CreateSongFromMidi(songObjectID, theExternalMidiData, midiSize, &err);
-                break;
-            case SONG_TYPE_RMF:
-                if (theExternalMidiData == NULL)
-                {
-                    pSong = PV_CreateSongFromMidi(songObjectID, NULL, 0, &err);
-                }
-                else
-                {
-                    pSong = PV_CreateSongFromMidi(songObjectID, theExternalMidiData, midiSize, &err);
-                }
-                break;
-            default:
-                err = PARAM_ERR;
-                break;
+            }
+            break;
+        default:
+            err = PARAM_ERR;
+            break;
         }
     }
     else
@@ -1068,7 +1067,7 @@ GM_Song * GM_LoadSong(struct GM_Mixer *pMixer,
         err = PARAM_ERR;
     }
 
-// load instruments
+    // load instruments
     if (pSong)
     {
         pSong->context = context;
@@ -1082,8 +1081,8 @@ GM_Song * GM_LoadSong(struct GM_Mixer *pMixer,
                                      loadInstruments);
         if (err)
         {
-            GM_FreeSong(threadContext, pSong);  // we ignore the error codes, because it should be ok to dispose
-                                                // since this song was never engaged
+            GM_FreeSong(threadContext, pSong); // we ignore the error codes, because it should be ok to dispose
+                                               // since this song was never engaged
             pSong = NULL;
         }
         else
@@ -1101,21 +1100,20 @@ GM_Song * GM_LoadSong(struct GM_Mixer *pMixer,
     return pSong;
 }
 
-
 // Stop this song playing, or pass NULL with pSong to stop all songs. "removeFromMixer" determines
 // if the song is removed from the mixer or not. If TRUE then you can still send midi events to the song
 // because the song is still in the mixer for event processing. FALSE removes the song from the mixer.
 static void PV_EndSongWithControl(void *threadContext, GM_Song *pSong, XBOOL removeFromMixer)
 {
-    LOOPCOUNT   count;
-    GM_Mixer    *pMixer;
+    LOOPCOUNT count;
+    GM_Mixer *pMixer;
 
     pMixer = MusicGlobals;
     if (pMixer)
     {
         if (pSong)
         {
-            GM_EndSongNotes(pSong);     // end just notes associated with this song
+            GM_EndSongNotes(pSong); // end just notes associated with this song
             if (removeFromMixer)
             {
                 for (count = 0; count < MAX_SONGS; count++)
@@ -1168,7 +1166,7 @@ void GM_EndSongButKeepActive(void *threadContext, GM_Song *pSong)
 // GM_Song.
 void GM_KillSongEventsFromQueue(GM_Song *pSong)
 {
-    int16_t   count;
+    int16_t count;
     Q_MIDIEvent *pEvent;
 
     for (count = 0; count < MAX_QUEUE_EVENTS; count++)
@@ -1192,25 +1190,25 @@ void GM_KillSongEventsFromQueue(GM_Song *pSong)
 // currently playing.
 OPErr GM_FreeSong(void *threadContext, GM_Song *pSong)
 {
-    OPErr   err;
-    XPTR    midiData;
+    OPErr err;
+    XPTR midiData;
 
     err = NO_ERR;
     GM_EndSong(threadContext, pSong);
     if (pSong)
     {
-        GM_KillSongNotes(pSong);        // we must kill the notes because we are about to free
-                                        // instrument memory
+        GM_KillSongNotes(pSong); // we must kill the notes because we are about to free
+                                 // instrument memory
         if (pSong->processingSlice == FALSE)
         {
             GM_PauseSong(pSong, TRUE);
             // remove any events associated with this song
             GM_KillSongEventsFromQueue(pSong);
 
-            midiData = (XPTR)pSong->sequenceData;       // save midi pointer now
-            pSong->sequenceData = NULL;                 // and disable midi decoder now, just
+            midiData = (XPTR)pSong->sequenceData; // save midi pointer now
+            pSong->sequenceData = NULL;           // and disable midi decoder now, just
             pSong->sequenceDataSize = 0;
-                                                        // in case the decoder thread comes to life
+            // in case the decoder thread comes to life
             // GM_SetCacheSamples(pSong, FALSE);
             err = GM_UnloadSongInstruments(pSong);
             if (err == NO_ERR)
@@ -1231,7 +1229,7 @@ OPErr GM_FreeSong(void *threadContext, GM_Song *pSong)
             }
             else
             {
-                //DebugStr("\pGM_FreeSong::GM_UnloadSongInstruments::STILL_PLAYING");
+                // DebugStr("\pGM_FreeSong::GM_UnloadSongInstruments::STILL_PLAYING");
 
                 // we've failed to unload all the instruments. So we need to restore
                 // our midi pointer, so this function can be called again without a leak.
@@ -1240,7 +1238,7 @@ OPErr GM_FreeSong(void *threadContext, GM_Song *pSong)
         }
         else
         {
-            //DebugStr("\pGM_FreeSong::STILL_PLAYING");
+            // DebugStr("\pGM_FreeSong::STILL_PLAYING");
             err = STILL_PLAYING;
         }
     }
@@ -1253,9 +1251,9 @@ OPErr GM_FreeSong(void *threadContext, GM_Song *pSong)
 //  pErr    OPErr error type
 UINT32 GM_GetSongTickLength(GM_Song *pSong, OPErr *pErr)
 {
-    GM_Song     *theSong;
-    UINT32      tickLength;
-    OPErr       err;
+    GM_Song *theSong;
+    UINT32 tickLength;
+    OPErr err;
 
     err = NO_ERR;
     tickLength = 0;
@@ -1273,19 +1271,19 @@ UINT32 GM_GetSongTickLength(GM_Song *pSong, OPErr *pErr)
         if (theSong)
         {
             *theSong = *pSong;
-            theSong->controllerCallback = NULL;     // ignore callbacks
+            theSong->controllerCallback = NULL; // ignore callbacks
             theSong->songEndCallbackPtr = NULL;
             theSong->songTimeCallbackPtr = NULL;
             theSong->metaEventCallbackPtr = NULL;
             theSong->disposeSongDataWhenDone = FALSE;
-            PV_ClearSongInstruments(theSong);       // don't free the instruments
+            PV_ClearSongInstruments(theSong); // don't free the instruments
 
             err = PV_ConfigureMusic(theSong);
             if (err == NO_ERR)
             {
                 theSong->AnalyzeMode = SCAN_DETERMINE_LENGTH;
                 theSong->SomeTrackIsAlive = TRUE;
-    
+
                 GM_SetSongLoopFlag(theSong, FALSE);
                 GM_SetSongMetaLoopFlag(theSong, FALSE);
                 theSong->songLoopCount = 0;
@@ -1353,17 +1351,17 @@ UINT32 GM_GetSongTickLength(GM_Song *pSong, OPErr *pErr)
 #if USE_CREATION_API == TRUE
 static void PV_TrackNameCallback(void *threadContext, GM_Song *pSong, char markerType, void *pMetaText, int32_t metaTextLength, int16_t currentTrack)
 {
-    XBYTE **tnArray,*str;
+    XBYTE **tnArray, *str;
 
     threadContext;
-    if (markerType == 0x03) 
-    {   // track name
+    if (markerType == 0x03)
+    { // track name
         if (currentTrack != -1)
         {
-            str = (XBYTE *)XNewPtr(metaTextLength+1);
+            str = (XBYTE *)XNewPtr(metaTextLength + 1);
             if (str)
             {
-                XBlockMove(pMetaText,str+1,metaTextLength);
+                XBlockMove(pMetaText, str + 1, metaTextLength);
                 str[0] = (XBYTE)metaTextLength;
                 tnArray = (XBYTE **)pSong->metaEventCallbackReference;
                 tnArray[currentTrack] = str;
@@ -1483,17 +1481,17 @@ OPErr GM_GetSongInstrumentChanges(void *theSongResource, GM_Song **outSong, XBYT
     }
     return err;
 }
-#endif  // USE_CREATION_API == TRUE
+#endif // USE_CREATION_API == TRUE
 #endif
 
 // Set the song position in midi ticks
 OPErr GM_SetSongTickPosition(GM_Song *pSong, UINT32 songTickPosition)
 {
-    GM_Song     *theSong;
-    OPErr       theErr;
-    XBOOL       foundPosition;
-    int32_t        count;
-    XBOOL       songPaused = FALSE;
+    GM_Song *theSong;
+    OPErr theErr;
+    XBOOL foundPosition;
+    int32_t count;
+    XBOOL songPaused = FALSE;
 
     if (pSong->seqType != SEQ_MIDI)
     {
@@ -1504,7 +1502,7 @@ OPErr GM_SetSongTickPosition(GM_Song *pSong, UINT32 songTickPosition)
     if (theSong)
     {
         *theSong = *pSong;
-        PV_ClearSongInstruments(theSong);       // don't free the instruments
+        PV_ClearSongInstruments(theSong); // don't free the instruments
 
         theErr = PV_ConfigureMusic(theSong);
         if (theErr == NO_ERR)
@@ -1539,14 +1537,14 @@ OPErr GM_SetSongTickPosition(GM_Song *pSong, UINT32 songTickPosition)
             GM_SetSongMetaLoopFlag(theSong, GM_GetSongMetaLoopFlag(pSong));
             if (foundPosition)
             {
-                for (count = 0; count < (MAX_INSTRUMENTS*MAX_BANKS); count++)
+                for (count = 0; count < (MAX_INSTRUMENTS * MAX_BANKS); count++)
                 {
                     theSong->instrumentData[count] = pSong->instrumentData[count];
                 }
 
                 GM_EndSongNotes(pSong);
-                *pSong = *theSong;      // copy over all song information at the new position
-                PV_ClearSongInstruments(theSong);       // don't free the instruments
+                *pSong = *theSong;                // copy over all song information at the new position
+                PV_ClearSongInstruments(theSong); // don't free the instruments
             }
 
             if (!songPaused)
@@ -1595,7 +1593,7 @@ UINT32 GM_SongMicroseconds(GM_Song *pSong)
 
 UINT32 GM_GetSongMicrosecondLength(GM_Song *pSong, OPErr *pErr)
 {
-    UINT32  ms;
+    UINT32 ms;
 
     ms = 0;
     if (pErr && pSong)
@@ -1619,11 +1617,11 @@ UINT32 GM_GetSongMicrosecondLength(GM_Song *pSong, OPErr *pErr)
 // $$kk: 08.12.98 merge: changed this method
 OPErr GM_SetSongMicrosecondPosition(GM_Song *pSong, UINT32 songMicrosecondPosition)
 {
-    GM_Song     *theSong;
-    OPErr       theErr;
-    XBOOL       foundPosition;
-    int32_t        count;
-    XBOOL       songPaused = FALSE;
+    GM_Song *theSong;
+    OPErr theErr;
+    XBOOL foundPosition;
+    int32_t count;
+    XBOOL songPaused = FALSE;
 
     // $$kk: 02.10.98
     // the way this was, it paused the song, changed the position, and resumed.
@@ -1640,7 +1638,7 @@ OPErr GM_SetSongMicrosecondPosition(GM_Song *pSong, UINT32 songMicrosecondPositi
     if (theSong)
     {
         *theSong = *pSong;
-        PV_ClearSongInstruments(theSong);       // don't free the instruments
+        PV_ClearSongInstruments(theSong); // don't free the instruments
 
         theErr = PV_ConfigureMusic(theSong);
         if (theErr == NO_ERR)
@@ -1677,14 +1675,14 @@ OPErr GM_SetSongMicrosecondPosition(GM_Song *pSong, UINT32 songMicrosecondPositi
             GM_SetSongMetaLoopFlag(theSong, GM_GetSongMetaLoopFlag(pSong));
             if (foundPosition)
             {
-                for (count = 0; count < (MAX_INSTRUMENTS*MAX_BANKS); count++)
+                for (count = 0; count < (MAX_INSTRUMENTS * MAX_BANKS); count++)
                 {
                     theSong->instrumentData[count] = pSong->instrumentData[count];
                 }
 
                 GM_KillSongNotes(pSong);
-                *pSong = *theSong;      // copy over all song information at the new position
-                PV_ClearSongInstruments(theSong);       // don't free the instruments
+                *pSong = *theSong;                // copy over all song information at the new position
+                PV_ClearSongInstruments(theSong); // don't free the instruments
             }
 
             // $$kk: 02.10.98: do not resume if song was paused before
@@ -1699,7 +1697,7 @@ OPErr GM_SetSongMicrosecondPosition(GM_Song *pSong, UINT32 songMicrosecondPositi
         }
         // don't need a thread context here because we don't callback
         GM_FreeSong(NULL, theSong); // we ignore the error codes, because it should be ok to dispose
-                                // since this song was never engaged
+                                    // since this song was never engaged
     }
     return theErr;
 }
@@ -1718,9 +1716,9 @@ INT32 GM_GetUsedPatchlist(void *theExternalSong,
                           XShortResourceID *pInstrumentArray,
                           OPErr *pErr)
 {
-    GM_Song             *theSong;
-    int32_t                count;
-    XBankToken          bankToken;
+    GM_Song *theSong;
+    int32_t count;
+    XBankToken bankToken;
 
     *pErr = NO_ERR;
 
@@ -1747,7 +1745,7 @@ INT32 GM_GetUsedPatchlist(void *theExternalSong,
     count = 0;
     if (*pErr == NO_ERR)
     {
-        for (; count < MAX_INSTRUMENTS*MAX_BANKS; count++)
+        for (; count < MAX_INSTRUMENTS * MAX_BANKS; count++)
         {
             if (pInstrumentArray[count] == (XShortResourceID)-1)
             {
@@ -1757,7 +1755,7 @@ INT32 GM_GetUsedPatchlist(void *theExternalSong,
     }
     return count;
 }
-#endif  // USE_CREATION_API
+#endif // USE_CREATION_API
 
 void GM_SetVelocityCurveType(GM_Song *pSong, VelocityCurveType velocityCurveType)
 {
@@ -1767,10 +1765,9 @@ void GM_SetVelocityCurveType(GM_Song *pSong, VelocityCurveType velocityCurveType
     }
 }
 
-
 OPErr GM_SetDisposeSongDataWhenDoneFlag(GM_Song *pSong, XBOOL disposeData)
 {
-    OPErr   theErr;
+    OPErr theErr;
 
     theErr = NO_ERR;
     if (pSong)
@@ -1784,10 +1781,9 @@ OPErr GM_SetDisposeSongDataWhenDoneFlag(GM_Song *pSong, XBOOL disposeData)
     return theErr;
 }
 
-
 OPErr GM_GetDisposeSongDataWhenDoneFlag(GM_Song *pSong, XBOOL *outDisposeData)
 {
-    OPErr   theErr;
+    OPErr theErr;
 
     theErr = NO_ERR;
     if (pSong)
@@ -1808,10 +1804,9 @@ OPErr GM_GetDisposeSongDataWhenDoneFlag(GM_Song *pSong, XBOOL *outDisposeData)
     return theErr;
 }
 
-
 OPErr GM_GetSongVoices(GM_Song *pSong, INT16 *pMaxSongVoices, INT16 *pMixLevel, INT16 *pMaxEffectVoices)
 {
-    OPErr   theErr;
+    OPErr theErr;
 
     theErr = NO_ERR;
     if (pSong)
@@ -1834,10 +1829,9 @@ OPErr GM_GetSongVoices(GM_Song *pSong, INT16 *pMaxSongVoices, INT16 *pMixLevel, 
     return theErr;
 }
 
-
 OPErr GM_ChangeSongVoices(GM_Song *pSong, INT16 maxSongVoices, INT16 mixLevel, INT16 maxEffectVoices)
 {
-    OPErr   theErr;
+    OPErr theErr;
 
     theErr = NO_ERR;
     if (pSong)
@@ -1845,8 +1839,8 @@ OPErr GM_ChangeSongVoices(GM_Song *pSong, INT16 maxSongVoices, INT16 mixLevel, I
         if ((maxSongVoices >= 0) &&
             (mixLevel > 0) &&
             (maxEffectVoices >= 0) &&
-            ((maxEffectVoices+maxSongVoices) > 0) &&
-            ((maxEffectVoices+maxSongVoices) <= MAX_VOICES) )
+            ((maxEffectVoices + maxSongVoices) > 0) &&
+            ((maxEffectVoices + maxSongVoices) <= MAX_VOICES))
         {
             pSong->maxSongVoices = maxSongVoices;
             pSong->mixLevel = mixLevel;
@@ -1863,7 +1857,6 @@ OPErr GM_ChangeSongVoices(GM_Song *pSong, INT16 maxSongVoices, INT16 mixLevel, I
     }
     return theErr;
 }
-
 
 OPErr GM_GetProgramBank(GM_Song *pSong, XSWORD channel, XSWORD *outProgram, XSWORD *outBank)
 {
@@ -1888,6 +1881,5 @@ OPErr GM_GetProgramBank(GM_Song *pSong, XSWORD channel, XSWORD *outProgram, XSWO
     }
     return err;
 }
-
 
 // EOF of GenSong.c
