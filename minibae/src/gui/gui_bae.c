@@ -726,16 +726,13 @@ bool bae_load_song(const char *path)
     }
 #endif
 
-    // If MIDI Output already enabled, register engine MIDI event callback so events are forwarded
 #ifdef SUPPORT_MIDI_HW
+    // If MIDI Output already enabled, register engine MIDI event callback so events are forwarded
     if (g_midi_output_enabled && g_bae.song)
-#else
-    if (g_bae.song)
-#endif
-    {
-        // TODO: Fix MIDI callback signature mismatch
-        // BAESong_SetMidiEventCallback(g_bae.song, gui_midi_event_callback, NULL);
+    {        
+        BAESong_SetMidiEventCallback(g_bae.song, gui_midi_event_callback, NULL);
     }
+#endif
 
     const char *base = path;
     for (const char *p = path; *p; ++p)
