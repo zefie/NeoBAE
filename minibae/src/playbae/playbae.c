@@ -1196,6 +1196,7 @@ int main(int argc, char *argv[])
    const char *libMiniBAECPUArch;
    const char *libMiniBAEVersion;
    const char *libMiniBAECompInfo;
+   const char *libMiniBAEFeatureString;
    BAERate rate = BAE_RATE_44K;
    memset(parmFile, '\0', 1024);
    memset(midiMuteChannels, '\0', 512);
@@ -1267,7 +1268,8 @@ int main(int argc, char *argv[])
       libMiniBAEVersion = BAE_GetVersion();
       libMiniBAECompInfo = BAE_GetCompileInfo();
       libMiniBAECPUArch = BAE_GetCurrentCPUArchitecture();
-      playbae_printf("playbae %s built with %s, libminiBAE %s\n", libMiniBAECPUArch, libMiniBAECompInfo, libMiniBAEVersion);
+      libMiniBAEFeatureString = BAE_GetFeatureString();
+      playbae_printf("playbae %s built with %s, libminiBAE %s\nfeatures: %s\n", libMiniBAECPUArch, libMiniBAECompInfo, libMiniBAEVersion, libMiniBAEFeatureString);
       playbae_printf(copyrightInfo);
       /* BAE_GetVersion() and BAE_GetCompileInfo() return malloc'd strings; free them. */
       if (libMiniBAECompInfo)

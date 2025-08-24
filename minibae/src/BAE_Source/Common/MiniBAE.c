@@ -1,21 +1,21 @@
 /*
     Copyright (c) 2009 Beatnik, Inc All rights reserved.
-    
+
     Redistribution and use in source and binary forms, with or without
     modification, are permitted provided that the following conditions are
     met:
-    
+
     Redistributions of source code must retain the above copyright notice,
     this list of conditions and the following disclaimer.
-    
+
     Redistributions in binary form must reproduce the above copyright
     notice, this list of conditions and the following disclaimer in the
     documentation and/or other materials provided with the distribution.
-    
+
     Neither the name of the Beatnik, Inc nor the names of its contributors
     may be used to endorse or promote products derived from this software
     without specific prior written permission.
-    
+
     THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS
     IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
     TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
@@ -61,7 +61,7 @@
 **                  Added PV_BAESong_InitLiveSong()
 **  2000.01.11      Removed the Mac hook support.
 **                  Fixed some random error enum translation problems.
-**  2000.01.13      Changed XConvertNativeFileToXFILENAME() calls to 
+**  2000.01.13      Changed XConvertNativeFileToXFILENAME() calls to
 **                      XConvertPathToXFILENAME()
 **                  Removed some MacOS deadwood I left in...
 **  2000.01.14      Added BAEMixer_IsAudioActive()
@@ -81,10 +81,10 @@
 **                  Reworked mechanism to know if the mixer has been allocated.
 **  2000.02.01      Added BAE_TranslateQuality(), BAE_TranslateBAEQuality()
 **                  Fixed lack of casting result of XNewPtr() in LoadCustomSample()
-**  2000.02.25      Changed PV_BAESong_InitLiveSong & BAESong_LoadGroovoid & 
+**  2000.02.25      Changed PV_BAESong_InitLiveSong & BAESong_LoadGroovoid &
 **                      BAESong_LoadMidiFromMemory
-**                  BAESong_LoadMidiFromFile & BAESong_LoadRmfFromMemory & 
-**                      BAESong_LoadRmfFromFile to call GM_SetSongMixer, or 
+**                  BAESong_LoadMidiFromFile & BAESong_LoadRmfFromMemory &
+**                      BAESong_LoadRmfFromFile to call GM_SetSongMixer, or
 **                      pass a GM_Mixer to GM_LoadSong
 **  2000.03.01      Added multiple bank support
 **  2000.03.02      Added BAEMixer_UnloadBanks(), added typedef BAEBankToken
@@ -123,7 +123,7 @@
 **                      dual-cpu build.
 **  2000.04.03 sh   Removed some warnings in BAESound_LoadCustomSample
 **  2000.10.17  sh  Added BAEMixer_Idle
-**  2000.10.18  sh  Added BAEMixer_GetMemoryUsed, BAESound_GetMemoryUsed, 
+**  2000.10.18  sh  Added BAEMixer_GetMemoryUsed, BAESound_GetMemoryUsed,
 **                  BAESong_GetMemoryUsed
 **  2000.11.8   sh  Added copyright.
 **  2000.11.29  tom Added BAEMixer_StartOutputToFile, BAEMixer_StopOutputToFile,
@@ -150,7 +150,7 @@
 
 #include "MiniBAE.h"
 #if USE_MPEG_ENCODER != FALSE
-#include "XMPEG_BAE_API.h"  /* for MPG_Encode* encoder API prototypes */
+#include "XMPEG_BAE_API.h" /* for MPG_Encode* encoder API prototypes */
 #endif
 #include "X_API.h"
 #include "GenSnd.h"
@@ -160,335 +160,417 @@
 #include "X_Assert.h"
 #include <limits.h>
 #include <stdint.h>
-#include "bankinfo.h"      // embedded bank metadata (hash -> friendly)
+#include "bankinfo.h" // embedded bank metadata (hash -> friendly)
 
 #if USE_FLAC_ENCODER != FALSE
 #include "FLAC/stream_encoder.h"
 // Forward declaration of FLAC encoding function from GenSoundFiles.c
-OPErr PV_WriteFromMemoryFLACFile(XFILENAME *file, GM_Waveform const* pAudioData, XWORD formatTag);
+OPErr PV_WriteFromMemoryFLACFile(XFILENAME *file, GM_Waveform const *pAudioData, XWORD formatTag);
 // Wave format constant
 #define X_WAVE_FORMAT_PCM 0x0001
 #endif
-#include "sha1mini.h"       // hashing for friendly name resolution
+#include "sha1mini.h" // hashing for friendly name resolution
 
 #ifdef WASM
-    #include <emscripten.h>
+#include <emscripten.h>
 
-void process_and_send_audio(int16_t* rawAudio, int length) {
+void process_and_send_audio(int16_t *rawAudio, int length)
+{
     // Call the JavaScript function "postAudioData" with the pointer
-    EM_ASM({
-        window.miniBAEInstance.postAudioData($0, $1);
-    }, rawAudio, length);
+    EM_ASM({ window.miniBAEInstance.postAudioData($0, $1); }, rawAudio, length);
 }
 #endif
 
 // Fallback helper: scan RMF memory directly for SONG resource if cache lookup fails.
-static SongResource * PV_FallbackFindSongInRMFMemory(void *data, uint32_t totalLen, int16_t desiredIndex, XLongResourceID *outID, int32_t *outSize){
-    if(!data || totalLen < 16 || desiredIndex < 0){ return NULL; }
-    unsigned char *ub = (unsigned char*)data;
-    uint32_t mapID = (uint32_t)ub[0]<<24 | (uint32_t)ub[1]<<16 | (uint32_t)ub[2]<<8 | (uint32_t)ub[3];
-    if(mapID != 0x4952455A){ return NULL; } // 'IREZ'
-    uint32_t resourceCount = (uint32_t)ub[8]<<24 | (uint32_t)ub[9]<<16 | (uint32_t)ub[10]<<8 | (uint32_t)ub[11];
-    if(resourceCount == 0 || resourceCount > 4096){ return NULL; }
+static SongResource *PV_FallbackFindSongInRMFMemory(void *data, uint32_t totalLen, int16_t desiredIndex, XLongResourceID *outID, int32_t *outSize)
+{
+    if (!data || totalLen < 16 || desiredIndex < 0)
+    {
+        return NULL;
+    }
+    unsigned char *ub = (unsigned char *)data;
+    uint32_t mapID = (uint32_t)ub[0] << 24 | (uint32_t)ub[1] << 16 | (uint32_t)ub[2] << 8 | (uint32_t)ub[3];
+    if (mapID != 0x4952455A)
+    {
+        return NULL;
+    } // 'IREZ'
+    uint32_t resourceCount = (uint32_t)ub[8] << 24 | (uint32_t)ub[9] << 16 | (uint32_t)ub[10] << 8 | (uint32_t)ub[11];
+    if (resourceCount == 0 || resourceCount > 4096)
+    {
+        return NULL;
+    }
     uint32_t nextOffset = 12; // start after map header
     int songFoundCount = 0;
-    for(uint32_t resIndex = 0; resIndex < resourceCount; ++resIndex){
-        if(nextOffset + 16 > totalLen){ return NULL; }
+    for (uint32_t resIndex = 0; resIndex < resourceCount; ++resIndex)
+    {
+        if (nextOffset + 16 > totalLen)
+        {
+            return NULL;
+        }
         unsigned char *base = ub + nextOffset;
-        uint32_t rawNext = (uint32_t)base[0]<<24 | (uint32_t)base[1]<<16 | (uint32_t)base[2]<<8 | (uint32_t)base[3];
-        uint32_t rawType = (uint32_t)base[4]<<24 | (uint32_t)base[5]<<16 | (uint32_t)base[6]<<8 | (uint32_t)base[7];
-        uint32_t rawID   = (uint32_t)base[8]<<24 | (uint32_t)base[9]<<16 | (uint32_t)base[10]<<8 | (uint32_t)base[11];
+        uint32_t rawNext = (uint32_t)base[0] << 24 | (uint32_t)base[1] << 16 | (uint32_t)base[2] << 8 | (uint32_t)base[3];
+        uint32_t rawType = (uint32_t)base[4] << 24 | (uint32_t)base[5] << 16 | (uint32_t)base[6] << 8 | (uint32_t)base[7];
+        uint32_t rawID = (uint32_t)base[8] << 24 | (uint32_t)base[9] << 16 | (uint32_t)base[10] << 8 | (uint32_t)base[11];
         uint8_t nameLen = base[12];
         uint32_t lenFieldPos = nextOffset + 13 + nameLen; // after len byte + name
-        if(lenFieldPos + 4 > totalLen){ return NULL; }
+        if (lenFieldPos + 4 > totalLen)
+        {
+            return NULL;
+        }
         unsigned char *lenPtr = ub + lenFieldPos;
-        uint32_t rawResLen = (uint32_t)lenPtr[0]<<24 | (uint32_t)lenPtr[1]<<16 | (uint32_t)lenPtr[2]<<8 | (uint32_t)lenPtr[3];
+        uint32_t rawResLen = (uint32_t)lenPtr[0] << 24 | (uint32_t)lenPtr[1] << 16 | (uint32_t)lenPtr[2] << 8 | (uint32_t)lenPtr[3];
         uint32_t dataStart = lenFieldPos + 4;
-        if(dataStart + rawResLen > totalLen){ return NULL; }
-        if(rawType == 0x534F4E47){ // 'SONG'
-            if(songFoundCount == desiredIndex){
-                if(outID) *outID = rawID;
-                if(outSize) *outSize = (int32_t)rawResLen;
-                SongResource *copy = (SongResource*)XNewPtr((int32_t)rawResLen);
-                if(copy){ XBlockMove(ub + dataStart, copy, (int32_t)rawResLen); }
+        if (dataStart + rawResLen > totalLen)
+        {
+            return NULL;
+        }
+        if (rawType == 0x534F4E47)
+        { // 'SONG'
+            if (songFoundCount == desiredIndex)
+            {
+                if (outID)
+                    *outID = rawID;
+                if (outSize)
+                    *outSize = (int32_t)rawResLen;
+                SongResource *copy = (SongResource *)XNewPtr((int32_t)rawResLen);
+                if (copy)
+                {
+                    XBlockMove(ub + dataStart, copy, (int32_t)rawResLen);
+                }
                 return copy;
             }
             songFoundCount++;
         }
         uint32_t computedNext = dataStart + rawResLen;
-        if(rawNext == 0 || rawNext < nextOffset || rawNext > totalLen){ rawNext = computedNext; }
-        if(rawNext <= nextOffset){ return NULL; }
+        if (rawNext == 0 || rawNext < nextOffset || rawNext > totalLen)
+        {
+            rawNext = computedNext;
+        }
+        if (rawNext <= nextOffset)
+        {
+            return NULL;
+        }
         nextOffset = rawNext;
-        if(nextOffset >= totalLen){ break; }
+        if (nextOffset >= totalLen)
+        {
+            break;
+        }
     }
     return NULL;
 }
 
 #define TRACKING 0
 
-
-
-const char* BAE_GetVersion()
+const char *BAE_GetVersion()
 {
-	size_t maxStrSize = 64;
-	char *versionString = (char *)malloc(sizeof (char) * maxStrSize);
-	#ifdef _VERSION
-		snprintf(versionString, maxStrSize, "version %s", _VERSION);
-        #else
-                snprintf(versionString, maxStrSize, "unknown version built %s", __DATE__);
-        #endif
-	return versionString;
+    size_t maxStrSize = 64;
+    char *versionString = (char *)malloc(sizeof(char) * maxStrSize);
+#ifdef _VERSION
+    snprintf(versionString, maxStrSize, "version %s", _VERSION);
+#else
+    snprintf(versionString, maxStrSize, "unknown version built %s", __DATE__);
+#endif
+    return versionString;
 }
 
-const char* BAE_GetCompileInfo() {
-	size_t maxStrSize = 128;
-	char *versionString = (char *)malloc(sizeof (char) * maxStrSize);
-    #ifdef __EMSCRIPTEN__
-		#ifdef __cplusplus
-			snprintf(versionString, maxStrSize, "clang++ v%d.%d, emscripten v%d.%d", __clang_major__, __clang_minor__, __EMSCRIPTEN_major__, __EMSCRIPTEN_minor__);
-		#else
-			snprintf(versionString, maxStrSize, "clang v%d.%d, emscripten v%d.%d", __clang_major__, __clang_minor__, __EMSCRIPTEN_major__, __EMSCRIPTEN_minor__);
-		#endif
-	#elif __clang_major_
-		#ifdef __cplusplus
-			snprintf(versionString, maxStrSize, "clang++ v%d.%d", __clang_major__, __clang_minor__);
-		#else
-			snprintf(versionString, maxStrSize, "clang v%d.%d", __clang_major__, __clang_minor__);
-		#endif
-	#elif  __MINGW32__
-		#ifdef __cplusplus
-			snprintf(versionString, maxStrSize, "mingw32 v%d.%d (g++ v%d.%d)", __MINGW32_MAJOR_VERSION, __MINGW32_MINOR_VERSION, __GNUC__, __GNUC_MINOR__);
-		#else
-			snprintf(versionString, maxStrSize, "mingw32 v%d.%d (gcc v%d.%d)", __MINGW32_MAJOR_VERSION, __MINGW32_MINOR_VERSION, __GNUC__, __GNUC_MINOR__);
-		#endif
-	#elif  __GNUC__
-		#ifdef __cplusplus
-			snprintf(versionString, maxStrSize, "g++ v%d.%d", __GNUC__, __GNUC_MINOR__);
-		#else
-			snprintf(versionString, maxStrSize, "gcc v%d.%d", __GNUC__, __GNUC_MINOR__);
-		#endif
-    #else
-		snprintf(versionString, maxStrSize, "UNKNOWN");
-	#endif
-        return versionString;
+const char *BAE_GetCompileInfo()
+{
+    size_t maxStrSize = 128;
+    char *versionString = (char *)malloc(sizeof(char) * maxStrSize);
+#ifdef __EMSCRIPTEN__
+#ifdef __cplusplus
+    snprintf(versionString, maxStrSize, "clang++ v%d.%d, emscripten v%d.%d", __clang_major__, __clang_minor__, __EMSCRIPTEN_major__, __EMSCRIPTEN_minor__);
+#else
+    snprintf(versionString, maxStrSize, "clang v%d.%d, emscripten v%d.%d", __clang_major__, __clang_minor__, __EMSCRIPTEN_major__, __EMSCRIPTEN_minor__);
+#endif
+#elif __clang_major_
+#ifdef __cplusplus
+    snprintf(versionString, maxStrSize, "clang++ v%d.%d", __clang_major__, __clang_minor__);
+#else
+    snprintf(versionString, maxStrSize, "clang v%d.%d", __clang_major__, __clang_minor__);
+#endif
+#elif __MINGW32__
+#ifdef __cplusplus
+    snprintf(versionString, maxStrSize, "mingw32 v%d.%d (g++ v%d.%d)", __MINGW32_MAJOR_VERSION, __MINGW32_MINOR_VERSION, __GNUC__, __GNUC_MINOR__);
+#else
+    snprintf(versionString, maxStrSize, "mingw32 v%d.%d (gcc v%d.%d)", __MINGW32_MAJOR_VERSION, __MINGW32_MINOR_VERSION, __GNUC__, __GNUC_MINOR__);
+#endif
+#elif __GNUC__
+#ifdef __cplusplus
+    snprintf(versionString, maxStrSize, "g++ v%d.%d", __GNUC__, __GNUC_MINOR__);
+#else
+    snprintf(versionString, maxStrSize, "gcc v%d.%d", __GNUC__, __GNUC_MINOR__);
+#endif
+#else
+    snprintf(versionString, maxStrSize, "UNKNOWN");
+#endif
+    return versionString;
 }
 
-const char *BAE_GetCurrentCPUArchitecture() { // Get current architecture, detects many architectures. Coded by Freak. Modified to append -SDL when built for SDL2.
-    // Append suffix at compile time without allocating new memory.
-    #if (X_PLATFORM == X_SDL2)
-        #define BAE_SDL_SUFFIX "-SDL2"
-    #elif (X_PLATFORM == X_WIN95)
-        #define BAE_SDL_SUFFIX "-DSound"        
-    #else
-        #define BAE_SDL_SUFFIX ""
-    #endif
+const char *BAE_GetFeatureString()
+{
+        static char featBuf[512];
+        featBuf[0] = '\0';
+        bool first = true;
 
-    #if USE_MPEG_DECODER != TRUE && USE_MPEG_ENCODER != TRUE
-        #define BAE_MPEG_SUFFIX "-NoMP3"
-    #else
-        #if USE_MPEG_DECODER == TRUE && USE_MPEG_ENCODER == TRUE
-            #define BAE_MPEG_SUFFIX "-MP3"
-        #elif USE_MPEG_DECODER == TRUE && USE_MPEG_ENCODER != TRUE
-            #define BAE_MPEG_SUFFIX "-MP3Dec"
-        #elif USE_MPEG_DECODER != TRUE && USE_MPEG_ENCODER == TRUE
-            #define BAE_MPEG_SUFFIX "-MP3Enc"
-        #endif
-    #endif
+        // Audio backend
+#if (X_PLATFORM == X_SDL2)
+        const char *audio = "SDL2";
+#elif (X_PLATFORM == X_WIN95)
+        const char *audio = "DirectSound";
+#else
+        const char *audio = NULL;
+#endif
+        if (audio && audio[0])
+        {
+                snprintf(featBuf + strlen(featBuf), sizeof(featBuf) - strlen(featBuf), "%s%s", first ? "" : ", ", audio);
+                first = false;
+        }
 
-    #if SUPPORT_MIDI_HW == TRUE
-        #define BAE_MIDI_SUFFIX "-MidiHW"
-    #else
-        #define BAE_MIDI_SUFFIX ""
-    #endif
+        // Built-in patches
+#ifdef _BUILT_IN_PATCHES
+        const char *patches = "Built-in Patches";
+        if (patches && patches[0])
+        {
+                snprintf(featBuf + strlen(featBuf), sizeof(featBuf) - strlen(featBuf), "%s%s", first ? "" : ", ", patches);
+                first = false;
+        }
+#endif
 
-    #if USE_FLAC_DECODER != TRUE && USE_FLAC_ENCODER != TRUE
-        #define BAE_FLAC_SUFFIX ""
+        // MP3 support
+#if USE_MPEG_DECODER != TRUE && USE_MPEG_ENCODER != TRUE
+        const char *mp3 = NULL;
+#else
+    #if USE_MPEG_DECODER == TRUE && USE_MPEG_ENCODER == TRUE
+        const char *mp3 = "Full MP3 Support";
+    #elif USE_MPEG_DECODER == TRUE && USE_MPEG_ENCODER != TRUE
+        const char *mp3 = "MP3 Decoder Support";
+    #elif USE_MPEG_DECODER != TRUE && USE_MPEG_ENCODER == TRUE
+        const char *mp3 = "MP3 Encoder Support";
     #else
-        #if USE_FLAC_DECODER == TRUE && USE_FLAC_ENCODER == TRUE
-            #define BAE_FLAC_SUFFIX "-FLAC"
-        #elif USE_FLAC_DECODER == TRUE && USE_FLAC_ENCODER != TRUE
-            #define BAE_FLAC_SUFFIX "-FLACDec"
-        #elif USE_FLAC_DECODER != TRUE && USE_FLAC_ENCODER == TRUE
-            #define BAE_FLAC_SUFFIX "-FLACEnc"
-        #endif
+        const char *mp3 = NULL;
     #endif
+#endif
+        if (mp3 && mp3[0])
+        {
+                snprintf(featBuf + strlen(featBuf), sizeof(featBuf) - strlen(featBuf), "%s%s", first ? "" : ", ", mp3);
+                first = false;
+        }
 
-    #define BAE_FEATURE_SUFFIX BAE_SDL_SUFFIX BAE_MPEG_SUFFIX BAE_MIDI_SUFFIX BAE_FLAC_SUFFIX
+        // MIDI hardware
+#if SUPPORT_MIDI_HW == TRUE
+        const char *midi = "MIDI Hardware Support";
+#else
+        const char *midi = NULL;
+#endif
+        if (midi && midi[0])
+        {
+                snprintf(featBuf + strlen(featBuf), sizeof(featBuf) - strlen(featBuf), "%s%s", first ? "" : ", ", midi);
+                first = false;
+        }
 
-    #if defined(__x86_64__) || defined(_M_X64)
-        return "x86_64" BAE_FEATURE_SUFFIX;
-    #elif defined(i386) || defined(__i386__) || defined(__i386) || defined(_M_IX86)
-        return "x86_32" BAE_FEATURE_SUFFIX;
-    #elif defined(__ARM_ARCH_2__)
-        return "ARM2" BAE_FEATURE_SUFFIX;
-    #elif defined(__ARM_ARCH_3__) || defined(__ARM_ARCH_3M__)
-        return "ARM3" BAE_FEATURE_SUFFIX;
-    #elif defined(__ARM_ARCH_4T__) || defined(__TARGET_ARM_4T)
-        return "ARM4T" BAE_FEATURE_SUFFIX;
-    #elif defined(__ARM_ARCH_5_) || defined(__ARM_ARCH_5E_)
-        return "ARM5" BAE_FEATURE_SUFFIX;
-    #elif defined(__ARM_ARCH_6T2__)
-        return "ARM6T2" BAE_FEATURE_SUFFIX;
-    #elif defined(__ARM_ARCH_6__) || defined(__ARM_ARCH_6J__) || defined(__ARM_ARCH_6K__) || defined(__ARM_ARCH_6Z__) || defined(__ARM_ARCH_6ZK__)
-        return "ARM6" BAE_FEATURE_SUFFIX;
-    #elif defined(__ARM_ARCH_7__) || defined(__ARM_ARCH_7A__) || defined(__ARM_ARCH_7R__) || defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7S__)
-        return "ARM7" BAE_FEATURE_SUFFIX;   // Generic ARMv7
-    #elif defined(__ARM_ARCH_7A__)
-        return "ARM7A" BAE_FEATURE_SUFFIX;
-    #elif defined(__ARM_ARCH_7R__)
-        return "ARM7R" BAE_FEATURE_SUFFIX;
-    #elif defined(__ARM_ARCH_7M__)
-        return "ARM7M" BAE_FEATURE_SUFFIX;
-    #elif defined(__ARM_ARCH_7S__)
-        return "ARM7S" BAE_FEATURE_SUFFIX;
-    #elif defined(__aarch64__) || defined(_M_ARM64)
-        return "ARM64" BAE_FEATURE_SUFFIX;
-    #elif defined(mips) || defined(__mips__) || defined(__mips)
-        return "MIPS" BAE_FEATURE_SUFFIX;
-    #elif defined(__sh__)
-        return "SUPERH" BAE_FEATURE_SUFFIX;
-    #elif defined(__powerpc64__) || defined(__PPC64__) || defined(__ppc64__) || defined(_ARCH_PPC64)
-        return "POWERPC64" BAE_FEATURE_SUFFIX;
-    #elif defined(__powerpc) || defined(__powerpc__) || defined(__POWERPC__) || defined(__ppc__) || defined(__PPC__) || defined(_ARCH_PPC)
-        return "POWERPC" BAE_FEATURE_SUFFIX;
-    #elif defined(__sparc__) || defined(__sparc)
-        return "SPARC" BAE_FEATURE_SUFFIX;
-    #elif defined(__m68k__)
-        return "M68K" BAE_FEATURE_SUFFIX;
-    #elif defined(WASM)
-        return "WASM" BAE_FEATURE_SUFFIX;
+        // FLAC support
+#if USE_FLAC_DECODER != TRUE && USE_FLAC_ENCODER != TRUE
+        const char *flac = NULL;
+#else
+    #if USE_FLAC_DECODER == TRUE && USE_FLAC_ENCODER == TRUE
+        const char *flac = "Full FLAC Support";
+    #elif USE_FLAC_DECODER == TRUE && USE_FLAC_ENCODER != TRUE
+        const char *flac = "FLAC Decoder Support";
+    #elif USE_FLAC_DECODER != TRUE && USE_FLAC_ENCODER == TRUE
+        const char *flac = "FLAC Encoder Support";
     #else
-        return "UNKNOWN" BAE_FEATURE_SUFFIX;
+        const char *flac = NULL;
     #endif
-    #undef BAE_SDL_SUFFIX
+#endif
+        if (flac && flac[0])
+        {
+                snprintf(featBuf + strlen(featBuf), sizeof(featBuf) - strlen(featBuf), "%s%s", first ? "" : ", ", flac);
+                first = false;
+        }
+
+        // If nothing was added, return an empty string
+        if (featBuf[0] == '\0')
+                featBuf[0] = '\0';
+
+        return featBuf;
 }
 
+const char *BAE_GetCurrentCPUArchitecture()
+{ // Get current architecture, detects many architectures. Coded by Freak. Modified to append -SDL when built for SDL2.
+  // Append suffix at compile time without allocating new memory.
+#if defined(__x86_64__) || defined(_M_X64)
+    return "x86_64";
+#elif defined(i386) || defined(__i386__) || defined(__i386) || defined(_M_IX86)
+    return "i686";
+#elif defined(__ARM_ARCH_2__)
+    return "ARM2";
+#elif defined(__ARM_ARCH_3__) || defined(__ARM_ARCH_3M__)
+    return "ARM3";
+#elif defined(__ARM_ARCH_4T__) || defined(__TARGET_ARM_4T)
+    return "ARM4T";
+#elif defined(__ARM_ARCH_5__) || defined(__ARM_ARCH_5E__)
+    return "ARM5";
+#elif defined(__ARM_ARCH_6T2__)
+    return "ARM6T2";
+#elif defined(__ARM_ARCH_6__) || defined(__ARM_ARCH_6J__) || defined(__ARM_ARCH_6K__) || defined(__ARM_ARCH_6Z__) || defined(__ARM_ARCH_6ZK__)
+    return "ARM6";
+#elif defined(__ARM_ARCH_7__) || defined(__ARM_ARCH_7A__) || defined(__ARM_ARCH_7R__) || defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7S__)
+    return "ARM7"; // Generic ARMv7
+#elif defined(__ARM_ARCH_7A__)
+    return "ARM7A";
+#elif defined(__ARM_ARCH_7R__)
+    return "ARM7R";
+#elif defined(__ARM_ARCH_7M__)
+    return "ARM7M";
+#elif defined(__ARM_ARCH_7S__)
+    return "ARM7S";
+#elif defined(__aarch64__) || defined(_M_ARM64)
+    return "ARM64";
+#elif defined(mips) || defined(__mips__) || defined(__mips)
+    return "MIPS";
+#elif defined(__sh__)
+    return "SuperH";
+#elif defined(__powerpc64__) || defined(__PPC64__) || defined(__ppc64__) || defined(_ARCH_PPC64)
+    return "PowerPC64";
+#elif defined(__powerpc) || defined(__powerpc__) || defined(__POWERPC__) || defined(__ppc__) || defined(__PPC__) || defined(_ARCH_PPC)
+    return "PowerPC";
+#elif defined(__sparc__) || defined(__sparc)
+    return "SPARC";
+#elif defined(__m68k__)
+    return "M68K";
+#elif defined(WASM)
+    return "WASM";
+#else
+    return "UNKNOWN";
+#endif
+}
 
 // Private types/structs
 // ----------------------------------------------------------------------------
 
 #if TRACKING
-typedef enum {
+typedef enum
+{
     BAE_MIXER_OBJECT = 1,
     BAE_SONG_OBJECT,
     BAE_SOUND_OBJECT,
     BAE_STREAM_OBJECT
 } BAE_OBJECT_TYPE;
 
-typedef struct BAEObjectListElem 
+typedef struct BAEObjectListElem
 {
-    void                        *object;
-    BAE_OBJECT_TYPE              type;
-    struct BAEObjectListElem    *next;
+    void *object;
+    BAE_OBJECT_TYPE type;
+    struct BAEObjectListElem *next;
 } BAEObjectListElem;
 #endif
 
-#define OBJECT_ID       FOUR_CHAR('i','g','o','r')      //  'igor'
+#define OBJECT_ID FOUR_CHAR('i', 'g', 'o', 'r') //  'igor'
 
-struct sBAEMixer 
+struct sBAEMixer
 {
-    int32_t                    mID;
-    GM_Mixer                *pMixer;        // Don't dereference pMixer, since if you are running
-                                            // the dual-CPU version of MiniBAE, this will be only a reference.
-    BAE_BOOL                 audioEngaged;
-    XFILE                   *pPatchFiles;
-    int16_t                    numPatchFiles;
+    int32_t mID;
+    GM_Mixer *pMixer; // Don't dereference pMixer, since if you are running
+                      // the dual-CPU version of MiniBAE, this will be only a reference.
+    BAE_BOOL audioEngaged;
+    XFILE *pPatchFiles;
+    int16_t numPatchFiles;
 #if TRACKING
-    BAEObjectListElem       *pObjects;
+    BAEObjectListElem *pObjects;
 #endif
-    BAE_UNSIGNED_FIXED      mFadeRate;
+    BAE_UNSIGNED_FIXED mFadeRate;
 
     BAE_AudioTaskCallbackPtr pTaskProc;
-    void                    *mTaskReference;
+    void *mTaskReference;
 
-    int                     mMuteCount;
-    int                     mMutedVolumeLevel;
-    BAE_Mutex               mLock;
+    int mMuteCount;
+    int mMutedVolumeLevel;
+    BAE_Mutex mLock;
 };
 
-
-struct sBAESong 
+struct sBAESong
 {
-    int32_t                    mID;
-    BAEMixer                mixer;
-    GM_Song                 *pSong;         // Don't dereference pSong, since if you are running
-                                            // the dual-CPU version of MiniBAE, this will be only a reference.
+    int32_t mID;
+    BAEMixer mixer;
+    GM_Song *pSong; // Don't dereference pSong, since if you are running
+                    // the dual-CPU version of MiniBAE, this will be only a reference.
 
-    BAE_Mutex               mLock;
-    BAE_SongCallbackPtr     mCallback;
-    void	            *mCallbackReference;
+    BAE_Mutex mLock;
+    BAE_SongCallbackPtr mCallback;
+    void *mCallbackReference;
 
     BAE_SongControllerCallbackPtr
-                            mControllerCallback;
-    void                    *mControllerCallbackReference;
+        mControllerCallback;
+    void *mControllerCallbackReference;
 
-    BAE_BOOL                mInMixer;
+    BAE_BOOL mInMixer;
 #if !TRACKING
-    BAE_BOOL                mValid;
-#endif  
-    int                     mInstrumentsLoadedCount;
+    BAE_BOOL mValid;
+#endif
+    int mInstrumentsLoadedCount;
 
-    XSWORD                  mVolume;
-    int                     mRouteBus;
-    BAE_BOOL                mAutoBuzz;
-    BAE_BOOL                mAutoFlash;
-    char                    *mTitle;
+    XSWORD mVolume;
+    int mRouteBus;
+    BAE_BOOL mAutoBuzz;
+    BAE_BOOL mAutoFlash;
+    char *mTitle;
 };
 
-
-struct sBAESound 
+struct sBAESound
 {
-    int32_t                    mID;
-    BAEMixer                mixer;
-    GM_Waveform             *pWave;         // Don't dereference pWave, since if you are running
-                                            // the dual-CPU version of MiniBAE, this will be only a reference.
+    int32_t mID;
+    BAEMixer mixer;
+    GM_Waveform *pWave; // Don't dereference pWave, since if you are running
+                        // the dual-CPU version of MiniBAE, this will be only a reference.
 
-    BAE_Mutex               mLock;
-    VOICE_REFERENCE         voiceRef;
-    BAE_UNSIGNED_FIXED      mPauseVariable;
-    BAE_UNSIGNED_FIXED      mVolume;
+    BAE_Mutex mLock;
+    VOICE_REFERENCE voiceRef;
+    BAE_UNSIGNED_FIXED mPauseVariable;
+    BAE_UNSIGNED_FIXED mVolume;
 
-    BAE_SoundCallbackPtr    mCallback;
-    void                    *mCallbackReference;
-    
-    int                     mRouteBus;
-    BAE_BOOL                mAutoBuzz;
-    BAE_BOOL                mAutoFlash;
-    uint32_t                mLoopCount;     // loop count for infinite/finite looping
-    uint32_t                mCurrentLoop;   // current loop iteration
+    BAE_SoundCallbackPtr mCallback;
+    void *mCallbackReference;
+
+    int mRouteBus;
+    BAE_BOOL mAutoBuzz;
+    BAE_BOOL mAutoFlash;
+    uint32_t mLoopCount;   // loop count for infinite/finite looping
+    uint32_t mCurrentLoop; // current loop iteration
 #if !TRACKING
-    BAE_BOOL                mValid;
-#endif  
+    BAE_BOOL mValid;
+#endif
 };
 
 #if USE_STREAM_API == TRUE
 struct sBAEStream
 {
-    int32_t                        mID;
-    BAEMixer                    mixer;
+    int32_t mID;
+    BAEMixer mixer;
 
-    BAE_Mutex                   mLock;
-    STREAM_REFERENCE            mSoundStreamVoiceReference;
-    unsigned int                mLoop:1;
-    unsigned int                mPrerolled:1;
-    uint32_t               mPlaybackLength;
-    BAE_UNSIGNED_FIXED          mVolumeState;
-    int16_t                   mPanState;
-    BAESampleInfo               mStreamSampleInfo;
-    BAE_UNSIGNED_FIXED          mPauseVariable;
-    BAE_AudioStreamCallbackPtr  mCallback;
-    uint32_t               mCallbackReference;
+    BAE_Mutex mLock;
+    STREAM_REFERENCE mSoundStreamVoiceReference;
+    unsigned int mLoop : 1;
+    unsigned int mPrerolled : 1;
+    uint32_t mPlaybackLength;
+    BAE_UNSIGNED_FIXED mVolumeState;
+    int16_t mPanState;
+    BAESampleInfo mStreamSampleInfo;
+    BAE_UNSIGNED_FIXED mPauseVariable;
+    BAE_AudioStreamCallbackPtr mCallback;
+    uint32_t mCallbackReference;
 #if !TRACKING
-    BAE_BOOL                    mValid;
+    BAE_BOOL mValid;
 #endif
 };
 #endif
 
 // MiniBAE.c globals
 // ----------------------------------------------------------------------------
-static XShortResourceID midiSongCount = 0;          // everytime a new song is loaded, this is increments
+static XShortResourceID midiSongCount = 0; // everytime a new song is loaded, this is increments
 // Friendly name cache for loaded banks (token -> sha1 + friendly)
-typedef struct {
+typedef struct
+{
     BAEBankToken token;
     char sha1[41];
     const char *friendly; // points into kEmbeddedBanks name or NULL
@@ -497,36 +579,61 @@ typedef struct {
 static BAE_FriendlyCacheEntry g_bankFriendlyCache[32];
 static int g_bankFriendlyCacheCount = 0;
 
-static void PV_RegisterBankFriendly(BAEBankToken token, const char *sha1Hex){
-    if(!token || !sha1Hex) return;
-    if(g_bankFriendlyCacheCount >= (int)(sizeof(g_bankFriendlyCache)/sizeof(g_bankFriendlyCache[0]))) return;
+static void PV_RegisterBankFriendly(BAEBankToken token, const char *sha1Hex)
+{
+    if (!token || !sha1Hex)
+        return;
+    if (g_bankFriendlyCacheCount >= (int)(sizeof(g_bankFriendlyCache) / sizeof(g_bankFriendlyCache[0])))
+        return;
     // Avoid duplicates
-    for(int i=0;i<g_bankFriendlyCacheCount;i++){ if(g_bankFriendlyCache[i].token == token) return; }
+    for (int i = 0; i < g_bankFriendlyCacheCount; i++)
+    {
+        if (g_bankFriendlyCache[i].token == token)
+            return;
+    }
     BAE_FriendlyCacheEntry *e = &g_bankFriendlyCache[g_bankFriendlyCacheCount];
     e->token = token;
-    strncpy(e->sha1, sha1Hex, 40); e->sha1[40]='\0';
+    strncpy(e->sha1, sha1Hex, 40);
+    e->sha1[40] = '\0';
     e->friendly = NULL;
-    for(int i=0;i<kBankCount;i++){
-        if(strcmp(sha1Hex, kBanks[i].sha1)==0){ e->friendly = kBanks[i].name; break; }
+    for (int i = 0; i < kBankCount; i++)
+    {
+        if (strcmp(sha1Hex, kBanks[i].sha1) == 0)
+        {
+            e->friendly = kBanks[i].name;
+            break;
+        }
     }
     g_bankFriendlyCacheCount++;
 }
 
-static const char* PV_FindBankFriendly(BAEBankToken token){
-    for(int i=0;i<g_bankFriendlyCacheCount;i++){ if(g_bankFriendlyCache[i].token == token){ return g_bankFriendlyCache[i].friendly; } }
+static const char *PV_FindBankFriendly(BAEBankToken token)
+{
+    for (int i = 0; i < g_bankFriendlyCacheCount; i++)
+    {
+        if (g_bankFriendlyCache[i].token == token)
+        {
+            return g_bankFriendlyCache[i].friendly;
+        }
+    }
     return NULL;
 }
 
 // Remove a bank's friendly name cache entry when the bank is unloaded so a
 // subsequently loaded bank that reuses the same underlying XFILE pointer
 // value doesn't inherit the prior bank's friendly name (stale display bug).
-static void PV_UnregisterBankFriendly(BAEBankToken token){
-    if(!token || g_bankFriendlyCacheCount <= 0) return;
-    for(int i=0;i<g_bankFriendlyCacheCount;i++){
-        if(g_bankFriendlyCache[i].token == token){
+static void PV_UnregisterBankFriendly(BAEBankToken token)
+{
+    if (!token || g_bankFriendlyCacheCount <= 0)
+        return;
+    for (int i = 0; i < g_bankFriendlyCacheCount; i++)
+    {
+        if (g_bankFriendlyCache[i].token == token)
+        {
             // Compact array in-place
-            for(int j=i+1;j<g_bankFriendlyCacheCount;j++){
-                g_bankFriendlyCache[j-1] = g_bankFriendlyCache[j];
+            for (int j = i + 1; j < g_bankFriendlyCacheCount; j++)
+            {
+                g_bankFriendlyCache[j - 1] = g_bankFriendlyCache[j];
             }
             g_bankFriendlyCacheCount--;
             break;
@@ -534,105 +641,108 @@ static void PV_UnregisterBankFriendly(BAEBankToken token){
     }
 }
 
-BAEResult BAE_GetBankFriendlyName(BAEMixer mixer, BAEBankToken token, char *outName, uint32_t outNameSize){
-    if(!outName || outNameSize == 0) return BAE_PARAM_ERR;
+BAEResult BAE_GetBankFriendlyName(BAEMixer mixer, BAEBankToken token, char *outName, uint32_t outNameSize)
+{
+    if (!outName || outNameSize == 0)
+        return BAE_PARAM_ERR;
     outName[0] = '\0';
-    if(!mixer || !token) return BAE_NULL_OBJECT;
+    if (!mixer || !token)
+        return BAE_NULL_OBJECT;
     const char *n = PV_FindBankFriendly(token);
-    if(!n) return BAE_RESOURCE_NOT_FOUND;
-    strncpy(outName, n, outNameSize-1); outName[outNameSize-1]='\0';
+    if (!n)
+        return BAE_RESOURCE_NOT_FOUND;
+    strncpy(outName, n, outNameSize - 1);
+    outName[outNameSize - 1] = '\0';
     return BAE_NO_ERROR;
 }
-                                                    // this is used as an ID for song callbacks and such
+// this is used as an ID for song callbacks and such
 
 // globals for *OutputToFile support. these were BAEMixer class members from BAE
 
 #define DUMP_OUTPUTFILE 0
 
 #if DUMP_OUTPUTFILE
-    FILE *fp;
+FILE *fp;
 #endif
 
-BAE_BOOL            mWritingToFile;
-BAEFileType         mWriteToFileType;
-void                *mWritingToFileReference;
-void                *mWritingEncoder;
-void                *mWritingDataBlock;
-uint32_t       mWritingDataBlockSize;
+BAE_BOOL mWritingToFile;
+BAEFileType mWriteToFileType;
+void *mWritingToFileReference;
+void *mWritingEncoder;
+void *mWritingDataBlock;
+uint32_t mWritingDataBlockSize;
 
 #if USE_FLAC_ENCODER != FALSE
 // FLAC encoding state for streaming
-void                *mFLACEncoder;
-void                *mFLACAccumulatedSamples;
-uint32_t       mFLACAccumulatedFrames;
-uint32_t       mFLACMaxAccumulatedFrames;
-uint32_t       mFLACChannels;
-uint32_t       mFLACBitsPerSample;
-uint32_t       mFLACSampleRate;
-XFILENAME           mFLACOutputFile;
+void *mFLACEncoder;
+void *mFLACAccumulatedSamples;
+uint32_t mFLACAccumulatedFrames;
+uint32_t mFLACMaxAccumulatedFrames;
+uint32_t mFLACChannels;
+uint32_t mFLACBitsPerSample;
+uint32_t mFLACSampleRate;
+XFILENAME mFLACOutputFile;
 #endif
 
 // Prototypes
 // ----------------------------------------------------------------------------
-BAEResult           BAE_TranslateOPErr(OPErr theErr);
-OPErr               BAE_TranslateBAErr(BAEResult theErr);
+BAEResult BAE_TranslateOPErr(OPErr theErr);
+OPErr BAE_TranslateBAErr(BAEResult theErr);
 
 #if USE_HIGHLEVEL_FILE_API != FALSE
-AudioFileType       BAE_TranslateBAEFileType(BAEFileType fileType);
+AudioFileType BAE_TranslateBAEFileType(BAEFileType fileType);
 #endif
 
 #if REVERB_USED != REVERB_DISABLED
-ReverbMode          BAE_TranslateFromBAEReverb(BAEReverbType igorVerb);
-BAEReverbType       BAE_TranslateToBAEReverb(ReverbMode r);
+ReverbMode BAE_TranslateFromBAEReverb(BAEReverbType igorVerb);
+BAEReverbType BAE_TranslateToBAEReverb(ReverbMode r);
 #endif
-
 
 // Private function prototypes
 // ----------------------------------------------------------------------------
 #if TRACKING
-static  BAEResult   PV_BAEMixer_AddObject(BAEMixer mixer, void *theObject, BAE_OBJECT_TYPE type);
-static  BAEResult   PV_BAEMixer_RemoveObject(BAEMixer mixer, void *theObject, BAE_OBJECT_TYPE type);
-static  BAE_BOOL    PV_BAEMixer_ValidateObject(BAEMixer mixer, void *theObject, BAE_OBJECT_TYPE type);
+static BAEResult PV_BAEMixer_AddObject(BAEMixer mixer, void *theObject, BAE_OBJECT_TYPE type);
+static BAEResult PV_BAEMixer_RemoveObject(BAEMixer mixer, void *theObject, BAE_OBJECT_TYPE type);
+static BAE_BOOL PV_BAEMixer_ValidateObject(BAEMixer mixer, void *theObject, BAE_OBJECT_TYPE type);
 #endif
 
-static  BAEResult   PV_BAEMixer_AddBank(BAEMixer mixer, XFILE newPatchFile);
-static  void        PV_BAEMixer_SubmitBankOrder(BAEMixer mixer);
+static BAEResult PV_BAEMixer_AddBank(BAEMixer mixer, XFILE newPatchFile);
+static void PV_BAEMixer_SubmitBankOrder(BAEMixer mixer);
 
-static  BAE_FIXED   PV_CalculateTimeDeltaForFade(
-                        BAE_FIXED sourceVolume,
-                        BAE_FIXED destVolume,
-                        BAE_FIXED timeInMiliseconds);
+static BAE_FIXED PV_CalculateTimeDeltaForFade(
+    BAE_FIXED sourceVolume,
+    BAE_FIXED destVolume,
+    BAE_FIXED timeInMiliseconds);
 
 // song related
-static  BAEResult   PV_BAESong_InitLiveSong(BAESong song, BAE_BOOL addToMixer);
+static BAEResult PV_BAESong_InitLiveSong(BAESong song, BAE_BOOL addToMixer);
 
-static  void        PV_BAESong_Stop(BAESong song, BAE_BOOL startFade);
-static  void        PV_BAESong_Unload(BAESong song);
-static  void        PV_BAESong_SetCallback(BAESong song, BAE_SongCallbackPtr pCallback, 
-                                            void *callbackReference);
+static void PV_BAESong_Stop(BAESong song, BAE_BOOL startFade);
+static void PV_BAESong_Unload(BAESong song);
+static void PV_BAESong_SetCallback(BAESong song, BAE_SongCallbackPtr pCallback,
+                                   void *callbackReference);
 
-static  BAETerpMode PV_TranslateTerpModeToBAETerpMode(TerpMode tm_in);
+static BAETerpMode PV_TranslateTerpModeToBAETerpMode(TerpMode tm_in);
 
 // sound related
-static  void        PV_BAESound_SetCallback(BAESound sound, BAE_SoundCallbackPtr pCallback, 
-                                        void *callbackReference);
-static  void        PV_BAESound_Unload(BAESound sound);
-static  void        PV_BAESound_Stop(BAESound sound, BAE_BOOL startFade);
+static void PV_BAESound_SetCallback(BAESound sound, BAE_SoundCallbackPtr pCallback,
+                                    void *callbackReference);
+static void PV_BAESound_Unload(BAESound sound);
+static void PV_BAESound_Stop(BAESound sound, BAE_BOOL startFade);
 
 extern char mCopyright[];
 extern char mAboutNames[];
 
 #if 0
-    #pragma mark -
-    #pragma mark ##### Support functions #####
-    #pragma mark -
+#pragma mark -
+#pragma mark##### Support functions #####
+#pragma mark -
 #endif
-
 
 // Read a file into memory and return an allocated pointer
 static XPTR PV_GetFileAsData(XFILENAME *pFile, int32_t *pSize)
 {
-    XPTR    data;
+    XPTR data;
 
     if (XGetFileAsData(pFile, &data, pSize))
     {
@@ -641,42 +751,38 @@ static XPTR PV_GetFileAsData(XFILENAME *pFile, int32_t *pSize)
     return data;
 }
 
-
-
 #if REVERB_USED != REVERB_DISABLED
 static const ReverbMode translateInternal[] = {
-                                REVERB_NO_CHANGE,
-                                REVERB_TYPE_1,
-                                REVERB_TYPE_2,
-                                REVERB_TYPE_3,
-                                REVERB_TYPE_4,
-                                REVERB_TYPE_5,
-                                REVERB_TYPE_6,
-                                REVERB_TYPE_7,
-                                REVERB_TYPE_8,
-                                REVERB_TYPE_9,
-                                REVERB_TYPE_10,
-                                REVERB_TYPE_11
-                                            };
+    REVERB_NO_CHANGE,
+    REVERB_TYPE_1,
+    REVERB_TYPE_2,
+    REVERB_TYPE_3,
+    REVERB_TYPE_4,
+    REVERB_TYPE_5,
+    REVERB_TYPE_6,
+    REVERB_TYPE_7,
+    REVERB_TYPE_8,
+    REVERB_TYPE_9,
+    REVERB_TYPE_10,
+    REVERB_TYPE_11};
 static const BAEReverbType translateExternal[] = {
-                                BAE_REVERB_NO_CHANGE,
-                                BAE_REVERB_TYPE_1,
-                                BAE_REVERB_TYPE_2,
-                                BAE_REVERB_TYPE_3,
-                                BAE_REVERB_TYPE_4,
-                                BAE_REVERB_TYPE_5,
-                                BAE_REVERB_TYPE_6,
-                                BAE_REVERB_TYPE_7,
-                                BAE_REVERB_TYPE_8,
-                                BAE_REVERB_TYPE_9,
-                                BAE_REVERB_TYPE_10,
-                                BAE_REVERB_TYPE_11
-                                            };
+    BAE_REVERB_NO_CHANGE,
+    BAE_REVERB_TYPE_1,
+    BAE_REVERB_TYPE_2,
+    BAE_REVERB_TYPE_3,
+    BAE_REVERB_TYPE_4,
+    BAE_REVERB_TYPE_5,
+    BAE_REVERB_TYPE_6,
+    BAE_REVERB_TYPE_7,
+    BAE_REVERB_TYPE_8,
+    BAE_REVERB_TYPE_9,
+    BAE_REVERB_TYPE_10,
+    BAE_REVERB_TYPE_11};
 // translate reverb types from BAEReverbType to ReverbMode
 ReverbMode BAE_TranslateFromBAEReverb(BAEReverbType igorVerb)
 {
-    ReverbMode              r;
-    int16_t               count;
+    ReverbMode r;
+    int16_t count;
 
     r = REVERB_TYPE_1;
     for (count = 0; count < MAX_REVERB_TYPES; count++)
@@ -693,8 +799,8 @@ ReverbMode BAE_TranslateFromBAEReverb(BAEReverbType igorVerb)
 // translate reverb types to BAEReverbType from ReverbMode
 BAEReverbType BAE_TranslateToBAEReverb(ReverbMode r)
 {
-    BAEReverbType           igorVerb;
-    int16_t               count;
+    BAEReverbType igorVerb;
+    int16_t count;
 
     igorVerb = BAE_REVERB_TYPE_1;
     for (count = 0; count < MAX_REVERB_TYPES; count++)
@@ -709,73 +815,69 @@ BAEReverbType BAE_TranslateToBAEReverb(ReverbMode r)
 }
 #endif
 
-
 static const BAEResult translateExternalError[] = {
-                                        BAE_NO_ERROR,
-                                        BAE_BUFFER_TOO_SMALL,
-                                        BAE_NOT_SETUP,
-                                        BAE_PARAM_ERR,
-                                        BAE_MEMORY_ERR,
-                                        BAE_BAD_INSTRUMENT,
-                                        BAE_BAD_MIDI_DATA,
-                                        BAE_ALREADY_PAUSED,
-                                        BAE_ALREADY_RESUMED,
-                                        BAE_DEVICE_UNAVAILABLE,
-                                        BAE_STILL_PLAYING,
-                                        BAE_NO_SONG_PLAYING,
-                                        BAE_TOO_MANY_SONGS_PLAYING,
-                                        BAE_NO_VOLUME,
-                                        BAE_NO_FREE_VOICES,
-                                        BAE_STREAM_STOP_PLAY,
-                                        BAE_BAD_FILE_TYPE,
-                                        BAE_GENERAL_BAD,
-                                        BAE_BAD_SAMPLE,
-                                        BAE_BAD_FILE,
-                                        BAE_FILE_NOT_FOUND,
-                                        BAE_NOT_REENTERANT,
-                                        BAE_SAMPLE_TOO_LARGE,
-                                        BAE_UNSUPPORTED_HARDWARE,
-                                        BAE_ABORTED,
-                                        BAE_RESOURCE_NOT_FOUND,
-                                        BAE_NULL_OBJECT
-                                    };
-
+    BAE_NO_ERROR,
+    BAE_BUFFER_TOO_SMALL,
+    BAE_NOT_SETUP,
+    BAE_PARAM_ERR,
+    BAE_MEMORY_ERR,
+    BAE_BAD_INSTRUMENT,
+    BAE_BAD_MIDI_DATA,
+    BAE_ALREADY_PAUSED,
+    BAE_ALREADY_RESUMED,
+    BAE_DEVICE_UNAVAILABLE,
+    BAE_STILL_PLAYING,
+    BAE_NO_SONG_PLAYING,
+    BAE_TOO_MANY_SONGS_PLAYING,
+    BAE_NO_VOLUME,
+    BAE_NO_FREE_VOICES,
+    BAE_STREAM_STOP_PLAY,
+    BAE_BAD_FILE_TYPE,
+    BAE_GENERAL_BAD,
+    BAE_BAD_SAMPLE,
+    BAE_BAD_FILE,
+    BAE_FILE_NOT_FOUND,
+    BAE_NOT_REENTERANT,
+    BAE_SAMPLE_TOO_LARGE,
+    BAE_UNSUPPORTED_HARDWARE,
+    BAE_ABORTED,
+    BAE_RESOURCE_NOT_FOUND,
+    BAE_NULL_OBJECT};
 
 static const OPErr translateInternalError[] = {
-                                        NO_ERR,
-                                        BUFFER_TO_SMALL,
-                                        NOT_SETUP,
-                                        PARAM_ERR,
-                                        MEMORY_ERR,
-                                        BAD_INSTRUMENT,
-                                        BAD_MIDI_DATA,
-                                        ALREADY_PAUSED,
-                                        ALREADY_RESUMED,
-                                        DEVICE_UNAVAILABLE,
-                                        STILL_PLAYING,
-                                        NO_SONG_PLAYING,
-                                        TOO_MANY_SONGS_PLAYING,
-                                        NO_VOLUME,
-                                        NO_FREE_VOICES,
-                                        STREAM_STOP_PLAY,
-                                        BAD_FILE_TYPE,
-                                        GENERAL_BAD,
-                                        BAD_SAMPLE,
-                                        BAD_FILE,
-                                        FILE_NOT_FOUND,
-                                        NOT_REENTERANT,
-                                        SAMPLE_TO_LARGE,
-                                        UNSUPPORTED_HARDWARE,
-                                        ABORTED_PROCESS,
-                                        RESOURCE_NOT_FOUND,
-                                        NULL_OBJECT
-                                    };
-                                        
+    NO_ERR,
+    BUFFER_TO_SMALL,
+    NOT_SETUP,
+    PARAM_ERR,
+    MEMORY_ERR,
+    BAD_INSTRUMENT,
+    BAD_MIDI_DATA,
+    ALREADY_PAUSED,
+    ALREADY_RESUMED,
+    DEVICE_UNAVAILABLE,
+    STILL_PLAYING,
+    NO_SONG_PLAYING,
+    TOO_MANY_SONGS_PLAYING,
+    NO_VOLUME,
+    NO_FREE_VOICES,
+    STREAM_STOP_PLAY,
+    BAD_FILE_TYPE,
+    GENERAL_BAD,
+    BAD_SAMPLE,
+    BAD_FILE,
+    FILE_NOT_FOUND,
+    NOT_REENTERANT,
+    SAMPLE_TO_LARGE,
+    UNSUPPORTED_HARDWARE,
+    ABORTED_PROCESS,
+    RESOURCE_NOT_FOUND,
+    NULL_OBJECT};
+
 // Translate from OPErr to BAEResult
 BAEResult BAE_TranslateOPErr(OPErr theErr)
 {
-    BAEResult       igorErr;
-    int16_t   count,  max;
+    BAEResult igorErr;
+    int16_t count, max;
 
     igorErr = BAE_GENERAL_ERR;
     max = sizeof(translateExternalError) / sizeof(BAEResult);
@@ -790,12 +892,11 @@ BAEResult BAE_TranslateOPErr(OPErr theErr)
     return igorErr;
 }
 
-
 // Translate from BAEResult to OPErr
 OPErr BAE_TranslateBAErr(BAEResult theErr)
 {
-    OPErr       igorErr;
-    int16_t   count,  max;
+    OPErr igorErr;
+    int16_t count, max;
 
     igorErr = GENERAL_BAD;
     max = sizeof(translateExternalError) / sizeof(BAEResult);
@@ -810,38 +911,35 @@ OPErr BAE_TranslateBAErr(BAEResult theErr)
     return igorErr;
 }
 
-
-
-
 #if USE_HIGHLEVEL_FILE_API != FALSE
 AudioFileType BAE_TranslateBAEFileType(BAEFileType fileType)
 {
-    AudioFileType   haeFileType;
+    AudioFileType haeFileType;
 
     haeFileType = FILE_INVALID_TYPE;
     switch (fileType)
     {
-        case BAE_AIFF_TYPE:
-            haeFileType = FILE_AIFF_TYPE;
-            break;
-        case BAE_WAVE_TYPE:
-            haeFileType = FILE_WAVE_TYPE;
-            break;
+    case BAE_AIFF_TYPE:
+        haeFileType = FILE_AIFF_TYPE;
+        break;
+    case BAE_WAVE_TYPE:
+        haeFileType = FILE_WAVE_TYPE;
+        break;
 #if USE_MPEG_DECODER != FALSE
-        case BAE_MPEG_TYPE:
-            haeFileType = FILE_MPEG_TYPE;
-            break;
+    case BAE_MPEG_TYPE:
+        haeFileType = FILE_MPEG_TYPE;
+        break;
 #endif
 #if (USE_FLAC_DECODER != FALSE) || (USE_FLAC_ENCODER != FALSE)
-        case BAE_FLAC_TYPE:
-            haeFileType = FILE_FLAC_TYPE;
-            break;
+    case BAE_FLAC_TYPE:
+        haeFileType = FILE_FLAC_TYPE;
+        break;
 #endif
-        case BAE_AU_TYPE:
-            haeFileType = FILE_AU_TYPE;
-            break;
-	default:
-	    break;
+    case BAE_AU_TYPE:
+        haeFileType = FILE_AU_TYPE;
+        break;
+    default:
+        break;
     }
     return haeFileType;
 }
@@ -855,24 +953,26 @@ static int g_defaultVelocityCurve = 0;
 
 BAEResult BAE_SetDefaultVelocityCurve(int curveType)
 {
-    if (curveType < 0) curveType = 0;
-    if (curveType > 4) curveType = 4;
+    if (curveType < 0)
+        curveType = 0;
+    if (curveType > 4)
+        curveType = 4;
     g_defaultVelocityCurve = curveType;
     return BAE_NO_ERROR;
 }
 
 BAEResult BAE_GetDefaultVelocityCurve(int *outCurveType)
 {
-    if (!outCurveType) return BAE_PARAM_ERR;
+    if (!outCurveType)
+        return BAE_PARAM_ERR;
     *outCurveType = g_defaultVelocityCurve;
     return BAE_NO_ERROR;
 }
 #if 0
-    #pragma mark -
-    #pragma mark ##### BAEMixer #####
-    #pragma mark -
+#pragma mark -
+#pragma mark##### BAEMixer #####
+#pragma mark -
 #endif
-
 
 // BAEMixer_New
 // ------------------------------------
@@ -880,8 +980,8 @@ BAEResult BAE_GetDefaultVelocityCurve(int *outCurveType)
 //
 BAEMixer BAEMixer_New(void)
 {
-    BAEMixer    mixer;
-    char        c;
+    BAEMixer mixer;
+    char c;
 
     // must reference these so they stay linked
     c = mCopyright[0];
@@ -893,7 +993,7 @@ BAEMixer BAEMixer_New(void)
         if (BAE_NewMutex(&mixer->mLock, "bae", "mix", __LINE__))
         {
             BAE_AcquireMutex(mixer->mLock);
-    
+
             mixer->mID = OBJECT_ID;
             mixer->pMixer = NULL;
             mixer->audioEngaged = FALSE;
@@ -901,11 +1001,11 @@ BAEMixer BAEMixer_New(void)
 #if TRACKING
             mixer->pObjects = NULL;
 #endif
-            mixer->pTaskProc = NULL; 
+            mixer->pTaskProc = NULL;
             mixer->mTaskReference = NULL;
             mixer->mFadeRate = FLOAT_TO_FIXED(2.2);
             mixer->mMutedVolumeLevel = BAE_GetHardwareVolume();
-            
+
             BAE_ReleaseMutex(mixer->mLock);
         }
         else
@@ -917,7 +1017,6 @@ BAEMixer BAEMixer_New(void)
     return mixer;
 }
 
-
 // BAEMixer_Delete()
 // ------------------------------------
 //
@@ -925,10 +1024,10 @@ BAEMixer BAEMixer_New(void)
 BAEResult BAEMixer_Delete(BAEMixer mixer)
 {
     BAEResult err;
-#if TRACKING    
+#if TRACKING
     BAEObjectListElem *elem, *next;
 #endif
-    
+
     err = BAEMixer_Close(mixer);
     if (err == BAE_NO_ERROR)
     {
@@ -940,21 +1039,21 @@ BAEResult BAEMixer_Delete(BAEMixer mixer)
             next = elem->next;
             switch (elem->type)
             {
-                case BAE_SONG_OBJECT:
-                    ((BAESong)elem->object)->mixer = NULL;
-                    break;
-    
-                case BAE_SOUND_OBJECT:
-                    ((BAESound)elem->object)->mixer = NULL;
-                    break;
+            case BAE_SONG_OBJECT:
+                ((BAESong)elem->object)->mixer = NULL;
+                break;
+
+            case BAE_SOUND_OBJECT:
+                ((BAESound)elem->object)->mixer = NULL;
+                break;
 #if USE_STREAM_API == TRUE
-                case BAE_STREAM_OBJECT:
-                    ((BAEStream)elem->object)->mixer = NULL;
-                    break;
+            case BAE_STREAM_OBJECT:
+                ((BAEStream)elem->object)->mixer = NULL;
+                break;
 #endif
-                case BAE_MIXER_OBJECT:
-                    BAE_ASSERT(FALSE);
-                    break;
+            case BAE_MIXER_OBJECT:
+                BAE_ASSERT(FALSE);
+                break;
             }
             XDisposePtr(elem);
             elem = next;
@@ -991,7 +1090,7 @@ BAEResult BAEMixer_SetAudioTask(BAEMixer mixer, BAE_AudioTaskCallbackPtr pTaskPr
 
     if (mixer)
     {
-        mixer->pTaskProc = pTaskProc; 
+        mixer->pTaskProc = pTaskProc;
         mixer->mTaskReference = taskReference;
         GM_SetAudioTask(PV_TaskCallback, mixer);
     }
@@ -1035,7 +1134,7 @@ BAEResult BAEMixer_GetAudioTask(BAEMixer mixer, BAE_AudioTaskCallbackPtr *pResul
 //
 BAEResult BAEMixer_GetMemoryUsed(BAEMixer mixer, uint32_t *pOutResult)
 {
-    uint32_t   size;
+    uint32_t size;
 
     size = 0;
     if (mixer)
@@ -1095,7 +1194,6 @@ static BAEResult PV_BAEMixer_AddObject(BAEMixer mixer, void *theObject, BAE_OBJE
     return BAE_TranslateOPErr(err);
 }
 
-
 // PV_BAEMixer_RemoveObject()
 // ------------------------------------
 //
@@ -1146,8 +1244,8 @@ static BAEResult PV_BAEMixer_RemoveObject(BAEMixer mixer, void *theObject, BAE_O
 // return TRUE if still in the list, otherwise false.
 static BAE_BOOL PV_BAEMixer_ValidateObject(BAEMixer mixer, void *theObject, BAE_OBJECT_TYPE type)
 {
-    BAE_BOOL            ok;
-    BAEObjectListElem   *elem, **prev;
+    BAE_BOOL ok;
+    BAEObjectListElem *elem, **prev;
 
     ok = FALSE;
     if (mixer)
@@ -1178,11 +1276,10 @@ static BAE_BOOL PV_BAEMixer_ValidateObject(BAEMixer mixer, void *theObject, BAE_
 }
 #endif
 
-
 // get and set the fade time. Will be used for all song/sound fades
 BAEResult BAEMixer_SetFadeRate(BAEMixer mixer, BAE_UNSIGNED_FIXED rate)
 {
-    BAEResult   err;
+    BAEResult err;
 
     err = BAE_NO_ERROR;
     if (mixer)
@@ -1199,7 +1296,7 @@ BAEResult BAEMixer_SetFadeRate(BAEMixer mixer, BAE_UNSIGNED_FIXED rate)
 // private function. Will return current fade rate or 2.2 if there's an error
 static BAE_UNSIGNED_FIXED PV_GetDefaultMixerFadeRate(BAEMixer mixer)
 {
-    BAE_UNSIGNED_FIXED  rate;
+    BAE_UNSIGNED_FIXED rate;
 
     rate = FLOAT_TO_FIXED(2.2);
     BAEMixer_GetFadeRate(mixer, &rate);
@@ -1208,7 +1305,7 @@ static BAE_UNSIGNED_FIXED PV_GetDefaultMixerFadeRate(BAEMixer mixer)
 
 BAEResult BAEMixer_GetFadeRate(BAEMixer mixer, BAE_UNSIGNED_FIXED *outFadeRate)
 {
-    BAEResult   err;
+    BAEResult err;
 
     err = BAE_NO_ERROR;
     if (mixer)
@@ -1236,17 +1333,17 @@ BAEResult BAEMixer_GetFadeRate(BAEMixer mixer, BAE_UNSIGNED_FIXED *outFadeRate)
 BAEResult BAEMixer_GetMaxDeviceCount(BAEMixer mixer, int32_t *outMaxDeviceCount)
 {
     OPErr err;
-    
+
     err = NO_ERR;
     if (mixer)
     {
         if (outMaxDeviceCount)
         {
-            #if USE_DEVICE_ENUM_SUPPORT == TRUE
-                *outMaxDeviceCount = GM_MaxDevices();
-            #else
-                *outMaxDeviceCount = 0;
-            #endif
+#if USE_DEVICE_ENUM_SUPPORT == TRUE
+            *outMaxDeviceCount = GM_MaxDevices();
+#else
+            *outMaxDeviceCount = 0;
+#endif
         }
         else
         {
@@ -1260,42 +1357,41 @@ BAEResult BAEMixer_GetMaxDeviceCount(BAEMixer mixer, int32_t *outMaxDeviceCount)
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAEMixer_SetCurrentDevice()
 // ------------------------------------
 //
 //
 BAEResult BAEMixer_SetCurrentDevice(BAEMixer mixer, int32_t deviceID, void *deviceParameter)
-{   
-    OPErr       err;
-    BAE_BOOL    isOpen;
-    int32_t        deviceCount;
-    
+{
+    OPErr err;
+    BAE_BOOL isOpen;
+    int32_t deviceCount;
+
     err = NO_ERR;
     if (mixer)
     {
-        #if USE_DEVICE_ENUM_SUPPORT == TRUE
-            BAEMixer_GetMaxDeviceCount(mixer, &deviceCount);
-            if (deviceID < deviceCount)
+#if USE_DEVICE_ENUM_SUPPORT == TRUE
+        BAEMixer_GetMaxDeviceCount(mixer, &deviceCount);
+        if (deviceID < deviceCount)
+        {
+            BAEMixer_IsOpen(mixer, &isOpen);
+            if (isOpen)
             {
-                BAEMixer_IsOpen(mixer, &isOpen);
-                if (isOpen)
-                {
-                    BAEMixer_DisengageAudio(mixer);     // shutdown from hardware
-                }
-                GM_SetDeviceID(deviceID, deviceParameter);  // change to new device
-                BAEMixer_IsOpen(mixer, &isOpen);
-                if (isOpen)
-                {
-                    BAEMixer_ReengageAudio(mixer);      // connect back to audio with new device
-                }
+                BAEMixer_DisengageAudio(mixer); // shutdown from hardware
             }
-        #else
-            deviceID = deviceID;
-            deviceParameter = deviceParameter;
-            isOpen = isOpen;
-            deviceCount = deviceCount;
-        #endif
+            GM_SetDeviceID(deviceID, deviceParameter); // change to new device
+            BAEMixer_IsOpen(mixer, &isOpen);
+            if (isOpen)
+            {
+                BAEMixer_ReengageAudio(mixer); // connect back to audio with new device
+            }
+        }
+#else
+        deviceID = deviceID;
+        deviceParameter = deviceParameter;
+        isOpen = isOpen;
+        deviceCount = deviceCount;
+#endif
     }
     else
     {
@@ -1304,7 +1400,6 @@ BAEResult BAEMixer_SetCurrentDevice(BAEMixer mixer, int32_t deviceID, void *devi
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAEMixer_GetCurrentDevice()
 // ------------------------------------
 //
@@ -1312,7 +1407,7 @@ BAEResult BAEMixer_SetCurrentDevice(BAEMixer mixer, int32_t deviceID, void *devi
 BAEResult BAEMixer_GetCurrentDevice(BAEMixer mixer, void *deviceParameter, int32_t *outDeviceID)
 {
     OPErr err;
-    
+
     err = NO_ERR;
     if (mixer)
     {
@@ -1332,7 +1427,6 @@ BAEResult BAEMixer_GetCurrentDevice(BAEMixer mixer, void *deviceParameter, int32
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAEMixer_GetDeviceName()
 // ------------------------------------
 //
@@ -1340,19 +1434,19 @@ BAEResult BAEMixer_GetCurrentDevice(BAEMixer mixer, void *deviceParameter, int32
 BAEResult BAEMixer_GetDeviceName(BAEMixer mixer, int32_t deviceID, char *cName, uint32_t cNameLength)
 {
     OPErr err;
-    
+
     err = NO_ERR;
     if (mixer)
     {
         if (cName && cNameLength)
         {
-            #if USE_DEVICE_ENUM_SUPPORT == TRUE
-                GM_GetDeviceName(deviceID, cName, cNameLength);
-            #else
-                deviceID = deviceID;
-                cName = cName;
-                cNameLength = cNameLength;
-            #endif
+#if USE_DEVICE_ENUM_SUPPORT == TRUE
+            GM_GetDeviceName(deviceID, cName, cNameLength);
+#else
+            deviceID = deviceID;
+            cName = cName;
+            cNameLength = cNameLength;
+#endif
         }
         else
         {
@@ -1401,7 +1495,7 @@ BAEResult BAEMixer_GetDefaultReverb(BAEMixer mixer, BAEReverbType *pOutResult)
 BAEResult BAEMixer_IsOpen(BAEMixer mixer, BAE_BOOL *outIsOpen)
 {
     OPErr err;
-    
+
     err = NO_ERR;
     if (mixer)
     {
@@ -1421,7 +1515,6 @@ BAEResult BAEMixer_IsOpen(BAEMixer mixer, BAE_BOOL *outIsOpen)
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAEMixer_Is16BitSupported()
 // ------------------------------------
 //
@@ -1429,7 +1522,7 @@ BAEResult BAEMixer_IsOpen(BAEMixer mixer, BAE_BOOL *outIsOpen)
 BAEResult BAEMixer_Is16BitSupported(BAEMixer mixer, BAE_BOOL *outIsSupported)
 {
     OPErr err;
-    
+
     err = NO_ERR;
     if (mixer)
     {
@@ -1449,7 +1542,6 @@ BAEResult BAEMixer_Is16BitSupported(BAEMixer mixer, BAE_BOOL *outIsSupported)
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAEMixer_Is8BitSupported()
 // ------------------------------------
 //
@@ -1457,7 +1549,7 @@ BAEResult BAEMixer_Is16BitSupported(BAEMixer mixer, BAE_BOOL *outIsSupported)
 BAEResult BAEMixer_Is8BitSupported(BAEMixer mixer, BAE_BOOL *outIsSupported)
 {
     OPErr err;
-    
+
     err = NO_ERR;
     if (mixer)
     {
@@ -1477,60 +1569,58 @@ BAEResult BAEMixer_Is8BitSupported(BAEMixer mixer, BAE_BOOL *outIsSupported)
     return BAE_TranslateOPErr(err);
 }
 
-
 // PV_GetDefaultTerp()
 // ------------------------------------
 //
 //
 static TerpMode PV_GetDefaultTerp(BAETerpMode t)
 {
-    TerpMode    theTerp;
+    TerpMode theTerp;
 
     switch (t)
     {
-        #if USE_DROP_SAMPLE == TRUE
-        case BAE_DROP_SAMPLE:
-            theTerp = E_AMP_SCALED_DROP_SAMPLE;
-            break;
-        #endif
-        #if USE_TERP1 == TRUE
-        case BAE_2_POINT_INTERPOLATION:
-            theTerp = E_2_POINT_INTERPOLATION;
-            break;
-        #endif
-        default:
-        case BAE_LINEAR_INTERPOLATION:
-        #if USE_TERP2 == TRUE
-            theTerp = E_LINEAR_INTERPOLATION;
-        #endif
-        #if LOOPS_USED == U3232_LOOPS
-            theTerp = E_LINEAR_INTERPOLATION_U3232;
-        #elif LOOPS_USED == FLOAT_LOOPS
-            theTerp = E_LINEAR_INTERPOLATION_FLOAT;
-        #endif
-            break;
+#if USE_DROP_SAMPLE == TRUE
+    case BAE_DROP_SAMPLE:
+        theTerp = E_AMP_SCALED_DROP_SAMPLE;
+        break;
+#endif
+#if USE_TERP1 == TRUE
+    case BAE_2_POINT_INTERPOLATION:
+        theTerp = E_2_POINT_INTERPOLATION;
+        break;
+#endif
+    default:
+    case BAE_LINEAR_INTERPOLATION:
+#if USE_TERP2 == TRUE
+        theTerp = E_LINEAR_INTERPOLATION;
+#endif
+#if LOOPS_USED == U3232_LOOPS
+        theTerp = E_LINEAR_INTERPOLATION_U3232;
+#elif LOOPS_USED == FLOAT_LOOPS
+        theTerp = E_LINEAR_INTERPOLATION_FLOAT;
+#endif
+        break;
     }
     return theTerp;
 }
-
 
 // BAEMixer_Open()
 // ------------------------------------
 //
 //
 BAEResult BAEMixer_Open(BAEMixer mixer,
-                        BAERate q, 
-                        BAETerpMode t, 
+                        BAERate q,
+                        BAETerpMode t,
                         BAEAudioModifiers am,
                         int16_t maxSongVoices,
                         int16_t maxSoundVoices,
                         int16_t mixLevel,
                         BAE_BOOL engageAudio)
 {
-    OPErr           theErr;
-    Rate            theRate = Q_RATE_8K;
-    TerpMode        theTerp = 0;
-    AudioModifiers  theMods = 0;
+    OPErr theErr;
+    Rate theRate = Q_RATE_8K;
+    TerpMode theTerp = 0;
+    AudioModifiers theMods = 0;
 
     theErr = NO_ERR;
     if (mixer)
@@ -1541,26 +1631,26 @@ BAEResult BAEMixer_Open(BAEMixer mixer,
 #if (X_PLATFORM == X_MACINTOSH) && (CPU_TYPE == k68000)
             // we're running on a MacOS 68k, so we've got to restrict the features in order to get decent playback
             q = BAE_RATE_11K;
-            am &= ~BAE_USE_STEREO;          // mono only
-            am &= ~BAE_STEREO_FILTER;       // don't allow
-            am |= BAE_DISABLE_REVERB;       // don't allow
-//          am &= ~BAE_USE_16;
+            am &= ~BAE_USE_STEREO;    // mono only
+            am &= ~BAE_STEREO_FILTER; // don't allow
+            am |= BAE_DISABLE_REVERB; // don't allow
+                                      //          am &= ~BAE_USE_16;
             switch (q)
             {
-                case BAE_44K:       // no way
-                case BAE_48K:
-                case BAE_24K:
-                case BAE_22K_TERP_44K:
-                    q = BAE_22K;
-                    break;
+            case BAE_44K: // no way
+            case BAE_48K:
+            case BAE_24K:
+            case BAE_22K_TERP_44K:
+                q = BAE_22K;
+                break;
             }
             t = BAE_DROP_SAMPLE;
-    
+
             switch (t)
             {
-                case BAE_LINEAR_INTERPOLATION:
-                    t = BAE_2_POINT_INTERPOLATION;
-                    break;
+            case BAE_LINEAR_INTERPOLATION:
+                t = BAE_2_POINT_INTERPOLATION;
+                break;
             }
 #endif
             theRate = (Rate)q;
@@ -1568,19 +1658,19 @@ BAEResult BAEMixer_Open(BAEMixer mixer,
             {
                 theErr = PARAM_ERR;
             }
-        
+
             switch (t)
             {
-                case BAE_DROP_SAMPLE:
-                case BAE_2_POINT_INTERPOLATION:
-                case BAE_LINEAR_INTERPOLATION:
-                    theTerp = PV_GetDefaultTerp(t);
-                    break;
-                default:
-                    theErr = PARAM_ERR;
-                    break;
+            case BAE_DROP_SAMPLE:
+            case BAE_2_POINT_INTERPOLATION:
+            case BAE_LINEAR_INTERPOLATION:
+                theTerp = PV_GetDefaultTerp(t);
+                break;
+            default:
+                theErr = PARAM_ERR;
+                break;
             }
-    
+
             theMods = M_NONE;
             if ((am & BAE_USE_16) && XIs16BitSupported())
             {
@@ -1588,10 +1678,10 @@ BAEResult BAEMixer_Open(BAEMixer mixer,
             }
             else
             {
-                am &= BAE_USE_16;           // 8 bit
+                am &= BAE_USE_16; // 8 bit
             }
-    
-            if ( (am & BAE_USE_STEREO) && XIsStereoSupported())
+
+            if ((am & BAE_USE_STEREO) && XIsStereoSupported())
             {
                 theMods |= M_USE_STEREO;
                 if (am & BAE_STEREO_FILTER)
@@ -1601,7 +1691,7 @@ BAEResult BAEMixer_Open(BAEMixer mixer,
             }
             else
             {
-                am &= ~BAE_USE_STEREO;          // mono
+                am &= ~BAE_USE_STEREO; // mono
             }
             if (am & BAE_DISABLE_REVERB)
             {
@@ -1635,9 +1725,9 @@ BAEResult BAEMixer_Open(BAEMixer mixer,
             // the built codebase
             {
                 int16_t major, minor, subminor;
-    
+
                 BAEMixer_GetMixerVersion(mixer, &major, &minor, &subminor);
-                if ((major != BAE_VERSION_MAJOR) || (minor != BAE_VERSION_MINOR) || 
+                if ((major != BAE_VERSION_MAJOR) || (minor != BAE_VERSION_MINOR) ||
                     (subminor != BAE_VERSION_SUB_MINOR))
                 {
                     theErr = GENERAL_BAD;
@@ -1652,10 +1742,10 @@ BAEResult BAEMixer_Open(BAEMixer mixer,
             if (theErr == NO_ERR)
             {
                 theErr = GM_InitGeneralSound(NULL, theRate, theTerp, theMods,
-                                                maxSongVoices,
-                                                mixLevel,
-                                                maxSoundVoices,
-                                                &mixer->pMixer);
+                                             maxSongVoices,
+                                             mixLevel,
+                                             maxSoundVoices,
+                                             &mixer->pMixer);
                 if (theErr == NO_ERR)
                 {
                     if (engageAudio)
@@ -1671,7 +1761,7 @@ BAEResult BAEMixer_Open(BAEMixer mixer,
         }
         else
         {
-            theErr = NOT_REENTERANT;        // can't be reentrant
+            theErr = NOT_REENTERANT; // can't be reentrant
         }
     }
     else
@@ -1681,8 +1771,6 @@ BAEResult BAEMixer_Open(BAEMixer mixer,
     return BAE_TranslateOPErr(theErr);
 }
 
-
-
 // BAEMixer_Close()
 // ------------------------------------
 //
@@ -1690,7 +1778,7 @@ BAEResult BAEMixer_Open(BAEMixer mixer,
 BAEResult BAEMixer_Close(BAEMixer mixer)
 {
     OPErr err;
-    
+
     err = NO_ERR;
     if (mixer)
     {
@@ -1726,7 +1814,6 @@ BAEResult BAEMixer_Close(BAEMixer mixer)
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAEMixer_GetMixerVersion()
 // ------------------------------------
 //
@@ -1734,7 +1821,7 @@ BAEResult BAEMixer_Close(BAEMixer mixer)
 BAEResult BAEMixer_GetMixerVersion(BAEMixer mixer, int16_t *pVersionMajor, int16_t *pVersionMinor, int16_t *pVersionSubMinor)
 {
     OPErr err;
-    
+
     err = NO_ERR;
     if (mixer)
     {
@@ -1756,26 +1843,25 @@ BAEResult BAEMixer_GetMixerVersion(BAEMixer mixer, int16_t *pVersionMajor, int16
     return BAE_TranslateOPErr(err);
 }
 
-
 // PV_BAEMixer_AddBank()
 // ------------------------------------
 //
 //
 static BAEResult PV_BAEMixer_AddBank(BAEMixer mixer, XFILE newPatchFile)
 {
-    OPErr   err;
-    XFILE   *newList;
+    OPErr err;
+    XFILE *newList;
 
     err = NO_ERR;
 
     if (mixer)
     {
         BAE_AcquireMutex(mixer->mLock);
-        newList = (XFILE*)XNewPtr(sizeof(XFILE) * (mixer->numPatchFiles+1));
+        newList = (XFILE *)XNewPtr(sizeof(XFILE) * (mixer->numPatchFiles + 1));
         if (newList)
         {
-            // copy old list, and append new file to end 
-            XBlockMove(mixer->pPatchFiles, newList, sizeof(XFILE)*mixer->numPatchFiles);
+            // copy old list, and append new file to end
+            XBlockMove(mixer->pPatchFiles, newList, sizeof(XFILE) * mixer->numPatchFiles);
             newList[mixer->numPatchFiles] = newPatchFile;
 
             // dispose of old list, and attach new list
@@ -1783,7 +1869,7 @@ static BAEResult PV_BAEMixer_AddBank(BAEMixer mixer, XFILE newPatchFile)
             mixer->pPatchFiles = newList;
             mixer->numPatchFiles++;
 
-            XFileUseThisResourceFile(newPatchFile);         
+            XFileUseThisResourceFile(newPatchFile);
         }
         else
         {
@@ -1798,15 +1884,14 @@ static BAEResult PV_BAEMixer_AddBank(BAEMixer mixer, XFILE newPatchFile)
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAEMixer_AddBankFromMemory()
 // ------------------------------------
 //
 //
-BAEResult BAEMixer_AddBankFromMemory(BAEMixer mixer, void * pAudioFile, uint32_t fileSize, BAEBankToken *outToken)
+BAEResult BAEMixer_AddBankFromMemory(BAEMixer mixer, void *pAudioFile, uint32_t fileSize, BAEBankToken *outToken)
 {
-    BAEResult       theErr;
-    XFILE           newPatchFile;
+    BAEResult theErr;
+    XFILE newPatchFile;
 
     theErr = BAE_NO_ERROR;
     if (mixer)
@@ -1820,11 +1905,18 @@ BAEResult BAEMixer_AddBankFromMemory(BAEMixer mixer, void * pAudioFile, uint32_t
                 *outToken = (BAEBankToken)newPatchFile;
             }
             // Compute sha1 of memory bank for friendly name cache
-            if(theErr == BAE_NO_ERROR){
+            if (theErr == BAE_NO_ERROR)
+            {
                 unsigned char digest[20];
                 char hex[41];
-                sha1mini((const unsigned char*)pAudioFile, fileSize, digest);
-                static const char *hexmap="0123456789abcdef"; for(int i=0;i<20;i++){ hex[i*2]=hexmap[digest[i]>>4]; hex[i*2+1]=hexmap[digest[i]&15]; } hex[40]='\0';
+                sha1mini((const unsigned char *)pAudioFile, fileSize, digest);
+                static const char *hexmap = "0123456789abcdef";
+                for (int i = 0; i < 20; i++)
+                {
+                    hex[i * 2] = hexmap[digest[i] >> 4];
+                    hex[i * 2 + 1] = hexmap[digest[i] & 15];
+                }
+                hex[40] = '\0';
                 PV_RegisterBankFriendly((BAEBankToken)newPatchFile, hex);
             }
         }
@@ -1840,16 +1932,15 @@ BAEResult BAEMixer_AddBankFromMemory(BAEMixer mixer, void * pAudioFile, uint32_t
     return theErr;
 }
 
-
 // BAEMixer_AddBankFromFile()
 // ------------------------------------
 //
 //
 BAEResult BAEMixer_AddBankFromFile(BAEMixer mixer, BAEPathName pAudioPathName, BAEBankToken *outToken)
 {
-    BAEResult       theErr;
-    XFILE           newPatchFile;
-    XFILENAME       theFile;
+    BAEResult theErr;
+    XFILE newPatchFile;
+    XFILENAME theFile;
 
     theErr = BAE_NO_ERROR;
     if (mixer)
@@ -1864,12 +1955,39 @@ BAEResult BAEMixer_AddBankFromFile(BAEMixer mixer, BAEPathName pAudioPathName, B
                 *outToken = (BAEBankToken)newPatchFile;
             }
             // After loading from file, read its bytes to compute sha1
-            if(theErr == BAE_NO_ERROR){
+            if (theErr == BAE_NO_ERROR)
+            {
                 // Use XFile routines: open resource already returns handle; need raw data pointer & size
                 // Simplest: reopen file normally and read bytes.
                 FILE *f = fopen(pAudioPathName, "rb");
-                if(f){
-                    fseek(f,0,SEEK_END); long sz = ftell(f); if(sz>0 && sz < (32*1024*1024)){ fseek(f,0,SEEK_SET); unsigned char *buf = (unsigned char*)malloc(sz); if(buf){ size_t rd=fread(buf,1,sz,f); if(rd==(size_t)sz){ unsigned char dg[20]; char hx[41]; sha1mini(buf, sz, dg); static const char *hm="0123456789abcdef"; for(int i=0;i<20;i++){ hx[i*2]=hm[dg[i]>>4]; hx[i*2+1]=hm[dg[i]&15]; } hx[40]='\0'; PV_RegisterBankFriendly((BAEBankToken)newPatchFile, hx);} free(buf);} }
+                if (f)
+                {
+                    fseek(f, 0, SEEK_END);
+                    long sz = ftell(f);
+                    if (sz > 0 && sz < (32 * 1024 * 1024))
+                    {
+                        fseek(f, 0, SEEK_SET);
+                        unsigned char *buf = (unsigned char *)malloc(sz);
+                        if (buf)
+                        {
+                            size_t rd = fread(buf, 1, sz, f);
+                            if (rd == (size_t)sz)
+                            {
+                                unsigned char dg[20];
+                                char hx[41];
+                                sha1mini(buf, sz, dg);
+                                static const char *hm = "0123456789abcdef";
+                                for (int i = 0; i < 20; i++)
+                                {
+                                    hx[i * 2] = hm[dg[i] >> 4];
+                                    hx[i * 2 + 1] = hm[dg[i] & 15];
+                                }
+                                hx[40] = '\0';
+                                PV_RegisterBankFriendly((BAEBankToken)newPatchFile, hx);
+                            }
+                            free(buf);
+                        }
+                    }
                     fclose(f);
                 }
             }
@@ -1886,7 +2004,6 @@ BAEResult BAEMixer_AddBankFromFile(BAEMixer mixer, BAEPathName pAudioPathName, B
     return theErr;
 }
 
-
 // BAEMixer_UnloadBank()
 // ------------------------------------
 //
@@ -1897,7 +2014,7 @@ BAEResult BAEMixer_UnloadBank(BAEMixer mixer, BAEBankToken token)
     XFILE patchFile;
     OPErr err;
     BAE_BOOL ok = FALSE;
-    int i,j;
+    int i, j;
 
     err = NO_ERR;
 
@@ -1906,9 +2023,9 @@ BAEResult BAEMixer_UnloadBank(BAEMixer mixer, BAEBankToken token)
         BAE_AcquireMutex(mixer->mLock);
 
         pPatchFiles = mixer->pPatchFiles;
-        patchFile = (XFILE) token;
+        patchFile = (XFILE)token;
 
-        for (i=0; i<mixer->numPatchFiles; i++)
+        for (i = 0; i < mixer->numPatchFiles; i++)
         {
             if (patchFile == pPatchFiles[i])
             {
@@ -1918,15 +2035,15 @@ BAEResult BAEMixer_UnloadBank(BAEMixer mixer, BAEBankToken token)
                 PV_UnregisterBankFriendly(token);
                 XFileClose(patchFile);
 
-                // compact the array.  
+                // compact the array.
                 // This will leave a unused slot on the end, but that's ok.
-                for (j=i+1; j<mixer->numPatchFiles; j++)
+                for (j = i + 1; j < mixer->numPatchFiles; j++)
                 {
-                    pPatchFiles[j-1] = pPatchFiles[j];
+                    pPatchFiles[j - 1] = pPatchFiles[j];
                 }
                 mixer->numPatchFiles--;
 
-                // was that the last one? kill the array.  
+                // was that the last one? kill the array.
                 // Don't really need to do this, but logically cleaner.
                 if (mixer->numPatchFiles == 0)
                 {
@@ -1949,8 +2066,6 @@ BAEResult BAEMixer_UnloadBank(BAEMixer mixer, BAEBankToken token)
     return BAE_TranslateOPErr(err);
 }
 
-
-
 BAEResult BAEMixer_UnloadBanks(BAEMixer mixer)
 {
     BAEResult err;
@@ -1961,8 +2076,9 @@ BAEResult BAEMixer_UnloadBanks(BAEMixer mixer)
         // Close patch files
         while (mixer->numPatchFiles)
         {
-            err = BAEMixer_UnloadBank(mixer, (BAEBankToken)mixer->pPatchFiles[mixer->numPatchFiles-1]);
-            if (err) break;
+            err = BAEMixer_UnloadBank(mixer, (BAEBankToken)mixer->pPatchFiles[mixer->numPatchFiles - 1]);
+            if (err)
+                break;
         }
     }
     else
@@ -1971,7 +2087,6 @@ BAEResult BAEMixer_UnloadBanks(BAEMixer mixer)
     }
     return err;
 }
-
 
 // BAEMixer_BringBankToFront()
 // ------------------------------------
@@ -1995,16 +2110,16 @@ BAEResult BAEMixer_BringBankToFront(BAEMixer mixer, BAEBankToken token)
         numPatchFiles = mixer->numPatchFiles;
         file = (XFILE)token;
 
-        for (i=0; i<numPatchFiles; i++)
+        for (i = 0; i < numPatchFiles; i++)
         {
             if (file == pPatchFiles[i])
             {
                 ok = TRUE; // found it!
-                
+
                 // move higher layers down one, and move the token layer to the end.
-                for (j=i+1; j<numPatchFiles; j++)
+                for (j = i + 1; j < numPatchFiles; j++)
                 {
-                    pPatchFiles[j-1] = pPatchFiles[j];
+                    pPatchFiles[j - 1] = pPatchFiles[j];
                 }
                 pPatchFiles[numPatchFiles - 1] = file;
                 XFileUseThisResourceFile(file);
@@ -2016,7 +2131,6 @@ BAEResult BAEMixer_BringBankToFront(BAEMixer mixer, BAEBankToken token)
         {
             err = RESOURCE_NOT_FOUND;
         }
-
     }
     else
     {
@@ -2024,7 +2138,6 @@ BAEResult BAEMixer_BringBankToFront(BAEMixer mixer, BAEBankToken token)
     }
     return BAE_TranslateOPErr(err);
 }
-
 
 // BAEMixer_SendBankToBack()
 // ------------------------------------
@@ -2041,7 +2154,7 @@ BAEResult BAEMixer_SendBankToBack(BAEMixer mixer, BAEBankToken token)
 
     err = NO_ERR;
     ok = FALSE;
-    
+
     if (mixer)
     {
         pPatchFiles = mixer->pPatchFiles;
@@ -2049,16 +2162,16 @@ BAEResult BAEMixer_SendBankToBack(BAEMixer mixer, BAEBankToken token)
         file = (XFILE)token;
 
         // find the patch file in the array, and reorder.
-        for (i=0; i<numPatchFiles; i++)
+        for (i = 0; i < numPatchFiles; i++)
         {
             if (file == pPatchFiles[i])
             {
                 ok = TRUE; // found it!
 
                 // move lower layers up one, and move the token layer to the start.
-                for (j=i; j>0; j--)
+                for (j = i; j > 0; j--)
                 {
-                    pPatchFiles[j] = pPatchFiles[j-1];
+                    pPatchFiles[j] = pPatchFiles[j - 1];
                 }
                 pPatchFiles[0] = file;
                 break;
@@ -2066,7 +2179,7 @@ BAEResult BAEMixer_SendBankToBack(BAEMixer mixer, BAEBankToken token)
         }
 
         if (ok)
-        {   
+        {
             PV_BAEMixer_SubmitBankOrder(mixer);
         }
         else
@@ -2081,7 +2194,6 @@ BAEResult BAEMixer_SendBankToBack(BAEMixer mixer, BAEBankToken token)
     return BAE_TranslateOPErr(err);
 }
 
-
 // PV_BAEMixer_SubmitBankOrder()
 // ------------------------------------
 //
@@ -2090,12 +2202,11 @@ static void PV_BAEMixer_SubmitBankOrder(BAEMixer mixer)
 {
     int i;
 
-    for (i=0; i<mixer->numPatchFiles; i++)
+    for (i = 0; i < mixer->numPatchFiles; i++)
     {
         XFileUseThisResourceFile(mixer->pPatchFiles[i]);
     }
 }
-
 
 // BAEMixer_GetBankVersion()
 // ------------------------------------
@@ -2103,20 +2214,20 @@ static void PV_BAEMixer_SubmitBankOrder(BAEMixer mixer)
 //
 BAEResult BAEMixer_GetBankVersion(BAEMixer mixer, BAEBankToken token, int16_t *pVersionMajor, int16_t *pVersionMinor, int16_t *pVersionSubMinor)
 {
-    OPErr       err;
-    XVersion    vers;
-    int         i;
-    XFILE       file;
-    BAE_BOOL    foundBank;
+    OPErr err;
+    XVersion vers;
+    int i;
+    XFILE file;
+    BAE_BOOL foundBank;
 
     err = NO_ERR;
-    
+
     if (mixer)
     {
         file = (XFILE)token;
         foundBank = FALSE;
 
-        for (i=0; i<mixer->numPatchFiles; i++)
+        for (i = 0; i < mixer->numPatchFiles; i++)
         {
             if (mixer->pPatchFiles[i] == file)
             {
@@ -2161,17 +2272,16 @@ BAEResult BAEMixer_GetBankVersion(BAEMixer mixer, BAEBankToken token, int16_t *p
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAEMixer_GetGroovoidNameFromBank()
 // -------------------------------------------
 // was GetSongNameFromAudioFile()
 //
 BAEResult BAEMixer_GetGroovoidNameFromBank(BAEMixer mixer, int32_t index, char *cSongName)
 {
-    XPTR        pData;
-    OPErr       err;
+    XPTR pData;
+    OPErr err;
     XLongResourceID id;
-    
+
     err = NO_ERR;
     if (mixer)
     {
@@ -2205,17 +2315,16 @@ BAEResult BAEMixer_GetGroovoidNameFromBank(BAEMixer mixer, int32_t index, char *
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAEMixer_ChangeAudioModes()
 // ------------------------------------
 //
 //
 BAEResult BAEMixer_ChangeAudioModes(BAEMixer mixer, BAERate q, BAETerpMode t, BAEAudioModifiers am)
 {
-    OPErr           err;
-    Rate            theRate = Q_RATE_8K;
-    TerpMode        theTerp = 0;
-    AudioModifiers  theMods = 0;
+    OPErr err;
+    Rate theRate = Q_RATE_8K;
+    TerpMode theTerp = 0;
+    AudioModifiers theMods = 0;
 
     err = NO_ERR;
     if (mixer)
@@ -2226,17 +2335,17 @@ BAEResult BAEMixer_ChangeAudioModes(BAEMixer mixer, BAERate q, BAETerpMode t, BA
             BAE_STDERR("BAEMixer_ChangeAudioModes:invalid rate %d\n", (int32_t)q);
             err = PARAM_ERR;
         }
-        
+
         switch (t)
         {
-            case BAE_DROP_SAMPLE:
-            case BAE_2_POINT_INTERPOLATION:
-            case BAE_LINEAR_INTERPOLATION:
-                theTerp = PV_GetDefaultTerp(t);
-                break;
-            default:
-                err = PARAM_ERR;
-                break;
+        case BAE_DROP_SAMPLE:
+        case BAE_2_POINT_INTERPOLATION:
+        case BAE_LINEAR_INTERPOLATION:
+            theTerp = PV_GetDefaultTerp(t);
+            break;
+        default:
+            err = PARAM_ERR;
+            break;
         }
 
         theMods = M_NONE;
@@ -2246,9 +2355,9 @@ BAEResult BAEMixer_ChangeAudioModes(BAEMixer mixer, BAERate q, BAETerpMode t, BA
         }
         else
         {
-            am &= ~BAE_USE_16;  // 8 bit
+            am &= ~BAE_USE_16; // 8 bit
         }
-        if ( (am & BAE_USE_STEREO) && XIsStereoSupported())
+        if ((am & BAE_USE_STEREO) && XIsStereoSupported())
         {
             theMods |= M_USE_STEREO;
             if (am & BAE_STEREO_FILTER)
@@ -2258,7 +2367,7 @@ BAEResult BAEMixer_ChangeAudioModes(BAEMixer mixer, BAERate q, BAETerpMode t, BA
         }
         else
         {
-            am &= ~BAE_USE_STEREO;  // mono
+            am &= ~BAE_USE_STEREO; // mono
         }
         if (am & BAE_DISABLE_REVERB)
         {
@@ -2268,7 +2377,7 @@ BAEResult BAEMixer_ChangeAudioModes(BAEMixer mixer, BAERate q, BAETerpMode t, BA
         {
             err = GM_ChangeAudioModes(NULL, theRate, theTerp, theMods);
             if (err)
-                BAE_STDERR("audio:failed change %d\n",(int32_t)err);
+                BAE_STDERR("audio:failed change %d\n", (int32_t)err);
         }
     }
     else
@@ -2278,14 +2387,13 @@ BAEResult BAEMixer_ChangeAudioModes(BAEMixer mixer, BAERate q, BAETerpMode t, BA
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAEMixer_ChangeSystemVoices()
 // ------------------------------------
 //
 //
 BAEResult BAEMixer_ChangeSystemVoices(BAEMixer mixer, int16_t maxSongVoices, int16_t maxSoundVoices, int16_t mixLevel)
 {
-    OPErr   err;
+    OPErr err;
 
     err = NO_ERR;
     if (mixer)
@@ -2294,11 +2402,10 @@ BAEResult BAEMixer_ChangeSystemVoices(BAEMixer mixer, int16_t maxSongVoices, int
     }
     else
     {
-        err = NULL_OBJECT;  
-    }   
+        err = NULL_OBJECT;
+    }
     return BAE_TranslateOPErr(err);
 }
-
 
 // BAEMixer_GetTick()
 // ------------------------------------
@@ -2307,7 +2414,7 @@ BAEResult BAEMixer_ChangeSystemVoices(BAEMixer mixer, int16_t maxSongVoices, int
 BAEResult BAEMixer_GetTick(BAEMixer mixer, uint32_t *outTick)
 {
     OPErr err;
-    
+
     err = NO_ERR;
     if (mixer)
     {
@@ -2320,7 +2427,6 @@ BAEResult BAEMixer_GetTick(BAEMixer mixer, uint32_t *outTick)
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAEMixer_SetAudioLatency()
 // ------------------------------------
 //
@@ -2328,29 +2434,29 @@ BAEResult BAEMixer_GetTick(BAEMixer mixer, uint32_t *outTick)
 BAEResult BAEMixer_SetAudioLatency(BAEMixer mixer, uint32_t requestedLatency)
 {
     BAEResult error;
-    
+
     error = BAE_NO_ERROR;
     if (mixer)
     {
-        #if (X_PLATFORM == X_WIN95) && BAE_COMPLETE 
+#if (X_PLATFORM == X_WIN95) && BAE_COMPLETE
         {
-            BAEWinOSParameters  parms;
-            int32_t                device;
-        
+            BAEWinOSParameters parms;
+            int32_t device;
+
             error = BAEMixer_GetCurrentDevice(mixer, (void *)&parms, &device);
-            if (error == BAE_NO_ERROR)  // get current
+            if (error == BAE_NO_ERROR) // get current
             {
                 parms.synthFramesPerBlock = (requestedLatency / BAE_GetSliceTimeInMicroseconds()) + 1;
-                error = BAEMixer_SetCurrentDevice(mixer, device, (void *)&parms);   // set modified
+                error = BAEMixer_SetCurrentDevice(mixer, device, (void *)&parms); // set modified
             }
         }
-        #else
+#else
         {
             mixer = mixer;
             requestedLatency = requestedLatency;
             error = BAE_NOT_SETUP;
         }
-        #endif
+#endif
     }
     else
     {
@@ -2359,7 +2465,6 @@ BAEResult BAEMixer_SetAudioLatency(BAEMixer mixer, uint32_t requestedLatency)
     return error;
 }
 
-
 // BAEMixer_GetAudioLatency()
 // ------------------------------------
 //
@@ -2367,7 +2472,7 @@ BAEResult BAEMixer_SetAudioLatency(BAEMixer mixer, uint32_t requestedLatency)
 BAEResult BAEMixer_GetAudioLatency(BAEMixer mixer, uint32_t *outLatency)
 {
     OPErr err;
-    
+
     err = NO_ERR;
     if (mixer)
     {
@@ -2390,7 +2495,7 @@ BAEResult BAEMixer_GetAudioLatency(BAEMixer mixer, uint32_t *outLatency)
 BAEResult BAEMixer_SetRouteBus(BAEMixer mixer, int routeBus)
 {
     OPErr err;
-    
+
     err = NO_ERR;
     if (mixer)
     {
@@ -2403,7 +2508,6 @@ BAEResult BAEMixer_SetRouteBus(BAEMixer mixer, int routeBus)
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAEMixer_SetMasterVolume()
 // ------------------------------------
 //
@@ -2411,7 +2515,7 @@ BAEResult BAEMixer_SetRouteBus(BAEMixer mixer, int routeBus)
 BAEResult BAEMixer_SetMasterVolume(BAEMixer mixer, BAE_UNSIGNED_FIXED theVolume)
 {
     OPErr err;
-    
+
     err = NO_ERR;
     if (mixer)
     {
@@ -2424,7 +2528,6 @@ BAEResult BAEMixer_SetMasterVolume(BAEMixer mixer, BAE_UNSIGNED_FIXED theVolume)
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAEMixer_GetMasterVolume()
 // ------------------------------------
 //
@@ -2432,7 +2535,7 @@ BAEResult BAEMixer_SetMasterVolume(BAEMixer mixer, BAE_UNSIGNED_FIXED theVolume)
 BAEResult BAEMixer_GetMasterVolume(BAEMixer mixer, BAE_UNSIGNED_FIXED *outVolume)
 {
     OPErr err;
-    
+
     err = NO_ERR;
     if (mixer)
     {
@@ -2452,7 +2555,6 @@ BAEResult BAEMixer_GetMasterVolume(BAEMixer mixer, BAE_UNSIGNED_FIXED *outVolume
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAEMixer_SetHardwareVolume()
 // ------------------------------------
 //
@@ -2460,7 +2562,7 @@ BAEResult BAEMixer_GetMasterVolume(BAEMixer mixer, BAE_UNSIGNED_FIXED *outVolume
 BAEResult BAEMixer_SetHardwareVolume(BAEMixer mixer, BAE_UNSIGNED_FIXED theVolume)
 {
     OPErr err;
-    short newVol = FIXED_TO_SHORT_ROUNDED(theVolume * X_FULL_VOLUME);   
+    short newVol = FIXED_TO_SHORT_ROUNDED(theVolume * X_FULL_VOLUME);
 
     err = NO_ERR;
     if (mixer)
@@ -2482,7 +2584,6 @@ BAEResult BAEMixer_SetHardwareVolume(BAEMixer mixer, BAE_UNSIGNED_FIXED theVolum
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAEMixer_GetHardwareVolume()
 // ------------------------------------
 //
@@ -2490,7 +2591,7 @@ BAEResult BAEMixer_SetHardwareVolume(BAEMixer mixer, BAE_UNSIGNED_FIXED theVolum
 BAEResult BAEMixer_GetHardwareVolume(BAEMixer mixer, BAE_UNSIGNED_FIXED *outVolume)
 {
     OPErr err;
-    
+
     err = NO_ERR;
     if (mixer)
     {
@@ -2516,7 +2617,6 @@ BAEResult BAEMixer_GetHardwareVolume(BAEMixer mixer, BAE_UNSIGNED_FIXED *outVolu
     }
     return BAE_TranslateOPErr(err);
 }
-
 
 // BAEMixer_SetMasterSoundEffectsVolume()
 // -----------------------------------------
@@ -2547,7 +2647,6 @@ BAEResult BAEMixer_SetMasterSoundEffectsVolume(BAEMixer mixer, BAE_UNSIGNED_FIXE
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAEMixer_GetMasterSoundEffectsVolume()
 // -----------------------------------------
 //
@@ -2555,7 +2654,7 @@ BAEResult BAEMixer_SetMasterSoundEffectsVolume(BAEMixer mixer, BAE_UNSIGNED_FIXE
 BAEResult BAEMixer_GetMasterSoundEffectsVolume(BAEMixer mixer, BAE_UNSIGNED_FIXED *outVolume)
 {
     OPErr err;
-    
+
     err = NO_ERR;
     if (mixer)
     {
@@ -2575,7 +2674,6 @@ BAEResult BAEMixer_GetMasterSoundEffectsVolume(BAEMixer mixer, BAE_UNSIGNED_FIXE
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAEMixer_GetAudioSampleFrame()
 // ------------------------------------
 //
@@ -2583,7 +2681,7 @@ BAEResult BAEMixer_GetMasterSoundEffectsVolume(BAEMixer mixer, BAE_UNSIGNED_FIXE
 BAEResult BAEMixer_GetAudioSampleFrame(BAEMixer mixer, int16_t *pLeft, int16_t *pRight, int16_t *outFrame)
 {
     OPErr err;
-    
+
     err = NO_ERR;
     if (mixer)
     {
@@ -2603,17 +2701,16 @@ BAEResult BAEMixer_GetAudioSampleFrame(BAEMixer mixer, int16_t *pLeft, int16_t *
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAEMixer_GetRealtimeStatus()
 // ------------------------------------
 //
 //
 BAEResult BAEMixer_GetRealtimeStatus(BAEMixer mixer, BAEAudioInfo *pStatus)
 {
-    GM_AudioInfo    status;
-    int16_t       count;
-    BAEVoiceType    voiceType;
-    OPErr           err;
+    GM_AudioInfo status;
+    int16_t count;
+    BAEVoiceType voiceType;
+    OPErr err;
 
     err = NO_ERR;
     if (mixer)
@@ -2626,16 +2723,16 @@ BAEResult BAEMixer_GetRealtimeStatus(BAEMixer mixer, BAEAudioInfo *pStatus)
             for (count = 0; count < status.voicesActive; count++)
             {
                 pStatus->voice[count] = status.voice[count];
-    
+
                 voiceType = BAE_UNKNOWN;
                 switch (status.voiceType[count])
                 {
-                    case MIDI_PCM_VOICE:
-                        voiceType = BAE_MIDI_PCM_VOICE;
-                        break;
-                    case SOUND_PCM_VOICE:
-                        voiceType = BAE_SOUND_PCM_VOICE;
-                        break;
+                case MIDI_PCM_VOICE:
+                    voiceType = BAE_MIDI_PCM_VOICE;
+                    break;
+                case SOUND_PCM_VOICE:
+                    voiceType = BAE_SOUND_PCM_VOICE;
+                    break;
                 }
                 pStatus->voiceType[count] = voiceType;
                 pStatus->instrument[count] = status.patch[count];
@@ -2657,15 +2754,14 @@ BAEResult BAEMixer_GetRealtimeStatus(BAEMixer mixer, BAEAudioInfo *pStatus)
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAEMixer_IsAudioEngaged()
 // ------------------------------------
 //
 //
 BAEResult BAEMixer_IsAudioEngaged(BAEMixer mixer, BAE_BOOL *outIsEngaged)
 {
-    OPErr       err;
-    XBOOL       isPaused;
+    OPErr err;
+    XBOOL isPaused;
 
     err = NO_ERR;
     if (mixer)
@@ -2694,15 +2790,14 @@ BAEResult BAEMixer_IsAudioEngaged(BAEMixer mixer, BAE_BOOL *outIsEngaged)
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAEMixer_DisengageAudio()
 // ------------------------------------
 //
 //
 BAEResult BAEMixer_DisengageAudio(BAEMixer mixer)
 {
-    OPErr   err;
-    
+    OPErr err;
+
     err = NO_ERR;
     if (mixer)
     {
@@ -2726,16 +2821,15 @@ BAEResult BAEMixer_DisengageAudio(BAEMixer mixer)
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAEMixer_ReengageAudio()
 // ------------------------------------
 //
 //
 BAEResult BAEMixer_ReengageAudio(BAEMixer mixer)
 {
-    OPErr   err;
-    
-    err = NO_ERR;   
+    OPErr err;
+
+    err = NO_ERR;
     if (mixer)
     {
         if (mixer->pMixer)
@@ -2760,7 +2854,7 @@ BAEResult BAEMixer_ReengageAudio(BAEMixer mixer)
 
 BAE_BOOL BAEMixer_IsMuted(BAEMixer mixer)
 {
-    BAE_BOOL    muted = FALSE;
+    BAE_BOOL muted = FALSE;
 
     if (mixer)
     {
@@ -2771,12 +2865,12 @@ BAE_BOOL BAEMixer_IsMuted(BAEMixer mixer)
     }
     return muted;
 }
-    
+
 // mute/unmute all audio playback. These are reference counted
 BAEResult BAEMixer_Mute(BAEMixer mixer)
 {
     OPErr err;
-    
+
     err = NO_ERR;
     if (mixer)
     {
@@ -2798,7 +2892,7 @@ BAEResult BAEMixer_Mute(BAEMixer mixer)
 BAEResult BAEMixer_Unmute(BAEMixer mixer)
 {
     OPErr err;
-    
+
     err = NO_ERR;
     if (mixer)
     {
@@ -2815,7 +2909,6 @@ BAEResult BAEMixer_Unmute(BAEMixer mixer)
     }
     return (BAEResult)err;
 }
-
 
 BAEResult BAEMixer_TestToneFrequency(BAE_UNSIGNED_FIXED freq)
 {
@@ -2840,14 +2933,13 @@ BAEResult BAEMixer_Idle(BAEMixer mixer)
     return BAE_NO_ERROR;
 }
 
-
 // BAEMixer_IsAudioActive()
 // ------------------------------------
 // This will check active voices and look at a sub sample of the audio output to
 // determine if there's any audio still playing
 BAEResult BAEMixer_IsAudioActive(BAEMixer mixer, BAE_BOOL *outIsActive)
 {
-    OPErr   err;
+    OPErr err;
 
     err = NO_ERR;
     if (mixer)
@@ -2872,7 +2964,6 @@ BAEResult BAEMixer_IsAudioActive(BAEMixer mixer, BAE_BOOL *outIsActive)
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAEMixer_GetCPULoadInMicroseconds()
 // --------------------------------------
 //
@@ -2880,7 +2971,7 @@ BAEResult BAEMixer_IsAudioActive(BAEMixer mixer, BAE_BOOL *outIsActive)
 BAEResult BAEMixer_GetCPULoadInMicroseconds(BAEMixer mixer, uint32_t *outLoad)
 {
     OPErr err;
-    
+
     err = NO_ERR;
     if (mixer)
     {
@@ -2900,7 +2991,6 @@ BAEResult BAEMixer_GetCPULoadInMicroseconds(BAEMixer mixer, uint32_t *outLoad)
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAEMixer_GetCPULoadInPercent()
 // --------------------------------------
 //
@@ -2908,7 +2998,7 @@ BAEResult BAEMixer_GetCPULoadInMicroseconds(BAEMixer mixer, uint32_t *outLoad)
 BAEResult BAEMixer_GetCPULoadInPercent(BAEMixer mixer, uint32_t *outLoad)
 {
     OPErr err;
-    
+
     err = NO_ERR;
     if (mixer)
     {
@@ -2928,7 +3018,6 @@ BAEResult BAEMixer_GetCPULoadInPercent(BAEMixer mixer, uint32_t *outLoad)
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAEMixer_GetModifiers()
 // --------------------------------------
 //
@@ -2939,7 +3028,7 @@ BAEResult BAEMixer_GetModifiers(BAEMixer mixer, BAEAudioModifiers *outMods)
     OPErr err;
     XBOOL generate16output;
     XBOOL generateStereoOutput;
-    
+
     err = NO_ERR;
     if (mixer)
     {
@@ -2950,8 +3039,10 @@ BAEResult BAEMixer_GetModifiers(BAEMixer mixer, BAEAudioModifiers *outMods)
                 theMods = 0;
                 err = GM_Generate16bitOutP(&generate16output);
                 err = GM_GenerateStereoOutP(&generateStereoOutput);
-                if (generate16output) theMods |= BAE_USE_16;
-                if (generateStereoOutput) theMods |= BAE_USE_STEREO;
+                if (generate16output)
+                    theMods |= BAE_USE_16;
+                if (generateStereoOutput)
+                    theMods |= BAE_USE_STEREO;
                 *outMods = theMods;
             }
             else
@@ -2971,7 +3062,6 @@ BAEResult BAEMixer_GetModifiers(BAEMixer mixer, BAEAudioModifiers *outMods)
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAEMixer_GetTerpMode()
 // --------------------------------------
 //
@@ -2980,7 +3070,7 @@ BAEResult BAEMixer_GetTerpMode(BAEMixer mixer, BAETerpMode *outTerpMode)
 {
     OPErr err;
     TerpMode t;
-    
+
     err = NO_ERR;
     if (mixer)
     {
@@ -3009,8 +3099,7 @@ BAEResult BAEMixer_GetTerpMode(BAEMixer mixer, BAETerpMode *outTerpMode)
         err = NULL_OBJECT;
     }
     return BAE_TranslateOPErr(err);
-}   
-
+}
 
 // BAEMixer_GetRate()
 // --------------------------------------
@@ -3018,8 +3107,8 @@ BAEResult BAEMixer_GetTerpMode(BAEMixer mixer, BAETerpMode *outTerpMode)
 //
 BAEResult BAEMixer_GetRate(BAEMixer mixer, BAERate *outRate)
 {
-    OPErr   err;
-    Rate    q;
+    OPErr err;
+    Rate q;
 
     err = NO_ERR;
     if (mixer)
@@ -3051,7 +3140,6 @@ BAEResult BAEMixer_GetRate(BAEMixer mixer, BAERate *outRate)
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAEMixer_GetMidiVoices()
 // --------------------------------------
 //
@@ -3060,7 +3148,7 @@ BAEResult BAEMixer_GetMidiVoices(BAEMixer mixer, int16_t *outNumMidiVoices)
 {
     OPErr err;
     INT16 song, mix, sound;
-    
+
     err = NO_ERR;
     if (mixer)
     {
@@ -3088,7 +3176,6 @@ BAEResult BAEMixer_GetMidiVoices(BAEMixer mixer, int16_t *outNumMidiVoices)
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAEMixer_GetSoundVoices()
 // --------------------------------------
 //
@@ -3097,7 +3184,7 @@ BAEResult BAEMixer_GetSoundVoices(BAEMixer mixer, int16_t *outNumSoundVoices)
 {
     OPErr err;
     INT16 song, mix, sound;
-    
+
     err = NO_ERR;
     if (mixer)
     {
@@ -3125,7 +3212,6 @@ BAEResult BAEMixer_GetSoundVoices(BAEMixer mixer, int16_t *outNumSoundVoices)
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAEMixer_GetMixLevel()
 // --------------------------------------
 //
@@ -3134,7 +3220,7 @@ BAEResult BAEMixer_GetMixLevel(BAEMixer mixer, int16_t *outMixLevel)
 {
     OPErr err;
     INT16 song, mix, sound;
-    
+
     err = NO_ERR;
     if (mixer)
     {
@@ -3175,27 +3261,27 @@ BAEResult BAEMixer_StartOutputToFile(BAEMixer theMixer,
                                      BAECompressionType compressionType)
 {
 #if USE_CREATION_API == TRUE
-    OPErr           theErr;
-    XFILENAME       theFile;
+    OPErr theErr;
+    XFILENAME theFile;
 
-// begin block added for MiniBAE 11/29/00 tom
+    // begin block added for MiniBAE 11/29/00 tom
     BAEAudioModifiers theModifiers;
     BAERate theRate;
     BAEResult err;
-// end block added for MiniBAE
+    // end block added for MiniBAE
 
 #if DUMP_OUTPUTFILE
     fp = fopen("C:\\temp\\test.txt", "w");
-    if(fp)
+    if (fp)
     {
         fprintf(fp, "BAEOutputMixer::StartOutputToFile dump\n");
     }
 #endif
 
-// begin block added for MiniBAE  11/28/00  tom
+    // begin block added for MiniBAE  11/28/00  tom
     err = BAEMixer_GetModifiers(theMixer, &theModifiers);
     err = BAEMixer_GetRate(theMixer, &theRate);
-// end block added for MiniBAE
+    // end block added for MiniBAE
 
     theErr = NO_ERR;
 
@@ -3209,136 +3295,155 @@ BAEResult BAEMixer_StartOutputToFile(BAEMixer theMixer,
     mWriteToFileType = outputType;
     XConvertPathToXFILENAME(pAudioOutputFile, &theFile);
 
-    // mWritingDataBlock is where we will store the results of BAE_BuildMixerSlice() 
+    // mWritingDataBlock is where we will store the results of BAE_BuildMixerSlice()
     if (mWritingDataBlock)
     {
         XDisposePtr(mWritingDataBlock);
     }
     mWritingDataBlockSize = GM_GetAudioBufferOutputSize();
-    
+
     mWritingDataBlock = XNewPtr(mWritingDataBlockSize);
 
 #if DUMP_OUTPUTFILE
-    if(fp)
+    if (fp)
     {
-        fprintf(fp,"\nmWritingDataBlockSize = %d",mWritingDataBlockSize);
+        fprintf(fp, "\nmWritingDataBlockSize = %d", mWritingDataBlockSize);
 
-        fprintf(fp,"\noutput rate = %d",GM_ConvertFromOutputRateToRate(theRate));
+        fprintf(fp, "\noutput rate = %d", GM_ConvertFromOutputRateToRate(theRate));
 
-        fprintf(fp,"\nmaxChunkSize = %d",MusicGlobals->maxChunkSize);
-        fprintf(fp,"\noutputRate = %d",MusicGlobals->outputRate);
+        fprintf(fp, "\nmaxChunkSize = %d", MusicGlobals->maxChunkSize);
+        fprintf(fp, "\noutputRate = %d", MusicGlobals->outputRate);
     }
 #endif
 
     switch (outputType)
     {
 #if USE_MPEG_ENCODER != FALSE
-        case BAE_MPEG_TYPE:
-        {
+    case BAE_MPEG_TYPE:
+    {
         if (theModifiers & BAE_USE_16)
+        {
+            mWritingToFileReference = (void *)XFileOpenForWrite(&theFile, TRUE);
+            if (mWritingToFileReference)
             {
+                XDWORD channels = (theModifiers & BAE_USE_STEREO) ? 2 : 1;
+                // Preserve original slice size (typically ~11ms worth) to maintain correct sequencing tempo.
+                // The MP3 encoder will internally accumulate multiple slices to reach a full 1152-frame MP3 frame.
+                // helper translates compression enum to per-channel bitrate in bits/sec
+                extern uint32_t BAE_TranslateMPEGTypeToBitrate(BAECompressionType ct);
+                extern XBOOL PV_RefillMPEGEncodeBuffer(void *buffer, void *userRef);
+                mWritingEncoder = MPG_EncodeNewStream(BAE_TranslateMPEGTypeToBitrate(compressionType),
+                                                      GM_ConvertFromOutputRateToRate((Rate)theRate),
+                                                      channels,
+                                                      mWritingDataBlock,
+                                                      (uint32_t)(mWritingDataBlockSize / (sizeof(short) * channels)));
+                if (mWritingEncoder)
+                {
+                    BAE_PRINTF("audio: MPG_EncodeNewStream ok ch=");
+                    char tmp[16];
+                    XLongToStr(tmp, (int32_t)channels);
+                    BAE_PRINTF(tmp);
+                    BAE_PRINTF(" framesPerCall=");
+                    XLongToStr(tmp, (int32_t)(mWritingDataBlockSize / (sizeof(short) * channels)));
+                    BAE_PRINTF(tmp);
+                    BAE_PRINTF(" rate=");
+                    XLongToStr(tmp, (int32_t)GM_ConvertFromOutputRateToRate((Rate)theRate));
+                    BAE_PRINTF(tmp);
+                    BAE_PRINTF("\n");
+                    // Prime first PCM buffer so first service call has audio content
+                    PV_RefillMPEGEncodeBuffer(mWritingDataBlock, theMixer);
+
+                    /* Pass mixer as userRef so refill can query modifiers/rate properly */
+                    MPG_EncodeSetRefillCallback(mWritingEncoder, PV_RefillMPEGEncodeBuffer, theMixer);
+
+                    GM_StopHardwareSoundManager(NULL); // disengage from hardware
+                    mWritingToFile = TRUE;
+                }
+                else
+                {
+                    BAE_STDERR("audio: MPG_EncodeNewStream FAILED\n");
+                    /* Treat failure to create encoder as an error so caller can abort gracefully. */
+                    theErr = BAD_FILE;
+                    /* Close file handle we opened to avoid leaving an open/half-written file. */
+                    if (mWritingToFileReference)
+                    {
+                        XFileClose((XFILE)mWritingToFileReference);
+                        mWritingToFileReference = NULL;
+                    }
+                    /* do not set mWritingToFile; cleanup of mWritingDataBlock happens below when theErr != NO_ERR */
+                }
+            }
+            else
+            {
+                theErr = BAD_FILE;
+            }
+        }
+        else
+        {
+            // Can only encode 16bit data.
+            theErr = PARAM_ERR;
+        }
+    }
+    break;
+#else
+        compressionType;
+#endif
+
+    case BAE_FLAC_TYPE:
+    case BAE_WAVE_TYPE:
+    case BAE_AIFF_TYPE:
+    case BAE_AU_TYPE:
+    {
+#if USE_FLAC_ENCODER != FALSE
+        if (outputType == BAE_FLAC_TYPE)
+        {
+            // For FLAC, we'll accumulate audio in memory and then encode
+            mFLACChannels = (theModifiers & BAE_USE_STEREO) ? 2 : 1;
+            mFLACBitsPerSample = (theModifiers & BAE_USE_16) ? 16 : 8;
+            mFLACSampleRate = GM_ConvertFromOutputRateToRate((Rate)theRate);
+            mFLACAccumulatedFrames = 0;
+            // Allocate buffer for about 10 minutes worth of audio (should handle most songs)
+            mFLACMaxAccumulatedFrames = mFLACSampleRate * 600; // 10 minutes
+            mFLACAccumulatedSamples = XNewPtr(mFLACMaxAccumulatedFrames * mFLACChannels * (mFLACBitsPerSample / 8));
+            mFLACEncoder = NULL;       // Will be created when we finish accumulating
+            mFLACOutputFile = theFile; // Store file path for later
+
+            // Check if allocation succeeded
+            if (!mFLACAccumulatedSamples)
+            {
+                theErr = MEMORY_ERR;
+            }
+            else
+            {
+                // Just open the file for later writing
                 mWritingToFileReference = (void *)XFileOpenForWrite(&theFile, TRUE);
                 if (mWritingToFileReference)
                 {
-            XDWORD channels = (theModifiers & BAE_USE_STEREO) ? 2 : 1;
-            // Preserve original slice size (typically ~11ms worth) to maintain correct sequencing tempo.
-            // The MP3 encoder will internally accumulate multiple slices to reach a full 1152-frame MP3 frame.
-            // helper translates compression enum to per-channel bitrate in bits/sec
-            extern uint32_t BAE_TranslateMPEGTypeToBitrate(BAECompressionType ct);
-            extern XBOOL PV_RefillMPEGEncodeBuffer(void *buffer, void *userRef);
-            mWritingEncoder = MPG_EncodeNewStream(BAE_TranslateMPEGTypeToBitrate(compressionType),
-                              GM_ConvertFromOutputRateToRate((Rate)theRate),
-                              channels,
-                              mWritingDataBlock,
-                              (uint32_t)(mWritingDataBlockSize / (sizeof(short) * channels)));
-            if(mWritingEncoder){
-                BAE_PRINTF("audio: MPG_EncodeNewStream ok ch=");
-                char tmp[16]; XLongToStr(tmp,(int32_t)channels); BAE_PRINTF(tmp);
-                BAE_PRINTF(" framesPerCall="); XLongToStr(tmp,(int32_t)(mWritingDataBlockSize / (sizeof(short)*channels))); BAE_PRINTF(tmp);
-                BAE_PRINTF(" rate="); XLongToStr(tmp,(int32_t)GM_ConvertFromOutputRateToRate((Rate)theRate)); BAE_PRINTF(tmp); BAE_PRINTF("\n");
-                // Prime first PCM buffer so first service call has audio content
-                PV_RefillMPEGEncodeBuffer(mWritingDataBlock, theMixer);
-
-                /* Pass mixer as userRef so refill can query modifiers/rate properly */
-                MPG_EncodeSetRefillCallback(mWritingEncoder, PV_RefillMPEGEncodeBuffer, theMixer);
-
-                GM_StopHardwareSoundManager(NULL);      // disengage from hardware
-                mWritingToFile = TRUE;
-            } else {
-                BAE_STDERR("audio: MPG_EncodeNewStream FAILED\n");
-                /* Treat failure to create encoder as an error so caller can abort gracefully. */
-                theErr = BAD_FILE;
-                /* Close file handle we opened to avoid leaving an open/half-written file. */
-                if (mWritingToFileReference) {
-                    XFileClose((XFILE)mWritingToFileReference);
-                    mWritingToFileReference = NULL;
-                }
-                /* do not set mWritingToFile; cleanup of mWritingDataBlock happens below when theErr != NO_ERR */
-            }
+                    GM_StopHardwareSoundManager(NULL);
+                    mWritingToFile = TRUE;
                 }
                 else
                 {
                     theErr = BAD_FILE;
                 }
             }
-            else
-            {
-                // Can only encode 16bit data.
-                theErr = PARAM_ERR;
-            }
-        } break;
-#else
-        compressionType;
-#endif
-
-        case BAE_FLAC_TYPE:
-        case BAE_WAVE_TYPE:
-        case BAE_AIFF_TYPE:
-        case BAE_AU_TYPE:
+        }
+        else
         {
-#if USE_FLAC_ENCODER != FALSE
-            if (outputType == BAE_FLAC_TYPE) {
-                // For FLAC, we'll accumulate audio in memory and then encode
-                mFLACChannels = (theModifiers & BAE_USE_STEREO) ? 2 : 1;
-                mFLACBitsPerSample = (theModifiers & BAE_USE_16) ? 16 : 8;
-                mFLACSampleRate = GM_ConvertFromOutputRateToRate((Rate)theRate);
-                mFLACAccumulatedFrames = 0;
-                // Allocate buffer for about 10 minutes worth of audio (should handle most songs)
-                mFLACMaxAccumulatedFrames = mFLACSampleRate * 600; // 10 minutes
-                mFLACAccumulatedSamples = XNewPtr(mFLACMaxAccumulatedFrames * mFLACChannels * (mFLACBitsPerSample / 8));
-                mFLACEncoder = NULL; // Will be created when we finish accumulating
-                mFLACOutputFile = theFile; // Store file path for later
-                
-                // Check if allocation succeeded
-                if (!mFLACAccumulatedSamples) {
-                    theErr = MEMORY_ERR;
-                } else {
-                    // Just open the file for later writing
-                    mWritingToFileReference = (void *)XFileOpenForWrite(&theFile, TRUE);
-                    if (mWritingToFileReference) {
-                        GM_StopHardwareSoundManager(NULL);
-                        mWritingToFile = TRUE;
-                    } else {
-                        theErr = BAD_FILE;
-                    }
-                }
-            } else {
 #endif
             GM_Waveform *w = GM_NewWaveform();
-            char buf[4] = {0,0,0,0};
+            char buf[4] = {0, 0, 0, 0};
 
             // initialize GM_Waveform with one frame of data, so that GM_WriteFileFromMemory()
             // doesn't complain.
 
-
-
-            w->bitSize = ( theModifiers/*iModifiers*/ & BAE_USE_16) ? 16 : 8;
-            w->channels = ( theModifiers /*iModifiers*/ & BAE_USE_STEREO) ? 2 : 1;
-            w->sampledRate = LONG_TO_UNSIGNED_FIXED(GM_ConvertFromOutputRateToRate((Rate)theRate/*iRate*/));
+            w->bitSize = (theModifiers /*iModifiers*/ & BAE_USE_16) ? 16 : 8;
+            w->channels = (theModifiers /*iModifiers*/ & BAE_USE_STEREO) ? 2 : 1;
+            w->sampledRate = LONG_TO_UNSIGNED_FIXED(GM_ConvertFromOutputRateToRate((Rate)theRate /*iRate*/));
             w->compressionType = C_NONE;
             w->theWaveform = &buf;
             w->waveFrames = 1;
-            w->waveSize = (w->bitSize/8) * (w->channels);
+            w->waveSize = (w->bitSize / 8) * (w->channels);
 
             // Write out the header now, we'll add data to it in ServiceAudioOutputToFile()
             theErr = GM_WriteFileFromMemory(&theFile, w, BAE_TranslateBAEFileType(outputType));
@@ -3351,8 +3456,8 @@ BAEResult BAEMixer_StartOutputToFile(BAEMixer theMixer,
             if (mWritingToFileReference)
             {
                 XFileSetPosition((XFILE)mWritingToFileReference, XFileGetLength((XFILE)mWritingToFileReference));
-                
-                GM_StopHardwareSoundManager(NULL);      // disengage from hardware
+
+                GM_StopHardwareSoundManager(NULL); // disengage from hardware
                 mWritingToFile = TRUE;
             }
             else
@@ -3360,28 +3465,29 @@ BAEResult BAEMixer_StartOutputToFile(BAEMixer theMixer,
                 theErr = BAD_FILE;
             }
 #if USE_FLAC_ENCODER != FALSE
-            }
+        }
 #endif
-        } break;
-
-        case BAE_RAW_PCM:
-            mWritingToFileReference = (void *)XFileOpenForWrite(&theFile, TRUE);
-            if (mWritingToFileReference)
-            {
-                GM_StopHardwareSoundManager(NULL);      // disengage from hardware
-                mWritingToFile = TRUE;
-            }
-            else
-            {
-                theErr = BAD_FILE;
-            }
-            break;
-
-        default:
-            theErr = BAD_FILE_TYPE;
-            break;
     }
-    
+    break;
+
+    case BAE_RAW_PCM:
+        mWritingToFileReference = (void *)XFileOpenForWrite(&theFile, TRUE);
+        if (mWritingToFileReference)
+        {
+            GM_StopHardwareSoundManager(NULL); // disengage from hardware
+            mWritingToFile = TRUE;
+        }
+        else
+        {
+            theErr = BAD_FILE;
+        }
+        break;
+
+    default:
+        theErr = BAD_FILE_TYPE;
+        break;
+    }
+
     if (theErr != NO_ERR)
     {
         XDisposePtr(mWritingDataBlock);
@@ -3410,57 +3516,60 @@ void BAEMixer_StopOutputToFile(void)
         switch (mWriteToFileType)
         {
 #if USE_MPEG_ENCODER != FALSE
-            case BAE_MPEG_TYPE:
-                BAE_PRINTF("audio: BAEMixer_StopOutputToFile freeing mWritingEncoder=%p\n", mWritingEncoder);
-                MPG_EncodeFreeStream(mWritingEncoder);
-                mWritingEncoder = NULL;
-                BAE_PRINTF("audio: BAEMixer_StopOutputToFile mWritingEncoder now NULL\n");
-                break;
+        case BAE_MPEG_TYPE:
+            BAE_PRINTF("audio: BAEMixer_StopOutputToFile freeing mWritingEncoder=%p\n", mWritingEncoder);
+            MPG_EncodeFreeStream(mWritingEncoder);
+            mWritingEncoder = NULL;
+            BAE_PRINTF("audio: BAEMixer_StopOutputToFile mWritingEncoder now NULL\n");
+            break;
 #endif
-            case BAE_WAVE_TYPE:
-            case BAE_AIFF_TYPE:
-            case BAE_AU_TYPE:
-                GM_FinalizeFileHeader((XFILE)mWritingToFileReference, BAE_TranslateBAEFileType(mWriteToFileType));
-                break;
+        case BAE_WAVE_TYPE:
+        case BAE_AIFF_TYPE:
+        case BAE_AU_TYPE:
+            GM_FinalizeFileHeader((XFILE)mWritingToFileReference, BAE_TranslateBAEFileType(mWriteToFileType));
+            break;
 
 #if USE_FLAC_ENCODER != FALSE
-            case BAE_FLAC_TYPE:
-                // Encode accumulated audio data to FLAC and write to file
-                if (mFLACAccumulatedSamples && mFLACAccumulatedFrames > 0) {
-                    // Use the existing PV_WriteFromMemoryFLACFile function
-                    GM_Waveform tempWave;
-                    tempWave.theWaveform = mFLACAccumulatedSamples;
-                    tempWave.waveFrames = mFLACAccumulatedFrames;
-                    tempWave.channels = mFLACChannels;
-                    tempWave.bitSize = mFLACBitsPerSample;
-                    tempWave.sampledRate = LONG_TO_UNSIGNED_FIXED(mFLACSampleRate);
-                    tempWave.compressionType = C_NONE;
-                    tempWave.waveSize = mFLACAccumulatedFrames * mFLACChannels * (mFLACBitsPerSample / 8);
-                    
-                    // Close current file and rewrite with FLAC encoded data
-                    XFileClose((XFILE)mWritingToFileReference);
-                    mWritingToFileReference = NULL;
-                    
-                    // Write FLAC data using stored file path
-                    PV_WriteFromMemoryFLACFile(&mFLACOutputFile, &tempWave, X_WAVE_FORMAT_PCM);
-                }
-                
-                // Cleanup FLAC state
-                if (mFLACEncoder) {
-                    FLAC__stream_encoder_finish((FLAC__StreamEncoder *)mFLACEncoder);
-                    FLAC__stream_encoder_delete((FLAC__StreamEncoder *)mFLACEncoder);
-                    mFLACEncoder = NULL;
-                }
-                if (mFLACAccumulatedSamples) {
-                    XDisposePtr(mFLACAccumulatedSamples);
-                    mFLACAccumulatedSamples = NULL;
-                }
-                mFLACAccumulatedFrames = 0;
-                break;
+        case BAE_FLAC_TYPE:
+            // Encode accumulated audio data to FLAC and write to file
+            if (mFLACAccumulatedSamples && mFLACAccumulatedFrames > 0)
+            {
+                // Use the existing PV_WriteFromMemoryFLACFile function
+                GM_Waveform tempWave;
+                tempWave.theWaveform = mFLACAccumulatedSamples;
+                tempWave.waveFrames = mFLACAccumulatedFrames;
+                tempWave.channels = mFLACChannels;
+                tempWave.bitSize = mFLACBitsPerSample;
+                tempWave.sampledRate = LONG_TO_UNSIGNED_FIXED(mFLACSampleRate);
+                tempWave.compressionType = C_NONE;
+                tempWave.waveSize = mFLACAccumulatedFrames * mFLACChannels * (mFLACBitsPerSample / 8);
+
+                // Close current file and rewrite with FLAC encoded data
+                XFileClose((XFILE)mWritingToFileReference);
+                mWritingToFileReference = NULL;
+
+                // Write FLAC data using stored file path
+                PV_WriteFromMemoryFLACFile(&mFLACOutputFile, &tempWave, X_WAVE_FORMAT_PCM);
+            }
+
+            // Cleanup FLAC state
+            if (mFLACEncoder)
+            {
+                FLAC__stream_encoder_finish((FLAC__StreamEncoder *)mFLACEncoder);
+                FLAC__stream_encoder_delete((FLAC__StreamEncoder *)mFLACEncoder);
+                mFLACEncoder = NULL;
+            }
+            if (mFLACAccumulatedSamples)
+            {
+                XDisposePtr(mFLACAccumulatedSamples);
+                mFLACAccumulatedSamples = NULL;
+            }
+            mFLACAccumulatedFrames = 0;
+            break;
 #endif
 
-            default:
-                break;
+        default:
+            break;
         }
         XFileClose((XFILE)mWritingToFileReference);
         mWritingToFileReference = NULL;
@@ -3468,16 +3577,16 @@ void BAEMixer_StopOutputToFile(void)
         XDisposePtr(mWritingDataBlock);
         mWritingDataBlock = NULL;
 
-        GM_StartHardwareSoundManager(NULL);         // reconnect to hardware
+        GM_StartHardwareSoundManager(NULL); // reconnect to hardware
     }
     mWritingToFile = FALSE;
 #if DUMP_OUTPUTFILE
-    if(fp)
+    if (fp)
     {
         fclose(fp);
     }
 #endif
-#endif  // #if USE_CREATION_API == TRUE
+#endif // #if USE_CREATION_API == TRUE
 }
 
 // ********************** BAEMixer_ServiceAudioOutputToFile   ************
@@ -3490,17 +3599,17 @@ void BAEMixer_StopOutputToFile(void)
 BAEResult BAEMixer_ServiceAudioOutputToFile(BAEMixer theMixer)
 {
 #if USE_CREATION_API == TRUE
-    int32_t                        sampleSize, channels;
-    OPErr                       theErr;
+    int32_t sampleSize, channels;
+    OPErr theErr;
 
 #ifndef HMP3_ENC_LOG
 #define HMP3_ENC_LOG 0
 #endif
 
-// begin block added for MiniBAE
+    // begin block added for MiniBAE
     BAEAudioModifiers theModifiers;
     BAEMixer_GetModifiers(theMixer, &theModifiers);
-// end block added for MiniBAE
+    // end block added for MiniBAE
 
     theErr = NO_ERR;
 
@@ -3516,8 +3625,8 @@ BAEResult BAEMixer_ServiceAudioOutputToFile(BAEMixer theMixer)
 
     if (mWritingToFile && mWritingToFileReference)
     {
-    // FIX: previous code used bitwise NOT (~BAE_USE_STEREO) causing invalid channel count
-    channels = (theModifiers & BAE_USE_STEREO) ? 2 : 1;
+        // FIX: previous code used bitwise NOT (~BAE_USE_STEREO) causing invalid channel count
+        channels = (theModifiers & BAE_USE_STEREO) ? 2 : 1;
         sampleSize = (theModifiers /*iModifiers*/ & BAE_USE_16) ? 2 : 1;
         if (mWritingDataBlockSize)
         {
@@ -3531,106 +3640,128 @@ BAEResult BAEMixer_ServiceAudioOutputToFile(BAEMixer theMixer)
                 *file << mWritingDataBlockSize / sampleSize / channels;
                 *file << "\nsampleSize = " << sampleSize << "channels = " << channels;
 #else
-        if(fp)
-        {
-            fprintf(fp,"\nwite block size = %d",mWritingDataBlockSize);
-            fprintf(fp,", %d",mWritingDataBlockSize / sampleSize / channels);
-            fprintf(fp, "\nsampleSize = %d, ""channels = %d", sampleSize, channels);
-        }
+                if (fp)
+                {
+                    fprintf(fp, "\nwite block size = %d", mWritingDataBlockSize);
+                    fprintf(fp, ", %d", mWritingDataBlockSize / sampleSize / channels);
+                    fprintf(fp, "\nsampleSize = %d, "
+                                "channels = %d",
+                            sampleSize, channels);
+                }
 #endif
 #endif
                 switch (mWriteToFileType)
                 {
 #if USE_MPEG_ENCODER != FALSE
-                    case BAE_MPEG_TYPE:
+                case BAE_MPEG_TYPE:
+                {
+                    static uint32_t g_mpeg_service_calls = 0;
+                    XPTR compressedData = NULL;
+                    XDWORD compressedLength = 0;
+                    XBOOL isDone = FALSE;
+                    if (!mWritingEncoder)
                     {
-                        static uint32_t g_mpeg_service_calls = 0;
-                        XPTR compressedData = NULL;
-                        XDWORD compressedLength = 0;
-                        XBOOL isDone = FALSE;
-                            if(!mWritingEncoder){
-                                BAE_PRINTF("audio: MPEG encode service called with NULL encoder (encoder not built?) aborting export.\n");
-                                // Gracefully abort: close file and reset state
-                                mWriteToFileType = 0; // invalid
-                                XFileClose((XFILE)mWritingToFileReference); mWritingToFileReference=NULL;
-                                mWritingToFile = FALSE;
-                                return BAE_GENERAL_ERR;
-                        } else {
-                            MPG_EncodeProcess(mWritingEncoder, &compressedData, &compressedLength, &isDone);
-                            if(compressedLength > 0){
-                                if (XFileWrite((XFILE)mWritingToFileReference, compressedData, compressedLength) == -1){
-                                    theErr = BAD_FILE;
-                                }
-                            }
-                            // Do NOT free stream here unless encoder signals done explicitly
-                            if(isDone){
-                                BAE_PRINTF("audio: MPG_EncodeProcess signaled done, freeing encoder %p\n", mWritingEncoder);
-                                if(mWritingEncoder){ MPG_EncodeFreeStream(mWritingEncoder); mWritingEncoder=NULL; BAE_PRINTF("audio: encoder freed, mWritingEncoder=NULL\n"); }
-                                else { BAE_PRINTF("audio: encoder already NULL when done signaled\n"); }
+                        BAE_PRINTF("audio: MPEG encode service called with NULL encoder (encoder not built?) aborting export.\n");
+                        // Gracefully abort: close file and reset state
+                        mWriteToFileType = 0; // invalid
+                        XFileClose((XFILE)mWritingToFileReference);
+                        mWritingToFileReference = NULL;
+                        mWritingToFile = FALSE;
+                        return BAE_GENERAL_ERR;
+                    }
+                    else
+                    {
+                        MPG_EncodeProcess(mWritingEncoder, &compressedData, &compressedLength, &isDone);
+                        if (compressedLength > 0)
+                        {
+                            if (XFileWrite((XFILE)mWritingToFileReference, compressedData, compressedLength) == -1)
+                            {
+                                theErr = BAD_FILE;
                             }
                         }
-                    } 
-                    break;
+                        // Do NOT free stream here unless encoder signals done explicitly
+                        if (isDone)
+                        {
+                            BAE_PRINTF("audio: MPG_EncodeProcess signaled done, freeing encoder %p\n", mWritingEncoder);
+                            if (mWritingEncoder)
+                            {
+                                MPG_EncodeFreeStream(mWritingEncoder);
+                                mWritingEncoder = NULL;
+                                BAE_PRINTF("audio: encoder freed, mWritingEncoder=NULL\n");
+                            }
+                            else
+                            {
+                                BAE_PRINTF("audio: encoder already NULL when done signaled\n");
+                            }
+                        }
+                    }
+                }
+                break;
 #endif
 
-                    case BAE_RAW_PCM:
+                case BAE_RAW_PCM:
+                {
+                    BAE_BuildMixerSlice(NULL, mWritingDataBlock, mWritingDataBlockSize,
+                                        (uint32_t)(mWritingDataBlockSize / sampleSize / channels));
+                    if (XFileWrite((XFILE)mWritingToFileReference, mWritingDataBlock, mWritingDataBlockSize) == -1)
                     {
-                        BAE_BuildMixerSlice(NULL, mWritingDataBlock, mWritingDataBlockSize, 
-                                            (uint32_t)(mWritingDataBlockSize / sampleSize / channels));
-                        if (XFileWrite((XFILE)mWritingToFileReference, mWritingDataBlock, mWritingDataBlockSize) == -1)
-                        {
-                            theErr = BAD_FILE;
-                        }
-                    } break;
-
-                    case BAE_WAVE_TYPE:
-                    case BAE_AIFF_TYPE:
-                    case BAE_AU_TYPE:
-                    {
-                        BAE_BuildMixerSlice(NULL, mWritingDataBlock, mWritingDataBlockSize, 
-                                                (uint32_t)(mWritingDataBlockSize / sampleSize / channels));
-                        theErr = GM_WriteAudioBufferToFile((XFILE)mWritingToFileReference, 
-                                                            BAE_TranslateBAEFileType(mWriteToFileType),
-                                                            mWritingDataBlock,
-                                                            mWritingDataBlockSize,
-                                                            channels,
-                                                            sampleSize);
+                        theErr = BAD_FILE;
                     }
-                    break;
+                }
+                break;
+
+                case BAE_WAVE_TYPE:
+                case BAE_AIFF_TYPE:
+                case BAE_AU_TYPE:
+                {
+                    BAE_BuildMixerSlice(NULL, mWritingDataBlock, mWritingDataBlockSize,
+                                        (uint32_t)(mWritingDataBlockSize / sampleSize / channels));
+                    theErr = GM_WriteAudioBufferToFile((XFILE)mWritingToFileReference,
+                                                       BAE_TranslateBAEFileType(mWriteToFileType),
+                                                       mWritingDataBlock,
+                                                       mWritingDataBlockSize,
+                                                       channels,
+                                                       sampleSize);
+                }
+                break;
 
 #if USE_FLAC_ENCODER != FALSE
-                    case BAE_FLAC_TYPE:
+                case BAE_FLAC_TYPE:
+                {
+                    // Accumulate audio samples for FLAC encoding
+                    uint32_t framesToProcess = (uint32_t)(mWritingDataBlockSize / sampleSize / channels);
+
+                    BAE_BuildMixerSlice(NULL, mWritingDataBlock, mWritingDataBlockSize, framesToProcess);
+
+                    // Check if we have room in the accumulation buffer
+                    if (mFLACAccumulatedFrames + framesToProcess <= mFLACMaxAccumulatedFrames)
                     {
-                        // Accumulate audio samples for FLAC encoding
-                        uint32_t framesToProcess = (uint32_t)(mWritingDataBlockSize / sampleSize / channels);
-                        
-                        BAE_BuildMixerSlice(NULL, mWritingDataBlock, mWritingDataBlockSize, framesToProcess);
-                        
-                        // Check if we have room in the accumulation buffer
-                        if (mFLACAccumulatedFrames + framesToProcess <= mFLACMaxAccumulatedFrames) {
-                            // Copy audio data to accumulation buffer
-                            char *destPtr = (char *)mFLACAccumulatedSamples + 
-                                          (mFLACAccumulatedFrames * mFLACChannels * (mFLACBitsPerSample / 8));
-                            memcpy(destPtr, mWritingDataBlock, mWritingDataBlockSize);
-                            mFLACAccumulatedFrames += framesToProcess;
-                        } else {
-                            // Buffer is full - this shouldn't happen with 10 minutes of buffer
-                            // But if it does, warn and stop accumulating (export will be truncated)
-                            static int warned = 0;
-                            if (!warned) {
-                                BAE_PRINTF("FLAC accumulation buffer full (>10 minutes), export will be truncated\n");
-                                warned = 1;
-                            }
+                        // Copy audio data to accumulation buffer
+                        char *destPtr = (char *)mFLACAccumulatedSamples +
+                                        (mFLACAccumulatedFrames * mFLACChannels * (mFLACBitsPerSample / 8));
+                        memcpy(destPtr, mWritingDataBlock, mWritingDataBlockSize);
+                        mFLACAccumulatedFrames += framesToProcess;
+                    }
+                    else
+                    {
+                        // Buffer is full - this shouldn't happen with 10 minutes of buffer
+                        // But if it does, warn and stop accumulating (export will be truncated)
+                        static int warned = 0;
+                        if (!warned)
+                        {
+                            BAE_PRINTF("FLAC accumulation buffer full (>10 minutes), export will be truncated\n");
+                            warned = 1;
                         }
                     }
-                    break;
+                }
+                break;
 #endif
 
-                    default:
-                    {
-                        theErr = BAD_FILE_TYPE;
-                    }
-                    break;
+                default:
+                {
+                    theErr = BAD_FILE_TYPE;
+                }
+                break;
                 }
             }
             else
@@ -3654,16 +3785,14 @@ BAEResult BAEMixer_ServiceAudioOutputToFile(BAEMixer theMixer)
 #endif
 }
 
-
 // ------------------------------------------------------------------
 // BAESound Functions
 // ------------------------------------------------------------------
 #if 0
-    #pragma mark -
-    #pragma mark ##### BAESound #####
-    #pragma mark -
+#pragma mark -
+#pragma mark##### BAESound #####
+#pragma mark -
 #endif
-
 
 // BAESound_New()
 // --------------------------------------
@@ -3673,7 +3802,7 @@ BAESound BAESound_New(BAEMixer mixer)
 {
     BAESound sound;
     sound = NULL;
-    
+
     if (mixer)
     {
         sound = (BAESound)XNewPtr(sizeof(struct sBAESound));
@@ -3685,7 +3814,7 @@ BAESound BAESound_New(BAEMixer mixer)
                 sound->mVolume = BAE_FIXED_1;
                 sound->mID = OBJECT_ID;
                 sound->voiceRef = DEAD_VOICE;
-                sound->mLoopCount = 0;  // default: no looping
+                sound->mLoopCount = 0;   // default: no looping
                 sound->mCurrentLoop = 0; // initialize current loop counter
 #if TRACKING
                 PV_BAEMixer_AddObject(mixer, sound, BAE_SOUND_OBJECT);
@@ -3703,17 +3832,16 @@ BAESound BAESound_New(BAEMixer mixer)
     return sound;
 }
 
-
 // BAESound_Delete()
 // --------------------------------------
 //
 //
 BAEResult BAESound_Delete(BAESound sound)
 {
-    OPErr       err;
+    OPErr err;
 
     err = NO_ERR;
-    if ( (sound) && (sound->mID == OBJECT_ID) )
+    if ((sound) && (sound->mID == OBJECT_ID))
     {
         sound->mID = 0; // do this, to prevent other methods from waiting on a lock
                         // as this object is torn down
@@ -3746,11 +3874,11 @@ BAEResult BAESound_Delete(BAESound sound)
 //
 BAEResult BAESound_GetMemoryUsed(BAESound sound, uint32_t *pOutResult)
 {
-    uint32_t   size;
+    uint32_t size;
 
     size = 0;
-    if ( (sound) && (sound->mID == OBJECT_ID) )
-    { 
+    if ((sound) && (sound->mID == OBJECT_ID))
+    {
         BAE_AcquireMutex(sound->mLock);
         // song size
         size = XGetPtrSize((XPTR)sound);
@@ -3764,7 +3892,6 @@ BAEResult BAESound_GetMemoryUsed(BAESound sound, uint32_t *pOutResult)
     return BAE_NO_ERROR;
 }
 
-
 // BAESound_SetMixer()
 // --------------------------------------
 //
@@ -3772,9 +3899,9 @@ BAEResult BAESound_GetMemoryUsed(BAESound sound, uint32_t *pOutResult)
 BAEResult BAESound_SetMixer(BAESound sound, BAEMixer mixer)
 {
     OPErr err;
-    
+
     err = NO_ERR;
-    if ( (sound) && (sound->mID == OBJECT_ID) && mixer)
+    if ((sound) && (sound->mID == OBJECT_ID) && mixer)
     {
         BAE_AcquireMutex(sound->mLock);
         sound->mixer = mixer;
@@ -3787,7 +3914,6 @@ BAEResult BAESound_SetMixer(BAESound sound, BAEMixer mixer)
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAESound_GetMixer()
 // --------------------------------------
 //
@@ -3795,9 +3921,9 @@ BAEResult BAESound_SetMixer(BAESound sound, BAEMixer mixer)
 BAEResult BAESound_GetMixer(BAESound sound, BAEMixer *outMixer)
 {
     OPErr err;
-    
+
     err = NO_ERR;
-    if ( (sound) && (sound->mID == OBJECT_ID) )
+    if ((sound) && (sound->mID == OBJECT_ID))
     {
         if (outMixer)
         {
@@ -3826,7 +3952,7 @@ static void PV_BAESound_Unload(BAESound sound)
 
     while (GM_IsSampleProcessing(voice))
     {
-//      BAE_PRINTF("BAE:deleting sound...\n");
+        //      BAE_PRINTF("BAE:deleting sound...\n");
         XWaitMicroseocnds(BAE_GetSliceTimeInMicroseconds());
     }
 
@@ -3835,7 +3961,7 @@ static void PV_BAESound_Unload(BAESound sound)
         GM_FreeWaveform(sound->pWave);
         sound->pWave = NULL;
     }
-//  BAE_PRINTF("BAE:deleting sound done\n");
+    //  BAE_PRINTF("BAE:deleting sound done\n");
 }
 
 // BAESound_Unload()
@@ -3847,7 +3973,7 @@ BAEResult BAESound_Unload(BAESound sound)
     OPErr err;
 
     err = NO_ERR;
-    if ( (sound) && (sound->mID == OBJECT_ID) )
+    if ((sound) && (sound->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(sound->mLock);
         PV_BAESound_Unload(sound);
@@ -3861,11 +3987,11 @@ BAEResult BAESound_Unload(BAESound sound)
 }
 
 BAEResult BAESound_SetSoundFrame(BAESound sound, uint32_t startFrameOffset,
-                                            void *sourceSamples, uint32_t sourceFrames)
+                                 void *sourceSamples, uint32_t sourceFrames)
 {
-    BAEResult   err = BAE_NO_ERROR;
+    BAEResult err = BAE_NO_ERROR;
 
-    if ( (sound) && (sound->mID == OBJECT_ID) )
+    if ((sound) && (sound->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(sound->mLock);
 
@@ -3883,20 +4009,20 @@ BAEResult BAESound_SetSoundFrame(BAESound sound, uint32_t startFrameOffset,
 //
 //
 BAEResult BAESound_LoadEmptySample(BAESound sound,
-                            uint32_t frames,           // number of frames of audio
-                            uint16_t bitSize,     // bits per sample 8 or 16
-                            uint16_t channels,    // mono or stereo 1 or 2
-                            BAE_UNSIGNED_FIXED rate,        // 16.16 fixed sample rate
-                            uint32_t loopStart,        // loop start in frames
-                            uint32_t loopEnd)          // loop end in frames
+                                   uint32_t frames,         // number of frames of audio
+                                   uint16_t bitSize,        // bits per sample 8 or 16
+                                   uint16_t channels,       // mono or stereo 1 or 2
+                                   BAE_UNSIGNED_FIXED rate, // 16.16 fixed sample rate
+                                   uint32_t loopStart,      // loop start in frames
+                                   uint32_t loopEnd)        // loop end in frames
 {
-    OPErr           theErr;
-    GM_Waveform     *pWave = NULL;
-    int32_t            size;
-    void            *sampleData;
+    OPErr theErr;
+    GM_Waveform *pWave = NULL;
+    int32_t size;
+    void *sampleData;
 
     theErr = NO_ERR;
-    if ( (sound) && (sound->mID == OBJECT_ID) )
+    if ((sound) && (sound->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(sound->mLock);
 
@@ -3923,7 +4049,7 @@ BAEResult BAESound_LoadEmptySample(BAESound sound,
                 if (bitSize == 8)
                 {
                     // 8 bit passed in is signed, but internal engine 8 bit data is unsigned.
-                    XPhase8BitWaveform((XBYTE*)pWave->theWaveform, pWave->waveSize);
+                    XPhase8BitWaveform((XBYTE *)pWave->theWaveform, pWave->waveSize);
                 }
                 sound->pWave = pWave;
             }
@@ -3938,8 +4064,8 @@ BAEResult BAESound_LoadEmptySample(BAESound sound,
         {
             theErr = MEMORY_ERR;
         }
-    
-        if ( (sound->pWave == NULL) && (theErr == NO_ERR) )
+
+        if ((sound->pWave == NULL) && (theErr == NO_ERR))
         {
             theErr = BAD_FILE;
         }
@@ -3957,18 +4083,18 @@ BAEResult BAESound_LoadEmptySample(BAESound sound,
 //
 //
 BAEResult BAESound_LoadCustomSample(BAESound sound,
-                            void * sampleData,              // pointer to audio data
-                            uint32_t frames,           // number of frames of audio
-                            uint16_t bitSize,     // bits per sample 8 or 16
-                            uint16_t channels,    // mono or stereo 1 or 2
-                            BAE_UNSIGNED_FIXED rate,        // 16.16 fixed sample rate
-                            uint32_t loopStart,        // loop start in frames
-                            uint32_t loopEnd)          // loop end in frames
+                                    void *sampleData,        // pointer to audio data
+                                    uint32_t frames,         // number of frames of audio
+                                    uint16_t bitSize,        // bits per sample 8 or 16
+                                    uint16_t channels,       // mono or stereo 1 or 2
+                                    BAE_UNSIGNED_FIXED rate, // 16.16 fixed sample rate
+                                    uint32_t loopStart,      // loop start in frames
+                                    uint32_t loopEnd)        // loop end in frames
 {
-    OPErr           theErr;
+    OPErr theErr;
 
     theErr = NO_ERR;
-    if ( (sound) && (sound->mID == OBJECT_ID) )
+    if ((sound) && (sound->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(sound->mLock);
 
@@ -3976,11 +4102,11 @@ BAEResult BAESound_LoadCustomSample(BAESound sound,
         BAESound_Unload(sound);
 
         // load new sound
-        sound->pWave = GM_ReadRawAudioIntoMemoryFromMemory(sampleData, frames, 
-                                                            bitSize, channels, 
-                                                             (XFIXED)rate, loopStart, 
-                                                             loopEnd, &theErr);
-        if ( (sound->pWave == NULL) && (theErr == NO_ERR) )
+        sound->pWave = GM_ReadRawAudioIntoMemoryFromMemory(sampleData, frames,
+                                                           bitSize, channels,
+                                                           (XFIXED)rate, loopStart,
+                                                           loopEnd, &theErr);
+        if ((sound->pWave == NULL) && (theErr == NO_ERR))
         {
             theErr = BAD_FILE;
         }
@@ -3993,7 +4119,6 @@ BAEResult BAESound_LoadCustomSample(BAESound sound,
     return BAE_TranslateOPErr(theErr);
 }
 
-
 // BAESound_LoadMemorySample()
 // --------------------------------------
 //
@@ -4001,11 +4126,11 @@ BAEResult BAESound_LoadCustomSample(BAESound sound,
 BAEResult BAESound_LoadMemorySample(BAESound sound, void *pMemoryFile, uint32_t memoryFileSize, BAEFileType fileType)
 {
 #if USE_HIGHLEVEL_FILE_API
-    OPErr           theErr;
-    AudioFileType   type;
+    OPErr theErr;
+    AudioFileType type;
 
     theErr = NO_ERR;
-    if ( (sound) && (sound->mID == OBJECT_ID) )
+    if ((sound) && (sound->mID == OBJECT_ID))
     {
         type = BAE_TranslateBAEFileType(fileType);
         if (type != FILE_INVALID_TYPE)
@@ -4017,16 +4142,16 @@ BAEResult BAESound_LoadMemorySample(BAESound sound, void *pMemoryFile, uint32_t 
 
             // load new sound
             sound->pWave = GM_ReadFileIntoMemoryFromMemory(pMemoryFile, memoryFileSize,
-                                                                type, TRUE, &theErr);
-            if ( (sound->pWave == NULL) && (theErr == NO_ERR) )
+                                                           type, TRUE, &theErr);
+            if ((sound->pWave == NULL) && (theErr == NO_ERR))
             {
                 theErr = BAD_FILE;
             }
-//          else
-//          {
-//              BAE_PRINTF("audio::sound loop start %ld end %ld\n", sound->pWave->startLoop,
-//                                                              sound->pWave->endLoop);
-//          }
+            //          else
+            //          {
+            //              BAE_PRINTF("audio::sound loop start %ld end %ld\n", sound->pWave->startLoop,
+            //                                                              sound->pWave->endLoop);
+            //          }
             BAE_ReleaseMutex(sound->mLock);
         }
         else
@@ -4044,7 +4169,6 @@ BAEResult BAESound_LoadMemorySample(BAESound sound, void *pMemoryFile, uint32_t 
 #endif
 }
 
-
 // BAESound_LoadMemorySample()
 // --------------------------------------
 //
@@ -4052,12 +4176,12 @@ BAEResult BAESound_LoadMemorySample(BAESound sound, void *pMemoryFile, uint32_t 
 BAEResult BAESound_LoadFileSample(BAESound sound, BAEPathName filePath, BAEFileType fileType)
 {
 #if USE_HIGHLEVEL_FILE_API
-    XFILENAME       theFile;
-    OPErr           theErr;
-    AudioFileType   type;
+    XFILENAME theFile;
+    OPErr theErr;
+    AudioFileType type;
 
     theErr = NO_ERR;
-    if ( (sound) && (sound->mID == OBJECT_ID) )
+    if ((sound) && (sound->mID == OBJECT_ID))
     {
         type = BAE_TranslateBAEFileType(fileType);
         if (type != FILE_INVALID_TYPE)
@@ -4071,7 +4195,7 @@ BAEResult BAESound_LoadFileSample(BAESound sound, BAEPathName filePath, BAEFileT
             XConvertPathToXFILENAME(filePath, &theFile);
             sound->pWave = GM_ReadFileIntoMemory(&theFile, type, TRUE, &theErr);
 
-            if ( (sound->pWave == NULL) && (theErr == NO_ERR) )
+            if ((sound->pWave == NULL) && (theErr == NO_ERR))
             {
                 theErr = BAD_FILE;
             }
@@ -4100,7 +4224,6 @@ BAEResult BAESound_LoadFileSample(BAESound sound, BAEPathName filePath, BAEFileT
 #endif
 }
 
-
 // BAESound_IsPaused()
 // --------------------------------------
 //
@@ -4108,9 +4231,9 @@ BAEResult BAESound_LoadFileSample(BAESound sound, BAEPathName filePath, BAEFileT
 BAEResult BAESound_IsPaused(BAESound sound, BAE_BOOL *outIsPaused)
 {
     OPErr err;
-    
+
     err = NO_ERR;
-    if ( (sound) && (sound->mID == OBJECT_ID) )
+    if ((sound) && (sound->mID == OBJECT_ID))
     {
         if (outIsPaused)
         {
@@ -4130,7 +4253,6 @@ BAEResult BAESound_IsPaused(BAESound sound, BAE_BOOL *outIsPaused)
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAESound_Pause()
 // --------------------------------------
 //
@@ -4138,15 +4260,15 @@ BAEResult BAESound_IsPaused(BAESound sound, BAE_BOOL *outIsPaused)
 BAEResult BAESound_Pause(BAESound sound)
 {
     OPErr err;
-    
+
     err = NO_ERR;
-    if ( (sound) && (sound->mID == OBJECT_ID) )
+    if ((sound) && (sound->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(sound->mLock);
         if (sound->mPauseVariable == 0)
         {
             BAESound_GetRate(sound, &sound->mPauseVariable);
-            BAESound_SetRate(sound, 0L);    // pause samples in their tracks
+            BAESound_SetRate(sound, 0L); // pause samples in their tracks
         }
         BAE_ReleaseMutex(sound->mLock);
     }
@@ -4157,7 +4279,6 @@ BAEResult BAESound_Pause(BAESound sound)
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAESound_Resume()
 // --------------------------------------
 //
@@ -4165,9 +4286,9 @@ BAEResult BAESound_Pause(BAESound sound)
 BAEResult BAESound_Resume(BAESound sound)
 {
     OPErr err;
-    
+
     err = NO_ERR;
-    if ( (sound) && (sound->mID == OBJECT_ID) )
+    if ((sound) && (sound->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(sound->mLock);
         if (sound->mPauseVariable)
@@ -4184,30 +4305,29 @@ BAEResult BAESound_Resume(BAESound sound)
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAESound_Fade()
 // --------------------------------------
 //
 //
 BAEResult BAESound_Fade(BAESound sound, BAE_FIXED sourceVolume, BAE_FIXED destVolume, BAE_FIXED timeInMiliseconds)
 {
-    int16_t   source, dest;
-    INT16       minVolume;
-    INT16       maxVolume;
-    OPErr       err;
-    
+    int16_t source, dest;
+    INT16 minVolume;
+    INT16 maxVolume;
+    OPErr err;
+
     err = NO_ERR;
-    if ( (sound) && (sound->mID == OBJECT_ID) )
+    if ((sound) && (sound->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(sound->mLock);
         if (sound->voiceRef != DEAD_VOICE)
         {
-#if ! USE_FLOAT
-            BAE_FIXED       delta;
+#if !USE_FLOAT
+            BAE_FIXED delta;
             delta = PV_CalculateTimeDeltaForFade(sourceVolume, destVolume, timeInMiliseconds);
             delta = XFixedMultiply(delta, -LONG_TO_FIXED(MAX_NOTE_VOLUME));
 #else
-            double      delta;
+            double delta;
             delta = PV_CalculateTimeDeltaForFade(sourceVolume, destVolume, timeInMiliseconds);
             delta = delta * -MAX_NOTE_VOLUME;
 #endif
@@ -4215,7 +4335,7 @@ BAEResult BAESound_Fade(BAESound sound, BAE_FIXED sourceVolume, BAE_FIXED destVo
             dest = FIXED_TO_SHORT_ROUNDED(destVolume * MAX_NOTE_VOLUME);
             minVolume = XMIN(source, dest);
             maxVolume = XMAX(source, dest);
-#if ! USE_FLOAT
+#if !USE_FLOAT
             GM_SetSampleFadeRate(sound->voiceRef, (delta), minVolume, maxVolume, FALSE);
 #else
             GM_SetSampleFadeRate(sound->voiceRef, FLOAT_TO_FIXED(delta), minVolume, maxVolume, FALSE);
@@ -4233,16 +4353,16 @@ BAEResult BAESound_Fade(BAESound sound, BAE_FIXED sourceVolume, BAE_FIXED destVo
 // Sound done callback that handles looping for BAESound objects
 static void PV_LoopingSoundDoneCallback(void *reference)
 {
-    BAESound                sound;
-    BAE_SoundCallbackPtr    userCallback;
-    void                    *userCallbackReference;
-    XBOOL                   shouldRestart = FALSE;
+    BAESound sound;
+    BAE_SoundCallbackPtr userCallback;
+    void *userCallbackReference;
+    XBOOL shouldRestart = FALSE;
 
     sound = (BAESound)reference;
     userCallback = NULL;
     userCallbackReference = NULL;
-    
-    if ( (sound) && (sound->mID == OBJECT_ID) )
+
+    if ((sound) && (sound->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(sound->mLock);
         if (sound->mixer && (sound->mixer->mID == OBJECT_ID))
@@ -4250,13 +4370,13 @@ static void PV_LoopingSoundDoneCallback(void *reference)
 #if TRACKING
             if (PV_BAEMixer_ValidateObject(sound->mixer, sound, BAE_SOUND_OBJECT))
 #else
-            if(sound->mValid)
+            if (sound->mValid)
 #endif
             {
                 userCallback = sound->mCallback;
                 userCallbackReference = sound->mCallbackReference;
                 sound->voiceRef = DEAD_VOICE;
-                
+
                 // Check if we should loop
                 if (sound->mLoopCount == 0xFFFFFFFF)
                 {
@@ -4269,17 +4389,17 @@ static void PV_LoopingSoundDoneCallback(void *reference)
                     sound->mCurrentLoop++;
                     shouldRestart = TRUE;
                 }
-                
+
                 if (shouldRestart)
                 {
                     // Restart the sound from the beginning
                     XSDWORD volume = UNSIGNED_FIXED_TO_LONG_ROUNDED(sound->mVolume * MAX_NOTE_VOLUME);
-                    sound->voiceRef = GM_SetupSampleFromInfo(sound->pWave, (void *)sound, 
-                                                        volume,
-                                                        0,
-                                                        NULL, 
-                                                        PV_LoopingSoundDoneCallback,
-                                                        0); // start from beginning
+                    sound->voiceRef = GM_SetupSampleFromInfo(sound->pWave, (void *)sound,
+                                                             volume,
+                                                             0,
+                                                             NULL,
+                                                             PV_LoopingSoundDoneCallback,
+                                                             0); // start from beginning
                     if (sound->voiceRef != DEAD_VOICE)
                     {
                         GM_SetSampleRouteBus(sound->voiceRef, sound->mRouteBus);
@@ -4290,7 +4410,7 @@ static void PV_LoopingSoundDoneCallback(void *reference)
             }
         }
         BAE_ReleaseMutex(sound->mLock);
-        
+
         // If we're not restarting or if this is the final iteration, call the user callback
         if (!shouldRestart && userCallback)
         {
@@ -4301,14 +4421,14 @@ static void PV_LoopingSoundDoneCallback(void *reference)
 
 static void PV_DefaultSoundDoneCallback(void *reference)
 {
-    BAESound                sound;
-    BAE_SoundCallbackPtr    callback;
-    void                    *callbackReference;
+    BAESound sound;
+    BAE_SoundCallbackPtr callback;
+    void *callbackReference;
 
     sound = (BAESound)reference;
     callback = NULL;
     callbackReference = NULL;
-    if ( (sound) && (sound->mID == OBJECT_ID) )
+    if ((sound) && (sound->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(sound->mLock);
         if (sound->mixer)
@@ -4318,7 +4438,7 @@ static void PV_DefaultSoundDoneCallback(void *reference)
 #if TRACKING
                 if (PV_BAEMixer_ValidateObject(sound->mixer, sound, BAE_SOUND_OBJECT))
 #else
-                if(sound->mValid)
+                if (sound->mValid)
 #endif
                 {
                     callback = sound->mCallback;
@@ -4347,8 +4467,8 @@ static void PV_BAESound_SetCallback(BAESound sound, BAE_SoundCallbackPtr pCallba
 {
     sound->mCallback = pCallback;
     sound->mCallbackReference = callbackReference;
-    
-    if (pCallback == NULL)  // going to clear
+
+    if (pCallback == NULL) // going to clear
     {
         if (sound->voiceRef != DEAD_VOICE)
         {
@@ -4357,14 +4477,13 @@ static void PV_BAESound_SetCallback(BAESound sound, BAE_SoundCallbackPtr pCallba
     }
 }
 
-
 // sample callbacks
 BAEResult BAESound_SetCallback(BAESound sound, BAE_SoundCallbackPtr pCallback, void *callbackReference)
 {
-    OPErr       err;
-    
+    OPErr err;
+
     err = NO_ERR;
-    if ( (sound) && (sound->mID == OBJECT_ID) )
+    if ((sound) && (sound->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(sound->mLock);
         PV_BAESound_SetCallback(sound, pCallback, callbackReference);
@@ -4377,11 +4496,10 @@ BAEResult BAESound_SetCallback(BAESound sound, BAE_SoundCallbackPtr pCallback, v
     return BAE_TranslateOPErr(err);
 }
 
-
 BAEResult BAESound_GetCallback(BAESound sound, BAE_SoundCallbackPtr *pResult)
 {
-    OPErr       err;
-    
+    OPErr err;
+
     err = NO_ERR;
     if (sound && pResult)
     {
@@ -4396,22 +4514,21 @@ BAEResult BAESound_GetCallback(BAESound sound, BAE_SoundCallbackPtr *pResult)
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAESound_Start()
 // --------------------------------------
 //
 //
 BAEResult BAESound_Start(BAESound sound,
-                            int16_t priority,
-                            BAE_UNSIGNED_FIXED sampleVolume,        // sample volume    (1.0)
-                            uint32_t startOffsetFrame)         // starting offset in frames
+                         int16_t priority,
+                         BAE_UNSIGNED_FIXED sampleVolume, // sample volume    (1.0)
+                         uint32_t startOffsetFrame)       // starting offset in frames
 {
-    OPErr           theErr = NO_ERR;
-    int32_t            volume;
+    OPErr theErr = NO_ERR;
+    int32_t volume;
 
     priority = priority; // NEED TO IMPLEMENT PRIORITY FOR SOUNDS IN ENGINE.
 
-    if ( (sound) && (sound->mID == OBJECT_ID) )
+    if ((sound) && (sound->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(sound->mLock);
 
@@ -4438,22 +4555,21 @@ BAEResult BAESound_Start(BAESound sound,
                 GM_ChangeSampleVolume(sound->voiceRef, 0);
                 GM_EndSample(sound->voiceRef);
             }
-    
+
             sound->voiceRef = DEAD_VOICE;
             sound->mVolume = sampleVolume;
             sound->mCurrentLoop = 0; // reset loop counter on start
             volume = UNSIGNED_FIXED_TO_LONG_ROUNDED(sampleVolume * MAX_NOTE_VOLUME);
-            
+
             // Choose callback based on whether looping is enabled
-            GM_SoundDoneCallbackPtr doneCallback = (sound->mLoopCount > 0) ? 
-                PV_LoopingSoundDoneCallback : PV_DefaultSoundDoneCallback;
-                
-            sound->voiceRef = GM_SetupSampleFromInfo(sound->pWave, (void *)sound, 
-                                                volume,
-                                                0,
-                                                NULL, 
-                                                doneCallback,
-                                                startOffsetFrame);
+            GM_SoundDoneCallbackPtr doneCallback = (sound->mLoopCount > 0) ? PV_LoopingSoundDoneCallback : PV_DefaultSoundDoneCallback;
+
+            sound->voiceRef = GM_SetupSampleFromInfo(sound->pWave, (void *)sound,
+                                                     volume,
+                                                     0,
+                                                     NULL,
+                                                     doneCallback,
+                                                     startOffsetFrame);
             if (sound->voiceRef == DEAD_VOICE)
             {
                 theErr = NO_FREE_VOICES;
@@ -4477,13 +4593,13 @@ BAEResult BAESound_Start(BAESound sound,
 
 static void PV_BAESound_Stop(BAESound sound, BAE_BOOL startFade)
 {
-    int16_t   sampleVolume;
+    int16_t sampleVolume;
 
     sound->mPauseVariable = 0;
-    
+
     // Reset loop state when stopping to prevent callbacks from restarting the sound
     sound->mCurrentLoop = 0;
-    sound->mLoopCount = 0;  // Disable looping when explicitly stopped
+    sound->mLoopCount = 0; // Disable looping when explicitly stopped
 
     if (sound->voiceRef != DEAD_VOICE)
     {
@@ -4491,7 +4607,7 @@ static void PV_BAESound_Stop(BAESound sound, BAE_BOOL startFade)
         {
             sampleVolume = GM_GetSampleVolume(sound->voiceRef);
             GM_SetSampleFadeRate(sound->voiceRef, PV_GetDefaultMixerFadeRate(sound->mixer),
-                                                    0, sampleVolume, TRUE);
+                                 0, sampleVolume, TRUE);
         }
         else
         {
@@ -4501,7 +4617,7 @@ static void PV_BAESound_Stop(BAESound sound, BAE_BOOL startFade)
 #endif
         }
     }
-    sound->voiceRef = DEAD_VOICE;   // done
+    sound->voiceRef = DEAD_VOICE; // done
 }
 
 // BAESound_Stop()
@@ -4510,10 +4626,10 @@ static void PV_BAESound_Stop(BAESound sound, BAE_BOOL startFade)
 //
 BAEResult BAESound_Stop(BAESound sound, BAE_BOOL startFade)
 {
-    OPErr       err;
+    OPErr err;
 
     err = NO_ERR;
-    if ( (sound) && (sound->mID == OBJECT_ID) )
+    if ((sound) && (sound->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(sound->mLock);
         PV_BAESound_Stop(sound, startFade);
@@ -4526,18 +4642,17 @@ BAEResult BAESound_Stop(BAESound sound, BAE_BOOL startFade)
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAESound_GetInfo()
 // --------------------------------------
 //
 //
 BAEResult BAESound_GetInfo(BAESound sound, BAESampleInfo *outInfo)
 {
-    GM_Waveform     *pWave;
-    OPErr           err;
+    GM_Waveform *pWave;
+    OPErr err;
 
     err = NO_ERR;
-    if ( (sound) && (sound->mID == OBJECT_ID) )
+    if ((sound) && (sound->mID == OBJECT_ID))
     {
         if (outInfo)
         {
@@ -4552,10 +4667,9 @@ BAEResult BAESound_GetInfo(BAESound sound, BAESampleInfo *outInfo)
                     (err = GM_GetWaveformNumChannels(pWave, &outInfo->channels)) != NO_ERR ||
                     (err = GM_GetWaveformSampleRate(pWave, &outInfo->sampledRate)) != NO_ERR ||
                     (err = GM_GetWaveformLoopPoints(pWave, &outInfo->startLoop, &outInfo->startLoop)) != NO_ERR ||
-                    (err = GM_GetWaveformBaseMidiPitch(pWave, &outInfo->baseMidiPitch)) != NO_ERR
-                )
+                    (err = GM_GetWaveformBaseMidiPitch(pWave, &outInfo->baseMidiPitch)) != NO_ERR)
                 {
-                    // if one of the conditions fails (non-zero error code), it will stop 
+                    // if one of the conditions fails (non-zero error code), it will stop
                     // evaluating the rest and 'err' will store the error code.
                     // otherwise err = NO_ERR.
                 }
@@ -4578,15 +4692,15 @@ BAEResult BAESound_GetInfo(BAESound sound, BAESampleInfo *outInfo)
     return BAE_TranslateOPErr(err);
 }
 
-BAEResult BAESound_GetRawPCMData(BAESound sound, char *outDataPointer, 
-                                                            uint32_t outDataSize)
+BAEResult BAESound_GetRawPCMData(BAESound sound, char *outDataPointer,
+                                 uint32_t outDataSize)
 {
-    BAEResult   err = BAE_NO_ERROR;
+    BAEResult err = BAE_NO_ERROR;
     BAESampleInfo info;
     unsigned char *sampleData;
     uint32_t frames;
 
-    if ( (sound) && (sound->mID == OBJECT_ID) )
+    if ((sound) && (sound->mID == OBJECT_ID))
     {
         if (outDataPointer && outDataSize)
         {
@@ -4625,9 +4739,9 @@ BAEResult BAESound_GetRawPCMData(BAESound sound, char *outDataPointer,
 BAEResult BAESound_IsDone(BAESound sound, BAE_BOOL *outIsDone)
 {
     OPErr err;
-    
+
     err = NO_ERR;
-    if ( (sound) && (sound->mID == OBJECT_ID) )
+    if ((sound) && (sound->mID == OBJECT_ID))
     {
         if (outIsDone)
         {
@@ -4661,9 +4775,9 @@ BAEResult BAESound_IsDone(BAESound sound, BAE_BOOL *outIsDone)
 BAEResult BAESound_SetRouteBus(BAESound sound, int routeBus)
 {
     OPErr err;
-    
+
     err = NO_ERR;
-    if ( (sound) && (sound->mID == OBJECT_ID) )
+    if ((sound) && (sound->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(sound->mLock);
         sound->mRouteBus = routeBus;
@@ -4687,9 +4801,9 @@ BAEResult BAESound_SetRouteBus(BAESound sound, int routeBus)
 BAEResult BAESound_SetVolume(BAESound sound, BAE_UNSIGNED_FIXED newVolume)
 {
     OPErr err;
-    
+
     err = NO_ERR;
-    if ( (sound) && (sound->mID == OBJECT_ID) )
+    if ((sound) && (sound->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(sound->mLock);
         sound->mVolume = newVolume;
@@ -4706,7 +4820,6 @@ BAEResult BAESound_SetVolume(BAESound sound, BAE_UNSIGNED_FIXED newVolume)
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAESound_GetVolume()
 // --------------------------------------
 //
@@ -4714,9 +4827,9 @@ BAEResult BAESound_SetVolume(BAESound sound, BAE_UNSIGNED_FIXED newVolume)
 BAEResult BAESound_GetVolume(BAESound sound, BAE_UNSIGNED_FIXED *outVolume)
 {
     OPErr err;
-    
+
     err = NO_ERR;
-    if ( (sound) && (sound->mID == OBJECT_ID) )
+    if ((sound) && (sound->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(sound->mLock);
         if (outVolume)
@@ -4724,7 +4837,7 @@ BAEResult BAESound_GetVolume(BAESound sound, BAE_UNSIGNED_FIXED *outVolume)
             if (sound->voiceRef != DEAD_VOICE)
             {
                 *outVolume = sound->mVolume;
-            //  *outVolume = UNSIGNED_RATIO_TO_FIXED(GM_GetSampleVolume(sound->voiceRef), MAX_NOTE_VOLUME);
+                //  *outVolume = UNSIGNED_RATIO_TO_FIXED(GM_GetSampleVolume(sound->voiceRef), MAX_NOTE_VOLUME);
             }
         }
         else
@@ -4740,7 +4853,6 @@ BAEResult BAESound_GetVolume(BAESound sound, BAE_UNSIGNED_FIXED *outVolume)
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAESound_SetRate()
 // --------------------------------------
 //
@@ -4748,9 +4860,9 @@ BAEResult BAESound_GetVolume(BAESound sound, BAE_UNSIGNED_FIXED *outVolume)
 BAEResult BAESound_SetRate(BAESound sound, BAE_UNSIGNED_FIXED newRate)
 {
     OPErr err;
-    
+
     err = NO_ERR;
-    if ( (sound) && (sound->mID == OBJECT_ID) )
+    if ((sound) && (sound->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(sound->mLock);
         if (sound->voiceRef != DEAD_VOICE)
@@ -4770,7 +4882,6 @@ BAEResult BAESound_SetRate(BAESound sound, BAE_UNSIGNED_FIXED newRate)
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAESound_GetRate()
 // --------------------------------------
 //
@@ -4779,9 +4890,9 @@ BAEResult BAESound_GetRate(BAESound sound, BAE_UNSIGNED_FIXED *outRate)
 {
     OPErr err;
     XFIXED f;
-    
+
     err = NO_ERR;
-    if ( (sound) && (sound->mID == OBJECT_ID) )
+    if ((sound) && (sound->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(sound->mLock);
         if (outRate)
@@ -4820,9 +4931,9 @@ BAEResult BAESound_GetRate(BAESound sound, BAE_UNSIGNED_FIXED *outRate)
 BAEResult BAESound_SetSamplePlaybackPosition(BAESound sound, uint32_t pos)
 {
     OPErr err;
-    
+
     err = NO_ERR;
-    if ( (sound) && (sound->mID == OBJECT_ID) )
+    if ((sound) && (sound->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(sound->mLock);
         if (sound->voiceRef != DEAD_VOICE)
@@ -4838,7 +4949,6 @@ BAEResult BAESound_SetSamplePlaybackPosition(BAESound sound, uint32_t pos)
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAESound_GetSamplePlaybackPosition()
 // --------------------------------------
 //
@@ -4846,9 +4956,9 @@ BAEResult BAESound_SetSamplePlaybackPosition(BAESound sound, uint32_t pos)
 BAEResult BAESound_GetSamplePlaybackPosition(BAESound sound, uint32_t *outPos)
 {
     OPErr err;
-    
+
     err = NO_ERR;
-    if ( (sound) && (sound->mID == OBJECT_ID) )
+    if ((sound) && (sound->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(sound->mLock);
         if (outPos)
@@ -4871,14 +4981,14 @@ BAEResult BAESound_GetSamplePlaybackPosition(BAESound sound, uint32_t *outPos)
     return BAE_TranslateOPErr(err);
 }
 
-void * BAESound_GetSamplePlaybackPointer(BAESound sound, uint32_t *outLength)
+void *BAESound_GetSamplePlaybackPointer(BAESound sound, uint32_t *outLength)
 {
     OPErr err;
-    void    *sampleData;
-    
+    void *sampleData;
+
     sampleData = NULL;
     err = NO_ERR;
-    if ( (sound) && (sound->mID == OBJECT_ID) )
+    if ((sound) && (sound->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(sound->mLock);
         if (outLength)
@@ -4899,7 +5009,7 @@ void * BAESound_GetSamplePlaybackPointer(BAESound sound, uint32_t *outLength)
     {
         err = NULL_OBJECT;
     }
-    //BAE_TranslateOPErr(err);
+    // BAE_TranslateOPErr(err);
     return sampleData;
 }
 
@@ -4910,9 +5020,9 @@ void * BAESound_GetSamplePlaybackPointer(BAESound sound, uint32_t *outLength)
 BAEResult BAESound_SetLowPassAmountFilter(BAESound sound, int16_t lowPassAmount)
 {
     OPErr err;
-    
+
     err = NO_ERR;
-    if ( (sound) && (sound->mID == OBJECT_ID) )
+    if ((sound) && (sound->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(sound->mLock);
         if (sound->voiceRef != DEAD_VOICE)
@@ -4928,7 +5038,6 @@ BAEResult BAESound_SetLowPassAmountFilter(BAESound sound, int16_t lowPassAmount)
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAESound_GetLowPassAmountFilter()
 // --------------------------------------
 //
@@ -4936,9 +5045,9 @@ BAEResult BAESound_SetLowPassAmountFilter(BAESound sound, int16_t lowPassAmount)
 BAEResult BAESound_GetLowPassAmountFilter(BAESound sound, int16_t *outLowPassAmount)
 {
     OPErr err;
-    
+
     err = NO_ERR;
-    if ( (sound) && (sound->mID == OBJECT_ID) )
+    if ((sound) && (sound->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(sound->mLock);
         if (outLowPassAmount)
@@ -4961,7 +5070,6 @@ BAEResult BAESound_GetLowPassAmountFilter(BAESound sound, int16_t *outLowPassAmo
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAESound_SetResonanceAmountFilter()
 // --------------------------------------
 //
@@ -4969,9 +5077,9 @@ BAEResult BAESound_GetLowPassAmountFilter(BAESound sound, int16_t *outLowPassAmo
 BAEResult BAESound_SetResonanceAmountFilter(BAESound sound, int16_t resonanceAmount)
 {
     OPErr err;
-    
+
     err = NO_ERR;
-    if ( (sound) && (sound->mID == OBJECT_ID) )
+    if ((sound) && (sound->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(sound->mLock);
         if (sound->voiceRef != DEAD_VOICE)
@@ -4987,7 +5095,6 @@ BAEResult BAESound_SetResonanceAmountFilter(BAESound sound, int16_t resonanceAmo
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAESound_GetResonanceAmountFilter()
 // --------------------------------------
 //
@@ -4995,9 +5102,9 @@ BAEResult BAESound_SetResonanceAmountFilter(BAESound sound, int16_t resonanceAmo
 BAEResult BAESound_GetResonanceAmountFilter(BAESound sound, int16_t *outResonanceAmount)
 {
     OPErr err;
-    
+
     err = NO_ERR;
-    if ( (sound) && (sound->mID == OBJECT_ID) )
+    if ((sound) && (sound->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(sound->mLock);
         if (outResonanceAmount)
@@ -5020,7 +5127,6 @@ BAEResult BAESound_GetResonanceAmountFilter(BAESound sound, int16_t *outResonanc
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAESound_SetFrequencyAmountFilter()
 // --------------------------------------
 //
@@ -5028,9 +5134,9 @@ BAEResult BAESound_GetResonanceAmountFilter(BAESound sound, int16_t *outResonanc
 BAEResult BAESound_SetFrequencyAmountFilter(BAESound sound, int16_t frequencyAmount)
 {
     OPErr err;
-    
+
     err = NO_ERR;
-    if ( (sound) && (sound->mID == OBJECT_ID) )
+    if ((sound) && (sound->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(sound->mLock);
         if (sound->voiceRef != DEAD_VOICE)
@@ -5046,7 +5152,6 @@ BAEResult BAESound_SetFrequencyAmountFilter(BAESound sound, int16_t frequencyAmo
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAESound_GetFrequencyAmountFilter()
 // --------------------------------------
 //
@@ -5054,9 +5159,9 @@ BAEResult BAESound_SetFrequencyAmountFilter(BAESound sound, int16_t frequencyAmo
 BAEResult BAESound_GetFrequencyAmountFilter(BAESound sound, int16_t *outFrequencyAmount)
 {
     OPErr err;
-    
+
     err = NO_ERR;
-    if ( (sound) && (sound->mID == OBJECT_ID) )
+    if ((sound) && (sound->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(sound->mLock);
         if (outFrequencyAmount)
@@ -5079,17 +5184,16 @@ BAEResult BAESound_GetFrequencyAmountFilter(BAESound sound, int16_t *outFrequenc
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAESound_SetSampleLoopPoints()
 // --------------------------------------
 //
 //
 BAEResult BAESound_SetSampleLoopPoints(BAESound sound, uint32_t start, uint32_t end)
 {
-    OPErr   err;
+    OPErr err;
 
     err = NO_ERR;
-    if ( (sound) && (sound->mID == OBJECT_ID) )
+    if ((sound) && (sound->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(sound->mLock);
         if (sound->pWave)
@@ -5116,7 +5220,6 @@ BAEResult BAESound_SetSampleLoopPoints(BAESound sound, uint32_t start, uint32_t 
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAESound_GetSampleLoopPoints()
 // --------------------------------------
 //
@@ -5124,9 +5227,9 @@ BAEResult BAESound_SetSampleLoopPoints(BAESound sound, uint32_t start, uint32_t 
 BAEResult BAESound_GetSampleLoopPoints(BAESound sound, uint32_t *outStart, uint32_t *outEnd)
 {
     OPErr err;
-    
+
     err = NO_ERR;
-    if ( (sound) && (sound->mID == OBJECT_ID) )
+    if ((sound) && (sound->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(sound->mLock);
         if (outStart && outEnd)
@@ -5153,7 +5256,6 @@ BAEResult BAESound_GetSampleLoopPoints(BAESound sound, uint32_t *outStart, uint3
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAESound_SetLoopCount()
 // --------------------------------------
 //
@@ -5161,9 +5263,9 @@ BAEResult BAESound_GetSampleLoopPoints(BAESound sound, uint32_t *outStart, uint3
 BAEResult BAESound_SetLoopCount(BAESound sound, uint32_t loops)
 {
     OPErr err;
-    
+
     err = NO_ERR;
-    if ( (sound) && (sound->mID == OBJECT_ID) )
+    if ((sound) && (sound->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(sound->mLock);
         sound->mLoopCount = loops;
@@ -5176,7 +5278,6 @@ BAEResult BAESound_SetLoopCount(BAESound sound, uint32_t loops)
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAESound_GetLoopCount()
 // --------------------------------------
 //
@@ -5184,9 +5285,9 @@ BAEResult BAESound_SetLoopCount(BAESound sound, uint32_t loops)
 BAEResult BAESound_GetLoopCount(BAESound sound, uint32_t *outLoops)
 {
     OPErr err;
-    
+
     err = NO_ERR;
-    if ( (sound) && (sound->mID == OBJECT_ID) )
+    if ((sound) && (sound->mID == OBJECT_ID))
     {
         if (outLoops)
         {
@@ -5206,16 +5307,13 @@ BAEResult BAESound_GetLoopCount(BAESound sound, uint32_t *outLoops)
     return BAE_TranslateOPErr(err);
 }
 
-
-
-
 // ------------------------------------------------------------------
 // BAEStream Functions
 // ------------------------------------------------------------------
 #if 0
-    #pragma mark -
-    #pragma mark ##### BAEStream #####
-    #pragma mark -
+#pragma mark -
+#pragma mark##### BAEStream #####
+#pragma mark -
 #endif
 
 #if USE_STREAM_API == TRUE
@@ -5225,11 +5323,11 @@ BAEResult BAESound_GetLoopCount(BAESound sound, uint32_t *outLoops)
 // BAEStream:  Sound effects, linear audio files, streamed
 // -----------------------------------------------------------------------------------------
 // -----------------------------------------------------------------------------------------
-BAEStream           BAEStream_New(BAEMixer mixer)
+BAEStream BAEStream_New(BAEMixer mixer)
 {
     BAEStream stream;
     stream = NULL;
-    
+
     if (mixer)
     {
         stream = (BAEStream)XNewPtr(sizeof(struct sBAEStream));
@@ -5266,10 +5364,10 @@ BAEStream           BAEStream_New(BAEMixer mixer)
 // Deactivates the indicated BAEStream, unloads its sample media data, and frees
 // its memory.  Call this when done with the BAEStream object.
 //
-BAEResult           BAEStream_Delete(BAEStream stream)
+BAEResult BAEStream_Delete(BAEStream stream)
 {
     OPErr err;
-    
+
     err = NO_ERR;
     if (stream)
     {
@@ -5307,10 +5405,10 @@ BAEResult BAEStream_Unload(BAEStream stream)
             GM_AudioStreamSetDoneCallback(stream->mSoundStreamVoiceReference, NULL, NULL);
         }
 
-    //  if (sound->pWave)
+        //  if (sound->pWave)
         {
             BAEStream_Stop(stream, FALSE);
-        //  GM_FreeWaveform(sound->pWave);
+            //  GM_FreeWaveform(sound->pWave);
         }
     }
     else
@@ -5320,30 +5418,27 @@ BAEResult BAEStream_Unload(BAEStream stream)
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAEStream_GetMemoryUsed()
 // --------------------------------------
 // Returns total number of bytes used by this object.
 //
-BAEResult           BAEStream_GetMemoryUsed(BAEStream stream, uint32_t *pOutResult)
+BAEResult BAEStream_GetMemoryUsed(BAEStream stream, uint32_t *pOutResult)
 {
-    uint32_t   size;
+    uint32_t size;
 
     size = 0;
     if (stream)
-    { 
+    {
         // song size
         size = XGetPtrSize((XPTR)stream);
-    //  size += sound->pWave->waveSize;;
+        //  size += sound->pWave->waveSize;;
     }
     if (pOutResult)
     {
         *pOutResult = size;
     }
     return BAE_NO_ERROR;
-
 }
-
 
 // BAEStream_SetMixer()
 // BAEResult BAEStream_SetMixer(BAEStream stream, BAEMixer mixer);
@@ -5351,11 +5446,11 @@ BAEResult           BAEStream_GetMemoryUsed(BAEStream stream, uint32_t *pOutResu
 // Associates the indicated BAEStream with the indicated BAEMixer, replacing the
 // previously associated BAEMixer.
 //
-BAEResult           BAEStream_SetMixer(BAEStream stream,
-                            BAEMixer mixer)
+BAEResult BAEStream_SetMixer(BAEStream stream,
+                             BAEMixer mixer)
 {
     OPErr err;
-    
+
     err = NO_ERR;
     if (stream && mixer)
     {
@@ -5368,19 +5463,16 @@ BAEResult           BAEStream_SetMixer(BAEStream stream,
     return BAE_TranslateOPErr(err);
 }
 
-
-
-
 // BAEStream_GetMixer()
 // ------------------------------------
 // Upon return, the BAEMixer pointed at by parameter outMixer will contain the
 // address of the BAEMIxer with which the indicated BAEStream is associated.
 //
-BAEResult           BAEStream_GetMixer(BAEStream stream,
-                            BAEMixer *outMixer)
+BAEResult BAEStream_GetMixer(BAEStream stream,
+                             BAEMixer *outMixer)
 {
     OPErr err;
-    
+
     err = NO_ERR;
     if (stream)
     {
@@ -5400,17 +5492,15 @@ BAEResult           BAEStream_GetMixer(BAEStream stream,
     return BAE_TranslateOPErr(err);
 }
 
-
-
 // BAEStream_SetVolume()
 // --------------------------------------
 // Sets the playback volume of the indicated BAEStream object to the indicated
 // level.  Normal volume is 1.0.
 //
-BAEResult           BAEStream_SetVolume(BAEStream stream,
-                            BAE_UNSIGNED_FIXED newVolume)
+BAEResult BAEStream_SetVolume(BAEStream stream,
+                              BAE_UNSIGNED_FIXED newVolume)
 {
-    BAEResult   err;
+    BAEResult err;
 
     err = BAE_NO_ERROR;
     if (stream)
@@ -5420,7 +5510,7 @@ BAEResult           BAEStream_SetVolume(BAEStream stream,
         if (stream->mSoundStreamVoiceReference != DEAD_STREAM)
         {
             GM_AudioStreamSetVolume(stream->mSoundStreamVoiceReference,
-                            FIXED_TO_SHORT_ROUNDED(newVolume * MAX_NOTE_VOLUME), FALSE);
+                                    FIXED_TO_SHORT_ROUNDED(newVolume * MAX_NOTE_VOLUME), FALSE);
         }
     }
     else
@@ -5430,17 +5520,15 @@ BAEResult           BAEStream_SetVolume(BAEStream stream,
     return err;
 }
 
-
-
 // BAEStream_GetVolume()
 // --------------------------------------
 // Upon return, the BAE_UNSIGNED_FIXED pointed to by parameter outVolume will hold
 // a copy of the indicated BAEStream's current playback volume.
 //
-BAEResult           BAEStream_GetVolume(BAEStream stream,
-                            BAE_UNSIGNED_FIXED *outVolume)
+BAEResult BAEStream_GetVolume(BAEStream stream,
+                              BAE_UNSIGNED_FIXED *outVolume)
 {
-    BAEResult   err;
+    BAEResult err;
 
     err = BAE_NO_ERROR;
 
@@ -5462,11 +5550,10 @@ BAEResult           BAEStream_GetVolume(BAEStream stream,
     return err;
 }
 
-
 // pass TRUE to entire loop stream, FALSE to not loop
-BAEResult       BAEStream_SetLoopFlag(BAEStream stream, BAE_BOOL loop)
+BAEResult BAEStream_SetLoopFlag(BAEStream stream, BAE_BOOL loop)
 {
-    OPErr       err;
+    OPErr err;
 
     err = NO_ERR;
     if (stream)
@@ -5480,10 +5567,10 @@ BAEResult       BAEStream_SetLoopFlag(BAEStream stream, BAE_BOOL loop)
     return BAE_TranslateOPErr(err);
 }
 
-BAEResult       BAEStream_GetLoopFlag(BAEStream stream, BAE_BOOL *outLoop)
+BAEResult BAEStream_GetLoopFlag(BAEStream stream, BAE_BOOL *outLoop)
 {
-    BAE_BOOL    loop;
-    OPErr       err;
+    BAE_BOOL loop;
+    OPErr err;
 
     loop = FALSE;
     err = NO_ERR;
@@ -5505,7 +5592,6 @@ BAEResult       BAEStream_GetLoopFlag(BAEStream stream, BAE_BOOL *outLoop)
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAEStream_GetInfo()
 // --------------------------------------
 // Upon return, the BAESampleInfo pointed to by parameter outInfo will contain a
@@ -5515,10 +5601,10 @@ BAEResult       BAEStream_GetLoopFlag(BAEStream stream, BAE_BOOL *outLoop)
 // BAEResult codes:
 //           BAE_NOT_SETUP -- No stream loaded
 // ------------------------------------
-BAEResult           BAEStream_GetInfo(BAEStream stream,
+BAEResult BAEStream_GetInfo(BAEStream stream,
                             BAESampleInfo *outInfo)
 {
-    BAEResult   err;
+    BAEResult err;
 
     if (stream)
     {
@@ -5540,8 +5626,8 @@ BAEResult           BAEStream_GetInfo(BAEStream stream,
 
 static void PV_DefaultStreamFileDoneCallback(void *reference)
 {
-    BAEStream                       pStream;
-    BAE_AudioStreamCallbackPtr      doneCallback;
+    BAEStream pStream;
+    BAE_AudioStreamCallbackPtr doneCallback;
 
     pStream = (BAEStream)reference;
     if (pStream)
@@ -5571,15 +5657,15 @@ BAEResult BAEStream_SetCallback(BAEStream stream, BAE_AudioStreamCallbackPtr cal
 // BAEStream_SetupFile()
 // --------------------------------------
 // prepare to play a formatted file as a stream.
-BAEResult           BAEStream_SetupFile(BAEStream stream, BAEPathName cFileName, 
-                            BAEFileType fileType,
-                            uint32_t bufferSize,       // temp buffer to read file
-                            BAE_BOOL loopFile)              // TRUE will loop file
+BAEResult BAEStream_SetupFile(BAEStream stream, BAEPathName cFileName,
+                              BAEFileType fileType,
+                              uint32_t bufferSize, // temp buffer to read file
+                              BAE_BOOL loopFile)   // TRUE will loop file
 {
-    XFILENAME       theFile;
-    GM_Waveform     fileInfo;
-    AudioFileType   type;
-    BAEResult       theErr;
+    XFILENAME theFile;
+    GM_Waveform fileInfo;
+    AudioFileType type;
+    BAEResult theErr;
 
     theErr = BAE_NO_ERROR;
     if (stream)
@@ -5592,7 +5678,7 @@ BAEResult           BAEStream_SetupFile(BAEStream stream, BAEPathName cFileName,
             if (bufferSize >= BAE_MIN_STREAM_BUFFER_SIZE)
             {
                 stream->mSoundStreamVoiceReference = GM_AudioStreamFileSetup(NULL, &theFile, type, bufferSize, &fileInfo, loopFile);
-                if (stream->mSoundStreamVoiceReference == DEAD_STREAM) 
+                if (stream->mSoundStreamVoiceReference == DEAD_STREAM)
                 {
                     theErr = BAE_BAD_FILE;
                 }
@@ -5610,7 +5696,7 @@ BAEResult           BAEStream_SetupFile(BAEStream stream, BAEPathName cFileName,
                     stream->mPlaybackLength = fileInfo.waveFrames;
                     stream->mLoop = loopFile;
 
-                    // set our default done callback with the object            
+                    // set our default done callback with the object
                     GM_AudioStreamSetDoneCallback(stream->mSoundStreamVoiceReference, PV_DefaultStreamFileDoneCallback, (void *)stream);
 
                     theErr = BAE_TranslateOPErr(GM_AudioStreamError(stream->mSoundStreamVoiceReference));
@@ -5633,10 +5719,10 @@ BAEResult           BAEStream_SetupFile(BAEStream stream, BAEPathName cFileName,
     return theErr;
 }
 
-BAEResult       BAEStream_Preroll(BAEStream stream)
+BAEResult BAEStream_Preroll(BAEStream stream)
 {
-    BAEResult   err;
-    OPErr       perr;
+    BAEResult err;
+    OPErr perr;
 
     err = BAE_NO_ERROR;
     if (stream)
@@ -5678,9 +5764,9 @@ BAEResult       BAEStream_Preroll(BAEStream stream)
 //          BAE_NO_FREE_VOICES -- Couldn't allocate a voice at this priority
 //          BAE_NOT_SETUP -- must call BAEStream_SetupFile
 // ------------------------------------
-BAEResult           BAEStream_Start(BAEStream stream)
+BAEResult BAEStream_Start(BAEStream stream)
 {
-    OPErr   theErr;
+    OPErr theErr;
 
     if (stream)
     {
@@ -5702,7 +5788,6 @@ BAEResult           BAEStream_Start(BAEStream stream)
     return BAE_TranslateOPErr(theErr);
 }
 
-
 // BAEStream_Stop()
 // --------------------------------------
 // Stops playback of the indicated BAEStream in one of two ways, depending upon the
@@ -5711,12 +5796,12 @@ BAEResult           BAEStream_Start(BAEStream stream)
 // ------------------------------------
 // Note: Returns immediately, not at the end of the fade-out period.
 //
-BAEResult           BAEStream_Stop(BAEStream stream,
-                            BAE_BOOL startFade)
+BAEResult BAEStream_Stop(BAEStream stream,
+                         BAE_BOOL startFade)
 {
-    BAEResult           err;
-    int16_t           streamVolume;
-    BAE_BOOL            paused;
+    BAEResult err;
+    int16_t streamVolume;
+    BAE_BOOL paused;
 
     err = BAE_NO_ERROR;
     if (stream)
@@ -5732,14 +5817,14 @@ BAEResult           BAEStream_Stop(BAEStream stream,
             if (startFade)
             {
                 streamVolume = GM_AudioStreamGetVolume(stream->mSoundStreamVoiceReference);
-                GM_SetAudioStreamFadeRate(stream->mSoundStreamVoiceReference, 
-                                            PV_GetDefaultMixerFadeRate(stream->mixer), 
-                                            0, streamVolume, TRUE);
+                GM_SetAudioStreamFadeRate(stream->mSoundStreamVoiceReference,
+                                          PV_GetDefaultMixerFadeRate(stream->mixer),
+                                          0, streamVolume, TRUE);
             }
             else
             {
                 GM_AudioStreamStop(NULL, stream->mSoundStreamVoiceReference);
-                GM_AudioStreamDrain(NULL, stream->mSoundStreamVoiceReference);  // wait for it to be finished
+                GM_AudioStreamDrain(NULL, stream->mSoundStreamVoiceReference); // wait for it to be finished
             }
             stream->mSoundStreamVoiceReference = DEAD_STREAM;
         }
@@ -5747,17 +5832,15 @@ BAEResult           BAEStream_Stop(BAEStream stream,
     return err;
 }
 
-
-
 // BAEStream_Pause()
 // ------------------------------------
 // Pauses playback of the indicated BAEStream.  If already paused, this function
 // will have no effect. To resume playback, call BAEStream_Resume() or
 // BAEStream_Start().
 //
-BAEResult           BAEStream_Pause(BAEStream stream)
+BAEResult BAEStream_Pause(BAEStream stream)
 {
-    BAEResult   err;
+    BAEResult err;
 
     err = BAE_NO_ERROR;
     if (stream)
@@ -5778,8 +5861,6 @@ BAEResult           BAEStream_Pause(BAEStream stream)
     return err;
 }
 
-
-
 // BAEStream_Resume()
 // --------------------------------------
 // If the indicated BAEStream is paused at the time of this call, causes playback
@@ -5787,9 +5868,9 @@ BAEResult           BAEStream_Pause(BAEStream stream)
 // this function will have no effect. Another way to resume playback after a
 // pause is to call BAEStream_Start().
 //
-BAEResult           BAEStream_Resume(BAEStream stream)
+BAEResult BAEStream_Resume(BAEStream stream)
 {
-    BAEResult   err;
+    BAEResult err;
 
     err = BAE_NO_ERROR;
     if (stream)
@@ -5807,17 +5888,15 @@ BAEResult           BAEStream_Resume(BAEStream stream)
     return err;
 }
 
-
-
 // BAEStream_IsPaused()
 // ------------------------------------
 // Upon return, parameter outIsPaused will point to a BAE_BOOL indicating whether
 // the indicated BAEStream is currently in a paused state (TRUE) or not (FALSE).
 //
-BAEResult           BAEStream_IsPaused(BAEStream stream,
-                            BAE_BOOL *outIsPaused)
+BAEResult BAEStream_IsPaused(BAEStream stream,
+                             BAE_BOOL *outIsPaused)
 {
-    BAEResult   err;
+    BAEResult err;
 
     err = BAE_NO_ERROR;
     if (stream)
@@ -5838,20 +5917,18 @@ BAEResult           BAEStream_IsPaused(BAEStream stream,
     return err;
 }
 
-
-
 // BAEStream_Fade()
 // --------------------------------------
 // Fades the volume of the indicated BAEStream smoothly from sourceVolume to
 // destVolume, over a period of timeInMilliseconds.  Note that this may be either
 // a fade up or a fade down.
 //
-BAEResult           BAEStream_Fade(BAEStream stream,
-                            BAE_FIXED sourceVolume,
-                            BAE_FIXED destVolume,
-                            BAE_FIXED timeInMiliseconds)
+BAEResult BAEStream_Fade(BAEStream stream,
+                         BAE_FIXED sourceVolume,
+                         BAE_FIXED destVolume,
+                         BAE_FIXED timeInMiliseconds)
 {
-    BAEResult   err;
+    BAEResult err;
 
     err = BAE_NO_ERROR;
     if (stream)
@@ -5864,19 +5941,17 @@ BAEResult           BAEStream_Fade(BAEStream stream,
     return err;
 }
 
-
-
 // BAEStream_IsDone()
 // --------------------------------------
 // Upon return, the BAE_BOOL pointed at by parameter outIsDone will indicate
 // whether the indicated BAEStream object has (TRUE) or has not (FALSE) played all
 // the way to its end and stopped on its own.
 //
-BAEResult           BAEStream_IsDone(BAEStream stream,
-                            BAE_BOOL *outIsDone)
+BAEResult BAEStream_IsDone(BAEStream stream,
+                           BAE_BOOL *outIsDone)
 {
-    BAEResult   err;
-    BAE_BOOL    playing;
+    BAEResult err;
+    BAE_BOOL playing;
 
     err = BAE_NO_ERROR;
     if (stream)
@@ -5905,17 +5980,15 @@ BAEResult           BAEStream_IsDone(BAEStream stream,
     return err;
 }
 
-
-
 // BAEStream_SetRate()
 // --------------------------------------
 // Sets the playback sample rate of the indicated BAEStream object to the indicated
 // rate, in Hertz.
 //
-BAEResult           BAEStream_SetRate(BAEStream stream,
+BAEResult BAEStream_SetRate(BAEStream stream,
                             BAE_UNSIGNED_FIXED newRate)
 {
-    BAEResult   err;
+    BAEResult err;
 
     err = BAE_NO_ERROR;
     if (stream)
@@ -5936,17 +6009,15 @@ BAEResult           BAEStream_SetRate(BAEStream stream,
     return err;
 }
 
-
-
 // BAEStream_GetRate()
 // --------------------------------------
 // Upon return, the BAE_UNSIGNED_FIXED pointed to by parameter outRate will hold a
 // copy of the indicated BAEStream's current sample rate, in Hertz.
 //
-BAEResult           BAEStream_GetRate(BAEStream stream,
+BAEResult BAEStream_GetRate(BAEStream stream,
                             BAE_UNSIGNED_FIXED *outRate)
 {
-    BAEResult   err;
+    BAEResult err;
 
     err = BAE_NO_ERROR;
     if (stream)
@@ -5974,17 +6045,15 @@ BAEResult           BAEStream_GetRate(BAEStream stream,
     return err;
 }
 
-
-
 // BAEStream_SetLowPassAmountFilter()
 // --------------------------------------
 // Sets the depth of the lowpass filter effect for the indicated
 // BAEStream object.
 //
-BAEResult           BAEStream_SetLowPassAmountFilter(BAEStream stream,
-                            int16_t lowPassAmount)
+BAEResult BAEStream_SetLowPassAmountFilter(BAEStream stream,
+                                           int16_t lowPassAmount)
 {
-    BAEResult   err;
+    BAEResult err;
 
     err = BAE_NO_ERROR;
     if (stream)
@@ -6005,18 +6074,16 @@ BAEResult           BAEStream_SetLowPassAmountFilter(BAEStream stream,
     return err;
 }
 
-
-
 // BAEStream_GetLowPassAmountFilter()
 // --------------------------------------
 // Upon return, the int16_t pointed to by parameter outLowPassAmount will hold a
 // copy of the indicated BAEStream object's current lowpass filter effect's depth
 // setting.
 //
-BAEResult           BAEStream_GetLowPassAmountFilter(BAEStream stream,
-                            int16_t *outLowPassAmount)
+BAEResult BAEStream_GetLowPassAmountFilter(BAEStream stream,
+                                           int16_t *outLowPassAmount)
 {
-    BAEResult   err;
+    BAEResult err;
 
     err = BAE_NO_ERROR;
     if (stream)
@@ -6044,17 +6111,15 @@ BAEResult           BAEStream_GetLowPassAmountFilter(BAEStream stream,
     return err;
 }
 
-
-
 // BAEStream_SetResonanceAmountFilter()
 // --------------------------------------
 // Sets the resonance of the lowpass filter effect for the indicated BAEStream
 // object.
 //
-BAEResult           BAEStream_SetResonanceAmountFilter(BAEStream stream,
-                            int16_t resonanceAmount)
+BAEResult BAEStream_SetResonanceAmountFilter(BAEStream stream,
+                                             int16_t resonanceAmount)
 {
-    BAEResult   err;
+    BAEResult err;
 
     err = BAE_NO_ERROR;
     if (stream)
@@ -6075,18 +6140,16 @@ BAEResult           BAEStream_SetResonanceAmountFilter(BAEStream stream,
     return err;
 }
 
-
-
 // BAEStream_GetResonanceAmountFilter()
 // ------------------------------------
 // Upon return, the int16_t pointed to by parameter outResonanceAmount will hold
 // a copy of the indicated BAEStream object's current lowpass filter effect's
 // resonance setting.
 //
-BAEResult           BAEStream_GetResonanceAmountFilter(BAEStream stream,
-                            int16_t *outResonanceAmount)
+BAEResult BAEStream_GetResonanceAmountFilter(BAEStream stream,
+                                             int16_t *outResonanceAmount)
 {
-    BAEResult   err;
+    BAEResult err;
 
     err = BAE_NO_ERROR;
     if (stream)
@@ -6114,17 +6177,15 @@ BAEResult           BAEStream_GetResonanceAmountFilter(BAEStream stream,
     return err;
 }
 
-
-
 // BAEStream_SetFrequencyAmountFilter()
 // --------------------------------------
 // Sets the frequency of the lowpass filter effect for the indicated BAEStream
 // object.
 //
-BAEResult           BAEStream_SetFrequencyAmountFilter(BAEStream stream,
-                            int16_t frequencyAmount)
+BAEResult BAEStream_SetFrequencyAmountFilter(BAEStream stream,
+                                             int16_t frequencyAmount)
 {
-    BAEResult   err;
+    BAEResult err;
 
     err = BAE_NO_ERROR;
     if (stream)
@@ -6145,18 +6206,16 @@ BAEResult           BAEStream_SetFrequencyAmountFilter(BAEStream stream,
     return err;
 }
 
-
-
 // BAEStream_GetFrequencyAmountFilter()
 // --------------------------------------
 // Upon return, the int16_t pointed to by parameter outFrequencyAmount will hold
 // a copy of the indicated BAEStream object's current lowpass filter effect's
 // frequency setting.
 //
-BAEResult           BAEStream_GetFrequencyAmountFilter(BAEStream stream,
-                            int16_t *outFrequencyAmount)
+BAEResult BAEStream_GetFrequencyAmountFilter(BAEStream stream,
+                                             int16_t *outFrequencyAmount)
 {
-    BAEResult   err;
+    BAEResult err;
 
     err = BAE_NO_ERROR;
     if (stream)
@@ -6190,19 +6249,16 @@ BAEResult BAEMixer_ServiceStreams(BAEMixer theMixer)
     return BAE_NO_ERROR;
 }
 
-#endif  //#if USE_STREAM_API == TRUE
-
-
+#endif // #if USE_STREAM_API == TRUE
 
 // ------------------------------------------------------------------
 // BAESong Functions
 // ------------------------------------------------------------------
 #if 0
-    #pragma mark -
-    #pragma mark ##### BAESong #####
-    #pragma mark -
+#pragma mark -
+#pragma mark##### BAESong #####
+#pragma mark -
 #endif
-
 
 // BAESong_New()
 // --------------------------------------
@@ -6210,8 +6266,8 @@ BAEResult BAEMixer_ServiceStreams(BAEMixer theMixer)
 //
 BAESong BAESong_New(BAEMixer mixer)
 {
-    BAESong     song;
-    BAEResult   result;
+    BAESong song;
+    BAEResult result;
 
     song = NULL;
     if (mixer)
@@ -6221,7 +6277,7 @@ BAESong BAESong_New(BAEMixer mixer)
         {
             if (BAE_NewMutex(&song->mLock, "bae", "seq", __LINE__))
             {
-    
+
                 song->mVolume = MAX_SONG_VOLUME;
                 song->mixer = mixer;
                 song->mInMixer = FALSE;
@@ -6234,11 +6290,12 @@ BAESong BAESong_New(BAEMixer mixer)
                     song->mValid = 1;
 #endif
                     song->mID = OBJECT_ID;
-                    if(song->pSong){
+                    if (song->pSong)
+                    {
                         memset(song->pSong->channelActiveNotes, 0, sizeof(song->pSong->channelActiveNotes));
                     }
                 }
-    
+
                 if (result)
                 {
                     BAESong_Delete(song);
@@ -6262,7 +6319,7 @@ void BAESong_DisplayInfo(BAESong song)
 
     BAE_STDERR("MiniBAE::Display Song info\n");
 
-    if ( (song) && (song->mID == OBJECT_ID) )
+    if ((song) && (song->mID == OBJECT_ID))
     {
         pSong = song->pSong;
 
@@ -6273,13 +6330,13 @@ void BAESong_DisplayInfo(BAESong song)
         }
         else
         {
-    #if (X_PLATFORM == X_DANGER)
+#if (X_PLATFORM == X_DANGER)
             if (pSong->seqType == SEQ_RTX)
             {
                 BAE_STDERR("RTX\n");
             }
             else
-    #endif
+#endif
             {
                 BAE_STDERR("UNKNOWN\n");
             }
@@ -6308,7 +6365,7 @@ void BAESong_DisplayInfo(BAESong song)
             BAE_STDERR("    SomeTrackIsAlive %s\n", pSong->SomeTrackIsAlive ? "TRUE" : "FALSE");
             BAE_STDERR("    songFinished %s\n", pSong->songFinished ? "TRUE" : "FALSE");
             BAE_STDERR("    songLoopCount %d\n", pSong->songLoopCount);
-            BAE_STDERR("    songMaxLoopCount %d\n", pSong->songMaxLoopCount); 
+            BAE_STDERR("    songMaxLoopCount %d\n", pSong->songMaxLoopCount);
             BAE_STDERR("    songMidiTickLength %f\n", pSong->songMidiTickLength);
             BAE_STDERR("    songMicrosecondLength %f\n", pSong->songMicrosecondLength);
 
@@ -6337,19 +6394,18 @@ void BAESong_DisplayInfo(BAESong song)
     }
 }
 
-
 // BAESong_GetMemoryUsed()
 // --------------------------------------
 //
 //
 BAEResult BAESong_GetMemoryUsed(BAESong song, uint32_t *pOutResult)
 {
-    uint32_t   size;
-    int16_t       count, splitCount;
-    GM_Instrument   *pI, *pSI;
+    uint32_t size;
+    int16_t count, splitCount;
+    GM_Instrument *pI, *pSI;
 
     size = 0;
-    if ( (song) && (song->mID == OBJECT_ID) )
+    if ((song) && (song->mID == OBJECT_ID))
     {
         // song size
         size = XGetPtrSize((XPTR)song);
@@ -6400,8 +6456,8 @@ static BAEResult PV_BAESong_InitLiveSong(BAESong song, BAE_BOOL addToMixer)
         song->pSong = GM_CreateLiveSong(NULL, midiSongCount++);
         if (song->pSong)
         {
-            GM_SetSongMixer(song->pSong, song->mixer->pMixer);  // associate mixer to song
-                                                                // other we can't load instruments
+            GM_SetSongMixer(song->pSong, song->mixer->pMixer); // associate mixer to song
+                                                               // other we can't load instruments
 
             BAEMixer_GetMidiVoices(song->mixer, &maxSongVoices);
             BAEMixer_GetSoundVoices(song->mixer, &maxEffectVoices);
@@ -6415,7 +6471,7 @@ static BAEResult PV_BAESong_InitLiveSong(BAESong song, BAE_BOOL addToMixer)
                 err = GM_StartLiveSong(song->pSong, FALSE, CreateBankToken());
                 if (err)
                 {
-                    song->mInMixer = TRUE;  
+                    song->mInMixer = TRUE;
                     while (GM_FreeSong(NULL, song->pSong) == STILL_PLAYING)
                     {
                         XWaitMicroseocnds(BAE_GetSliceTimeInMicroseconds());
@@ -6436,7 +6492,6 @@ static BAEResult PV_BAESong_InitLiveSong(BAESong song, BAE_BOOL addToMixer)
 
     return BAE_TranslateOPErr(err);
 }
-
 
 // PV_BAESong_Unload()
 // --------------------------------------
@@ -6467,7 +6522,7 @@ BAEResult BAESong_Delete(BAESong song)
     OPErr err;
 
     err = NO_ERR;
-    if ( (song) && (song->mID == OBJECT_ID) )
+    if ((song) && (song->mID == OBJECT_ID))
     {
         song->mID = 0;
 
@@ -6493,7 +6548,6 @@ BAEResult BAESong_Delete(BAESong song)
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAESong_GetMixer()
 // --------------------------------------
 //
@@ -6503,7 +6557,7 @@ BAEResult BAESong_GetMixer(BAESong song, BAEMixer *outMixer)
     OPErr err;
 
     err = NO_ERR;
-    if ( (song) && (song->mID == OBJECT_ID) )
+    if ((song) && (song->mID == OBJECT_ID))
     {
         if (outMixer)
         {
@@ -6520,7 +6574,6 @@ BAEResult BAESong_GetMixer(BAESong song, BAEMixer *outMixer)
     }
     return BAE_TranslateOPErr(err);
 }
-
 
 // BAESong_SetMixer()
 // --------------------------------------
@@ -6542,17 +6595,16 @@ BAEResult BAESong_SetMixer(BAESong song, BAEMixer mixer)
     return BAE_TranslateOPErr(err);
 }
 
-
 BAEResult BAESong_GetTitle(BAESong song, char *cName, int maxSize)
 {
-    OPErr               err = NO_ERR;
+    OPErr err = NO_ERR;
 
-    if ( (song) && (song->mID == OBJECT_ID) )
+    if ((song) && (song->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(song->mLock);
         if (song->mTitle == NULL)
         {
-            char    numbers[10];
+            char numbers[10];
 
             // make title
             song->mTitle = XDuplicateStr("Untitled");
@@ -6567,7 +6619,7 @@ BAEResult BAESong_GetTitle(BAESong song, char *cName, int maxSize)
         {
             if (XStrLen(song->mTitle) > maxSize)
             {
-                song->mTitle[maxSize-1] = 0;
+                song->mTitle[maxSize - 1] = 0;
             }
             XStrCpy(cName, song->mTitle);
         }
@@ -6590,17 +6642,17 @@ BAEResult BAESong_GetTitle(BAESong song, char *cName, int maxSize)
 //
 BAEResult BAESong_LoadGroovoid(BAESong song, char *cName, BAE_BOOL ignoreBadInstruments) // was LoadFromBank
 {
-    SongResource        *pXSong;
-    int32_t                size;
-    OPErr               theErr;
-    XShortResourceID    theID;
-    GM_Song             *pSong;
+    SongResource *pXSong;
+    int32_t size;
+    OPErr theErr;
+    XShortResourceID theID;
+    GM_Song *pSong;
 
     theErr = NO_ERR;
-    if ( (song) && (song->mID == OBJECT_ID) )
+    if ((song) && (song->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(song->mLock);
-        
+
 #if X_PLATFORM != X_MACINTOSH_9
         // on all platforms except MacOS9 we need a valid open resource file. BAE's resource manager is designed
         // to fall back into the MacOS resource manager if no valid BAE file is open. So this test is removed
@@ -6608,22 +6660,22 @@ BAEResult BAESong_LoadGroovoid(BAESong song, char *cName, BAE_BOOL ignoreBadInst
         if (song->mixer && song->mixer->pPatchFiles)
 #endif
         {
-            pXSong = (SongResource *)XGetNamedResource(ID_SONG, cName, &size);      // look for song
+            pXSong = (SongResource *)XGetNamedResource(ID_SONG, cName, &size); // look for song
             if (pXSong)
             {
                 if (song->pSong)
                 {
                     PV_BAESong_Unload(song);
-                    theID = midiSongCount++;    // runtime midi ID
+                    theID = midiSongCount++; // runtime midi ID
                     pSong = GM_LoadSong(song->mixer->pMixer,
                                         NULL,
                                         song,
                                         theID,
-                                        (void *) pXSong,
+                                        (void *)pXSong,
                                         NULL,
                                         0L,
-                                        NULL,       // no callback
-                                        TRUE,       // load instruments
+                                        NULL, // no callback
+                                        TRUE, // load instruments
                                         ignoreBadInstruments,
                                         CreateBankToken(),
                                         &theErr);
@@ -6631,15 +6683,15 @@ BAEResult BAESong_LoadGroovoid(BAESong song, char *cName, BAE_BOOL ignoreBadInst
                     {
                         // things are cool
                         GM_SetDisposeSongDataWhenDoneFlag(pSong, TRUE); // dispose of midi data
-                        GM_SetSongLoopFlag(pSong, FALSE);       // don't loop song
-                        song->pSong = pSong;                // preserve for use later
+                        GM_SetSongLoopFlag(pSong, FALSE);               // don't loop song
+                        song->pSong = pSong;                            // preserve for use later
                         GM_SetVelocityCurveType(song->pSong, (VelocityCurveType)g_defaultVelocityCurve);
                         theErr = NO_ERR;
                     }
                     else
                     {
                         // need to re-initialize
-                        PV_BAESong_InitLiveSong(song, FALSE); 
+                        PV_BAESong_InitLiveSong(song, FALSE);
                         theErr = BAD_FILE;
                     }
                 }
@@ -6663,39 +6715,36 @@ BAEResult BAESong_LoadGroovoid(BAESong song, char *cName, BAE_BOOL ignoreBadInst
     return BAE_TranslateOPErr(theErr);
 }
 
-
-
 // BAESong_LoadMidiFromMemory()
 // --------------------------------------
 //
 //  pMidiData is copied in this function and can be disposed of upon return.
-BAEResult BAESong_LoadMidiFromMemory(BAESong song, void const* pMidiData, uint32_t midiSize, BAE_BOOL ignoreBadInstruments)
+BAEResult BAESong_LoadMidiFromMemory(BAESong song, void const *pMidiData, uint32_t midiSize, BAE_BOOL ignoreBadInstruments)
 {
-    SongResource        *pXSong;
-    OPErr               theErr;
-    XShortResourceID    theID;
-    GM_Song             *pSong;
-    short               soundVoices, midiVoices, mixLevel;
-    char                *title;
+    SongResource *pXSong;
+    OPErr theErr;
+    XShortResourceID theID;
+    GM_Song *pSong;
+    short soundVoices, midiVoices, mixLevel;
+    char *title;
 
     theErr = NO_ERR;
-    if ( (song) && (song->mID == OBJECT_ID) )
+    if ((song) && (song->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(song->mLock);
         pMidiData = XDuplicateMemory((XPTRC)pMidiData, (XDWORD)midiSize);
         if (pMidiData && midiSize)
         {
-            theID = midiSongCount++;    // runtime midi ID
+            theID = midiSongCount++; // runtime midi ID
             BAEMixer_GetMidiVoices(song->mixer, &midiVoices);
             BAEMixer_GetMixLevel(song->mixer, &mixLevel);
             BAEMixer_GetSoundVoices(song->mixer, &soundVoices);
             pXSong = XNewSongPtr(SONG_TYPE_SMS,
-                                theID,
-                                midiVoices,
-                                mixLevel,
-                                soundVoices,
-                                REVERB_TYPE_1
-                                );
+                                 theID,
+                                 midiVoices,
+                                 mixLevel,
+                                 soundVoices,
+                                 REVERB_TYPE_1);
             if (pXSong)
             {
                 if (song->pSong)
@@ -6705,11 +6754,11 @@ BAEResult BAESong_LoadMidiFromMemory(BAESong song, void const* pMidiData, uint32
                                         NULL,
                                         song,
                                         theID,
-                                        (void *) pXSong,
-                                        (void *) pMidiData,
-                                        (int32_t) midiSize,
-                                        NULL,       // no callback
-                                        TRUE,       // load instruments
+                                        (void *)pXSong,
+                                        (void *)pMidiData,
+                                        (int32_t)midiSize,
+                                        NULL, // no callback
+                                        TRUE, // load instruments
                                         ignoreBadInstruments,
                                         CreateBankToken(),
                                         &theErr);
@@ -6727,7 +6776,7 @@ BAEResult BAESong_LoadMidiFromMemory(BAESong song, void const* pMidiData, uint32
                             if (title)
                             {
                                 XBlockMove(((XBYTE *)pSong->sequenceData) + pSong->titleOffset,
-                                            title, pSong->titleLength);
+                                           title, pSong->titleLength);
                                 title[pSong->titleLength] = 0;
                             }
                             song->mTitle = title;
@@ -6736,16 +6785,15 @@ BAEResult BAESong_LoadMidiFromMemory(BAESong song, void const* pMidiData, uint32
                     else
                     {
                         // need to re-initialize
-                        PV_BAESong_InitLiveSong(song, FALSE); 
+                        PV_BAESong_InitLiveSong(song, FALSE);
                         theErr = BAD_FILE;
                     }
                 }
                 else
                 {
-                    theErr = GENERAL_BAD;  // a BAESong must always have a pSong...
+                    theErr = GENERAL_BAD; // a BAESong must always have a pSong...
                 }
                 XDisposePtr(pXSong);
-
             }
             else
             {
@@ -6771,35 +6819,34 @@ BAEResult BAESong_LoadMidiFromMemory(BAESong song, void const* pMidiData, uint32
 //
 BAEResult BAESong_LoadMidiFromFile(BAESong song, BAEPathName filePath, BAE_BOOL ignoreBadInstruments)
 {
-    XFILENAME           name;
-    XPTR                pMidiData;
-    SongResource        *pXSong;
-    int32_t                midiSize;
-    OPErr               theErr;
-    XShortResourceID    theID;
-    GM_Song             *pSong;
-    int16_t               soundVoices, midiVoices, mixLevel;
+    XFILENAME name;
+    XPTR pMidiData;
+    SongResource *pXSong;
+    int32_t midiSize;
+    OPErr theErr;
+    XShortResourceID theID;
+    GM_Song *pSong;
+    int16_t soundVoices, midiVoices, mixLevel;
 
     theErr = NO_ERR;
-    if ( (song) && (song->mID == OBJECT_ID) )
+    if ((song) && (song->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(song->mLock);
         XConvertPathToXFILENAME(filePath, &name);
         pMidiData = PV_GetFileAsData(&name, &midiSize);
         if (pMidiData)
         {
-            theID = midiSongCount++;    // runtime midi ID
+            theID = midiSongCount++; // runtime midi ID
             BAEMixer_GetMidiVoices(song->mixer, &midiVoices);
             BAEMixer_GetMixLevel(song->mixer, &mixLevel);
             BAEMixer_GetSoundVoices(song->mixer, &soundVoices);
             pXSong = XNewSongPtr(SONG_TYPE_SMS,
-                                theID,
-                                midiVoices,
-                                mixLevel,
-                                soundVoices,
-                                BAE_REVERB_TYPE_1
-                                );
-    
+                                 theID,
+                                 midiVoices,
+                                 mixLevel,
+                                 soundVoices,
+                                 BAE_REVERB_TYPE_1);
+
             if (pXSong)
             {
                 if (song->pSong)
@@ -6809,11 +6856,11 @@ BAEResult BAESong_LoadMidiFromFile(BAESong song, BAEPathName filePath, BAE_BOOL 
                                         NULL,
                                         song,
                                         theID,
-                                        (void *) pXSong,
+                                        (void *)pXSong,
                                         pMidiData,
                                         midiSize,
-                                        NULL,       // no callback
-                                        TRUE,       // load instruments
+                                        NULL, // no callback
+                                        TRUE, // load instruments
                                         ignoreBadInstruments,
                                         CreateBankToken(),
                                         &theErr);
@@ -6821,21 +6868,21 @@ BAEResult BAESong_LoadMidiFromFile(BAESong song, BAEPathName filePath, BAE_BOOL 
                     {
                         // things are cool
                         GM_SetDisposeSongDataWhenDoneFlag(pSong, TRUE); // dispose of midi data
-                        GM_SetSongLoopFlag(pSong, FALSE);       // don't loop song
-                        song->pSong = pSong;                    // preserve for use later
+                        GM_SetSongLoopFlag(pSong, FALSE);               // don't loop song
+                        song->pSong = pSong;                            // preserve for use later
                         GM_SetVelocityCurveType(song->pSong, (VelocityCurveType)g_defaultVelocityCurve);
                     }
                     else
                     {
                         // need to re-initialize
-                        PV_BAESong_InitLiveSong(song, FALSE); 
+                        PV_BAESong_InitLiveSong(song, FALSE);
                         theErr = BAD_FILE;
                         XDisposePtr(pMidiData);
                     }
                 }
                 else
                 {
-                    theErr = (OPErr)BAE_GENERAL_BAD;  // a BAESong must always have a pSong...
+                    theErr = (OPErr)BAE_GENERAL_BAD; // a BAESong must always have a pSong...
                 }
                 XDisposePtr(pXSong);
             }
@@ -6858,7 +6905,6 @@ BAEResult BAESong_LoadMidiFromFile(BAESong song, BAEPathName filePath, BAE_BOOL 
     return BAE_TranslateOPErr(theErr);
 }
 
-
 // BAESong_LoadRmfFromMemory()
 // --------------------------------------
 // was BAERmfSong::LoadFromMemory()
@@ -6866,15 +6912,15 @@ BAEResult BAESong_LoadMidiFromFile(BAESong song, BAEPathName filePath, BAE_BOOL 
 BAEResult BAESong_LoadRmfFromMemory(BAESong song, void *pRMFData, uint32_t rmfSize, int16_t songIndex, BAE_BOOL ignoreBadInstruments)
 {
 #if USE_FULL_RMF_SUPPORT == TRUE
-    XFILE               fileRef;
-    SongResource        *pXSong;
-    GM_Song             *pSong;
-    OPErr               theErr;
-    XLongResourceID     theID;
-    int32_t                size;
+    XFILE fileRef;
+    SongResource *pXSong;
+    GM_Song *pSong;
+    OPErr theErr;
+    XLongResourceID theID;
+    int32_t size;
 
     theErr = NO_ERR;
-    if ( (song) && (song->mID == OBJECT_ID) )
+    if ((song) && (song->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(song->mLock);
         if (pRMFData && rmfSize)
@@ -6891,12 +6937,12 @@ BAEResult BAESong_LoadRmfFromMemory(BAESong song, void *pRMFData, uint32_t rmfSi
                         pSong = GM_LoadSong(song->mixer->pMixer,
                                             NULL,
                                             song,
-                                            (XShortResourceID) theID,
-                                            (void *) pXSong,
+                                            (XShortResourceID)theID,
+                                            (void *)pXSong,
                                             NULL,
                                             0L,
-                                            NULL,       // no callback
-                                            TRUE,       // load instruments
+                                            NULL, // no callback
+                                            TRUE, // load instruments
                                             ignoreBadInstruments,
                                             CreateBankToken(),
                                             &theErr);
@@ -6904,14 +6950,14 @@ BAEResult BAESong_LoadRmfFromMemory(BAESong song, void *pRMFData, uint32_t rmfSi
                         {
                             // things are cool
                             GM_SetDisposeSongDataWhenDoneFlag(pSong, TRUE); // dispose of midi data
-                            GM_SetSongLoopFlag(pSong, FALSE);       // don't loop song
-                            song->pSong = pSong;                    // preserve for use later
+                            GM_SetSongLoopFlag(pSong, FALSE);               // don't loop song
+                            song->pSong = pSong;                            // preserve for use later
                             GM_SetVelocityCurveType(song->pSong, (VelocityCurveType)g_defaultVelocityCurve);
                         }
                         else
                         {
                             // need to re-initialize
-                            PV_BAESong_InitLiveSong(song, FALSE); 
+                            PV_BAESong_InitLiveSong(song, FALSE);
                             theErr = BAD_FILE;
                         }
                     }
@@ -6926,7 +6972,8 @@ BAEResult BAESong_LoadRmfFromMemory(BAESong song, void *pRMFData, uint32_t rmfSi
                     theErr = RESOURCE_NOT_FOUND;
                     // Fallback attempt: direct memory scan if primary lookup failed.
                     SongResource *fallbackSong = PV_FallbackFindSongInRMFMemory(pRMFData, rmfSize, songIndex, &theID, &size);
-                    if(fallbackSong){
+                    if (fallbackSong)
+                    {
                         pXSong = fallbackSong; // treat as found
                         theErr = NO_ERR;
                         if (song->pSong)
@@ -6935,12 +6982,12 @@ BAEResult BAESong_LoadRmfFromMemory(BAESong song, void *pRMFData, uint32_t rmfSi
                             pSong = GM_LoadSong(song->mixer->pMixer,
                                                 NULL,
                                                 song,
-                                                (XShortResourceID) theID,
-                                                (void *) pXSong,
+                                                (XShortResourceID)theID,
+                                                (void *)pXSong,
                                                 NULL,
                                                 0L,
-                                                NULL,       // no callback
-                                                TRUE,       // load instruments
+                                                NULL, // no callback
+                                                TRUE, // load instruments
                                                 ignoreBadInstruments,
                                                 CreateBankToken(),
                                                 &theErr);
@@ -6984,9 +7031,8 @@ BAEResult BAESong_LoadRmfFromMemory(BAESong song, void *pRMFData, uint32_t rmfSi
     return BAE_TranslateOPErr(theErr);
 #else
     return BAE_NOT_SETUP;
-#endif  //#if USE_FULL_RMF_SUPPORT == TRUE
+#endif // #if USE_FULL_RMF_SUPPORT == TRUE
 }
-
 
 // BAESong_LoadRmfFromFile()
 // --------------------------------------
@@ -6995,16 +7041,16 @@ BAEResult BAESong_LoadRmfFromMemory(BAESong song, void *pRMFData, uint32_t rmfSi
 BAEResult BAESong_LoadRmfFromFile(BAESong song, BAEPathName filePath, int16_t songIndex, BAE_BOOL ignoreBadInstruments)
 {
 #if USE_FULL_RMF_SUPPORT == TRUE
-    XFILE               fileRef;
-    XFILENAME           name;
-    SongResource        *pXSong;
-    GM_Song             *pSong;
-    OPErr               theErr;
-    XLongResourceID     theID;
-    int32_t                size;
+    XFILE fileRef;
+    XFILENAME name;
+    SongResource *pXSong;
+    GM_Song *pSong;
+    OPErr theErr;
+    XLongResourceID theID;
+    int32_t size;
 
     theErr = NO_ERR;
-    if ( (song) && (song->mID == OBJECT_ID) )
+    if ((song) && (song->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(song->mLock);
         XConvertPathToXFILENAME(filePath, &name);
@@ -7020,12 +7066,12 @@ BAEResult BAESong_LoadRmfFromFile(BAESong song, BAEPathName filePath, int16_t so
                     pSong = GM_LoadSong(song->mixer->pMixer,
                                         NULL,
                                         song,
-                                        (XShortResourceID) theID,
-                                        (void *) pXSong,
+                                        (XShortResourceID)theID,
+                                        (void *)pXSong,
                                         NULL,
                                         0L,
-                                        NULL,       // no callback
-                                        TRUE,       // load instruments
+                                        NULL, // no callback
+                                        TRUE, // load instruments
                                         ignoreBadInstruments,
                                         CreateBankToken(),
                                         &theErr);
@@ -7033,14 +7079,14 @@ BAEResult BAESong_LoadRmfFromFile(BAESong song, BAEPathName filePath, int16_t so
                     {
                         // things are cool
                         GM_SetDisposeSongDataWhenDoneFlag(pSong, TRUE); // dispose of midi data
-                        GM_SetSongLoopFlag(pSong, FALSE);       // don't loop song
-                        song->pSong = pSong;                    // preserve for use later
+                        GM_SetSongLoopFlag(pSong, FALSE);               // don't loop song
+                        song->pSong = pSong;                            // preserve for use later
                         GM_SetVelocityCurveType(song->pSong, (VelocityCurveType)g_defaultVelocityCurve);
                     }
                     else
                     {
                         // need to re-initialize
-                        PV_BAESong_InitLiveSong(song, FALSE); 
+                        PV_BAESong_InitLiveSong(song, FALSE);
                         theErr = BAD_FILE;
                     }
                 }
@@ -7066,18 +7112,18 @@ BAEResult BAESong_LoadRmfFromFile(BAESong song, BAEPathName filePath, int16_t so
     {
         theErr = NULL_OBJECT;
     }
-    return BAE_TranslateOPErr(theErr);  
+    return BAE_TranslateOPErr(theErr);
 #else
     return BAE_NOT_SETUP;
-#endif  //#if USE_FULL_RMF_SUPPORT == TRUE
+#endif // #if USE_FULL_RMF_SUPPORT == TRUE
 }
 
 BAEResult BAESong_SetRouteBus(BAESong song, int routeBus)
 {
     OPErr err;
-    
+
     err = NO_ERR;
-    if ( (song) && (song->mID == OBJECT_ID) )
+    if ((song) && (song->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(song->mLock);
         song->mRouteBus = routeBus;
@@ -7096,8 +7142,10 @@ BAEResult BAESong_SetVelocityCurve(BAESong song, int curveType)
     OPErr err = NO_ERR;
     if ((song) && (song->mID == OBJECT_ID))
     {
-        if (curveType < 0) curveType = 0;
-        if (curveType > 4) curveType = 4; // engine currently supports 0..4
+        if (curveType < 0)
+            curveType = 0;
+        if (curveType > 4)
+            curveType = 4; // engine currently supports 0..4
         BAE_AcquireMutex(song->mLock);
         if (song->pSong)
         {
@@ -7125,7 +7173,7 @@ BAEResult BAESong_SetVolume(BAESong song, BAE_UNSIGNED_FIXED volume)
     OPErr err;
 
     err = NO_ERR;
-    if ( (song) && (song->mID == OBJECT_ID) )
+    if ((song) && (song->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(song->mLock);
         song->mVolume = FIXED_TO_SHORT_ROUNDED(volume * MAX_SONG_VOLUME);
@@ -7139,7 +7187,6 @@ BAEResult BAESong_SetVolume(BAESong song, BAE_UNSIGNED_FIXED volume)
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAESong_GetVolume()
 // --------------------------------------
 //
@@ -7149,7 +7196,7 @@ BAEResult BAESong_GetVolume(BAESong song, BAE_UNSIGNED_FIXED *outVolume)
     OPErr err;
 
     err = NO_ERR;
-    if ( (song) && (song->mID == OBJECT_ID) )
+    if ((song) && (song->mID == OBJECT_ID))
     {
         if (outVolume)
         {
@@ -7170,7 +7217,6 @@ BAEResult BAESong_GetVolume(BAESong song, BAE_UNSIGNED_FIXED *outVolume)
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAESong_SetTranspose()
 // --------------------------------------
 //
@@ -7180,10 +7226,10 @@ BAEResult BAESong_SetTranspose(BAESong song, int32_t semitones)
     OPErr err;
 
     err = NO_ERR;
-    if ( (song) && (song->mID == OBJECT_ID) )
+    if ((song) && (song->mID == OBJECT_ID))
     {
         semitones *= -1;
-        if ( (semitones > -128) && (semitones < 128) )
+        if ((semitones > -128) && (semitones < 128))
         {
             BAE_AcquireMutex(song->mLock);
             GM_SetSongPitchOffset(song->pSong, semitones);
@@ -7197,7 +7243,6 @@ BAEResult BAESong_SetTranspose(BAESong song, int32_t semitones)
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAESong_GetTranspose()
 // --------------------------------------
 //
@@ -7207,7 +7252,7 @@ BAEResult BAESong_GetTranspose(BAESong song, int32_t *outSemitones)
     OPErr err;
 
     err = NO_ERR;
-    if ( (song) && (song->mID == OBJECT_ID) )
+    if ((song) && (song->mID == OBJECT_ID))
     {
         if (outSemitones)
         {
@@ -7227,7 +7272,6 @@ BAEResult BAESong_GetTranspose(BAESong song, int32_t *outSemitones)
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAESong_AllowChannelTranspose()
 // --------------------------------------
 //
@@ -7235,9 +7279,9 @@ BAEResult BAESong_GetTranspose(BAESong song, int32_t *outSemitones)
 BAEResult BAESong_AllowChannelTranspose(BAESong song, uint16_t channel, BAE_BOOL allowTranspose)
 {
     OPErr err;
-    
+
     err = NO_ERR;
-    if ( (song) && (song->mID == OBJECT_ID) )
+    if ((song) && (song->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(song->mLock);
         GM_AllowChannelPitchOffset(song->pSong, channel, allowTranspose);
@@ -7250,7 +7294,6 @@ BAEResult BAESong_AllowChannelTranspose(BAESong song, uint16_t channel, BAE_BOOL
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAESong_DoesChannelAllowTranspose()
 // --------------------------------------
 //
@@ -7258,9 +7301,9 @@ BAEResult BAESong_AllowChannelTranspose(BAESong song, uint16_t channel, BAE_BOOL
 BAEResult BAESong_DoesChannelAllowTranspose(BAESong song, uint16_t channel, BAE_BOOL *outAllowTranspose)
 {
     OPErr err;
-    
+
     err = NO_ERR;
-    if ( (song) && (song->mID == OBJECT_ID) )
+    if ((song) && (song->mID == OBJECT_ID))
     {
         if (outAllowTranspose)
         {
@@ -7280,7 +7323,6 @@ BAEResult BAESong_DoesChannelAllowTranspose(BAESong song, uint16_t channel, BAE_
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAESong_MuteChannel()
 // --------------------------------------
 //
@@ -7288,9 +7330,9 @@ BAEResult BAESong_DoesChannelAllowTranspose(BAESong song, uint16_t channel, BAE_
 BAEResult BAESong_MuteChannel(BAESong song, uint16_t channel)
 {
     OPErr err;
-    
+
     err = NO_ERR;
-    if ( (song) && (song->mID == OBJECT_ID) )
+    if ((song) && (song->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(song->mLock);
         GM_MuteChannel(song->pSong, channel);
@@ -7303,7 +7345,6 @@ BAEResult BAESong_MuteChannel(BAESong song, uint16_t channel)
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAESong_UnmuteChannel()
 // --------------------------------------
 //
@@ -7311,9 +7352,9 @@ BAEResult BAESong_MuteChannel(BAESong song, uint16_t channel)
 BAEResult BAESong_UnmuteChannel(BAESong song, uint16_t channel)
 {
     OPErr err;
-    
+
     err = NO_ERR;
-    if ( (song) && (song->mID == OBJECT_ID) )
+    if ((song) && (song->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(song->mLock);
         GM_UnmuteChannel(song->pSong, channel);
@@ -7326,7 +7367,6 @@ BAEResult BAESong_UnmuteChannel(BAESong song, uint16_t channel)
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAESong_GetChannelMuteStatus()
 // --------------------------------------
 //
@@ -7334,9 +7374,9 @@ BAEResult BAESong_UnmuteChannel(BAESong song, uint16_t channel)
 BAEResult BAESong_GetChannelMuteStatus(BAESong song, BAE_BOOL *outChannels)
 {
     OPErr err;
-    
+
     err = NO_ERR;
-    if ( (song) && (song->mID == OBJECT_ID) )
+    if ((song) && (song->mID == OBJECT_ID))
     {
         if (outChannels)
         {
@@ -7356,7 +7396,6 @@ BAEResult BAESong_GetChannelMuteStatus(BAESong song, BAE_BOOL *outChannels)
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAESong_SoloChannel()
 // --------------------------------------
 //
@@ -7364,9 +7403,9 @@ BAEResult BAESong_GetChannelMuteStatus(BAESong song, BAE_BOOL *outChannels)
 BAEResult BAESong_SoloChannel(BAESong song, uint16_t channel)
 {
     OPErr err;
-    
+
     err = NO_ERR;
-    if ( (song) && (song->mID == OBJECT_ID) )
+    if ((song) && (song->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(song->mLock);
         GM_SoloChannel(song->pSong, channel);
@@ -7379,7 +7418,6 @@ BAEResult BAESong_SoloChannel(BAESong song, uint16_t channel)
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAESong_UnSoloChannel()
 // --------------------------------------
 //
@@ -7387,9 +7425,9 @@ BAEResult BAESong_SoloChannel(BAESong song, uint16_t channel)
 BAEResult BAESong_UnSoloChannel(BAESong song, uint16_t channel)
 {
     OPErr err;
-    
+
     err = NO_ERR;
-    if ( (song) && (song->mID == OBJECT_ID) )
+    if ((song) && (song->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(song->mLock);
         GM_UnsoloChannel(song->pSong, channel);
@@ -7402,7 +7440,6 @@ BAEResult BAESong_UnSoloChannel(BAESong song, uint16_t channel)
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAESong_GetChannelSoloStatus()
 // --------------------------------------
 //
@@ -7410,9 +7447,9 @@ BAEResult BAESong_UnSoloChannel(BAESong song, uint16_t channel)
 BAEResult BAESong_GetChannelSoloStatus(BAESong song, BAE_BOOL *outChannels)
 {
     OPErr err;
-    
+
     err = NO_ERR;
-    if ( (song) && (song->mID == OBJECT_ID) )
+    if ((song) && (song->mID == OBJECT_ID))
     {
         if (outChannels)
         {
@@ -7438,13 +7475,13 @@ BAEResult BAESong_GetChannelSoloStatus(BAESong song, BAE_BOOL *outChannels)
 BAEResult BAESong_GetActiveNotes(BAESong song, unsigned char channel, unsigned char *outNotes)
 {
     OPErr err = NO_ERR;
-    if( (song) && (song->mID == OBJECT_ID) )
+    if ((song) && (song->mID == OBJECT_ID))
     {
-        if(outNotes && channel < 16)
+        if (outNotes && channel < 16)
         {
             memset(outNotes, 0, 128);
             BAE_AcquireMutex(song->mLock);
-            if(song->pSong)
+            if (song->pSong)
             {
                 memcpy(outNotes, song->pSong->channelActiveNotes[channel], 128);
             }
@@ -7466,7 +7503,6 @@ BAEResult BAESong_GetActiveNotes(BAESong song, unsigned char channel, unsigned c
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAESong_LoadInstrument()
 // --------------------------------------
 //
@@ -7476,10 +7512,10 @@ BAEResult BAESong_LoadInstrument(BAESong song, BAE_INSTRUMENT instrument)
     OPErr err;
 
     err = NO_ERR;
-    if ( (song) && (song->mID == OBJECT_ID) )
+    if ((song) && (song->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(song->mLock);
-        if (song->pSong)    // MOVE THIS CHECK INTO ENGINE
+        if (song->pSong) // MOVE THIS CHECK INTO ENGINE
         {
             if (song->mInMixer == FALSE)
             {
@@ -7490,8 +7526,8 @@ BAEResult BAESong_LoadInstrument(BAESong song, BAE_INSTRUMENT instrument)
             {
                 song->mInstrumentsLoadedCount++;
                 err = GM_LoadSongInstrument(song->pSong,
-                                        (XLongResourceID) instrument,
-                                        CreateBankToken());
+                                            (XLongResourceID)instrument,
+                                            CreateBankToken());
             }
         }
         else
@@ -7507,7 +7543,6 @@ BAEResult BAESong_LoadInstrument(BAESong song, BAE_INSTRUMENT instrument)
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAESong_UnloadInstrument()
 // --------------------------------------
 //
@@ -7515,12 +7550,12 @@ BAEResult BAESong_LoadInstrument(BAESong song, BAE_INSTRUMENT instrument)
 BAEResult BAESong_UnloadInstrument(BAESong song, BAE_INSTRUMENT instrument)
 {
     OPErr err;
-    
+
     err = NO_ERR;
-    if ( (song) && (song->mID == OBJECT_ID) )
+    if ((song) && (song->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(song->mLock);
-        if (song->pSong)    // MOVE THIS CHECK INTO ENGINE
+        if (song->pSong) // MOVE THIS CHECK INTO ENGINE
         {
             err = GM_UnloadSongInstrument(song->pSong, (XLongResourceID)instrument);
             if (song->mInstrumentsLoadedCount)
@@ -7530,7 +7565,7 @@ BAEResult BAESong_UnloadInstrument(BAESong song, BAE_INSTRUMENT instrument)
             else
             {
                 song->mInMixer = FALSE;
-                PV_BAESong_Stop(song, FALSE);   // remove from bae mixer
+                PV_BAESong_Stop(song, FALSE); // remove from bae mixer
             }
         }
         else
@@ -7546,7 +7581,6 @@ BAEResult BAESong_UnloadInstrument(BAESong song, BAE_INSTRUMENT instrument)
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAESong_IsInstrumentLoaded()
 // --------------------------------------
 //
@@ -7554,9 +7588,9 @@ BAEResult BAESong_UnloadInstrument(BAESong song, BAE_INSTRUMENT instrument)
 BAEResult BAESong_IsInstrumentLoaded(BAESong song, BAE_INSTRUMENT instrument, BAE_BOOL *outIsLoaded)
 {
     OPErr err;
-    
+
     err = NO_ERR;
-    if ( (song) && (song->mID == OBJECT_ID) )
+    if ((song) && (song->mID == OBJECT_ID))
     {
         if (outIsLoaded)
         {
@@ -7576,7 +7610,6 @@ BAEResult BAESong_IsInstrumentLoaded(BAESong song, BAE_INSTRUMENT instrument, BA
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAESong_GetControlValue()
 // --------------------------------------
 //
@@ -7584,9 +7617,9 @@ BAEResult BAESong_IsInstrumentLoaded(BAESong song, BAE_INSTRUMENT instrument, BA
 BAEResult BAESong_GetControlValue(BAESong song, unsigned char channel, unsigned char controller, char *outValue)
 {
     OPErr err;
-    
+
     err = NO_ERR;
-    if ( (song) && (song->mID == OBJECT_ID) )
+    if ((song) && (song->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(song->mLock);
         if (outValue)
@@ -7609,21 +7642,20 @@ BAEResult BAESong_GetControlValue(BAESong song, unsigned char channel, unsigned 
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAESong_GetProgramBank()
 // --------------------------------------
 //
 //
 BAEResult BAESong_GetProgramBank(BAESong song,
-                            unsigned char channel,
-                            unsigned char *outProgram,
-                            unsigned char *outBank)
+                                 unsigned char channel,
+                                 unsigned char *outProgram,
+                                 unsigned char *outBank)
 {
     OPErr err;
     XSWORD bank, program;
 
     err = NO_ERR;
-    if ( (song) && (song->mID == OBJECT_ID) )
+    if ((song) && (song->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(song->mLock);
         if (outBank && outProgram)
@@ -7631,11 +7663,11 @@ BAEResult BAESong_GetProgramBank(BAESong song,
             if (song->pSong)
             {
                 GM_GetProgramBank(song->pSong, channel, &program, &bank);
-                *outProgram = (unsigned char) program;
-                *outBank = (unsigned char) bank;
+                *outProgram = (unsigned char)program;
+                *outBank = (unsigned char)bank;
 
-//              *outProgram = (unsigned char)(song->pSong)->channelProgram[channel];
-//              *outBank = (unsigned char)(song->pSong)->channelBank[channel];
+                //              *outProgram = (unsigned char)(song->pSong)->channelProgram[channel];
+                //              *outBank = (unsigned char)(song->pSong)->channelBank[channel];
             }
             else
             {
@@ -7655,20 +7687,19 @@ BAEResult BAESong_GetProgramBank(BAESong song,
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAESong_GetPitchBend()
 // --------------------------------------
 //
 //
 BAEResult BAESong_GetPitchBend(BAESong song,
-                            unsigned char channel, 
-                            unsigned char *outLSB, 
-                            unsigned char *outMSB)
+                               unsigned char channel,
+                               unsigned char *outLSB,
+                               unsigned char *outMSB)
 {
     OPErr err;
-    
+
     err = NO_ERR;
-    if ( (song) && (song->mID == OBJECT_ID) )
+    if ((song) && (song->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(song->mLock);
         if (outLSB && outMSB)
@@ -7688,28 +7719,27 @@ BAEResult BAESong_GetPitchBend(BAESong song,
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAESong_NoteOff()
 // --------------------------------------
 //
 //
-BAEResult BAESong_NoteOff(BAESong song, 
-                            unsigned char channel, 
-                            unsigned char note, 
-                            unsigned char velocity,
-                            uint32_t time)
+BAEResult BAESong_NoteOff(BAESong song,
+                          unsigned char channel,
+                          unsigned char note,
+                          unsigned char velocity,
+                          uint32_t time)
 {
     OPErr err;
-    
+
     err = NO_ERR;
-    if ( (song) && (song->mID == OBJECT_ID) )
+    if ((song) && (song->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(song->mLock);
         if (time == 0)
         {
             time = GM_GetSyncTimeStamp();
         }
-        
+
         QGM_NoteOff(song->pSong, time, channel, note, velocity);
         BAE_ReleaseMutex(song->mLock);
     }
@@ -7720,26 +7750,25 @@ BAEResult BAESong_NoteOff(BAESong song,
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAESong_NoteOnWithLoad()
 // --------------------------------------
 //
 //
-BAEResult BAESong_NoteOnWithLoad(BAESong song, 
-                            unsigned char channel, 
-                            unsigned char note, 
-                            unsigned char velocity,
-                            uint32_t time)
+BAEResult BAESong_NoteOnWithLoad(BAESong song,
+                                 unsigned char channel,
+                                 unsigned char note,
+                                 unsigned char velocity,
+                                 uint32_t time)
 {
-    BAE_INSTRUMENT  inst;
-    unsigned char   program, bank;
-    BAEMixer        mixer;
-    OPErr           err;
-    BAE_BOOL        isLoaded;
-    uint32_t   latency;
-    
+    BAE_INSTRUMENT inst;
+    unsigned char program, bank;
+    BAEMixer mixer;
+    OPErr err;
+    BAE_BOOL isLoaded;
+    uint32_t latency;
+
     err = NO_ERR;
-    if ( (song) && (song->mID == OBJECT_ID) )
+    if ((song) && (song->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(song->mLock);
         BAESong_GetMixer(song, &mixer);
@@ -7761,14 +7790,14 @@ BAEResult BAESong_NoteOnWithLoad(BAESong song,
             {
                 time = GM_GetSyncTimeStamp();
             }
-    
+
             QGM_NoteOn(song->pSong, time, channel, note, velocity);
         }
         else
         {
             err = (OPErr)BAE_GENERAL_BAD;
         }
-    
+
         BAE_ReleaseMutex(song->mLock);
     }
     else
@@ -7778,28 +7807,27 @@ BAEResult BAESong_NoteOnWithLoad(BAESong song,
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAESong_NoteOn()
 // --------------------------------------
 //
 //
-BAEResult BAESong_NoteOn(BAESong song, 
-                    unsigned char channel, 
-                    unsigned char note, 
-                    unsigned char velocity,
-                    uint32_t time)
+BAEResult BAESong_NoteOn(BAESong song,
+                         unsigned char channel,
+                         unsigned char note,
+                         unsigned char velocity,
+                         uint32_t time)
 {
     OPErr err;
-    
+
     err = NO_ERR;
-    if ( (song) && (song->mID == OBJECT_ID) )
+    if ((song) && (song->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(song->mLock);
         if (time == 0)
         {
             time = GM_GetSyncTimeStamp();
         }
-    
+
         QGM_NoteOn(song->pSong, time, channel, note, velocity);
         BAE_ReleaseMutex(song->mLock);
     }
@@ -7810,16 +7838,15 @@ BAEResult BAESong_NoteOn(BAESong song,
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAESong_KeyPressure()
 // --------------------------------------
 //
 //
-BAEResult BAESong_KeyPressure(BAESong song, 
-                        unsigned char channel, 
-                        unsigned char note, 
-                        unsigned char pressure,
-                        uint32_t time)
+BAEResult BAESong_KeyPressure(BAESong song,
+                              unsigned char channel,
+                              unsigned char note,
+                              unsigned char pressure,
+                              uint32_t time)
 {
     song = song;
     time = time;
@@ -7829,29 +7856,28 @@ BAEResult BAESong_KeyPressure(BAESong song,
     return BAE_NO_ERROR;
 }
 
-
 // BAESong_ControlChange()
 // --------------------------------------
 //
 //
 
-BAEResult BAESong_ControlChange(BAESong song, 
-                            unsigned char channel, 
-                            unsigned char controlNumber,
-                            unsigned char controlValue, 
-                            uint32_t time)
+BAEResult BAESong_ControlChange(BAESong song,
+                                unsigned char channel,
+                                unsigned char controlNumber,
+                                unsigned char controlValue,
+                                uint32_t time)
 {
     OPErr err;
 
     err = NO_ERR;
-    if ( (song) && (song->mID == OBJECT_ID) )
+    if ((song) && (song->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(song->mLock);
         if (time == 0)
         {
             time = GM_GetSyncTimeStamp();
         }
-    
+
         QGM_Controller(song->pSong, time, channel, controlNumber, controlValue);
         BAE_ReleaseMutex(song->mLock);
     }
@@ -7862,28 +7888,27 @@ BAEResult BAESong_ControlChange(BAESong song,
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAESong_ProgramBankChange()
 // --------------------------------------
 //
 //
-BAEResult BAESong_ProgramBankChange(BAESong song, 
-                                unsigned char channel,
-                                unsigned char programNumber,
-                                unsigned char bankNumber,
-                                uint32_t time)
+BAEResult BAESong_ProgramBankChange(BAESong song,
+                                    unsigned char channel,
+                                    unsigned char programNumber,
+                                    unsigned char bankNumber,
+                                    uint32_t time)
 {
     OPErr err;
-    
+
     err = NO_ERR;
-    if ( (song) && (song->mID == OBJECT_ID) )
+    if ((song) && (song->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(song->mLock);
         if (time == 0)
         {
             time = GM_GetSyncTimeStamp();
         }
-    
+
         QGM_Controller(song->pSong, time, channel, 0, bankNumber);
         QGM_ProgramChange(song->pSong, time, channel, programNumber);
         BAE_ReleaseMutex(song->mLock);
@@ -7895,27 +7920,26 @@ BAEResult BAESong_ProgramBankChange(BAESong song,
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAESong_ProgramChange()
 // --------------------------------------
 //
 //
-BAEResult BAESong_ProgramChange(BAESong song, 
-                            unsigned char channel, 
-                            unsigned char programNumber,
-                            uint32_t time)
+BAEResult BAESong_ProgramChange(BAESong song,
+                                unsigned char channel,
+                                unsigned char programNumber,
+                                uint32_t time)
 {
     OPErr err;
-    
+
     err = NO_ERR;
-    if ( (song) && (song->mID == OBJECT_ID) )
+    if ((song) && (song->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(song->mLock);
         if (time == 0)
         {
             time = GM_GetSyncTimeStamp();
         }
-    
+
         QGM_ProgramChange(song->pSong, time, channel, programNumber);
         BAE_ReleaseMutex(song->mLock);
     }
@@ -7926,15 +7950,14 @@ BAEResult BAESong_ProgramChange(BAESong song,
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAESong_ChannelPressure()
 // --------------------------------------
 //
 //
-BAEResult BAESong_ChannelPressure(BAESong song, 
-                                unsigned char channel,  
-                                unsigned char pressure, 
-                                uint32_t time)
+BAEResult BAESong_ChannelPressure(BAESong song,
+                                  unsigned char channel,
+                                  unsigned char pressure,
+                                  uint32_t time)
 {
     song = song;
     time = time;
@@ -7943,28 +7966,27 @@ BAEResult BAESong_ChannelPressure(BAESong song,
     return BAE_NO_ERROR;
 }
 
-
 // BAESong_PitchBend()
 // --------------------------------------
 //
 //
-BAEResult BAESong_PitchBend(BAESong song, 
-                        unsigned char channel, 
-                        unsigned char lsb, 
-                        unsigned char msb,
-                        uint32_t time)
+BAEResult BAESong_PitchBend(BAESong song,
+                            unsigned char channel,
+                            unsigned char lsb,
+                            unsigned char msb,
+                            uint32_t time)
 {
     OPErr err;
-    
+
     err = NO_ERR;
-    if ( (song) && (song->mID == OBJECT_ID) )
+    if ((song) && (song->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(song->mLock);
         if (time == 0)
         {
             time = GM_GetSyncTimeStamp();
         }
-    
+
         QGM_PitchBend(song->pSong, time, channel, msb, lsb);
         BAE_ReleaseMutex(song->mLock);
     }
@@ -7975,7 +7997,6 @@ BAEResult BAESong_PitchBend(BAESong song,
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAESong_AllNotesOff()
 // --------------------------------------
 //
@@ -7983,16 +8004,16 @@ BAEResult BAESong_PitchBend(BAESong song,
 BAEResult BAESong_AllNotesOff(BAESong song, uint32_t time)
 {
     OPErr err;
-    
+
     err = NO_ERR;
-    if ( (song) && (song->mID == OBJECT_ID) )
+    if ((song) && (song->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(song->mLock);
         if (time == 0)
         {
             time = GM_GetSyncTimeStamp();
         }
-    
+
         QGM_AllNotesOff(song->pSong, time);
         BAE_ReleaseMutex(song->mLock);
     }
@@ -8003,47 +8024,46 @@ BAEResult BAESong_AllNotesOff(BAESong song, uint32_t time)
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAESong_ParseMidiData()
 // --------------------------------------
 //
 //
-BAEResult BAESong_ParseMidiData(BAESong song, unsigned char commandByte, unsigned char data1Byte, 
-                    unsigned char data2Byte, unsigned char data3Byte,
-                    uint32_t time)
+BAEResult BAESong_ParseMidiData(BAESong song, unsigned char commandByte, unsigned char data1Byte,
+                                unsigned char data2Byte, unsigned char data3Byte,
+                                uint32_t time)
 {
     BAEResult theErr;
-    unsigned char   channel;
+    unsigned char channel;
 
     theErr = BAE_NO_ERROR;
-    if ( (song) && (song->mID == OBJECT_ID) )
+    if ((song) && (song->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(song->mLock);
         channel = commandByte & 0x0F;
         data3Byte = data3Byte;
-        switch(commandByte & 0xF0)
+        switch (commandByte & 0xF0)
         {
-            case NOTE_OFF:  // Note off
-                theErr = BAESong_NoteOff(song, channel, data1Byte, data2Byte, time);
-                break;
-            case NOTE_ON:   // Note on
-                theErr = BAESong_NoteOn(song, channel, data1Byte, data2Byte, time);
-                break;
-            case POLY_AFTERTOUCH:   // key pressure (aftertouch)
-                theErr = BAESong_KeyPressure(song, channel, data1Byte, data2Byte, time);
-                break;
-            case CONTROL_CHANGE:    // controllers
-                theErr = BAESong_ControlChange(song, channel, data1Byte, data2Byte, time);
-                break;
-            case PROGRAM_CHANGE:    // Program change
-                theErr = BAESong_ProgramChange(song, channel, data1Byte, time);
-                break;
-            case CHANNEL_AFTERTOUCH:    // channel pressure (aftertouch)
-                theErr = BAESong_ChannelPressure(song, channel, data1Byte, time);
-                break;
-            case PITCH_BEND:    // SetPitchBend
-                theErr = BAESong_PitchBend(song, channel, data1Byte, data2Byte, time);
-                break;
+        case NOTE_OFF: // Note off
+            theErr = BAESong_NoteOff(song, channel, data1Byte, data2Byte, time);
+            break;
+        case NOTE_ON: // Note on
+            theErr = BAESong_NoteOn(song, channel, data1Byte, data2Byte, time);
+            break;
+        case POLY_AFTERTOUCH: // key pressure (aftertouch)
+            theErr = BAESong_KeyPressure(song, channel, data1Byte, data2Byte, time);
+            break;
+        case CONTROL_CHANGE: // controllers
+            theErr = BAESong_ControlChange(song, channel, data1Byte, data2Byte, time);
+            break;
+        case PROGRAM_CHANGE: // Program change
+            theErr = BAESong_ProgramChange(song, channel, data1Byte, time);
+            break;
+        case CHANNEL_AFTERTOUCH: // channel pressure (aftertouch)
+            theErr = BAESong_ChannelPressure(song, channel, data1Byte, time);
+            break;
+        case PITCH_BEND: // SetPitchBend
+            theErr = BAESong_PitchBend(song, channel, data1Byte, data2Byte, time);
+            break;
         }
         BAE_ReleaseMutex(song->mLock);
     }
@@ -8060,72 +8080,128 @@ BAEResult BAESong_InjectMidiMessage(BAESong song, const unsigned char *message, 
 {
     BAEResult theErr = BAE_NO_ERROR;
 
-    if (!song || song->mID != OBJECT_ID) return BAE_NULL_OBJECT;
-    if (!message || length <= 0) return BAE_PARAM_ERR;
+    if (!song || song->mID != OBJECT_ID)
+        return BAE_NULL_OBJECT;
+    if (!message || length <= 0)
+        return BAE_PARAM_ERR;
 
     BAE_AcquireMutex(song->mLock);
 #ifdef _DEBUG
     // Debug: descriptive log for injected raw MIDI message
     {
-        char desc[256]; desc[0] = '\0';
+        char desc[256];
+        desc[0] = '\0';
         unsigned char st = message[0];
-        if (st < 0xF0) {
-            unsigned char mtype = st & 0xF0; unsigned char mch = st & 0x0F;
-            switch (mtype) {
-                case 0x80:
-                    if (length >= 3) snprintf(desc, sizeof(desc), "NoteOff ch=%u note=%u vel=%u", mch, message[1], message[2]);
-                    else snprintf(desc, sizeof(desc), "NoteOff ch=%u (truncated)", mch);
-                    break;
-                case 0x90:
-                    if (length >= 3) snprintf(desc, sizeof(desc), "NoteOn ch=%u note=%u vel=%u", mch, message[1], message[2]);
-                    else snprintf(desc, sizeof(desc), "NoteOn ch=%u (truncated)", mch);
-                    break;
-                case 0xA0:
-                    if (length >= 3) snprintf(desc, sizeof(desc), "PolyAftertouch ch=%u note=%u pressure=%u", mch, message[1], message[2]);
-                    else snprintf(desc, sizeof(desc), "PolyAftertouch ch=%u (truncated)", mch);
-                    break;
-                case 0xB0:
-                    if (length >= 3) snprintf(desc, sizeof(desc), "ControlChange ch=%u cc=%u val=%u", mch, message[1], message[2]);
-                    else snprintf(desc, sizeof(desc), "ControlChange ch=%u (truncated)", mch);
-                    break;
-                case 0xC0:
-                    if (length >= 2) snprintf(desc, sizeof(desc), "ProgramChange ch=%u prog=%u", mch, message[1]);
-                    else snprintf(desc, sizeof(desc), "ProgramChange ch=%u (truncated)", mch);
-                    break;
-                case 0xD0:
-                    if (length >= 2) snprintf(desc, sizeof(desc), "ChannelPressure ch=%u pressure=%u", mch, message[1]);
-                    else snprintf(desc, sizeof(desc), "ChannelPressure ch=%u (truncated)", mch);
-                    break;
-                case 0xE0:
-                    if (length >= 3) snprintf(desc, sizeof(desc), "PitchBend ch=%u lsb=%u msb=%u", mch, message[1], message[2]);
-                    else snprintf(desc, sizeof(desc), "PitchBend ch=%u (truncated)", mch);
-                    break;
-                default:
-                    snprintf(desc, sizeof(desc), "ChannelMessage 0x%02X ch=%u", mtype, mch);
-                    break;
+        if (st < 0xF0)
+        {
+            unsigned char mtype = st & 0xF0;
+            unsigned char mch = st & 0x0F;
+            switch (mtype)
+            {
+            case 0x80:
+                if (length >= 3)
+                    snprintf(desc, sizeof(desc), "NoteOff ch=%u note=%u vel=%u", mch, message[1], message[2]);
+                else
+                    snprintf(desc, sizeof(desc), "NoteOff ch=%u (truncated)", mch);
+                break;
+            case 0x90:
+                if (length >= 3)
+                    snprintf(desc, sizeof(desc), "NoteOn ch=%u note=%u vel=%u", mch, message[1], message[2]);
+                else
+                    snprintf(desc, sizeof(desc), "NoteOn ch=%u (truncated)", mch);
+                break;
+            case 0xA0:
+                if (length >= 3)
+                    snprintf(desc, sizeof(desc), "PolyAftertouch ch=%u note=%u pressure=%u", mch, message[1], message[2]);
+                else
+                    snprintf(desc, sizeof(desc), "PolyAftertouch ch=%u (truncated)", mch);
+                break;
+            case 0xB0:
+                if (length >= 3)
+                    snprintf(desc, sizeof(desc), "ControlChange ch=%u cc=%u val=%u", mch, message[1], message[2]);
+                else
+                    snprintf(desc, sizeof(desc), "ControlChange ch=%u (truncated)", mch);
+                break;
+            case 0xC0:
+                if (length >= 2)
+                    snprintf(desc, sizeof(desc), "ProgramChange ch=%u prog=%u", mch, message[1]);
+                else
+                    snprintf(desc, sizeof(desc), "ProgramChange ch=%u (truncated)", mch);
+                break;
+            case 0xD0:
+                if (length >= 2)
+                    snprintf(desc, sizeof(desc), "ChannelPressure ch=%u pressure=%u", mch, message[1]);
+                else
+                    snprintf(desc, sizeof(desc), "ChannelPressure ch=%u (truncated)", mch);
+                break;
+            case 0xE0:
+                if (length >= 3)
+                    snprintf(desc, sizeof(desc), "PitchBend ch=%u lsb=%u msb=%u", mch, message[1], message[2]);
+                else
+                    snprintf(desc, sizeof(desc), "PitchBend ch=%u (truncated)", mch);
+                break;
+            default:
+                snprintf(desc, sizeof(desc), "ChannelMessage 0x%02X ch=%u", mtype, mch);
+                break;
             }
-        } else {
-            switch (st) {
-                case 0xF0: snprintf(desc, sizeof(desc), "SysEx start len=%d", (int)length); break;
-                case 0xF7: snprintf(desc, sizeof(desc), "SysEx continuation/EOX len=%d", (int)length); break;
-                case 0xF1: snprintf(desc, sizeof(desc), "MTC Quarter Frame"); break;
-                case 0xF2: snprintf(desc, sizeof(desc), "Song Position Pointer"); break;
-                case 0xF3: snprintf(desc, sizeof(desc), "Song Select"); break;
-                case 0xF6: snprintf(desc, sizeof(desc), "Tune Request"); break;
-                case 0xF8: snprintf(desc, sizeof(desc), "Timing Clock"); break;
-                case 0xFA: snprintf(desc, sizeof(desc), "Start"); break;
-                case 0xFB: snprintf(desc, sizeof(desc), "Continue"); break;
-                case 0xFC: snprintf(desc, sizeof(desc), "Stop"); break;
-                case 0xFE: snprintf(desc, sizeof(desc), "Active Sensing"); break;
-                case 0xFF: snprintf(desc, sizeof(desc), "System Reset/Meta"); break;
-                default: snprintf(desc, sizeof(desc), "System 0x%02X len=%d", st, (int)length); break;
+        }
+        else
+        {
+            switch (st)
+            {
+            case 0xF0:
+                snprintf(desc, sizeof(desc), "SysEx start len=%d", (int)length);
+                break;
+            case 0xF7:
+                snprintf(desc, sizeof(desc), "SysEx continuation/EOX len=%d", (int)length);
+                break;
+            case 0xF1:
+                snprintf(desc, sizeof(desc), "MTC Quarter Frame");
+                break;
+            case 0xF2:
+                snprintf(desc, sizeof(desc), "Song Position Pointer");
+                break;
+            case 0xF3:
+                snprintf(desc, sizeof(desc), "Song Select");
+                break;
+            case 0xF6:
+                snprintf(desc, sizeof(desc), "Tune Request");
+                break;
+            case 0xF8:
+                snprintf(desc, sizeof(desc), "Timing Clock");
+                break;
+            case 0xFA:
+                snprintf(desc, sizeof(desc), "Start");
+                break;
+            case 0xFB:
+                snprintf(desc, sizeof(desc), "Continue");
+                break;
+            case 0xFC:
+                snprintf(desc, sizeof(desc), "Stop");
+                break;
+            case 0xFE:
+                snprintf(desc, sizeof(desc), "Active Sensing");
+                break;
+            case 0xFF:
+                snprintf(desc, sizeof(desc), "System Reset/Meta");
+                break;
+            default:
+                snprintf(desc, sizeof(desc), "System 0x%02X len=%d", st, (int)length);
+                break;
             }
         }
 
         int dump_len = (length > 64) ? 64 : length;
-        char hexdump[64*3 + 16]; hexdump[0] = '\0';
-        for(int i=0;i<dump_len;i++){ char tmp[8]; snprintf(tmp,sizeof(tmp), "%02X ", message[i]); strncat(hexdump, tmp, sizeof(hexdump)-strlen(hexdump)-1); }
-        if(length > dump_len) strncat(hexdump, "...", sizeof(hexdump)-strlen(hexdump)-1);
+        char hexdump[64 * 3 + 16];
+        hexdump[0] = '\0';
+        for (int i = 0; i < dump_len; i++)
+        {
+            char tmp[8];
+            snprintf(tmp, sizeof(tmp), "%02X ", message[i]);
+            strncat(hexdump, tmp, sizeof(hexdump) - strlen(hexdump) - 1);
+        }
+        if (length > dump_len)
+            strncat(hexdump, "...", sizeof(hexdump) - strlen(hexdump) - 1);
         BAE_PRINTF("BAE-INJECT: time=%u %s (len=%d) hex=%s\n", time, desc, (int)length, hexdump);
     }
 #endif
@@ -8135,14 +8211,14 @@ BAEResult BAESong_InjectMidiMessage(BAESong song, const unsigned char *message, 
         GM_MidiEventCallbackPtr cb = song->pSong->midiEventCallbackPtr;
         void *cbRef = song->pSong->midiEventCallbackReference;
         uint32_t t_us = 0;
-        if (song->pSong) t_us = (uint32_t)song->pSong->songMicroseconds;
+        if (song->pSong)
+            t_us = (uint32_t)song->pSong->songMicroseconds;
         (*cb)(NULL, song->pSong, message, length, t_us, cbRef);
     }
     BAE_ReleaseMutex(song->mLock);
 
     return theErr;
 }
-
 
 // BAESong_Preroll()
 // --------------------------------------
@@ -8153,7 +8229,7 @@ BAEResult BAESong_Preroll(BAESong song)
     OPErr err;
 
     err = NO_ERR;
-    if ( (song) && (song->mID == OBJECT_ID) )
+    if ((song) && (song->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(song->mLock);
         // auto level engaged
@@ -8169,9 +8245,9 @@ BAEResult BAESong_Preroll(BAESong song)
 
 static void PV_DefaultSongDoneCallback(void *threadContext, GM_Song *pSong, void *reference)
 {
-    BAESong             song;
+    BAESong song;
     BAE_SongCallbackPtr callback = NULL;
-    void                *callbackReference = NULL;
+    void *callbackReference = NULL;
 
     song = (BAESong)reference;
     if ((song) && (song->mID == OBJECT_ID))
@@ -8183,8 +8259,8 @@ static void PV_DefaultSongDoneCallback(void *threadContext, GM_Song *pSong, void
             {
 #if TRACKING
                 if (PV_BAEMixer_ValidateObject(song->mixer, song, BAE_SONG_OBJECT))
-#else                   
-                if(song->mValid)
+#else
+                if (song->mValid)
 #endif
                 {
                     callback = song->mCallback;
@@ -8209,15 +8285,16 @@ static void PV_DefaultSongDoneCallback(void *threadContext, GM_Song *pSong, void
     }
 }
 
-
-
 // song callbacks
-static void PV_BAESong_SetMetaEventCallback(BAESong song, GM_SongMetaCallbackProcPtr pCallback, void *callbackReference) {
-	GM_SetSongMetaEventCallback(song->pSong, pCallback, callbackReference);
+static void PV_BAESong_SetMetaEventCallback(BAESong song, GM_SongMetaCallbackProcPtr pCallback, void *callbackReference)
+{
+    GM_SetSongMetaEventCallback(song->pSong, pCallback, callbackReference);
 }
 #ifdef SUPPORT_KARAOKE
-static void PV_BAESong_SetLyricCallback(BAESong song, GM_SongLyricCallbackProcPtr pCallback, void *callbackReference) {
-    if(song && song->pSong){
+static void PV_BAESong_SetLyricCallback(BAESong song, GM_SongLyricCallbackProcPtr pCallback, void *callbackReference)
+{
+    if (song && song->pSong)
+    {
         song->pSong->lyricCallbackPtr = pCallback;
         song->pSong->lyricCallbackReference = callbackReference;
     }
@@ -8225,10 +8302,10 @@ static void PV_BAESong_SetLyricCallback(BAESong song, GM_SongLyricCallbackProcPt
 #endif
 BAEResult BAESong_SetMetaEventCallback(BAESong song, GM_SongMetaCallbackProcPtr pCallback, void *callbackReference)
 {
-    OPErr       err;
+    OPErr err;
 
     err = NO_ERR;
-    if ( (song) && (song->mID == OBJECT_ID) )
+    if ((song) && (song->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(song->mLock);
         PV_BAESong_SetMetaEventCallback(song, pCallback, callbackReference);
@@ -8244,11 +8321,14 @@ BAEResult BAESong_SetMetaEventCallback(BAESong song, GM_SongMetaCallbackProcPtr 
 BAEResult BAESong_SetLyricCallback(BAESong song, GM_SongLyricCallbackProcPtr pCallback, void *callbackReference)
 {
     OPErr err = NO_ERR;
-    if((song) && (song->mID == OBJECT_ID)){
+    if ((song) && (song->mID == OBJECT_ID))
+    {
         BAE_AcquireMutex(song->mLock);
         PV_BAESong_SetLyricCallback(song, pCallback, callbackReference);
         BAE_ReleaseMutex(song->mLock);
-    } else {
+    }
+    else
+    {
         err = NULL_OBJECT;
     }
     return BAE_TranslateOPErr(err);
@@ -8263,10 +8343,10 @@ static void PV_BAESong_SetCallback(BAESong song, BAE_SongCallbackPtr pCallback, 
 
 BAEResult BAESong_SetCallback(BAESong song, BAE_SongCallbackPtr pCallback, void *callbackReference)
 {
-    OPErr       err;
-    
+    OPErr err;
+
     err = NO_ERR;
-    if ( (song) && (song->mID == OBJECT_ID) )
+    if ((song) && (song->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(song->mLock);
         PV_BAESong_SetCallback(song, pCallback, callbackReference);
@@ -8279,11 +8359,10 @@ BAEResult BAESong_SetCallback(BAESong song, BAE_SongCallbackPtr pCallback, void 
     return BAE_TranslateOPErr(err);
 }
 
-
 BAEResult BAESong_GetCallback(BAESong song, BAE_SongCallbackPtr *pResult)
 {
-    OPErr       err;
-    
+    OPErr err;
+
     err = NO_ERR;
     if (song && pResult)
     {
@@ -8298,13 +8377,13 @@ BAEResult BAESong_GetCallback(BAESong song, BAE_SongCallbackPtr *pResult)
     return BAE_TranslateOPErr(err);
 }
 
-static void PV_DefaultSongControllerCallback(void *threadContext, struct GM_Song *pSong, void * reference, int16_t channel, int16_t track, int16_t controler, int16_t value)
+static void PV_DefaultSongControllerCallback(void *threadContext, struct GM_Song *pSong, void *reference, int16_t channel, int16_t track, int16_t controler, int16_t value)
 {
-    BAESong             song;
-    BAE_SongControllerCallbackPtr   
-                        callback = NULL;
-    void                *callbackReference = NULL;
-    
+    BAESong song;
+    BAE_SongControllerCallbackPtr
+        callback = NULL;
+    void *callbackReference = NULL;
+
     song = (BAESong)reference;
     if ((song) && (song->mID == OBJECT_ID))
     {
@@ -8315,18 +8394,18 @@ static void PV_DefaultSongControllerCallback(void *threadContext, struct GM_Song
             {
 #if TRACKING
                 if (PV_BAEMixer_ValidateObject(song->mixer, song, BAE_SONG_OBJECT))
-#else                   
-                    if(song->mValid)
+#else
+                if (song->mValid)
 #endif
-                    {
-                        callback = song->mControllerCallback;
-                        callbackReference = song->mControllerCallbackReference;
-                        song->mInMixer = FALSE;
-                    }
-                    else
-                    {
-                        BAE_STDERR("audio:song not in mixer list, no callback\n");
-                    }
+                {
+                    callback = song->mControllerCallback;
+                    callbackReference = song->mControllerCallbackReference;
+                    song->mInMixer = FALSE;
+                }
+                else
+                {
+                    BAE_STDERR("audio:song not in mixer list, no callback\n");
+                }
             }
         }
         BAE_ReleaseMutex(song->mLock);
@@ -8375,16 +8454,16 @@ BAEResult BAESong_SetMidiEventCallback(BAESong song, GM_MidiEventCallbackPtr pCa
 // song callbacks
 BAEResult BAESong_SetControllerCallback(BAESong song, BAE_SongControllerCallbackPtr pCallback, void *callbackReference, int16_t controller)
 {
-    OPErr       err;
-    
+    OPErr err;
+
     err = NO_ERR;
-    if ( (song) && (song->mID == OBJECT_ID) )
+    if ((song) && (song->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(song->mLock);
         PV_BAESong_SetControllerCallback(song, pCallback, callbackReference);
 
         GM_SetControllerCallback(song->pSong, song,
-                           PV_DefaultSongControllerCallback, controller);
+                                 PV_DefaultSongControllerCallback, controller);
         BAE_ReleaseMutex(song->mLock);
     }
     else
@@ -8394,11 +8473,10 @@ BAEResult BAESong_SetControllerCallback(BAESong song, BAE_SongControllerCallback
     return BAE_TranslateOPErr(err);
 }
 
-
 BAEResult BAESong_GetControllerCallback(BAESong song, BAE_SongControllerCallbackPtr *pResult)
 {
-    OPErr       err;
-    
+    OPErr err;
+
     err = NO_ERR;
     if (song && pResult)
     {
@@ -8413,7 +8491,6 @@ BAEResult BAESong_GetControllerCallback(BAESong song, BAE_SongControllerCallback
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAESong_Start()
 // --------------------------------------
 //
@@ -8423,7 +8500,7 @@ BAEResult BAESong_Start(BAESong song, int16_t priority)
     OPErr err;
 
     err = NO_ERR;
-    if ( (song) && (song->mID == OBJECT_ID) )
+    if ((song) && (song->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(song->mLock);
         if (song->mixer)
@@ -8434,7 +8511,7 @@ BAEResult BAESong_Start(BAESong song, int16_t priority)
 
             // auto level engaged
             err = GM_BeginSong(song->pSong, NULL, FALSE, TRUE);
-            if(err == NO_ERR)
+            if (err == NO_ERR)
             {
                 song->mInMixer = TRUE;
                 GM_SetSongCallback(song->pSong, PV_DefaultSongDoneCallback, (void *)song);
@@ -8464,8 +8541,8 @@ static void PV_BAESong_Stop(BAESong song, BAE_BOOL startFade)
     if (startFade)
     {
         song->mVolume = GM_GetSongVolume(song->pSong);
-        GM_SetSongFadeRate(song->pSong, PV_GetDefaultMixerFadeRate(song->mixer), 
-                                        0, song->mVolume, TRUE);
+        GM_SetSongFadeRate(song->pSong, PV_GetDefaultMixerFadeRate(song->mixer),
+                           0, song->mVolume, TRUE);
     }
     else
     {
@@ -8483,10 +8560,10 @@ static void PV_BAESong_Stop(BAESong song, BAE_BOOL startFade)
 //
 BAEResult BAESong_Stop(BAESong song, BAE_BOOL startFade)
 {
-    OPErr       err;
+    OPErr err;
 
     err = NO_ERR;
-    if ( (song) && (song->mID == OBJECT_ID) )
+    if ((song) && (song->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(song->mLock);
         PV_BAESong_Stop(song, startFade);
@@ -8499,7 +8576,6 @@ BAEResult BAESong_Stop(BAESong song, BAE_BOOL startFade)
     return BAE_TranslateOPErr(err);
 }
 
-
 // PV_CalculateTimeDeltaForFade()
 // --------------------------------------
 //
@@ -8507,9 +8583,9 @@ BAEResult BAESong_Stop(BAESong song, BAE_BOOL startFade)
 static BAE_FIXED PV_CalculateTimeDeltaForFade(BAE_FIXED sourceVolume, BAE_FIXED destVolume, BAE_FIXED timeInMiliseconds)
 {
 #if USE_FLOAT
-    double  delta;
-    double  source, dest;
-    double  time;
+    double delta;
+    double source, dest;
+    double time;
 
     source = FIXED_TO_FLOAT(sourceVolume);
     dest = FIXED_TO_FLOAT(destVolume);
@@ -8518,9 +8594,9 @@ static BAE_FIXED PV_CalculateTimeDeltaForFade(BAE_FIXED sourceVolume, BAE_FIXED 
     delta = (dest - source) / (time / BAE_GetSliceTimeInMicroseconds());
     return delta;
 #else
-    BAE_FIXED   delta;
-    BAE_FIXED   source, dest;
-    BAE_FIXED   time;
+    BAE_FIXED delta;
+    BAE_FIXED source, dest;
+    BAE_FIXED time;
 
     source = (sourceVolume);
     dest = (destVolume);
@@ -8531,30 +8607,29 @@ static BAE_FIXED PV_CalculateTimeDeltaForFade(BAE_FIXED sourceVolume, BAE_FIXED 
 #endif
 }
 
-
 // BAESong_Fade()
 // --------------------------------------
 //
 //
 BAEResult BAESong_Fade(BAESong song, BAE_FIXED sourceVolume, BAE_FIXED destVolume, BAE_FIXED timeInMiliseconds)
 {
-    int16_t   source, dest;
-    INT16       minVolume;
-    INT16       maxVolume;
-    OPErr       err;
-    
+    int16_t source, dest;
+    INT16 minVolume;
+    INT16 maxVolume;
+    OPErr err;
+
     err = NO_ERR;
-    if ( (song) && (song->mID == OBJECT_ID) )
+    if ((song) && (song->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(song->mLock);
         if (song->pSong)
         {
-#if ! USE_FLOAT
+#if !USE_FLOAT
             BAE_FIXED delta;
             delta = PV_CalculateTimeDeltaForFade(sourceVolume, destVolume, timeInMiliseconds);
             delta = XFixedMultiply(delta, LONG_TO_FIXED(MAX_SONG_VOLUME));
 #else
-            double      delta;
+            double delta;
             delta = PV_CalculateTimeDeltaForFade(sourceVolume, destVolume, timeInMiliseconds);
             delta = delta * -MAX_SONG_VOLUME;
 #endif
@@ -8562,7 +8637,7 @@ BAEResult BAESong_Fade(BAESong song, BAE_FIXED sourceVolume, BAE_FIXED destVolum
             dest = FIXED_TO_SHORT_ROUNDED(destVolume * MAX_SONG_VOLUME);
             minVolume = XMIN(source, dest);
             maxVolume = XMAX(source, dest);
-#if ! USE_FLOAT
+#if !USE_FLOAT
             GM_SetSongFadeRate(song->pSong, (delta), minVolume, maxVolume, FALSE);
 #else
             GM_SetSongFadeRate(song->pSong, FLOAT_TO_FIXED(delta), minVolume, maxVolume, FALSE);
@@ -8588,12 +8663,12 @@ BAEResult BAESong_Fade(BAESong song, BAE_FIXED sourceVolume, BAE_FIXED destVolum
 BAEResult BAESong_Pause(BAESong song)
 {
     OPErr err;
-    
+
     err = NO_ERR;
-    if ( (song) && (song->mID == OBJECT_ID) )
+    if ((song) && (song->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(song->mLock);
-        GM_PauseSong(song->pSong, TRUE);    // pause midi, but don't kill voices
+        GM_PauseSong(song->pSong, TRUE); // pause midi, but don't kill voices
         BAE_ReleaseMutex(song->mLock);
     }
     else
@@ -8603,7 +8678,6 @@ BAEResult BAESong_Pause(BAESong song)
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAESong_Resume()
 // --------------------------------------
 //
@@ -8611,9 +8685,9 @@ BAEResult BAESong_Pause(BAESong song)
 BAEResult BAESong_Resume(BAESong song)
 {
     OPErr err;
-    
+
     err = NO_ERR;
-    if ( (song) && (song->mID == OBJECT_ID) )
+    if ((song) && (song->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(song->mLock);
         GM_ResumeSong(song->pSong);
@@ -8626,7 +8700,6 @@ BAEResult BAESong_Resume(BAESong song)
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAESong_IsPaused()
 // --------------------------------------
 //
@@ -8634,9 +8707,9 @@ BAEResult BAESong_Resume(BAESong song)
 BAEResult BAESong_IsPaused(BAESong song, BAE_BOOL *outIsPaused)
 {
     OPErr err;
-    
+
     err = NO_ERR;
-    if ( (song) && (song->mID == OBJECT_ID) )
+    if ((song) && (song->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(song->mLock);
         if (outIsPaused)
@@ -8656,7 +8729,6 @@ BAEResult BAESong_IsPaused(BAESong song, BAE_BOOL *outIsPaused)
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAESong_SetLoops()
 // --------------------------------------
 //
@@ -8666,7 +8738,7 @@ BAEResult BAESong_SetLoops(BAESong song, int16_t numLoops)
     OPErr err;
 
     err = NO_ERR;
-    if ( (song) && (song->mID == OBJECT_ID) )
+    if ((song) && (song->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(song->mLock);
         if (numLoops >= 0)
@@ -8689,7 +8761,6 @@ BAEResult BAESong_SetLoops(BAESong song, int16_t numLoops)
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAESong_GetLoops()
 // --------------------------------------
 //
@@ -8699,7 +8770,7 @@ BAEResult BAESong_GetLoops(BAESong song, int16_t *outNumLoops)
     OPErr err;
 
     err = NO_ERR;
-    if ( (song) && (song->mID == OBJECT_ID) )
+    if ((song) && (song->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(song->mLock);
         if (outNumLoops)
@@ -8719,7 +8790,6 @@ BAEResult BAESong_GetLoops(BAESong song, int16_t *outNumLoops)
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAESong_GetMicrosecondLength()
 // --------------------------------------
 //
@@ -8727,9 +8797,9 @@ BAEResult BAESong_GetLoops(BAESong song, int16_t *outNumLoops)
 BAEResult BAESong_GetMicrosecondLength(BAESong song, uint32_t *outLength)
 {
     OPErr err;
-    
-    err = NO_ERR;   
-    if ( (song) && (song->mID == OBJECT_ID) )
+
+    err = NO_ERR;
+    if ((song) && (song->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(song->mLock);
         if (outLength)
@@ -8749,20 +8819,19 @@ BAEResult BAESong_GetMicrosecondLength(BAESong song, uint32_t *outLength)
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAESong_SetMicrosecondPosition()
 // --------------------------------------
 //
 //
 BAEResult BAESong_SetMicrosecondPosition(BAESong song, uint32_t ticks)
 {
-    OPErr   err;
+    OPErr err;
 
     err = NO_ERR;
-    if ( (song) && (song->mID == OBJECT_ID) )
+    if ((song) && (song->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(song->mLock);
-        if (song->pSong)    // MOVE THIS CHECK INTO THE ENGINE
+        if (song->pSong) // MOVE THIS CHECK INTO THE ENGINE
         {
             err = GM_SetSongMicrosecondPosition(song->pSong, ticks);
         }
@@ -8775,7 +8844,6 @@ BAEResult BAESong_SetMicrosecondPosition(BAESong song, uint32_t ticks)
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAESong_GetMicrosecondPosition()
 // --------------------------------------
 //
@@ -8783,9 +8851,9 @@ BAEResult BAESong_SetMicrosecondPosition(BAESong song, uint32_t ticks)
 BAEResult BAESong_GetMicrosecondPosition(BAESong song, uint32_t *outTicks)
 {
     OPErr err;
-    
+
     err = NO_ERR;
-    if ( (song) && (song->mID == OBJECT_ID) )
+    if ((song) && (song->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(song->mLock);
         if (outTicks)
@@ -8805,7 +8873,6 @@ BAEResult BAESong_GetMicrosecondPosition(BAESong song, uint32_t *outTicks)
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAESong_IsDone()
 // --------------------------------------
 //
@@ -8813,9 +8880,9 @@ BAEResult BAESong_GetMicrosecondPosition(BAESong song, uint32_t *outTicks)
 BAEResult BAESong_IsDone(BAESong song, BAE_BOOL *outIsDone)
 {
     OPErr err;
-    
+
     err = NO_ERR;
-    if ( (song) && (song->mID == OBJECT_ID) )
+    if ((song) && (song->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(song->mLock);
         if (outIsDone)
@@ -8835,7 +8902,6 @@ BAEResult BAESong_IsDone(BAESong song, BAE_BOOL *outIsDone)
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAESong_AreMidiEventsPending()
 // --------------------------------------
 // returns TRUE if there are midi events pending
@@ -8845,7 +8911,7 @@ BAEResult BAESong_AreMidiEventsPending(BAESong song, BAE_BOOL *outPending)
     OPErr err;
 
     err = NO_ERR;
-    if ( (song) && (song->mID == OBJECT_ID) )
+    if ((song) && (song->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(song->mLock);
         if (outPending)
@@ -8875,41 +8941,6 @@ BAEResult BAESong_AreMidiEventsPending(BAESong song, BAE_BOOL *outPending)
     return BAE_TranslateOPErr(err);
 }
 
-
-// BAESong_IsRolledMIDI()
-// --------------------------------------
-// returns TRUE if this song uses a "rolled" MIDI format (no dominant master track)
-//
-BAEResult BAESong_IsRolledMIDI(BAESong song, BAE_BOOL *outIsRolled)
-{
-    OPErr err;
-
-    err = NO_ERR;
-    if ( (song) && (song->mID == OBJECT_ID) )
-    {
-        BAE_AcquireMutex(song->mLock);
-        if (outIsRolled)
-        {
-            *outIsRolled = FALSE;
-            if (song->pSong)
-            {
-                *outIsRolled = (BAE_BOOL)GM_IsRolledMIDI(song->pSong);
-            }
-        }
-        else
-        {
-            err = PARAM_ERR;
-        }
-        BAE_ReleaseMutex(song->mLock);
-    }
-    else
-    {
-        err = NULL_OBJECT;
-    }
-    return BAE_TranslateOPErr(err);
-}
-
-
 // BAESong_SetMasterTempo()
 // --------------------------------------
 //
@@ -8917,9 +8948,9 @@ BAEResult BAESong_IsRolledMIDI(BAESong song, BAE_BOOL *outIsRolled)
 BAEResult BAESong_SetMasterTempo(BAESong song, BAE_UNSIGNED_FIXED tempoFactor)
 {
     OPErr err;
-    
+
     err = NO_ERR;
-    if ( (song) && (song->mID == OBJECT_ID) )
+    if ((song) && (song->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(song->mLock);
         GM_SetMasterSongTempo(song->pSong, tempoFactor);
@@ -8932,7 +8963,6 @@ BAEResult BAESong_SetMasterTempo(BAESong song, BAE_UNSIGNED_FIXED tempoFactor)
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAESong_GetMasterTempo()
 // --------------------------------------
 //
@@ -8940,9 +8970,9 @@ BAEResult BAESong_SetMasterTempo(BAESong song, BAE_UNSIGNED_FIXED tempoFactor)
 BAEResult BAESong_GetMasterTempo(BAESong song, BAE_UNSIGNED_FIXED *outTempoFactor)
 {
     OPErr err;
-    
+
     err = NO_ERR;
-    if ( (song) && (song->mID == OBJECT_ID) )
+    if ((song) && (song->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(song->mLock);
         if (outTempoFactor)
@@ -8962,7 +8992,6 @@ BAEResult BAESong_GetMasterTempo(BAESong song, BAE_UNSIGNED_FIXED *outTempoFacto
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAESong_MuteTrack()
 // --------------------------------------
 //
@@ -8970,9 +8999,9 @@ BAEResult BAESong_GetMasterTempo(BAESong song, BAE_UNSIGNED_FIXED *outTempoFacto
 BAEResult BAESong_MuteTrack(BAESong song, uint16_t track)
 {
     OPErr err;
-    
+
     err = NO_ERR;
-    if ( (song) && (song->mID == OBJECT_ID) )
+    if ((song) && (song->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(song->mLock);
         GM_MuteTrack(song->pSong, track);
@@ -8985,7 +9014,6 @@ BAEResult BAESong_MuteTrack(BAESong song, uint16_t track)
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAESong_UnmuteTrack()
 // --------------------------------------
 //
@@ -8993,9 +9021,9 @@ BAEResult BAESong_MuteTrack(BAESong song, uint16_t track)
 BAEResult BAESong_UnmuteTrack(BAESong song, uint16_t track)
 {
     OPErr err;
-    
+
     err = NO_ERR;
-    if ( (song) && (song->mID == OBJECT_ID) )
+    if ((song) && (song->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(song->mLock);
         GM_UnmuteTrack(song->pSong, track);
@@ -9008,7 +9036,6 @@ BAEResult BAESong_UnmuteTrack(BAESong song, uint16_t track)
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAESong_GetTrackMuteStatus()
 // --------------------------------------
 //
@@ -9016,9 +9043,9 @@ BAEResult BAESong_UnmuteTrack(BAESong song, uint16_t track)
 BAEResult BAESong_GetTrackMuteStatus(BAESong song, BAE_BOOL *outTracks)
 {
     OPErr err;
-    
+
     err = NO_ERR;
-    if ( (song) && (song->mID == OBJECT_ID) )
+    if ((song) && (song->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(song->mLock);
         if (outTracks)
@@ -9038,7 +9065,6 @@ BAEResult BAESong_GetTrackMuteStatus(BAESong song, BAE_BOOL *outTracks)
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAESong_SoloTrack()
 // --------------------------------------
 //
@@ -9046,9 +9072,9 @@ BAEResult BAESong_GetTrackMuteStatus(BAESong song, BAE_BOOL *outTracks)
 BAEResult BAESong_SoloTrack(BAESong song, uint16_t track)
 {
     OPErr err;
-    
+
     err = NO_ERR;
-    if ( (song) && (song->mID == OBJECT_ID) )
+    if ((song) && (song->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(song->mLock);
         GM_SoloTrack(song->pSong, track);
@@ -9061,7 +9087,6 @@ BAEResult BAESong_SoloTrack(BAESong song, uint16_t track)
     return BAE_TranslateOPErr(err);
 }
 
-
 // BAESong_UnSoloTrack()
 // --------------------------------------
 //
@@ -9069,9 +9094,9 @@ BAEResult BAESong_SoloTrack(BAESong song, uint16_t track)
 BAEResult BAESong_UnSoloTrack(BAESong song, uint16_t track)
 {
     OPErr err;
-    
+
     err = NO_ERR;
-    if ( (song) && (song->mID == OBJECT_ID) )
+    if ((song) && (song->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(song->mLock);
         GM_UnsoloTrack(song->pSong, track);
@@ -9084,7 +9109,6 @@ BAEResult BAESong_UnSoloTrack(BAESong song, uint16_t track)
     return BAE_TranslateOPErr(err);
 }
 
-
 //  BAESong_GetSoloTrackStatus()
 // --------------------------------------
 //
@@ -9092,9 +9116,9 @@ BAEResult BAESong_UnSoloTrack(BAESong song, uint16_t track)
 BAEResult BAESong_GetSoloTrackStatus(BAESong song, BAE_BOOL *outTracks)
 {
     OPErr err;
-    
+
     err = NO_ERR;
-    if ( (song) && (song->mID == OBJECT_ID) )
+    if ((song) && (song->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(song->mLock);
         if (outTracks)
@@ -9114,18 +9138,13 @@ BAEResult BAESong_GetSoloTrackStatus(BAESong song, BAE_BOOL *outTracks)
     return BAE_TranslateOPErr(err);
 }
 
-
-
-
-
 // ------------------------------------------------------------------
 // Utility Functions
 // ------------------------------------------------------------------
 #if 0
-    #pragma mark -
-    #pragma mark >>>>> Utility Functions <<<<<
+#pragma mark -
+#pragma mark>>>>> Utility Functions <<<<<
 #endif
-
 
 #if USE_FULL_RMF_SUPPORT == TRUE
 // PV_TranslateInfoType()
@@ -9134,83 +9153,82 @@ BAEResult BAESong_GetSoloTrackStatus(BAESong song, BAE_BOOL *outTracks)
 //
 static SongInfo PV_TranslateInfoType(BAEInfoType infoType)
 {
-    SongInfo    info;
+    SongInfo info;
 
     switch (infoType)
     {
-        default:
-            info = I_INVALID;
-            break;
-        case TITLE_INFO:
-            info = I_TITLE;
-            break;
-        case PERFORMED_BY_INFO:
-            info = I_PERFORMED_BY;
-            break;
-        case COMPOSER_INFO:
-            info = I_COMPOSER;
-            break;
-        case COPYRIGHT_INFO:
-            info = I_COPYRIGHT;
-            break;
-        case PUBLISHER_CONTACT_INFO:
-            info = I_PUBLISHER_CONTACT;
-            break;
-        case USE_OF_LICENSE_INFO:
-            info = I_USE_OF_LICENSE;
-            break;
-        case LICENSE_TERM_INFO:
-            info = I_LICENSE_TERM;
-            break;
-        case LICENSED_TO_URL_INFO:
-            info = I_LICENSED_TO_URL;
-            break;
-        case EXPIRATION_DATE_INFO:
-            info = I_EXPIRATION_DATE;
-            break;
-        case COMPOSER_NOTES_INFO:
-            info = I_COMPOSER_NOTES;
-            break;
-        case INDEX_NUMBER_INFO:
-            info = I_INDEX_NUMBER;
-            break;
-        case GENRE_INFO:
-            info = I_GENRE;
-            break;
-        case SUB_GENRE_INFO:
-            info = I_SUB_GENRE;
-            break;
-        case TEMPO_DESCRIPTION_INFO:
-            info = I_TEMPO;
-            break;
-        case ORIGINAL_SOURCE_INFO:
-            info = I_ORIGINAL_SOURCE;
-            break;
+    default:
+        info = I_INVALID;
+        break;
+    case TITLE_INFO:
+        info = I_TITLE;
+        break;
+    case PERFORMED_BY_INFO:
+        info = I_PERFORMED_BY;
+        break;
+    case COMPOSER_INFO:
+        info = I_COMPOSER;
+        break;
+    case COPYRIGHT_INFO:
+        info = I_COPYRIGHT;
+        break;
+    case PUBLISHER_CONTACT_INFO:
+        info = I_PUBLISHER_CONTACT;
+        break;
+    case USE_OF_LICENSE_INFO:
+        info = I_USE_OF_LICENSE;
+        break;
+    case LICENSE_TERM_INFO:
+        info = I_LICENSE_TERM;
+        break;
+    case LICENSED_TO_URL_INFO:
+        info = I_LICENSED_TO_URL;
+        break;
+    case EXPIRATION_DATE_INFO:
+        info = I_EXPIRATION_DATE;
+        break;
+    case COMPOSER_NOTES_INFO:
+        info = I_COMPOSER_NOTES;
+        break;
+    case INDEX_NUMBER_INFO:
+        info = I_INDEX_NUMBER;
+        break;
+    case GENRE_INFO:
+        info = I_GENRE;
+        break;
+    case SUB_GENRE_INFO:
+        info = I_SUB_GENRE;
+        break;
+    case TEMPO_DESCRIPTION_INFO:
+        info = I_TEMPO;
+        break;
+    case ORIGINAL_SOURCE_INFO:
+        info = I_ORIGINAL_SOURCE;
+        break;
     }
     return info;
 }
-#endif  //#if USE_FULL_RMF_SUPPORT == TRUE
-
+#endif // #if USE_FULL_RMF_SUPPORT == TRUE
 
 // TranslateBankProgramToInstrument()
 // --------------------------------------
 //
 //
-BAE_INSTRUMENT TranslateBankProgramToInstrument(uint16_t bank, 
-                                    uint16_t program, 
-                                    uint16_t channel,
-                                    uint16_t note)
+BAE_INSTRUMENT TranslateBankProgramToInstrument(uint16_t bank,
+                                                uint16_t program,
+                                                uint16_t channel,
+                                                uint16_t note)
 {
-    BAE_INSTRUMENT  instrument;
+    BAE_INSTRUMENT instrument;
 
     instrument = program;
     if (channel == PERCUSSION_CHANNEL)
     {
-        bank = (bank * 2) + 1;      // odd banks are percussion
+        bank = (bank * 2) + 1; // odd banks are percussion
     }
     else
     {
-        bank = bank * 2 + 0;        // even banks are for instruments
+        bank = bank * 2 + 0; // even banks are for instruments
         note = 0;
     }
 
@@ -9222,18 +9240,17 @@ BAE_INSTRUMENT TranslateBankProgramToInstrument(uint16_t bank,
     return instrument;
 }
 
-
 // PV_GetRmfSongResource()
 // --------------------------------------
 //
 //
 #if USE_FULL_RMF_SUPPORT == TRUE
-static OPErr PV_GetRmfSongResource(void *pRMFData, uint32_t rmfSize, int16_t index, 
-                        SongResource **ppOutResource, int32_t *pOutResourceSize)
+static OPErr PV_GetRmfSongResource(void *pRMFData, uint32_t rmfSize, int16_t index,
+                                   SongResource **ppOutResource, int32_t *pOutResourceSize)
 {
-    XFILE               fileRef;
-    XLongResourceID     theID;
-    OPErr               err;
+    XFILE fileRef;
+    XLongResourceID theID;
+    OPErr err;
 
     err = NO_ERR;
     if (pRMFData && rmfSize && ppOutResource && pOutResourceSize)
@@ -9263,37 +9280,37 @@ static OPErr PV_GetRmfSongResource(void *pRMFData, uint32_t rmfSize, int16_t ind
     }
     return err;
 }
-#endif  //#if USE_FULL_RMF_SUPPORT == TRUE
+#endif // #if USE_FULL_RMF_SUPPORT == TRUE
 
 // BAEUtil_GetInfoSizeFromFile()
 // --------------------------------------
-// If the file at filePath contains a song with index 
-// songIndex, and that song includes a text info field of type infoType, 
-// then returns the size in bytes of that text info field. 
-// 
+// If the file at filePath contains a song with index
+// songIndex, and that song includes a text info field of type infoType,
+// then returns the size in bytes of that text info field.
+//
 // Returns: Text info field size in bytes
 //
-BAEResult BAEUtil_GetInfoSizeFromFile(BAEPathName filePath, 
-                                          int16_t songIndex, 
-                                          BAEInfoType infoType, 
-                                          uint32_t *pOutResourceSize)
+BAEResult BAEUtil_GetInfoSizeFromFile(BAEPathName filePath,
+                                      int16_t songIndex,
+                                      BAEInfoType infoType,
+                                      uint32_t *pOutResourceSize)
 {
 #if USE_FULL_RMF_SUPPORT == TRUE
-    SongInfo        info;
-    BAEResult       theErr;
-    SongResource    *pSongRes;
-    int32_t            songResSize = 0;
-    
+    SongInfo info;
+    BAEResult theErr;
+    SongResource *pSongRes;
+    int32_t songResSize = 0;
+
     theErr = BAE_NO_ERROR;
     info = PV_TranslateInfoType(infoType);
-    
+
     if (pOutResourceSize && (info != I_INVALID))
     {
-        XFILE               fileRef;
-        XFILENAME           name;
-        OPErr               theErr;
-        XLongResourceID     theID;
-        
+        XFILE fileRef;
+        XFILENAME name;
+        OPErr theErr;
+        XLongResourceID theID;
+
         theErr = NO_ERR;
         *pOutResourceSize = 0;
         XConvertPathToXFILENAME(filePath, &name);
@@ -9306,7 +9323,7 @@ BAEResult BAEUtil_GetInfoSizeFromFile(BAEPathName filePath,
                 *pOutResourceSize = XGetSongInformationSize(pSongRes, songResSize, info);
             }
             XDisposePtr((XPTR)pSongRes);
-            XFileClose(fileRef);            
+            XFileClose(fileRef);
         }
     }
     else
@@ -9320,32 +9337,30 @@ BAEResult BAEUtil_GetInfoSizeFromFile(BAEPathName filePath,
 #endif
 }
 
-
-
 // BAEUtil_GetRmfSongInfoFromFile()
 // --------------------------------------
 //
 //
 BAEResult BAEUtil_GetRmfSongInfoFromFile(BAEPathName filePath, int16_t songIndex,
-                                 BAEInfoType infoType, char* targetBuffer, uint32_t bufferBytes)
+                                         BAEInfoType infoType, char *targetBuffer, uint32_t bufferBytes)
 {
 #if USE_FULL_RMF_SUPPORT == TRUE
-    SongInfo        info;
-    BAEResult       theErr;
-    SongResource    *pSongRes;
-    int32_t            songResSize;
-    
+    SongInfo info;
+    BAEResult theErr;
+    SongResource *pSongRes;
+    int32_t songResSize;
+
     theErr = BAE_NO_ERROR;
     targetBuffer[0] = 0;
     info = PV_TranslateInfoType(infoType);
-    
+
     if (info != I_INVALID)
     {
-        XFILE               fileRef;
-        XFILENAME           name;
-        OPErr               theErr;
-        XLongResourceID     theID;
-        
+        XFILE fileRef;
+        XFILENAME name;
+        OPErr theErr;
+        XLongResourceID theID;
+
         theErr = NO_ERR;
         XConvertPathToXFILENAME(filePath, &name);
         fileRef = XFileOpenResource(&name, TRUE);
@@ -9355,7 +9370,7 @@ BAEResult BAEUtil_GetRmfSongInfoFromFile(BAEPathName filePath, int16_t songIndex
             if (pSongRes)
             {
                 XGetSongInformation(pSongRes, songResSize, info, targetBuffer, bufferBytes);
-                
+
 #if (X_PLATFORM != X_MACINTOSH_9)
                 // data stored in the copyright fields is Mac ASCII, any other platform should translate
                 while (*targetBuffer)
@@ -9366,7 +9381,7 @@ BAEResult BAEUtil_GetRmfSongInfoFromFile(BAEPathName filePath, int16_t songIndex
 #endif
             }
             XDisposePtr((XPTR)pSongRes);
-            XFileClose(fileRef);            
+            XFileClose(fileRef);
         }
     }
     else
@@ -9381,19 +9396,18 @@ BAEResult BAEUtil_GetRmfSongInfoFromFile(BAEPathName filePath, int16_t songIndex
 #endif
 }
 
-
 // BAEUtil_GetRmfSongInfo()
 // --------------------------------------
 //
 //
 BAEResult BAEUtil_GetRmfSongInfo(void *pRMFData, uint32_t rmfSize, int16_t songIndex,
-                             BAEInfoType infoType, char* targetBuffer, uint32_t bufferBytes)
+                                 BAEInfoType infoType, char *targetBuffer, uint32_t bufferBytes)
 {
 #if USE_FULL_RMF_SUPPORT == TRUE
-    SongInfo        info;
-    BAEResult       theErr;
-    SongResource    *pSongRes;
-    int32_t            songResSize;
+    SongInfo info;
+    BAEResult theErr;
+    SongResource *pSongRes;
+    int32_t songResSize;
 
     theErr = BAE_NO_ERROR;
     targetBuffer[0] = 0;
@@ -9428,7 +9442,6 @@ BAEResult BAEUtil_GetRmfSongInfo(void *pRMFData, uint32_t rmfSize, int16_t songI
 #endif
 }
 
-
 // BAEUtil_GetInfoSize()
 // --------------------------------------
 //
@@ -9436,10 +9449,10 @@ BAEResult BAEUtil_GetRmfSongInfo(void *pRMFData, uint32_t rmfSize, int16_t songI
 uint32_t BAEUtil_GetInfoSize(void *pRMFData, uint32_t rmfSize, int16_t songIndex, BAEInfoType infoType)
 {
 #if USE_FULL_RMF_SUPPORT == TRUE
-    SongInfo        info;
-    uint32_t   size;
-    SongResource    *pSongRes;
-    int32_t            songResSize;
+    SongInfo info;
+    uint32_t size;
+    SongResource *pSongRes;
+    int32_t songResSize;
 
     size = 0;
     info = PV_TranslateInfoType(infoType);
@@ -9458,7 +9471,6 @@ uint32_t BAEUtil_GetInfoSize(void *pRMFData, uint32_t rmfSize, int16_t songIndex
 #endif
 }
 
-
 #if USE_FULL_RMF_SUPPORT == TRUE
 // BAEUtil_IsRmfSongEncrypted()
 // --------------------------------------
@@ -9466,14 +9478,14 @@ uint32_t BAEUtil_GetInfoSize(void *pRMFData, uint32_t rmfSize, int16_t songIndex
 //
 BAE_BOOL BAEUtil_IsRmfSongEncrypted(void *pRMFData, uint32_t rmfSize, int16_t songIndex)
 {
-    SongResource    *pSongRes;
-    int32_t            songResSize;
-    BAE_BOOL        locked;
-    
+    SongResource *pSongRes;
+    int32_t songResSize;
+    BAE_BOOL locked;
+
     pSongRes = NULL;
     songResSize = 0;
     locked = FALSE;
-    
+
     if (PV_GetRmfSongResource(pRMFData, rmfSize, songIndex, &pSongRes, &songResSize) == NO_ERR)
     {
         locked = (BAE_BOOL)XIsSongLocked(pSongRes);
@@ -9482,21 +9494,20 @@ BAE_BOOL BAEUtil_IsRmfSongEncrypted(void *pRMFData, uint32_t rmfSize, int16_t so
     return locked;
 }
 
-
 // BAEUtil_IsRmfSongCompressed()
 // --------------------------------------
 //
 //
 BAE_BOOL BAEUtil_IsRmfSongCompressed(void *pRMFData, uint32_t rmfSize, int16_t songIndex)
 {
-    SongResource    *pSongRes;
-    int32_t            songResSize;
-    BAE_BOOL        compressed;
-    
+    SongResource *pSongRes;
+    int32_t songResSize;
+    BAE_BOOL compressed;
+
     pSongRes = NULL;
     songResSize = 0;
     compressed = FALSE;
-    
+
     if (PV_GetRmfSongResource(pRMFData, rmfSize, songIndex, &pSongRes, &songResSize) == NO_ERR)
     {
         compressed = (BAE_BOOL)XIsSongCompressed(pSongRes);
@@ -9504,25 +9515,25 @@ BAE_BOOL BAEUtil_IsRmfSongCompressed(void *pRMFData, uint32_t rmfSize, int16_t s
     }
     return compressed;
 }
-#endif  //#if USE_FULL_RMF_SUPPORT == TRUE
+#endif // #if USE_FULL_RMF_SUPPORT == TRUE
 
 #if USE_FULL_RMF_SUPPORT == TRUE
 // BAEUtil_GetRmfVersion()
 // --------------------------------------
 //
 //
-BAEResult BAEUtil_GetRmfVersion(void *pRMFData, uint32_t rmfSize, 
+BAEResult BAEUtil_GetRmfVersion(void *pRMFData, uint32_t rmfSize,
                                 int16_t *pVersionMajor, int16_t *pVersionMinor, int16_t *pVersionSubMinor)
 {
-    XFILE               fileRef;
-    OPErr               err;
-    XVersion            vers;
+    XFILE fileRef;
+    OPErr err;
+    XVersion vers;
 
     err = NO_ERR;
     vers.versionMajor = 0;
     vers.versionMinor = 0;
     vers.versionSubMinor = 0;
-    
+
     if (pRMFData && rmfSize && pVersionMajor && pVersionMinor && pVersionSubMinor)
     {
         fileRef = XFileOpenResourceFromMemory((XPTR)pRMFData, rmfSize, FALSE);
@@ -9544,7 +9555,7 @@ BAEResult BAEUtil_GetRmfVersion(void *pRMFData, uint32_t rmfSize,
     *pVersionSubMinor = vers.versionMinor;
     return BAE_TranslateOPErr(err);
 }
-#endif  // #if USE_FULL_RMF_SUPPORT == TRUE
+#endif // #if USE_FULL_RMF_SUPPORT == TRUE
 
 // PV_TranslateTerpModeToBAETerpMode()
 // -------------------------------------------
@@ -9556,26 +9567,26 @@ static BAETerpMode PV_TranslateTerpModeToBAETerpMode(TerpMode mode_in)
 
     switch (mode_in)
     {
-        case E_AMP_SCALED_DROP_SAMPLE:
-            mode_out = BAE_DROP_SAMPLE;
-            break;
-        case E_2_POINT_INTERPOLATION:
-            mode_out = BAE_2_POINT_INTERPOLATION;
-            break;
-        case E_LINEAR_INTERPOLATION:
-        case E_LINEAR_INTERPOLATION_FLOAT:
-        case E_LINEAR_INTERPOLATION_U3232:      
-            mode_out = BAE_LINEAR_INTERPOLATION;
-            break;
-        default:
-            BAE_ASSERT(FALSE);
+    case E_AMP_SCALED_DROP_SAMPLE:
+        mode_out = BAE_DROP_SAMPLE;
+        break;
+    case E_2_POINT_INTERPOLATION:
+        mode_out = BAE_2_POINT_INTERPOLATION;
+        break;
+    case E_LINEAR_INTERPOLATION:
+    case E_LINEAR_INTERPOLATION_FLOAT:
+    case E_LINEAR_INTERPOLATION_U3232:
+        mode_out = BAE_LINEAR_INTERPOLATION;
+        break;
+    default:
+        BAE_ASSERT(FALSE);
     }
     return mode_out;
 }
 
 char mCopyright[] =
-{
-"\
+    {
+        "\
 (c) Copyright 1996-2001 Beatnik, Inc, All Rights Reserved\r\
 Beatnik products contain certain trade secrets and confidential and \
 proprietary information of Beatnik.  Use, reproduction, disclosure \
@@ -9589,12 +9600,11 @@ restrictions as set forth in subparagraph (c)(1)(ii) of The \
 Rights in Technical Data and Computer Software clause in DFARS \
 252.227-7013 or subparagraphs (c)(1) and (2) of the Commercial \
 Computer Software--Restricted Rights at 48 CFR 52.227-19, as \
-applicable."
-};
+applicable."};
 
 char mAboutNames[] =
-{
-"\
+    {
+        "\
 Audio Engine Programming: \
 Steve Hales, \
 Mark Deggeller, \
@@ -9617,48 +9627,71 @@ Music: \
 Brian Salter \
 Documentation: \
 Chris Grigg \
-In memory of Jim Nitchals, 1962-1998.  A subtle genius and original thinker."
-};
+In memory of Jim Nitchals, 1962-1998.  A subtle genius and original thinker."};
 
 // EOF MiniBAE.c
 
 #if USE_MPEG_ENCODER != FALSE
 // Translate BAECompressionType (per-channel kbps enum naming) to bits/sec per channel.
-uint32_t BAE_TranslateMPEGTypeToBitrate(BAECompressionType ct) {
-    switch(ct){
-        case BAE_COMPRESSION_MPEG_8: return 8000;
-        case BAE_COMPRESSION_MPEG_16: return 16000;
-        case BAE_COMPRESSION_MPEG_24: return 24000;
-        case BAE_COMPRESSION_MPEG_32: return 32000;
-        case BAE_COMPRESSION_MPEG_40: return 40000;
-        case BAE_COMPRESSION_MPEG_48: return 48000;
-        case BAE_COMPRESSION_MPEG_56: return 56000;
-        case BAE_COMPRESSION_MPEG_64: return 64000;
-        case BAE_COMPRESSION_MPEG_80: return 80000;
-        case BAE_COMPRESSION_MPEG_96: return 96000;
-        case BAE_COMPRESSION_MPEG_112: return 112000;
-        case BAE_COMPRESSION_MPEG_128: return 128000;
-        case BAE_COMPRESSION_MPEG_160: return 160000;
-        case BAE_COMPRESSION_MPEG_192: return 192000;
-        case BAE_COMPRESSION_MPEG_224: return 224000;
-        case BAE_COMPRESSION_MPEG_256: return 256000;
-        case BAE_COMPRESSION_MPEG_320: return 320000;
-        default: return 128000; // safe default
+uint32_t BAE_TranslateMPEGTypeToBitrate(BAECompressionType ct)
+{
+    switch (ct)
+    {
+    case BAE_COMPRESSION_MPEG_8:
+        return 8000;
+    case BAE_COMPRESSION_MPEG_16:
+        return 16000;
+    case BAE_COMPRESSION_MPEG_24:
+        return 24000;
+    case BAE_COMPRESSION_MPEG_32:
+        return 32000;
+    case BAE_COMPRESSION_MPEG_40:
+        return 40000;
+    case BAE_COMPRESSION_MPEG_48:
+        return 48000;
+    case BAE_COMPRESSION_MPEG_56:
+        return 56000;
+    case BAE_COMPRESSION_MPEG_64:
+        return 64000;
+    case BAE_COMPRESSION_MPEG_80:
+        return 80000;
+    case BAE_COMPRESSION_MPEG_96:
+        return 96000;
+    case BAE_COMPRESSION_MPEG_112:
+        return 112000;
+    case BAE_COMPRESSION_MPEG_128:
+        return 128000;
+    case BAE_COMPRESSION_MPEG_160:
+        return 160000;
+    case BAE_COMPRESSION_MPEG_192:
+        return 192000;
+    case BAE_COMPRESSION_MPEG_224:
+        return 224000;
+    case BAE_COMPRESSION_MPEG_256:
+        return 256000;
+    case BAE_COMPRESSION_MPEG_320:
+        return 320000;
+    default:
+        return 128000; // safe default
     }
 }
 
 // Refill callback: build next mixer slice of PCM into provided buffer.
-XBOOL PV_RefillMPEGEncodeBuffer(void *buffer, void *userRef){
-    if(!buffer || !mWritingDataBlock || !mWritingDataBlockSize) return FALSE;
+XBOOL PV_RefillMPEGEncodeBuffer(void *buffer, void *userRef)
+{
+    if (!buffer || !mWritingDataBlock || !mWritingDataBlockSize)
+        return FALSE;
     BAEMixer mixer = (BAEMixer)userRef;
-    BAEAudioModifiers mods; if(BAEMixer_GetModifiers(mixer, &mods)!=BAE_NO_ERROR){mods = BAE_USE_16;}
-    int channels = (mods & BAE_USE_STEREO)?2:1;
-    int sampleSize = (mods & BAE_USE_16)?2:1;
+    BAEAudioModifiers mods;
+    if (BAEMixer_GetModifiers(mixer, &mods) != BAE_NO_ERROR)
+    {
+        mods = BAE_USE_16;
+    }
+    int channels = (mods & BAE_USE_STEREO) ? 2 : 1;
+    int sampleSize = (mods & BAE_USE_16) ? 2 : 1;
     uint32_t frames = (uint32_t)(mWritingDataBlockSize / (sampleSize * channels));
     // Build directly into destination buffer so encoder reads fresh PCM
     BAE_BuildMixerSlice(mixer, buffer, mWritingDataBlockSize, frames);
     return TRUE;
 }
 #endif
-
-

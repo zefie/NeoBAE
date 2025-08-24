@@ -410,6 +410,7 @@ void render_about_dialog(SDL_Renderer *R, int mx, int my, bool mclick)
     // About dialog content: paged. Page 0 = main info, Page 1 = credits/licenses
     // Navigation controls drawn bottom-right
     const char *cpuArch = BAE_GetCurrentCPUArchitecture();
+    const char *baeFeatures = BAE_GetFeatureString();
     char *baeVersion = (char *)BAE_GetVersion();   /* malloc'd by engine */
     char *compInfo = (char *)BAE_GetCompileInfo(); /* malloc'd by engine */
 
@@ -428,6 +429,12 @@ void render_about_dialog(SDL_Renderer *R, int mx, int my, bool mclick)
         snprintf(line2, sizeof(line2), "built with %s", compInfo);
     else
         line2[0] = '\0';
+
+    char line3[256];
+    if (baeFeatures && baeFeatures[0])
+        snprintf(line3, sizeof(line3), "features: %s", baeFeatures);
+    else
+        line3[0] = '\0';
 
     int y = dlg.y + 40;
     // Page 0: main info
@@ -500,6 +507,17 @@ void render_about_dialog(SDL_Renderer *R, int mx, int my, bool mclick)
         {
             draw_text(R, dlg.x + pad, y, line2, g_text_color);
             y += 20;
+        }
+        // Insert features line as third line on About page (with wrapping)
+        if (line3[0])
+        {
+            int wrapWidth = dlgW - pad * 2 - 8;
+            int featureLineH = 18; // line height for wrapped features
+            int wrapCount = count_wrapped_lines(line3, wrapWidth);
+            if (wrapCount <= 0)
+                wrapCount = 1;
+            draw_wrapped_text(R, dlg.x + pad, y, line3, g_text_color, wrapWidth, featureLineH);
+            y += wrapCount * featureLineH;
         }
         draw_text(R, dlg.x + pad, y, "", g_text_color); /* spacer */
         y += 6;
