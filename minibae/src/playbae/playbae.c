@@ -384,20 +384,36 @@ void playbae_printf(const char *fmt, ...)
    }
 }
 
+#include <stdarg.h>
 // prototypes
 
 char const copyrightInfo[] =
-    {
-        "Copyright (C) 2009 Beatnik, Inc and Copyright (C) 2021-2025 Zefie Networks. All rights reserved.\n"};
+   "Copyright (C) 2009 Beatnik, Inc and Copyright (C) 2021-2025 Zefie Networks. All rights reserved.\n";
 
-char const usageString[] =
-    {
-        "USAGE:  playbae  -p  {patches.hsb}\n"
-        "                 -f  {Play a file (MIDI, RMF, WAV, AIFF, MPEG audio: MP2/MP3, FLAC)}\n"
-        "                 -o  {write output to file}\n"
-        "                 -om {write MP3 output to file (requires MP3 encoder build)}\n"
+static char playFileString[512];
+
+static void init_playFileString(void)
+{
+   /* Build the human-friendly file type list at runtime (can't call strcat at file-scope). */
+   strcpy(playFileString, "Play a file (MIDI, RMF, WAV, AIFF");
+#if defined(USE_MPEG_DECODER) && (USE_MPEG_DECODER != 0)
+   strcat(playFileString, ", MPEG audio: MP2/MP3");
+#endif
+#if defined(USE_FLAC_DECODER) && (USE_FLAC_DECODER != 0)
+   strcat(playFileString, ", FLAC");
+#endif
+   strcat(playFileString, ")");
+}
+
+char const usageStringFmt[] =
+   "USAGE:  playbae  -p  {patches.hsb}\n"
+   "                 -f  {%s}\n"
+   "                 -o  {write output to file}\n"
+#if defined(USE_MPEG_ENCODER) && (USE_MPEG_ENCODER != 0)
+        "                 -om {write MP3 output to file}\n"
+#endif
 #if defined(USE_FLAC_ENCODER) && (USE_FLAC_ENCODER != 0)
-        "                 -of {write FLAC output to file (requires FLAC encoder build)}\n"
+        "                 -of {write FLAC output to file}\n"
 #endif
 #ifdef SUPPORT_KARAOKE
         "                 -k  {enable karaoke lyric display (MIDI/RMF with lyrics)}\n"
@@ -412,7 +428,7 @@ char const usageString[] =
         "                 -q  {quiet mode}\n"
         "                 -b  {CBR bitrate kbps for MP3 export (default 128)}\n"
         "                 -h  {displays this message then exits}\n"
-        "                 -x  {displays additional lesser-used options}\n"};
+        "                 -x  {displays additional lesser-used options}\n";
 
 char const usageStringExtra[] =
     {
@@ -428,7 +444,9 @@ char const usageStringExtra[] =
         "                 -a  {Play a AIF file}\n"
         "                 -r  {Play a RMF file}\n"
         "                 -m  {Play a MID file}\n"
+#if defined(USE_MPEG_DECODER) && (USE_MPEG_DECODER != 0)        
         "                 -mp {Play an MPEG audio file (MP2/MP3)}\n"
+#endif
         "                 -d  {verbose (debug) mode}\n"};
 
 char const reverbTypeList[] =
@@ -1178,6 +1196,7 @@ BAEResult playFile(BAEMixer theMixer, char *parmFile, BAE_UNSIGNED_FIXED volume,
 // ---------------------------------------------------------------------
 int main(int argc, char *argv[])
 {
+   init_playFileString();
    // Initialize err so we don't report garbage if early allocation fails
    BAEResult err = BAE_NO_ERROR;
    BAEMixer theMixer;
@@ -1325,7 +1344,7 @@ int main(int argc, char *argv[])
       }
       if (PV_ParseCommands(argc, argv, "-h", FALSE, NULL))
       {
-         playbae_printf(usageString);
+         playbae_printf(usageStringFmt, playFileString);
          return 0;
       }
       if (PV_ParseCommands(argc, argv, "-x", FALSE, NULL))
@@ -1453,7 +1472,7 @@ int main(int argc, char *argv[])
             playbae_dprintf("BAE memory used during idle after SetBankToFile: %ld bytes\n\n", BAE_GetSizeOfMemoryUsed());
 #else
             playbae_printf("ERR: Built-in patches were disabled at compile-time. -p flag is required.\n");
-            playbae_printf(usageString);
+            playbae_printf(usageStringFmt, playFileString);
             return 0;
 #endif
          }
@@ -1770,7 +1789,7 @@ int main(int argc, char *argv[])
 
    if (doneCommand == 0)
    {
-      playbae_printf(usageString);
+      playbae_printf(usageStringFmt, playFileString);
    }
 
    BAE_WaitMicroseconds(160000);
