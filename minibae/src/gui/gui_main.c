@@ -44,10 +44,10 @@
 #include "gui_logging.h"
 #include "gui_bae.h"
 #include "gui_export.h"
-#include "gui_theme.h"   // for theme globals and detection functions
-#include "gui_widgets.h" // for UI widget functions
-#include "gui_text.h"    // for text rendering functions
-#include "gui_midi.h"    // for virtual keyboard functions
+#include "gui_theme.h"    // for theme globals and detection functions
+#include "gui_widgets.h"  // for UI widget functions
+#include "gui_text.h"     // for text rendering functions
+#include "gui_midi.h"     // for virtual keyboard functions
 #include "gui_playlist.h" // for playlist panel functions
 
 /* Forward-declare dialog renderer from gui_dialogs.c to avoid including the
@@ -92,29 +92,28 @@ int calculate_window_height(void)
     // Transport panel
     int transportPanelY = 160;
     int transportPanelH = 85;
-    
+
     // Keyboard panel comes after transport
     int keyboardPanelY = transportPanelY + transportPanelH + 10;
     int keyboardPanelH = 110;
     bool showKeyboard = g_show_virtual_keyboard; // Simplified for init
-    bool showWaveform = false; // No file loaded yet during init
-    
+    bool showWaveform = false;                   // No file loaded yet during init
+
 #if SUPPORT_KARAOKE == TRUE
     int karaokePanelHeight = 40;
     bool showKaraoke = false; // No karaoke during init
 #endif
-    
-    int statusY = ((showKeyboard || showWaveform) ? (keyboardPanelY + keyboardPanelH + 10) : 
-                   (transportPanelY + transportPanelH + 10));
+
+    int statusY = ((showKeyboard || showWaveform) ? (keyboardPanelY + keyboardPanelH + 10) : (transportPanelY + transportPanelH + 10));
 #if SUPPORT_KARAOKE == TRUE
     if (showKaraoke)
         statusY += karaokePanelHeight + 5;
 #endif
-    
+
     // Add playlist panel
     int playlistPanelHeight = 300;
     statusY += playlistPanelHeight + 10;
-    
+
     return statusY + 115; // status panel + bottom padding
 }
 
@@ -283,7 +282,6 @@ static const float MAIN_VU_ALPHA = 0.12f; // main/master VU smoother
 static const float CHANNEL_VU_ALPHA = 0.85f; // per-channel VU very responsive
 // Activity/decay tuning for the activity-driven channel VU path
 static const float CHANNEL_ACTIVITY_DECAY = 0.60f; // lower -> faster decay (more responsive)
-
 
 // Dialog state (defined in gui_dialogs.c) — reference via externs so both
 // translation units share the same state and rendering functions.
@@ -549,6 +547,7 @@ void setWindowIcon(SDL_Window *window)
 #endif
 }
 
+// Playlist export functions
 int main(int argc, char *argv[])
 {
     // Single-instance check (Windows): if another instance exists, forward any file arg and exit.
@@ -735,7 +734,7 @@ int main(int argc, char *argv[])
 #else
     snprintf(playlist_path, sizeof(playlist_path), "%s/playlist.m3u", exe_dir);
 #endif
-    
+
     // Check if file exists and load it
     FILE *test_file = fopen(playlist_path, "r");
     if (test_file)
@@ -814,7 +813,7 @@ int main(int argc, char *argv[])
         {
             // Add file to playlist and set as current
             playlist_update_current_file(argv[1]);
-            
+
             duration = bae_get_len_ms();
             playing = false;    // Ensure we start from stopped state
             bae_play(&playing); // Auto-start playback
@@ -839,7 +838,7 @@ int main(int argc, char *argv[])
     bool rdown = false;  // right mouse button down
     bool rclick = false; // right mouse button click
     int mx = 0, my = 0;
-    int last_drag_progress = -1; // Track last dragged position to avoid repeated seeks
+    int last_drag_progress = -1;      // Track last dragged position to avoid repeated seeks
     int last_wave_drag_progress = -1; // Track waveform drag seek to avoid repeated seeks while holding
 
     while (running)
@@ -895,7 +894,7 @@ int main(int argc, char *argv[])
                             {
                                 // Add file to playlist and set as current
                                 playlist_update_current_file(incoming);
-                                
+
                                 duration = bae_get_len_ms();
                                 progress = 0;
                                 playing = false;
@@ -932,7 +931,7 @@ int main(int argc, char *argv[])
                 {
                     mdown = false;
                     mclick = true;
-                    
+
                     // Handle playlist drag end
                     playlist_handle_drag_end();
                 }
@@ -945,7 +944,7 @@ int main(int argc, char *argv[])
             case SDL_MOUSEMOTION:
                 mx = e.motion.x;
                 my = e.motion.y;
-                
+
                 // Handle playlist drag update
                 playlist_handle_drag_update(mx, my);
                 break;
@@ -1088,12 +1087,12 @@ int main(int argc, char *argv[])
                                 // For playlist scroll, we need to match the actual rendered coordinates
                                 // The playlist panel coordinates are calculated in the main rendering loop
                                 // Let's just use a simple approximation and let playlist module do detailed check
-                                
-#if SUPPORT_KARAOKE == TRUE                            
+
+#if SUPPORT_KARAOKE == TRUE
                                 bool showKaraoke = g_karaoke_enabled && !g_karaoke_suspended &&
                                                    (g_lyric_count > 0 || g_karaoke_line_current[0] || g_karaoke_line_previous[0]) &&
-                                                   !g_bae.is_audio_file &&g_bae.song;
-#endif                                
+                                                   !g_bae.is_audio_file && g_bae.song;
+#endif
                                 // Compute the exact playlist panel rect the same way it is calculated
                                 // during rendering so wheel handling matches the visible list area.
                                 int playlistPanelHeight = 300; // same as rendering
@@ -1120,7 +1119,8 @@ int main(int argc, char *argv[])
                                 // Let the playlist module decide whether the wheel event is inside
                                 // the actual list area (not the whole panel). It will compute the
                                 // list rect using the same layout math and handle scrolling.
-                                if (!playlist_handle_mouse_wheel(mx, my, wy, playlistPanel)) {
+                                if (!playlist_handle_mouse_wheel(mx, my, wy, playlistPanel))
+                                {
                                     // not in playlist list area - ignore here
                                 }
                             }
@@ -1188,7 +1188,7 @@ int main(int argc, char *argv[])
                             {
                                 // Add file to playlist and set as current
                                 playlist_update_current_file(dropped);
-                                
+
                                 duration = bae_get_len_ms();
                                 progress = 0;
                                 playing = false;    // Ensure we start from stopped state
@@ -1831,28 +1831,28 @@ int main(int argc, char *argv[])
                     BAESong_Stop(g_bae.song, FALSE);
                     BAESong_SetMicrosecondPosition(g_bae.song, 0);
                 }
-                
+
                 // Handle playlist advancement
                 if (g_playlist.count > 0 && g_playlist.current_index >= 0)
                 {
                     int next_index = playlist_get_next_song_for_end_of_song();
-                    
+
                     if (next_index >= 0 && next_index < g_playlist.count)
                     {
                         // Load and play the next song
                         const char *next_file = g_playlist.entries[next_index].filename;
-                        
+
                         BAE_PRINTF("Playlist: advancing to index %d: %s\n", next_index, next_file);
-                        
+
                         if (bae_load_song_with_settings(next_file, transpose, tempo, volume, loopPlay, reverbType, ch_enable))
                         {
                             // Update playlist current index
                             g_playlist.current_index = next_index;
-                            
+
                             // Start playback
                             duration = bae_get_len_ms();
                             progress = 0;
-                            
+
                             // Robust auto-start sequence: ensure at position 0, preroll again (defensive), then start
                             if (!g_bae.is_audio_file && g_bae.song)
                             {
@@ -1931,14 +1931,16 @@ int main(int argc, char *argv[])
         bae_service_wav_export();
 
         // Handle pending playlist loads
-        if (playlist_has_pending_load()) {
+        if (playlist_has_pending_load())
+        {
             const char *pending_file = playlist_get_pending_load_file();
-            if (pending_file && bae_load_song_with_settings(pending_file, transpose, tempo, volume, loopPlay, reverbType, ch_enable)) {
+            if (pending_file && bae_load_song_with_settings(pending_file, transpose, tempo, volume, loopPlay, reverbType, ch_enable))
+            {
                 // Successfully loaded the song from playlist
                 playlist_update_current_file(pending_file);
                 duration = bae_get_len_ms();
                 progress = 0;
-                
+
                 // Robust auto-start sequence: ensure at position 0, preroll again (defensive), then start
                 if (!g_bae.is_audio_file && g_bae.song)
                 {
@@ -1979,14 +1981,14 @@ int main(int argc, char *argv[])
         Rect channelPanel = {10, 10, 380, 140};
         Rect controlPanel = {400, 10, 490, 140};
         Rect transportPanel = {10, 160, 880, 85}; // increased height by 5px
-        
+
         // Keyboard panel comes after transport
         int keyboardPanelY = transportPanel.y + transportPanel.h + 10;
         Rect keyboardPanel = {10, keyboardPanelY, 880, 110};
 #ifdef SUPPORT_MIDI_HW
-    bool showKeyboard = g_show_virtual_keyboard && (g_midi_input_enabled || (g_bae.song_loaded && !g_bae.is_audio_file));
+        bool showKeyboard = g_show_virtual_keyboard && (g_midi_input_enabled || (g_bae.song_loaded && !g_bae.is_audio_file));
 #else
-    bool showKeyboard = g_show_virtual_keyboard && (g_bae.song_loaded && !g_bae.is_audio_file);
+        bool showKeyboard = g_show_virtual_keyboard && (g_bae.song_loaded && !g_bae.is_audio_file);
 #endif
 #if SUPPORT_KARAOKE == TRUE
         // Insert karaoke panel (if active) above status panel; dynamic window height
@@ -2000,33 +2002,31 @@ int main(int argc, char *argv[])
                            (g_lyric_count > 0 || g_karaoke_line_current[0] || g_karaoke_line_previous[0]) &&
                            g_bae.song_loaded && !g_bae.is_audio_file;
 #endif
-    // Karaoke now appears after keyboard panel or waveform (for audio files)
-    bool showWaveform = g_bae.is_audio_file && g_bae.sound;
-    // Always hide the virtual keyboard when waveform is active (including when MIDI input is enabled)
-    if (showWaveform)
-    {
-        showKeyboard = false;
-    }
+        // Karaoke now appears after keyboard panel or waveform (for audio files)
+        bool showWaveform = g_bae.is_audio_file && g_bae.sound;
+        // Always hide the virtual keyboard when waveform is active (including when MIDI input is enabled)
+        if (showWaveform)
+        {
+            showKeyboard = false;
+        }
 #if SUPPORT_KARAOKE == TRUE
-    Rect karaokePanel = {10, ((showKeyboard || showWaveform) ? (keyboardPanel.y + keyboardPanel.h + 10) : 
-                              (transportPanel.y + transportPanel.h + 10)), 880, karaokePanelHeight};
+        Rect karaokePanel = {10, ((showKeyboard || showWaveform) ? (keyboardPanel.y + keyboardPanel.h + 10) : (transportPanel.y + transportPanel.h + 10)), 880, karaokePanelHeight};
 #endif
 
-    int statusY = ((showKeyboard || showWaveform) ? (keyboardPanel.y + keyboardPanel.h + 10) : 
-                   (transportPanel.y + transportPanel.h + 10));
+        int statusY = ((showKeyboard || showWaveform) ? (keyboardPanel.y + keyboardPanel.h + 10) : (transportPanel.y + transportPanel.h + 10));
 #if SUPPORT_KARAOKE == TRUE
         if (showKaraoke)
         {
             statusY = karaokePanel.y + karaokePanel.h + 5;
         }
-#endif        
+#endif
         // Add playlist panel right above status panel
         int playlistPanelHeight = 300; // Reduced from 500px to 300px
         int playlistPanelY = statusY;
         statusY += playlistPanelHeight + 10; // Move status down by playlist height + gap
         Rect playlistPanel = {10, playlistPanelY, 880, playlistPanelHeight};
         bool showPlaylist = true; // Always show playlist
-        
+
         int neededH = statusY + 115; // status panel + bottom padding
         if (neededH != g_window_h)
         {
@@ -2407,8 +2407,8 @@ int main(int argc, char *argv[])
         draw_text(R, 687, 85, "Volume:", labelCol);
         // Allow volume slider interaction when reverb dropdown is closed. We want
         // users to adjust master volume even while external MIDI input is active.
-    // Disable volume interaction when a modal/dialog is open
-    bool volume_enabled = !g_reverbDropdownOpen && !modal_block;
+        // Disable volume interaction when a modal/dialog is open
+        bool volume_enabled = !g_reverbDropdownOpen && !modal_block;
         ui_slider(R, (Rect){687, 103, ddRect.w, 14}, &volume, 0, NEW_MAX_VOLUME_PCT,
                   volume_enabled ? ui_mx : -1, volume_enabled ? ui_my : -1,
                   volume_enabled ? ui_mdown : false, volume_enabled ? ui_mclick : false);
@@ -2817,8 +2817,10 @@ int main(int argc, char *argv[])
                 int inWfY = wfY + 1;
                 int inWfW = wfW - 2;
                 int inWfH = wfH - 2;
-                if (inWfW < 1) inWfW = 1;
-                if (inWfH < 1) inWfH = 1;
+                if (inWfW < 1)
+                    inWfW = 1;
+                if (inWfH < 1)
+                    inWfH = 1;
 
                 // Try to get raw sample pointer and length (in frames)
                 uint32_t frames = 0;
@@ -2937,10 +2939,13 @@ int main(int argc, char *argv[])
                         if (sampleRate > 0 && audio_total_frames > 0)
                         {
                             double frac = (double)wf_relx / (double)(inWfW);
-                            if (frac < 0.0) frac = 0.0;
-                            if (frac > 1.0) frac = 1.0;
+                            if (frac < 0.0)
+                                frac = 0.0;
+                            if (frac > 1.0)
+                                frac = 1.0;
                             uint32_t frame_position = (uint32_t)((double)audio_total_frames * frac);
-                            if (frame_position >= audio_total_frames) frame_position = audio_total_frames - 1;
+                            if (frame_position >= audio_total_frames)
+                                frame_position = audio_total_frames - 1;
                             computed_ms = (int)((double)frame_position * 1000.0 / sampleRate);
                         }
                     }
@@ -3005,7 +3010,8 @@ int main(int argc, char *argv[])
                         if (sampleRate > 0)
                         {
                             uint32_t frame_pos = (uint32_t)((double)playhead_ms * sampleRate / 1000.0);
-                            if (frame_pos >= audio_total_frames) frame_pos = audio_total_frames - 1;
+                            if (frame_pos >= audio_total_frames)
+                                frame_pos = audio_total_frames - 1;
                             double frac = (double)frame_pos / (double)audio_total_frames;
                             int phx = inWfX + (int)(frac * inWfW);
                             SDL_SetRenderDrawColor(R, g_highlight_color.r, g_highlight_color.g, g_highlight_color.b, 220);
@@ -3394,105 +3400,106 @@ int main(int argc, char *argv[])
                 }
             }
         }
-    SKIP_KEYBOARD_RENDER:        
-        
-        {
-            Rect loopR = {160, 215, 20, 20};
-            // Create tooltip area that includes checkbox and label
-            Rect loopTooltipArea = {160, 215, 70, 20}; // Wider to include "BAE Loop" text
-            bool clicked = false;
+    SKIP_KEYBOARD_RENDER:
+
+    {
+        Rect loopR = {160, 215, 20, 20};
+        // Create tooltip area that includes checkbox and label
+        Rect loopTooltipArea = {160, 215, 70, 20}; // Wider to include "BAE Loop" text
+        bool clicked = false;
 #ifdef SUPPORT_MIDI_HW
-            // When MIDI input is enabled, render a disabled Loop checkbox (no interaction) so it appears under the dim overlay
-            if (g_midi_input_enabled)
+        // When MIDI input is enabled, render a disabled Loop checkbox (no interaction) so it appears under the dim overlay
+        if (g_midi_input_enabled)
+        {
+            SDL_Color disabledBg = g_panel_bg;
+            SDL_Color disabledTxt = g_panel_border;
+            // Draw checkbox background and border
+            draw_rect(R, loopR, disabledBg);
+            draw_frame(R, loopR, g_panel_border);
+            Rect inner = {loopR.x + 3, loopR.y + 3, loopR.w - 6, loopR.h - 6};
+            if (loopPlay)
             {
-                SDL_Color disabledBg = g_panel_bg;
-                SDL_Color disabledTxt = g_panel_border;
-                // Draw checkbox background and border
-                draw_rect(R, loopR, disabledBg);
-                draw_frame(R, loopR, g_panel_border);
-                Rect inner = {loopR.x + 3, loopR.y + 3, loopR.w - 6, loopR.h - 6};
-                if (loopPlay)
-                {
-                    draw_rect(R, inner, g_accent_color);
-                    draw_frame(R, inner, g_button_text);
-                }
-                else
-                {
-                    draw_rect(R, inner, g_panel_bg);
-                    draw_frame(R, inner, g_panel_border);
-                }
-                // Label
-                draw_text(R, loopR.x + loopR.w + 6, loopR.y + 2, "BAE Loop", disabledTxt);
+                draw_rect(R, inner, g_accent_color);
+                draw_frame(R, inner, g_button_text);
             }
             else
             {
-#endif
-                if (!modal_block)
-                {
-                    if (ui_toggle(R, loopR, &loopPlay, "BAE Loop", ui_mx, ui_my, ui_mclick))
-                        clicked = true;
-                }
-                else if (g_exporting)
-                {
-                    // While exporting allow loop toggle using real mouse coords so user can uncheck loop
-                    if (ui_toggle(R, loopR, &loopPlay, "BAE Loop", mx, my, mclick))
-                        clicked = true;
-                }
-                
-                // Handle tooltip for BAE Loop
-                if (point_in(ui_mx, ui_my, loopTooltipArea) && !modal_block)
-                {
-                    const char *tooltip_text = "BAE Loop will interfere with the playlist, disable it to use the playlist.";
-                    
-                    // Measure actual text width and height
-                    int text_w, text_h;
-                    measure_text(tooltip_text, &text_w, &text_h);
-                    
-                    int tooltip_w = text_w + 8; // 4px padding on each side
-                    int tooltip_h = text_h + 8; // 4px padding top and bottom
-                    if (tooltip_w > 500) tooltip_w = 500; // Maximum width constraint
-                    
-                    int tooltip_x = ui_mx + 10;
-                    int tooltip_y = ui_my - 30;
-                    
-                    // Keep tooltip on screen
-                    if (tooltip_x + tooltip_w > WINDOW_W - 4)
-                        tooltip_x = WINDOW_W - tooltip_w - 4;
-                    if (tooltip_y < 4)
-                        tooltip_y = ui_my + 25; // Show below cursor if no room above
-                    
-                    g_loop_tooltip_rect = (Rect){tooltip_x, tooltip_y, tooltip_w, tooltip_h};
-                    strncpy(g_loop_tooltip_text, tooltip_text, sizeof(g_loop_tooltip_text) - 1);
-                    g_loop_tooltip_text[sizeof(g_loop_tooltip_text) - 1] = '\0';
-                    g_loop_tooltip_visible = true;
-                }
-                else
-                {
-                    g_loop_tooltip_visible = false;
-                }
-                
-                if (clicked)
-                {
-                    bae_set_loop(loopPlay);
-                    g_bae.loop_enabled_gui = loopPlay;
-
-                    // Update loop count on currently loaded audio file if any
-                    if (g_bae.is_audio_file && g_bae.sound)
-                    {
-                        uint32_t loopCount = loopPlay ? 0xFFFFFFFF : 0;
-                        BAESound_SetLoopCount(g_bae.sound, loopCount);
-                    }
-
-                    // Save settings when loop is changed
-                    if (g_current_bank_path[0] != '\0')
-                    {
-                        save_settings(g_current_bank_path, reverbType, loopPlay);
-                    }
-                }
-#ifdef SUPPORT_MIDI_HW
+                draw_rect(R, inner, g_panel_bg);
+                draw_frame(R, inner, g_panel_border);
             }
-#endif
+            // Label
+            draw_text(R, loopR.x + loopR.w + 6, loopR.y + 2, "BAE Loop", disabledTxt);
         }
+        else
+        {
+#endif
+            if (!modal_block)
+            {
+                if (ui_toggle(R, loopR, &loopPlay, "BAE Loop", ui_mx, ui_my, ui_mclick))
+                    clicked = true;
+            }
+            else if (g_exporting)
+            {
+                // While exporting allow loop toggle using real mouse coords so user can uncheck loop
+                if (ui_toggle(R, loopR, &loopPlay, "BAE Loop", mx, my, mclick))
+                    clicked = true;
+            }
+
+            // Handle tooltip for BAE Loop
+            if (point_in(ui_mx, ui_my, loopTooltipArea) && !modal_block)
+            {
+                const char *tooltip_text = "BAE Loop will interfere with the playlist, disable it to use the playlist.";
+
+                // Measure actual text width and height
+                int text_w, text_h;
+                measure_text(tooltip_text, &text_w, &text_h);
+
+                int tooltip_w = text_w + 8; // 4px padding on each side
+                int tooltip_h = text_h + 8; // 4px padding top and bottom
+                if (tooltip_w > 500)
+                    tooltip_w = 500; // Maximum width constraint
+
+                int tooltip_x = ui_mx + 10;
+                int tooltip_y = ui_my - 30;
+
+                // Keep tooltip on screen
+                if (tooltip_x + tooltip_w > WINDOW_W - 4)
+                    tooltip_x = WINDOW_W - tooltip_w - 4;
+                if (tooltip_y < 4)
+                    tooltip_y = ui_my + 25; // Show below cursor if no room above
+
+                g_loop_tooltip_rect = (Rect){tooltip_x, tooltip_y, tooltip_w, tooltip_h};
+                strncpy(g_loop_tooltip_text, tooltip_text, sizeof(g_loop_tooltip_text) - 1);
+                g_loop_tooltip_text[sizeof(g_loop_tooltip_text) - 1] = '\0';
+                g_loop_tooltip_visible = true;
+            }
+            else
+            {
+                g_loop_tooltip_visible = false;
+            }
+
+            if (clicked)
+            {
+                bae_set_loop(loopPlay);
+                g_bae.loop_enabled_gui = loopPlay;
+
+                // Update loop count on currently loaded audio file if any
+                if (g_bae.is_audio_file && g_bae.sound)
+                {
+                    uint32_t loopCount = loopPlay ? 0xFFFFFFFF : 0;
+                    BAESound_SetLoopCount(g_bae.sound, loopCount);
+                }
+
+                // Save settings when loop is changed
+                if (g_current_bank_path[0] != '\0')
+                {
+                    save_settings(g_current_bank_path, reverbType, loopPlay);
+                }
+            }
+#ifdef SUPPORT_MIDI_HW
+        }
+#endif
+    }
 #ifdef SUPPORT_MIDI_HW
         if (g_midi_input_enabled)
         {
@@ -3520,7 +3527,7 @@ int main(int argc, char *argv[])
                     {
                         // Add file to playlist and set as current
                         playlist_update_current_file(sel);
-                        
+
                         duration = bae_get_len_ms();
                         progress = 0;
                         // Robust auto-start sequence: ensure at position 0, preroll again (defensive), then start
@@ -3589,6 +3596,8 @@ int main(int argc, char *argv[])
 #ifdef SUPPORT_MIDI_HW
                         /* export_allowed already ensures g_midi_output_enabled == false */
 #endif
+
+                        // Single song export
                         // When export button clicked, open save dialog using extension depending on codec
                         int export_dialog_type = 0; // Default to WAV
 
@@ -3774,6 +3783,7 @@ int main(int argc, char *argv[])
                             }
                             free(export_file);
                         }
+                        ui_mclick = false; // consume click
                     }
                 }
                 else
@@ -3792,7 +3802,6 @@ int main(int argc, char *argv[])
                     int text_y = disr.y + (disr.h - text_h) / 2;
                     draw_text(R, text_x, text_y, "Export", disabledTxt);
                 }
-
 
 #ifdef SUPPORT_MIDI_HW
             }
@@ -4438,7 +4447,8 @@ int main(int argc, char *argv[])
         }
 #endif
         // Playlist panel - sync with currently playing file first
-        if (g_bae.song_loaded && g_bae.loaded_path[0]) {
+        if (g_bae.song_loaded && g_bae.loaded_path[0])
+        {
             playlist_update_current_file(g_bae.loaded_path);
         }
         playlist_render(R, playlistPanel, ui_mx, ui_my, ui_mdown, ui_mclick, ui_rclick, modal_block);
@@ -4491,11 +4501,12 @@ int main(int argc, char *argv[])
                     // Measure actual text width and height
                     int text_w, text_h;
                     measure_text(tip, &text_w, &text_h);
-                    
+
                     int tw = text_w + 8; // 4px padding on each side
                     int th = text_h + 8; // 4px padding top and bottom
-                    if (tw > 480) tw = 480; // Maximum width constraint
-                    
+                    if (tw > 480)
+                        tw = 480; // Maximum width constraint
+
                     int tx = mx + 12;
                     int ty = my + 12;
                     if (tx + tw > WINDOW_W - 4)
@@ -4553,11 +4564,12 @@ int main(int argc, char *argv[])
                     // Measure actual text width and height
                     int text_w, text_h;
                     measure_text(tip, &text_w, &text_h);
-                    
+
                     int tw = text_w + 8; // 4px padding on each side
                     int th = text_h + 8; // 4px padding top and bottom
-                    if (tw > 450) tw = 450; // Maximum width constraint
-                    
+                    if (tw > 450)
+                        tw = 450; // Maximum width constraint
+
                     int tx = mx + 12;
                     int ty = my + 12; // initial placement near cursor
                     if (tx + tw > WINDOW_W - 4)
@@ -5039,7 +5051,7 @@ int main(int argc, char *argv[])
             SDL_Color tfg = g_is_dark_mode ? g_text_color : (SDL_Color){32, 32, 32, 255};
             draw_rect(R, tipRect, tbg);
             draw_frame(R, tipRect, tbd);
-            
+
             // Center text vertically in tooltip
             int text_w, text_h;
             measure_text(g_file_tooltip_text, &text_w, &text_h);
@@ -5076,7 +5088,7 @@ int main(int argc, char *argv[])
             SDL_Color tfg = g_is_dark_mode ? g_text_color : (SDL_Color){32, 32, 32, 255};
             draw_rect(R, tipRect, tbg);
             draw_frame(R, tipRect, tbd);
-            
+
             // Center text vertically in tooltip
             int text_w, text_h;
             measure_text(g_bank_tooltip_text, &text_w, &text_h);
@@ -5448,7 +5460,7 @@ int main(int argc, char *argv[])
         current_settings.window_y = y;
         save_full_settings(&current_settings);
     }
-    
+
     // Auto-save playlist to application directory
     get_executable_directory(exe_dir, sizeof(exe_dir));
 #ifdef _WIN32
@@ -5456,7 +5468,7 @@ int main(int argc, char *argv[])
 #else
     snprintf(playlist_path, sizeof(playlist_path), "%s/playlist.m3u", exe_dir);
 #endif
-    
+
     if (g_playlist.count > 0)
     {
         BAE_PRINTF("Auto-saving playlist: %s\n", playlist_path);
@@ -5470,7 +5482,7 @@ int main(int argc, char *argv[])
             BAE_PRINTF("Removed empty playlist file: %s\n", playlist_path);
         }
     }
-    
+
     SDL_DestroyRenderer(R);
     SDL_DestroyWindow(win);
     g_main_window = NULL; // Clear global reference
