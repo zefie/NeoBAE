@@ -388,7 +388,7 @@ void playbae_printf(const char *fmt, ...)
 // prototypes
 
 char const copyrightInfo[] =
-   "Copyright (C) 2009 Beatnik, Inc and Copyright (C) 2021-2025 Zefie Networks. All rights reserved.\n";
+    "Copyright (C) 2009 Beatnik, Inc and Copyright (C) 2021-2025 Zefie Networks. All rights reserved.\n";
 
 static char playFileString[512];
 
@@ -406,29 +406,29 @@ static void init_playFileString(void)
 }
 
 char const usageStringFmt[] =
-   "USAGE:  playbae  -p  {patches.hsb}\n"
-   "                 -f  {%s}\n"
-   "                 -o  {write output to file}\n"
+    "USAGE:  playbae  -p  {patches.hsb}\n"
+    "                 -f  {%s}\n"
+    "                 -o  {write output to file}\n"
 #if defined(USE_MPEG_ENCODER) && (USE_MPEG_ENCODER != 0)
-        "                 -om {write MP3 output to file}\n"
+    "                 -om {write MP3 output to file}\n"
 #endif
 #if defined(USE_FLAC_ENCODER) && (USE_FLAC_ENCODER != 0)
-        "                 -of {write FLAC output to file}\n"
+    "                 -of {write FLAC output to file}\n"
 #endif
 #ifdef SUPPORT_KARAOKE
-        "                 -k  {enable karaoke lyric display (MIDI/RMF with lyrics)}\n"
+    "                 -k  {enable karaoke lyric display (MIDI/RMF with lyrics)}\n"
 #endif
-        "                 -l  {# of times to loop}\n"
-        "                 -v  {max volume (in percent, overdrive allowed) (default: 100)}\n"
-        "                 -vc {velocity curve 0-4 (default engine setting)}\n"
-        "                 -t  {max length in seconds to play midi (0 = forever)}\n"
-        "                 -mc {MIDI/RMF Channels to mute, 1-16, comma seperated (example: 1,10,16)}\n"
-        "                 -rv {set default reverb type}\n"
-        "                 -nf {disable fade-out when stopping via time limit or CTRL-C}\n"
-        "                 -q  {quiet mode}\n"
-        "                 -b  {CBR bitrate kbps for MP3 export (default 128)}\n"
-        "                 -h  {displays this message then exits}\n"
-        "                 -x  {displays additional lesser-used options}\n";
+    "                 -l  {# of times to loop}\n"
+    "                 -v  {max volume (in percent, overdrive allowed) (default: 100)}\n"
+    "                 -vc {velocity curve 0-4 (default engine setting)}\n"
+    "                 -t  {max length in seconds to play midi (0 = forever)}\n"
+    "                 -mc {MIDI/RMF Channels to mute, 1-16, comma seperated (example: 1,10,16)}\n"
+    "                 -rv {set default reverb type}\n"
+    "                 -nf {disable fade-out when stopping via time limit or CTRL-C}\n"
+    "                 -q  {quiet mode}\n"
+    "                 -b  {CBR bitrate kbps for MP3 export (default 128)}\n"
+    "                 -h  {displays this message then exits}\n"
+    "                 -x  {displays additional lesser-used options}\n";
 
 char const usageStringExtra[] =
     {
@@ -444,7 +444,7 @@ char const usageStringExtra[] =
         "                 -a  {Play a AIF file}\n"
         "                 -r  {Play a RMF file}\n"
         "                 -m  {Play a MID file}\n"
-#if defined(USE_MPEG_DECODER) && (USE_MPEG_DECODER != 0)        
+#if defined(USE_MPEG_DECODER) && (USE_MPEG_DECODER != 0)
         "                 -mp {Play an MPEG audio file (MP2/MP3)}\n"
 #endif
         "                 -d  {verbose (debug) mode}\n"};
