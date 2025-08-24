@@ -844,6 +844,9 @@ typedef enum SndCompressionType
     C_ULAW              = FOUR_CHAR('u','l','a','w'),   // 'ulaw'   �Law; 2 to 1
     C_ALAW              = FOUR_CHAR('a','l','a','w'),   // 'ulaw'   aLaw; 2 to 1
 
+    // FLAC lossless compression
+    C_FLAC              = FOUR_CHAR('f','l','a','c'),   // 'flac'   FLAC lossless
+
                                                         // for all of these compression types
                                                         // the SndCompressionSubType (CS_DEFAULT)
                                                         // is CS_MPEG2.
@@ -1185,6 +1188,10 @@ OPErr XCompressMPEG(GM_Waveform const* pWave,
 
 #if USE_MPEG_ENCODER != 0 || USE_MPEG_DECODER != 0
 OPErr XExpandMPEG(GM_Waveform const* src, UINT32 startFrame, GM_Waveform* dst);
+#endif
+
+#if USE_FLAC_DECODER != 0
+OPErr XExpandFLAC(GM_Waveform const* src, UINT32 startFrame, GM_Waveform* dst);
 #endif
 
 

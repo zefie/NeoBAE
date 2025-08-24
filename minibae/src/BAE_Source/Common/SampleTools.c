@@ -557,7 +557,7 @@ UINT32          const decodingBytes = decodingFrames * bytesPerFrame;
         }
         break;
 
-#if USE_MPEG_DECODER != 0
+#if USE_MPEG_DECODER != FALSE
     case C_MPEG_32:
     case C_MPEG_40:
     case C_MPEG_48:
@@ -573,6 +573,11 @@ UINT32          const decodingBytes = decodingFrames * bytesPerFrame;
     case C_MPEG_256:
     case C_MPEG_320:
         return XExpandMPEG(src, startFrame, dst);
+#endif
+
+#if USE_FLAC_DECODER != 0
+    case C_FLAC:
+        return XExpandFLAC(src, startFrame, dst);
 #endif
 
 #if X_PLATFORM == X_MACINTOSH_9

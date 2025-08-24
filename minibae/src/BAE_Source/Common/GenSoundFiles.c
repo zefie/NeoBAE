@@ -3313,6 +3313,83 @@ void * GM_CreateFileState(AudioFileType fileType)
     return state;
 }
 
+#if USE_FLAC_DECODER != 0
+// Wrapper to expand FLAC compressed GM_Waveform into decoded PCM waveform
+OPErr XExpandFLAC(GM_Waveform const* src, UINT32 startFrame, GM_Waveform* dst)
+{
+    OPErr err = NO_ERR;
+    GM_Waveform *decoded = NULL;
+
+    if (!src || !dst)
+        return PARAM_ERR;
+
+    // PV_ReadIntoMemoryFLACFile expects an XFILE; create one from memory
+    // The helper GM_ReadFileIntoMemoryFromMemory is already available, but
+    // PV_ReadIntoMemoryFLACFile is internal and used above. We'll emulate
+    // how MPEG wrapper handles memory-based expansion: call PV_ReadIntoMemoryFLACFile
+    // by opening a memory XFILE.
+
+    XFILE file = XFileOpenForReadFromMemory((void*)src->theWaveform, src->waveSize);
+    if (!file)
+        return FILE_NOT_FOUND;
+
+    decoded = PV_ReadIntoMemoryFLACFile(file, TRUE, NULL, NULL, NULL, &err);
+    XFileClose(file);
+
+    if (!decoded)
+    {
+        return err != NO_ERR ? err : BAD_FILE;
+    }
+
+    // Determine bytes per frame of decoded data
+    {
+        const uint32_t bytesPerFrame = decoded->channels * (decoded->bitSize / 8);
+        uint32_t availableFrames = 0;
+        if (decoded->waveFrames > startFrame)
+            availableFrames = decoded->waveFrames - startFrame;
+
+        // Number of frames requested in dst originally mirrors src->waveFrames
+        uint32_t requestedFrames = dst->waveFrames;
+        uint32_t framesToCopy = availableFrames < requestedFrames ? availableFrames : requestedFrames;
+
+        uint32_t copyBytes = framesToCopy * bytesPerFrame;
+
+        // Allocate buffer for dst waveform
+        dst->theWaveform = (XPTR)XNewPtr(copyBytes);
+        if (!dst->theWaveform)
+        {
+            // cleanup
+            if (decoded->theWaveform)
+                XDisposePtr(decoded->theWaveform);
+            XDisposePtr(decoded);
+            return MEMORY_ERR;
+        }
+
+        // Copy requested range from decoded buffer
+        if (copyBytes > 0)
+        {
+            XBlockMove(((XBYTE*)decoded->theWaveform) + (startFrame * bytesPerFrame), dst->theWaveform, copyBytes);
+        }
+
+        // Set dst metadata
+        dst->waveFrames = framesToCopy;
+        dst->waveSize = copyBytes;
+        dst->bitSize = decoded->bitSize;
+        dst->channels = decoded->channels;
+        dst->sampledRate = decoded->sampledRate;
+        dst->baseMidiPitch = decoded->baseMidiPitch;
+        dst->compressionType = C_NONE;
+
+        // Free temporary decoded buffer and struct
+        if (decoded->theWaveform)
+            XDisposePtr(decoded->theWaveform);
+        XDisposePtr(decoded);
+    }
+
+    return NO_ERR;
+}
+#endif
+
 void GM_DisposeFileState(AudioFileType fileType, void *state)
 {
     if (fileType == FILE_AU_TYPE) {
