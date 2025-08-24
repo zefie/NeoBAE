@@ -28,6 +28,9 @@ void rmf_info_load_if_needed(void);
 
 // Platform file dialogs
 char *open_file_dialog(void);
+char *open_folder_dialog(void); // For folder selection to add all files
+char *open_playlist_dialog(void); // For M3U playlist files
+char *save_playlist_dialog(void); // For saving M3U playlist files
 
 // Dialog rendering functions
 void render_rmf_info_dialog(SDL_Renderer *R, int mx, int my, bool mclick);

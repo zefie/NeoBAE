@@ -27,8 +27,10 @@ for f in Makefile.gui-mingw Makefile.mingw Makefile.gui Makefile Makefile.clang;
     runtest make -f ${f} FLAC_ENC=1 FLAC_DEC=1 all
     # midi hw only
     runtest make -f ${f} ENABLE_MIDI_HW=1 all
+    # karaoke support
+    runtest make -f ${f} KARAOKE=1 all
     # full build
-    runtest make -f ${f} ENABLE_MIDI_HW=1 MP3_ENC=1 MP3_DEC=1 FLAC_ENC=1 FLAC_DEC=1 all
+    runtest make -f ${f} ENABLE_MIDI_HW=1 MP3_ENC=1 MP3_DEC=1 FLAC_ENC=1 FLAC_DEC=1 KARAOKE=1 all
     if [ "${f}" == "Makefile.gui" ]; then
         # Linux HW Midi Drivers
         runtest make -f ${f} ENABLE_MIDI_HW=1 MP3_ENC=1 MP3_DEC=1 FLAC_ENC=1 FLAC_DEC=1 ENABLE_ALSA=1 all

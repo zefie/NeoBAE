@@ -54,6 +54,9 @@ extern bool g_in_bank_load_recreate;
 extern int g_sample_rate_hz;
 extern bool g_stereo_output;
 
+// Sound volume tracking
+extern double g_last_applied_sound_volume;
+
 // Per-channel VU meter state
 extern float g_channel_vu[16];
 extern float g_channel_peak_level[16];

@@ -48,6 +48,7 @@
 #include "gui_widgets.h" // for UI widget functions
 #include "gui_text.h"    // for text rendering functions
 #include "gui_midi.h"    // for virtual keyboard functions
+#include "gui_playlist.h" // for playlist panel functions
 
 /* Forward-declare dialog renderer from gui_dialogs.c to avoid including the
     full header (which defines globals that conflict with this file's statics). */
@@ -84,6 +85,38 @@ bool recreate_mixer_and_restore(int sampleRateHz, bool stereo, int reverbType,
                                 bool ch_enable[16]);
 bool load_bank(const char *path, bool current_playing_state, int transpose, int tempo, int volume, bool loop_enabled, int reverb_type, bool ch_enable[16], bool save_to_settings);
 bool load_bank_simple(const char *path, bool save_to_settings, int reverb_type, bool loop_enabled);
+
+// Calculate the required window height based on visible panels
+int calculate_window_height(void)
+{
+    // Transport panel
+    int transportPanelY = 160;
+    int transportPanelH = 85;
+    
+    // Keyboard panel comes after transport
+    int keyboardPanelY = transportPanelY + transportPanelH + 10;
+    int keyboardPanelH = 110;
+    bool showKeyboard = g_show_virtual_keyboard; // Simplified for init
+    bool showWaveform = false; // No file loaded yet during init
+    
+#if SUPPORT_KARAOKE == TRUE
+    int karaokePanelHeight = 40;
+    bool showKaraoke = false; // No karaoke during init
+#endif
+    
+    int statusY = ((showKeyboard || showWaveform) ? (keyboardPanelY + keyboardPanelH + 10) : 
+                   (transportPanelY + transportPanelH + 10));
+#if SUPPORT_KARAOKE == TRUE
+    if (showKaraoke)
+        statusY += karaokePanelHeight + 5;
+#endif
+    
+    // Add playlist panel
+    int playlistPanelHeight = 300;
+    statusY += playlistPanelHeight + 10;
+    
+    return statusY + 115; // status panel + bottom padding
+}
 
 // Embedded TTF font (generated header). Define EMBED_TTF_FONT and
 // generate embedded_font.h via scripts/create_embedded_font_h.py to enable.
@@ -169,6 +202,9 @@ char g_current_bank_path[512] = "";
 #define WINDOW_W 900
 int g_window_h = WINDOW_BASE_H; // dynamic height (expands when karaoke visible)
 
+// Global window reference for settings saving
+SDL_Window *g_main_window = NULL;
+
 // ------------- miniBAE integration -------------
 
 BAEGUI g_bae = {0};
@@ -217,6 +253,7 @@ char *get_absolute_path(const char *path)
 
 // Forward declaration (defined later) so helpers can call it
 void karaoke_commit_line(uint32_t time_us, const char *line);
+#endif
 
 // Total playtime globals (ms) tracked across the session — used by transport UI
 // This timer accumulates playback time even when the song loops and is
@@ -247,8 +284,6 @@ static const float CHANNEL_VU_ALPHA = 0.85f; // per-channel VU very responsive
 // Activity/decay tuning for the activity-driven channel VU path
 static const float CHANNEL_ACTIVITY_DECAY = 0.60f; // lower -> faster decay (more responsive)
 
-// Raw MIDI event callback from engine — forward to external MIDI output when enabled
-#endif
 
 // Dialog state (defined in gui_dialogs.c) — reference via externs so both
 // translation units share the same state and rendering functions.
@@ -266,6 +301,10 @@ extern char g_bank_tooltip_text[520];
 extern bool g_file_tooltip_visible;
 extern Rect g_file_tooltip_rect;
 extern char g_file_tooltip_text[520];
+
+extern bool g_loop_tooltip_visible;
+extern Rect g_loop_tooltip_rect;
+extern char g_loop_tooltip_text[520];
 
 // WAV export state
 
@@ -674,12 +713,57 @@ int main(int argc, char *argv[])
     // Load bank database AFTER mixer so load_bank can succeed
     load_bankinfo();
 
+    // Initialize playlist system
+    playlist_init();
+
+    // Apply playlist settings AFTER playlist_init() to avoid being reset
+    if (settings.has_shuffle)
+    {
+        g_playlist.shuffle_enabled = settings.shuffle_enabled;
+    }
+    if (settings.has_repeat)
+    {
+        g_playlist.repeat_mode = settings.repeat_mode;
+    }
+
+    // Auto-load playlist.m3u from application directory if it exists
+    char exe_dir[512];
+    get_executable_directory(exe_dir, sizeof(exe_dir));
+    char playlist_path[768];
+#ifdef _WIN32
+    snprintf(playlist_path, sizeof(playlist_path), "%s\\playlist.m3u", exe_dir);
+#else
+    snprintf(playlist_path, sizeof(playlist_path), "%s/playlist.m3u", exe_dir);
+#endif
+    
+    // Check if file exists and load it
+    FILE *test_file = fopen(playlist_path, "r");
+    if (test_file)
+    {
+        fclose(test_file);
+        BAE_PRINTF("Auto-loading playlist: %s\n", playlist_path);
+        playlist_load(playlist_path);
+    }
+
     if (!g_bae.bank_loaded)
     {
         BAE_PRINTF("WARNING: No patch bank loaded. Place patches.hsb next to executable or use built-in patches.\n");
     }
 
-    SDL_Window *win = SDL_CreateWindow("miniBAE Player", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, WINDOW_W, g_window_h, SDL_WINDOW_SHOWN);
+    // Calculate correct window height including playlist panel
+    g_window_h = calculate_window_height();
+
+    // Use saved window position if available, otherwise center with 200px offset
+    int window_x = SDL_WINDOWPOS_CENTERED;
+    int window_y = SDL_WINDOWPOS_CENTERED + 200;
+    if (settings.has_window_pos)
+    {
+        window_x = settings.window_x;
+        window_y = settings.window_y;
+    }
+
+    SDL_Window *win = SDL_CreateWindow("miniBAE Player", window_x, window_y, WINDOW_W, g_window_h, SDL_WINDOW_SHOWN);
+    g_main_window = win; // Store global reference for settings saving
     setWindowTitle(win);
     setWindowIcon(win);
     if (!win)
@@ -728,6 +812,9 @@ int main(int argc, char *argv[])
     {
         if (bae_load_song_with_settings(argv[1], transpose, tempo, volume, loopPlay, reverbType, ch_enable))
         {
+            // Add file to playlist and set as current
+            playlist_update_current_file(argv[1]);
+            
             duration = bae_get_len_ms();
             playing = false;    // Ensure we start from stopped state
             bae_play(&playing); // Auto-start playback
@@ -749,6 +836,8 @@ int main(int argc, char *argv[])
     Uint32 lastTick = SDL_GetTicks();
     bool mdown = false;
     bool mclick = false;
+    bool rdown = false;  // right mouse button down
+    bool rclick = false; // right mouse button click
     int mx = 0, my = 0;
     int last_drag_progress = -1; // Track last dragged position to avoid repeated seeks
     int last_wave_drag_progress = -1; // Track waveform drag seek to avoid repeated seeks while holding
@@ -757,6 +846,7 @@ int main(int argc, char *argv[])
     {
         SDL_Event e;
         mclick = false;
+        rclick = false;
         while (SDL_PollEvent(&e))
         {
             switch (e.type)
@@ -803,6 +893,9 @@ int main(int argc, char *argv[])
 #endif
                             if (bae_load_song_with_settings(incoming, transpose, tempo, volume, loopPlay, reverbType, ch_enable))
                             {
+                                // Add file to playlist and set as current
+                                playlist_update_current_file(incoming);
+                                
                                 duration = bae_get_len_ms();
                                 progress = 0;
                                 playing = false;
@@ -829,17 +922,32 @@ int main(int argc, char *argv[])
                 {
                     mdown = true;
                 }
+                else if (e.button.button == SDL_BUTTON_RIGHT)
+                {
+                    rdown = true;
+                }
                 break;
             case SDL_MOUSEBUTTONUP:
                 if (e.button.button == SDL_BUTTON_LEFT)
                 {
                     mdown = false;
                     mclick = true;
+                    
+                    // Handle playlist drag end
+                    playlist_handle_drag_end();
+                }
+                else if (e.button.button == SDL_BUTTON_RIGHT)
+                {
+                    rdown = false;
+                    rclick = true;
                 }
                 break;
             case SDL_MOUSEMOTION:
                 mx = e.motion.x;
                 my = e.motion.y;
+                
+                // Handle playlist drag update
+                playlist_handle_drag_update(mx, my);
                 break;
             case SDL_MOUSEWHEEL:
             {
@@ -974,6 +1082,48 @@ int main(int argc, char *argv[])
                                     bae_set_volume(volume);
                                 }
                             }
+                            // Playlist scroll handling
+                            else
+                            {
+                                // For playlist scroll, we need to match the actual rendered coordinates
+                                // The playlist panel coordinates are calculated in the main rendering loop
+                                // Let's just use a simple approximation and let playlist module do detailed check
+                                
+#if SUPPORT_KARAOKE == TRUE                            
+                                bool showKaraoke = g_karaoke_enabled && !g_karaoke_suspended &&
+                                                   (g_lyric_count > 0 || g_karaoke_line_current[0] || g_karaoke_line_previous[0]) &&
+                                                   !g_bae.is_audio_file &&g_bae.song;
+#endif                                
+                                // Compute the exact playlist panel rect the same way it is calculated
+                                // during rendering so wheel handling matches the visible list area.
+                                int playlistPanelHeight = 300; // same as rendering
+                                int keyboardPanelY_local = transportPanel.y + transportPanel.h + 10;
+                                Rect keyboardPanel_local = {10, keyboardPanelY_local, 880, 110};
+                                bool showKeyboard_local = g_show_virtual_keyboard && g_bae.song && !g_bae.is_audio_file && g_bae.song_loaded;
+                                bool showWaveform_local = g_bae.is_audio_file && g_bae.sound;
+                                if (showWaveform_local)
+                                    showKeyboard_local = false;
+#if SUPPORT_KARAOKE == TRUE
+                                bool showKaraoke_local = g_karaoke_enabled && !g_karaoke_suspended &&
+                                                         (g_lyric_count > 0 || g_karaoke_line_current[0] || g_karaoke_line_previous[0]) &&
+                                                         g_bae.song_loaded && !g_bae.is_audio_file;
+                                int karaokePanelHeight_local = 40;
+#endif
+                                int statusY_local = ((showKeyboard_local || showWaveform_local) ? (keyboardPanel_local.y + keyboardPanel_local.h + 10) : (transportPanel.y + transportPanel.h + 10));
+#if SUPPORT_KARAOKE == TRUE
+                                if (showKaraoke_local)
+                                    statusY_local = statusY_local + karaokePanelHeight_local + 5;
+#endif
+                                int playlistPanelY = statusY_local;
+                                Rect playlistPanel = {10, playlistPanelY, 880, playlistPanelHeight};
+
+                                // Let the playlist module decide whether the wheel event is inside
+                                // the actual list area (not the whole panel). It will compute the
+                                // list rect using the same layout math and handle scrolling.
+                                if (!playlist_handle_mouse_wheel(mx, my, wy, playlistPanel)) {
+                                    // not in playlist list area - ignore here
+                                }
+                            }
                         }
                     }
                 }
@@ -984,15 +1134,18 @@ int main(int argc, char *argv[])
                 char *dropped = e.drop.file;
                 if (dropped)
                 {
-                    // Check if it's a bank file (.hsb)
+                    // Check file extension
                     const char *ext = strrchr(dropped, '.');
                     bool is_bank_file = false;
+                    bool is_playlist_file = false;
                     if (ext)
                     {
 #ifdef _WIN32
                         is_bank_file = (_stricmp(ext, ".hsb") == 0);
+                        is_playlist_file = (_stricmp(ext, ".m3u") == 0);
 #else
                         is_bank_file = (strcasecmp(ext, ".hsb") == 0);
+                        is_playlist_file = (strcasecmp(ext, ".m3u") == 0);
 #endif
                     }
 
@@ -1010,6 +1163,13 @@ int main(int argc, char *argv[])
                             set_status_message("Failed to load dropped bank file");
                         }
                     }
+                    else if (is_playlist_file)
+                    {
+                        // Load as playlist
+                        BAE_PRINTF("Drag and drop: Loading playlist file: %s\n", dropped);
+                        playlist_load(dropped);
+                        set_status_message("Playlist loaded");
+                    }
                     else
                     {
 #ifdef SUPPORT_MIDI_HW
@@ -1026,6 +1186,9 @@ int main(int argc, char *argv[])
                             BAE_PRINTF("Drag and drop: Loading media file: %s\n", dropped);
                             if (bae_load_song_with_settings(dropped, transpose, tempo, volume, loopPlay, reverbType, ch_enable))
                             {
+                                // Add file to playlist and set as current
+                                playlist_update_current_file(dropped);
+                                
                                 duration = bae_get_len_ms();
                                 progress = 0;
                                 playing = false;    // Ensure we start from stopped state
@@ -1392,6 +1555,15 @@ int main(int argc, char *argv[])
             playing = g_bae.is_playing;
         }
 
+#ifdef SUPPORT_MIDI_HW
+        // Clear playing state when MIDI input is enabled to ensure Play button shows "Play" not "Pause"
+        if (g_midi_input_enabled && playing)
+        {
+            playing = false;
+            g_bae.is_playing = false;
+        }
+#endif
+
         // If this is an audio file (WAV/FLAC/MP3) and the GUI loop checkbox is enabled,
         // Note: With the new loop count feature, BAESound objects handle looping internally
         // so we no longer need manual loop detection and restart
@@ -1659,6 +1831,70 @@ int main(int argc, char *argv[])
                     BAESong_Stop(g_bae.song, FALSE);
                     BAESong_SetMicrosecondPosition(g_bae.song, 0);
                 }
+                
+                // Handle playlist advancement
+                if (g_playlist.count > 0 && g_playlist.current_index >= 0)
+                {
+                    int next_index = playlist_get_next_song_for_end_of_song();
+                    
+                    if (next_index >= 0 && next_index < g_playlist.count)
+                    {
+                        // Load and play the next song
+                        const char *next_file = g_playlist.entries[next_index].filename;
+                        
+                        BAE_PRINTF("Playlist: advancing to index %d: %s\n", next_index, next_file);
+                        
+                        if (bae_load_song_with_settings(next_file, transpose, tempo, volume, loopPlay, reverbType, ch_enable))
+                        {
+                            // Update playlist current index
+                            g_playlist.current_index = next_index;
+                            
+                            // Start playback
+                            duration = bae_get_len_ms();
+                            progress = 0;
+                            
+                            // Robust auto-start sequence: ensure at position 0, preroll again (defensive), then start
+                            if (!g_bae.is_audio_file && g_bae.song)
+                            {
+                                BAESong_SetMicrosecondPosition(g_bae.song, 0);
+                                BAESong_Preroll(g_bae.song);
+                                if (BAESong_Start(g_bae.song, 0) == BAE_NO_ERROR)
+                                {
+                                    playing = true;
+                                    g_bae.is_playing = true;
+                                    g_bae.song_finished = false;
+                                    BAE_PRINTF("Playlist: next song started successfully\n");
+                                }
+                                else
+                                {
+                                    BAE_PRINTF("Playlist: failed to start next song\n");
+                                }
+                            }
+                            else if (g_bae.is_audio_file && g_bae.sound)
+                            {
+                                if (BAESound_Start(g_bae.sound, 0, FLOAT_TO_UNSIGNED_FIXED(g_last_applied_sound_volume), 0) == BAE_NO_ERROR)
+                                {
+                                    playing = true;
+                                    g_bae.is_playing = true;
+                                    g_bae.song_finished = false;
+                                    BAE_PRINTF("Playlist: next audio file started successfully\n");
+                                }
+                                else
+                                {
+                                    BAE_PRINTF("Playlist: failed to start next audio file\n");
+                                }
+                            }
+                        }
+                        else
+                        {
+                            BAE_PRINTF("Playlist: failed to load next song: %s\n", next_file);
+                        }
+                    }
+                    else
+                    {
+                        BAE_PRINTF("Playlist: end of playlist reached\n");
+                    }
+                }
             }
         }
 
@@ -1694,6 +1930,37 @@ int main(int argc, char *argv[])
         // Service WAV export if active
         bae_service_wav_export();
 
+        // Handle pending playlist loads
+        if (playlist_has_pending_load()) {
+            const char *pending_file = playlist_get_pending_load_file();
+            if (pending_file && bae_load_song_with_settings(pending_file, transpose, tempo, volume, loopPlay, reverbType, ch_enable)) {
+                // Successfully loaded the song from playlist
+                playlist_update_current_file(pending_file);
+                duration = bae_get_len_ms();
+                progress = 0;
+                
+                // Robust auto-start sequence: ensure at position 0, preroll again (defensive), then start
+                if (!g_bae.is_audio_file && g_bae.song)
+                {
+                    BAESong_SetMicrosecondPosition(g_bae.song, 0);
+                    BAESong_Preroll(g_bae.song);
+                }
+                playing = false; // force toggle logic
+                if (!bae_play(&playing))
+                {
+                    BAE_PRINTF("Autoplay after playlist double-click failed for '%s'\n", pending_file);
+                }
+                if (playing && g_bae.mixer)
+                {
+                    for (int i = 0; i < 3; i++)
+                    {
+                        BAEMixer_Idle(g_bae.mixer);
+                    }
+                }
+            }
+            playlist_clear_pending_load();
+        }
+
         // Draw UI with improved layout and styling
 #ifdef _WIN32
         SDL_SetRenderDrawColor(R, g_theme.bg_color.r, g_theme.bg_color.g, g_theme.bg_color.b, 255);
@@ -1712,6 +1979,8 @@ int main(int argc, char *argv[])
         Rect channelPanel = {10, 10, 380, 140};
         Rect controlPanel = {400, 10, 490, 140};
         Rect transportPanel = {10, 160, 880, 85}; // increased height by 5px
+        
+        // Keyboard panel comes after transport
         int keyboardPanelY = transportPanel.y + transportPanel.h + 10;
         Rect keyboardPanel = {10, keyboardPanelY, 880, 110};
 #ifdef SUPPORT_MIDI_HW
@@ -1719,7 +1988,7 @@ int main(int argc, char *argv[])
 #else
     bool showKeyboard = g_show_virtual_keyboard && (g_bae.song_loaded && !g_bae.is_audio_file);
 #endif
-#ifdef SUPPORT_KARAOKE
+#if SUPPORT_KARAOKE == TRUE
         // Insert karaoke panel (if active) above status panel; dynamic window height
         int karaokePanelHeight = 40;
         // Show karaoke if enabled and not suspended for the current song.
@@ -1730,6 +1999,7 @@ int main(int argc, char *argv[])
         bool showKaraoke = g_karaoke_enabled && !g_karaoke_suspended &&
                            (g_lyric_count > 0 || g_karaoke_line_current[0] || g_karaoke_line_previous[0]) &&
                            g_bae.song_loaded && !g_bae.is_audio_file;
+#endif
     // Karaoke now appears after keyboard panel or waveform (for audio files)
     bool showWaveform = g_bae.is_audio_file && g_bae.sound;
     // Always hide the virtual keyboard when waveform is active (including when MIDI input is enabled)
@@ -1737,12 +2007,26 @@ int main(int argc, char *argv[])
     {
         showKeyboard = false;
     }
-    Rect karaokePanel = {10, ((showKeyboard || showWaveform) ? (keyboardPanel.y + keyboardPanel.h + 10) : (transportPanel.y + transportPanel.h + 10)), 880, karaokePanelHeight};
-    int statusY = ((showKeyboard || showWaveform) ? (keyboardPanel.y + keyboardPanel.h + 10) : (transportPanel.y + transportPanel.h + 10));
+#if SUPPORT_KARAOKE == TRUE
+    Rect karaokePanel = {10, ((showKeyboard || showWaveform) ? (keyboardPanel.y + keyboardPanel.h + 10) : 
+                              (transportPanel.y + transportPanel.h + 10)), 880, karaokePanelHeight};
+#endif
+
+    int statusY = ((showKeyboard || showWaveform) ? (keyboardPanel.y + keyboardPanel.h + 10) : 
+                   (transportPanel.y + transportPanel.h + 10));
+#if SUPPORT_KARAOKE == TRUE
         if (showKaraoke)
         {
             statusY = karaokePanel.y + karaokePanel.h + 5;
         }
+#endif        
+        // Add playlist panel right above status panel
+        int playlistPanelHeight = 300; // Reduced from 500px to 300px
+        int playlistPanelY = statusY;
+        statusY += playlistPanelHeight + 10; // Move status down by playlist height + gap
+        Rect playlistPanel = {10, playlistPanelY, 880, playlistPanelHeight};
+        bool showPlaylist = true; // Always show playlist
+        
         int neededH = statusY + 115; // status panel + bottom padding
         if (neededH != g_window_h)
         {
@@ -1750,7 +2034,6 @@ int main(int argc, char *argv[])
             SDL_SetWindowSize(win, WINDOW_W, g_window_h);
         }
         Rect statusPanel = {10, statusY, 880, 100};
-#endif
         // Channel panel
         draw_rect(R, channelPanel, panelBg);
         draw_frame(R, channelPanel, panelBorder);
@@ -1764,10 +2047,11 @@ int main(int argc, char *argv[])
         int ui_mx = mx, ui_my = my;
         bool ui_mdown = mdown;
         bool ui_mclick = mclick;
+        bool ui_rclick = rclick;
         if (modal_block)
         {
             ui_mx = ui_my = -10000;
-            ui_mdown = ui_mclick = false;
+            ui_mdown = ui_mclick = ui_rclick = false;
         }
         int chStartX = 20, chStartY = 40;
         // Precompute estimated per-channel levels from mixer realtime info when available.
@@ -3111,8 +3395,11 @@ int main(int argc, char *argv[])
             }
         }
     SKIP_KEYBOARD_RENDER:        
+        
         {
             Rect loopR = {160, 215, 20, 20};
+            // Create tooltip area that includes checkbox and label
+            Rect loopTooltipArea = {160, 215, 70, 20}; // Wider to include "BAE Loop" text
             bool clicked = false;
 #ifdef SUPPORT_MIDI_HW
             // When MIDI input is enabled, render a disabled Loop checkbox (no interaction) so it appears under the dim overlay
@@ -3135,22 +3422,55 @@ int main(int argc, char *argv[])
                     draw_frame(R, inner, g_panel_border);
                 }
                 // Label
-                draw_text(R, loopR.x + loopR.w + 6, loopR.y + 2, "Loop", disabledTxt);
+                draw_text(R, loopR.x + loopR.w + 6, loopR.y + 2, "BAE Loop", disabledTxt);
             }
             else
             {
 #endif
                 if (!modal_block)
                 {
-                    if (ui_toggle(R, loopR, &loopPlay, "Loop", ui_mx, ui_my, ui_mclick))
+                    if (ui_toggle(R, loopR, &loopPlay, "BAE Loop", ui_mx, ui_my, ui_mclick))
                         clicked = true;
                 }
                 else if (g_exporting)
                 {
                     // While exporting allow loop toggle using real mouse coords so user can uncheck loop
-                    if (ui_toggle(R, loopR, &loopPlay, "Loop", mx, my, mclick))
+                    if (ui_toggle(R, loopR, &loopPlay, "BAE Loop", mx, my, mclick))
                         clicked = true;
                 }
+                
+                // Handle tooltip for BAE Loop
+                if (point_in(ui_mx, ui_my, loopTooltipArea) && !modal_block)
+                {
+                    const char *tooltip_text = "BAE Loop will interfere with the playlist, disable it to use the playlist.";
+                    
+                    // Measure actual text width and height
+                    int text_w, text_h;
+                    measure_text(tooltip_text, &text_w, &text_h);
+                    
+                    int tooltip_w = text_w + 8; // 4px padding on each side
+                    int tooltip_h = text_h + 8; // 4px padding top and bottom
+                    if (tooltip_w > 500) tooltip_w = 500; // Maximum width constraint
+                    
+                    int tooltip_x = ui_mx + 10;
+                    int tooltip_y = ui_my - 30;
+                    
+                    // Keep tooltip on screen
+                    if (tooltip_x + tooltip_w > WINDOW_W - 4)
+                        tooltip_x = WINDOW_W - tooltip_w - 4;
+                    if (tooltip_y < 4)
+                        tooltip_y = ui_my + 25; // Show below cursor if no room above
+                    
+                    g_loop_tooltip_rect = (Rect){tooltip_x, tooltip_y, tooltip_w, tooltip_h};
+                    strncpy(g_loop_tooltip_text, tooltip_text, sizeof(g_loop_tooltip_text) - 1);
+                    g_loop_tooltip_text[sizeof(g_loop_tooltip_text) - 1] = '\0';
+                    g_loop_tooltip_visible = true;
+                }
+                else
+                {
+                    g_loop_tooltip_visible = false;
+                }
+                
                 if (clicked)
                 {
                     bae_set_loop(loopPlay);
@@ -3177,23 +3497,30 @@ int main(int argc, char *argv[])
         if (g_midi_input_enabled)
         {
             // Draw disabled Open... button (no interaction)
-            Rect openRect = {230, 215, 80, 22};
+            Rect openRect = {258, 215, 80, 22}; // Moved from 230 to 258 to accommodate "BAE Loop"
             SDL_Color disabledBg = g_panel_bg;
             SDL_Color disabledTxt = g_panel_border;
             draw_rect(R, openRect, disabledBg);
             draw_frame(R, openRect, g_panel_border);
-            draw_text(R, openRect.x + 8, openRect.y + 4, "Open...", disabledTxt);
+            int text_w = 0, text_h = 0;
+            measure_text("Open...", &text_w, &text_h);
+            int text_x = openRect.x + (openRect.w - text_w) / 2;
+            int text_y = openRect.y + (openRect.h - text_h) / 2;
+            draw_text(R, text_x, text_y, "Open...", disabledTxt);
         }
         else
         {
 #endif
-            if (ui_button(R, (Rect){230, 215, 80, 22}, "Open...", ui_mx, ui_my, ui_mdown) && ui_mclick && !modal_block)
+            if (ui_button(R, (Rect){258, 215, 80, 22}, "Open...", ui_mx, ui_my, ui_mdown) && ui_mclick && !modal_block) // Moved from 230 to 258
             {
                 char *sel = open_file_dialog();
                 if (sel)
                 {
                     if (bae_load_song_with_settings(sel, transpose, tempo, volume, loopPlay, reverbType, ch_enable))
                     {
+                        // Add file to playlist and set as current
+                        playlist_update_current_file(sel);
+                        
                         duration = bae_get_len_ms();
                         progress = 0;
                         // Robust auto-start sequence: ensure at position 0, preroll again (defensive), then start
@@ -3236,10 +3563,14 @@ int main(int argc, char *argv[])
                 // When MIDI-in is enabled the overlay provides recording controls. Draw a disabled placeholder here.
                 SDL_Color disabledBg = g_panel_bg;
                 SDL_Color disabledTxt = g_panel_border;
-                Rect placeholder = {320, 215, 80, 22};
+                Rect placeholder = {348, 215, 80, 22}; // Moved from 320 to 348
                 draw_rect(R, placeholder, disabledBg);
                 draw_frame(R, placeholder, g_panel_border);
-                draw_text(R, placeholder.x + 14, placeholder.y + 4, "Record", disabledTxt);
+                int text_w = 0, text_h = 0;
+                measure_text("Record", &text_w, &text_h);
+                int text_x = placeholder.x + (placeholder.w - text_w) / 2;
+                int text_y = placeholder.y + (placeholder.h - text_h) / 2;
+                draw_text(R, text_x, text_y, "Record", disabledTxt);
             }
             else
             {
@@ -3253,7 +3584,7 @@ int main(int argc, char *argv[])
 #endif
                 if (export_allowed)
                 {
-                    if (ui_button(R, (Rect){320, 215, 80, 22}, "Export", ui_mx, ui_my, ui_mdown) && ui_mclick)
+                    if (ui_button(R, (Rect){348, 215, 80, 22}, "Export", ui_mx, ui_my, ui_mdown) && ui_mclick) // Moved from 320 to 348
                     {
 #ifdef SUPPORT_MIDI_HW
                         /* export_allowed already ensures g_midi_output_enabled == false */
@@ -3448,14 +3779,18 @@ int main(int argc, char *argv[])
                 else
                 {
                     // Draw disabled Export button (no interaction)
-                    Rect disr = {320, 215, 80, 22};
+                    Rect disr = {340, 215, 80, 22}; // Moved from 320 to 340
                     SDL_Color disabledBg = g_panel_bg;
                     SDL_Color disabledTxt = g_panel_border;
                     disabledBg.a = 200;
                     disabledTxt.a = 200;
                     draw_rect(R, disr, disabledBg);
                     draw_frame(R, disr, g_panel_border);
-                    draw_text(R, disr.x + 18, disr.y + 4, "Export", disabledTxt);
+                    int text_w = 0, text_h = 0;
+                    measure_text("Export", &text_w, &text_h);
+                    int text_x = disr.x + (disr.w - text_w) / 2;
+                    int text_y = disr.y + (disr.h - text_h) / 2;
+                    draw_text(R, text_x, text_y, "Export", disabledTxt);
                 }
 
 
@@ -3465,8 +3800,8 @@ int main(int argc, char *argv[])
             // RMF Info button (only for RMF files)
             if (g_bae.is_rmf_file)
             {
-                // RMF Info button position (fixed)
-                int rmf_x_pos = 440;
+                // RMF Info button position (moved from 440 to 640 to avoid overlap with Record Format button)
+                int rmf_x_pos = 648;
 
                 if (ui_button(R, (Rect){rmf_x_pos, 215, 80, 22}, "RMF Info", ui_mx, ui_my, ui_mdown) && ui_mclick && !modal_block)
                 {
@@ -3533,7 +3868,7 @@ int main(int argc, char *argv[])
                 mclick = false;
             }
             // Also draw Record/Stop in the Export slot so MIDI users can record even when panel is dimmed
-            Rect recRect = {320, 215, 80, 22};
+            Rect recRect = {348, 215, 80, 22}; // Moved from 320 to 348
             // Dropdown button to right of record (two-column list)
             Rect recFmtBtn = {recRect.x + recRect.w + 8, 215, 200, 22};
             // Only show format selector when MIDI input is enabled
@@ -3572,7 +3907,11 @@ int main(int argc, char *argv[])
                     disabledTxt.a = 200;
                     draw_rect(R, recFmtBtn, disabledBg);
                     draw_frame(R, recFmtBtn, g_panel_border);
-                    draw_text(R, recFmtBtn.x + 6, recFmtBtn.y + 3, g_midiRecordFormatNames[g_midiRecordFormatIndex], disabledTxt);
+                    int text_w = 0, text_h = 0;
+                    measure_text(g_midiRecordFormatNames[g_midiRecordFormatIndex], &text_w, &text_h);
+                    int text_x = recFmtBtn.x + (recFmtBtn.w - text_w) / 2;
+                    int text_y = recFmtBtn.y + (recFmtBtn.h - text_h) / 2;
+                    draw_text(R, text_x, text_y, g_midiRecordFormatNames[g_midiRecordFormatIndex], disabledTxt);
                 }
 
                 // Render two-column dropdown list when open (only if enabled and open)
@@ -3965,7 +4304,11 @@ int main(int argc, char *argv[])
                     disabledTxt.a = 200;
                     draw_rect(R, recRect, disabledBg);
                     draw_frame(R, recRect, g_panel_border);
-                    draw_text(R, recRect.x + 22, recRect.y + 4, "Record", disabledTxt);
+                    int text_w = 0, text_h = 0;
+                    measure_text("Record", &text_w, &text_h);
+                    int text_x = recRect.x + (recRect.w - text_w) / 2;
+                    int text_y = recRect.y + (recRect.h - text_h) / 2;
+                    draw_text(R, text_x, text_y, "Record", disabledTxt);
                 }
             }
             else
@@ -4094,6 +4437,12 @@ int main(int argc, char *argv[])
                 SDL_UnlockMutex(g_lyric_mutex);
         }
 #endif
+        // Playlist panel - sync with currently playing file first
+        if (g_bae.song_loaded && g_bae.loaded_path[0]) {
+            playlist_update_current_file(g_bae.loaded_path);
+        }
+        playlist_render(R, playlistPanel, ui_mx, ui_my, ui_mdown, ui_mclick, ui_rclick, modal_block);
+
         // Status panel
         draw_rect(R, statusPanel, panelBg);
         draw_frame(R, statusPanel, panelBorder);
@@ -4139,10 +4488,14 @@ int main(int argc, char *argv[])
                 int tipLen = (int)strlen(tip);
                 if (tipLen > 0)
                 {
-                    int tw = tipLen * 8 + 8;
-                    if (tw > 560)
-                        tw = 560;
-                    int th = 16 + 6;
+                    // Measure actual text width and height
+                    int text_w, text_h;
+                    measure_text(tip, &text_w, &text_h);
+                    
+                    int tw = text_w + 8; // 4px padding on each side
+                    int th = text_h + 8; // 4px padding top and bottom
+                    if (tw > 480) tw = 480; // Maximum width constraint
+                    
                     int tx = mx + 12;
                     int ty = my + 12;
                     if (tx + tw > WINDOW_W - 4)
@@ -4197,10 +4550,14 @@ int main(int argc, char *argv[])
                 int tipLen = (int)strlen(tip);
                 if (tipLen > 0)
                 {
-                    int tw = tipLen * 8 + 8;
-                    if (tw > 520)
-                        tw = 520;
-                    int th = 16 + 6;
+                    // Measure actual text width and height
+                    int text_w, text_h;
+                    measure_text(tip, &text_w, &text_h);
+                    
+                    int tw = text_w + 8; // 4px padding on each side
+                    int th = text_h + 8; // 4px padding top and bottom
+                    if (tw > 450) tw = 450; // Maximum width constraint
+                    
                     int tx = mx + 12;
                     int ty = my + 12; // initial placement near cursor
                     if (tx + tw > WINDOW_W - 4)
@@ -4682,7 +5039,12 @@ int main(int argc, char *argv[])
             SDL_Color tfg = g_is_dark_mode ? g_text_color : (SDL_Color){32, 32, 32, 255};
             draw_rect(R, tipRect, tbg);
             draw_frame(R, tipRect, tbd);
-            draw_text(R, tipRect.x + 4, tipRect.y + 4, g_file_tooltip_text, tfg);
+            
+            // Center text vertically in tooltip
+            int text_w, text_h;
+            measure_text(g_file_tooltip_text, &text_w, &text_h);
+            int text_y = tipRect.y + (tipRect.h - text_h) / 2;
+            draw_text(R, tipRect.x + 4, text_y, g_file_tooltip_text, tfg);
         }
 
         // Draw deferred bank tooltip last so it appears above status text and other UI
@@ -4714,7 +5076,44 @@ int main(int argc, char *argv[])
             SDL_Color tfg = g_is_dark_mode ? g_text_color : (SDL_Color){32, 32, 32, 255};
             draw_rect(R, tipRect, tbg);
             draw_frame(R, tipRect, tbd);
-            draw_text(R, tipRect.x + 4, tipRect.y + 4, g_bank_tooltip_text, tfg);
+            
+            // Center text vertically in tooltip
+            int text_w, text_h;
+            measure_text(g_bank_tooltip_text, &text_w, &text_h);
+            int text_y = tipRect.y + (tipRect.h - text_h) / 2;
+            draw_text(R, tipRect.x + 4, text_y, g_bank_tooltip_text, tfg);
+        }
+
+        // Draw loop tooltip
+        if (g_loop_tooltip_visible)
+        {
+            Rect tipRect = g_loop_tooltip_rect;
+            SDL_Color shadow = {0, 0, 0, g_is_dark_mode ? 140 : 100};
+            Rect shadowRect = {tipRect.x + 2, tipRect.y + 2, tipRect.w, tipRect.h};
+            draw_rect(R, shadowRect, shadow);
+            SDL_Color tbg;
+            if (g_is_dark_mode)
+            {
+                int r = g_panel_bg.r + 25;
+                if (r > 255)
+                    r = 255;
+                int g = g_panel_bg.g + 25;
+                if (g > 255)
+                    g = 255;
+                int b = g_panel_bg.b + 25;
+                if (b > 255)
+                    b = 255;
+                tbg = (SDL_Color){r, g, b, 255};
+            }
+            else
+            {
+                tbg = (SDL_Color){255, 255, 220, 255}; // Light yellow background
+            }
+            SDL_Color tbd = g_is_dark_mode ? g_button_border : (SDL_Color){128, 128, 128, 255};
+            SDL_Color tfg = g_is_dark_mode ? g_text_color : (SDL_Color){32, 32, 32, 255};
+            draw_rect(R, tipRect, tbg);
+            draw_frame(R, tipRect, tbd);
+            draw_text(R, tipRect.x + 4, tipRect.y + 4, g_loop_tooltip_text, tfg);
         }
 
         // Render dropdown list on top of everything else if open
@@ -5038,9 +5437,45 @@ int main(int argc, char *argv[])
     midi_service_stop();
     midi_input_shutdown();
 #endif
+    // Save window position and playlist before cleanup
+    if (g_main_window)
+    {
+        int x, y;
+        SDL_GetWindowPosition(g_main_window, &x, &y);
+        Settings current_settings = load_settings();
+        current_settings.has_window_pos = true;
+        current_settings.window_x = x;
+        current_settings.window_y = y;
+        save_full_settings(&current_settings);
+    }
+    
+    // Auto-save playlist to application directory
+    get_executable_directory(exe_dir, sizeof(exe_dir));
+#ifdef _WIN32
+    snprintf(playlist_path, sizeof(playlist_path), "%s\\playlist.m3u", exe_dir);
+#else
+    snprintf(playlist_path, sizeof(playlist_path), "%s/playlist.m3u", exe_dir);
+#endif
+    
+    if (g_playlist.count > 0)
+    {
+        BAE_PRINTF("Auto-saving playlist: %s\n", playlist_path);
+        playlist_save(playlist_path);
+    }
+    else
+    {
+        // If playlist is empty, remove the file if it exists
+        if (remove(playlist_path) == 0)
+        {
+            BAE_PRINTF("Removed empty playlist file: %s\n", playlist_path);
+        }
+    }
+    
     SDL_DestroyRenderer(R);
     SDL_DestroyWindow(win);
+    g_main_window = NULL; // Clear global reference
     bae_shutdown();
+    playlist_cleanup();
     if (g_font)
         TTF_CloseFont(g_font);
     TTF_Quit();

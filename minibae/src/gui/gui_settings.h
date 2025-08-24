@@ -24,6 +24,13 @@ typedef struct
     bool disable_webtv_progress_bar;
     bool has_export_codec;
     int export_codec_index;
+    bool has_shuffle;
+    bool shuffle_enabled;
+    bool has_repeat;
+    int repeat_mode;
+    bool has_window_pos;
+    int window_x;
+    int window_y;
 } Settings;
 
 // Settings dialog state
@@ -42,6 +49,7 @@ extern bool g_sampleRateDropdownOpen;
 Settings load_settings(void);
 void save_settings(const char *last_bank_path, int reverb_type, bool loop_enabled);
 void save_full_settings(const Settings *settings);
+void save_playlist_settings(void); // Save just shuffle and repeat settings
 
 // Settings application functions
 void apply_settings_to_ui(const Settings *settings, int *transpose, int *tempo, int *volume,

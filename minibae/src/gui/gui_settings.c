@@ -8,6 +8,7 @@
 #include "gui_theme.h"
 #include "gui_common.h"
 #include "gui_midi.h"
+#include "gui_playlist.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -111,6 +112,30 @@ Settings load_settings(void)
             settings.export_codec_index = atoi(line + 19);
             settings.has_export_codec = true;
         }
+        else if (strncmp(line, "shuffle_enabled=", 16) == 0)
+        {
+            settings.shuffle_enabled = (atoi(line + 16) != 0);
+            settings.has_shuffle = true;
+        }
+        else if (strncmp(line, "repeat_mode=", 12) == 0)
+        {
+            settings.repeat_mode = atoi(line + 12);
+            if (settings.repeat_mode < 0 || settings.repeat_mode > 2)
+            {
+                settings.repeat_mode = 0; // Default to no repeat
+            }
+            settings.has_repeat = true;
+        }
+        else if (strncmp(line, "window_x=", 9) == 0)
+        {
+            settings.window_x = atoi(line + 9);
+            settings.has_window_pos = true;
+        }
+        else if (strncmp(line, "window_y=", 9) == 0)
+        {
+            settings.window_y = atoi(line + 9);
+            settings.has_window_pos = true;
+        }
     }
     fclose(f);
     return settings;
@@ -143,6 +168,19 @@ void save_settings(const char *last_bank_path, int reverb_type, bool loop_enable
         fprintf(f, "show_keyboard=%d\n", g_show_virtual_keyboard ? 1 : 0);
         fprintf(f, "disable_webtv_progress_bar=%d\n", g_disable_webtv_progress_bar ? 1 : 0);
         fprintf(f, "export_codec_index=%d\n", g_exportCodecIndex);
+        fprintf(f, "shuffle_enabled=%d\n", g_playlist.shuffle_enabled ? 1 : 0);
+        fprintf(f, "repeat_mode=%d\n", g_playlist.repeat_mode);
+        
+        // Save window position if available
+        extern SDL_Window *g_main_window;
+        if (g_main_window)
+        {
+            int x, y;
+            SDL_GetWindowPosition(g_main_window, &x, &y);
+            fprintf(f, "window_x=%d\n", x);
+            fprintf(f, "window_y=%d\n", y);
+        }
+        
         fclose(f);
     }
 }
@@ -201,6 +239,19 @@ void save_full_settings(const Settings *settings)
         {
             fprintf(f, "export_codec_index=%d\n", settings->export_codec_index);
         }
+        if (settings->has_shuffle)
+        {
+            fprintf(f, "shuffle_enabled=%d\n", settings->shuffle_enabled ? 1 : 0);
+        }
+        if (settings->has_repeat)
+        {
+            fprintf(f, "repeat_mode=%d\n", settings->repeat_mode);
+        }
+        if (settings->has_window_pos)
+        {
+            fprintf(f, "window_x=%d\n", settings->window_x);
+            fprintf(f, "window_y=%d\n", settings->window_y);
+        }
         fclose(f);
     }
 }
@@ -247,6 +298,25 @@ void apply_settings_to_ui(const Settings *settings, int *transpose, int *tempo, 
     {
         g_disable_webtv_progress_bar = settings->disable_webtv_progress_bar;
     }
+    if (settings->has_shuffle)
+    {
+        g_playlist.shuffle_enabled = settings->shuffle_enabled;
+    }
+    if (settings->has_repeat)
+    {
+        g_playlist.repeat_mode = settings->repeat_mode;
+    }
+}
+
+void save_playlist_settings(void)
+{
+    // Load current settings and update just the playlist ones
+    Settings settings = load_settings();
+    settings.has_shuffle = true;
+    settings.shuffle_enabled = g_playlist.shuffle_enabled;
+    settings.has_repeat = true;
+    settings.repeat_mode = g_playlist.repeat_mode;
+    save_full_settings(&settings);
 }
 
 // Settings dialog rendering

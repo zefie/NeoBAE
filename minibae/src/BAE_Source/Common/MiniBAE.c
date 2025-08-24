@@ -337,20 +337,33 @@ const char *BAE_GetFeatureString()
         }
 #endif
 
-        // MP3 support
-#if USE_MPEG_DECODER != TRUE && USE_MPEG_ENCODER != TRUE
-        const char *mp3 = NULL;
+#if SUPPORT_KARAOKE == TRUE
+        const char *karaoke = "Karaoke Support";
+        if (karaoke && karaoke[0])
+        {
+                snprintf(featBuf + strlen(featBuf), sizeof(featBuf) - strlen(featBuf), "%s%s", first ? "" : ", ", karaoke);
+                first = FALSE;
+        }
 #else
-    #if USE_MPEG_DECODER == TRUE && USE_MPEG_ENCODER == TRUE
-        const char *mp3 = "Full MP3 Support";
-    #elif USE_MPEG_DECODER == TRUE && USE_MPEG_ENCODER != TRUE
-        const char *mp3 = "MP3 Decoder Support";
-    #elif USE_MPEG_DECODER != TRUE && USE_MPEG_ENCODER == TRUE
-        const char *mp3 = "MP3 Encoder Support";
-    #else
-        const char *mp3 = NULL;
-    #endif
+        const char *karaoke = "No Karaoke Support";
+        if (karaoke && karaoke[0])
+        {
+                snprintf(featBuf + strlen(featBuf), sizeof(featBuf) - strlen(featBuf), "%s%s", first ? "" : ", ", karaoke);
+                first = FALSE;
+        }
 #endif
+        // MP3 support
+
+#if USE_MPEG_DECODER == TRUE && USE_MPEG_ENCODER == TRUE
+    const char *mp3 = "Full MP3 Support";
+#elif USE_MPEG_DECODER == TRUE && USE_MPEG_ENCODER != TRUE
+    const char *mp3 = "MP3 Decoder Support";
+#elif USE_MPEG_DECODER != TRUE && USE_MPEG_ENCODER == TRUE
+    const char *mp3 = "MP3 Encoder Support";
+#else
+    const char *mp3 = "No MP3 Support";
+#endif
+
         if (mp3 && mp3[0])
         {
                 snprintf(featBuf + strlen(featBuf), sizeof(featBuf) - strlen(featBuf), "%s%s", first ? "" : ", ", mp3);
@@ -361,7 +374,7 @@ const char *BAE_GetFeatureString()
 #if SUPPORT_MIDI_HW == TRUE
         const char *midi = "MIDI Hardware Support";
 #else
-        const char *midi = NULL;
+        const char *midi = "No MIDI Hardware Support";
 #endif
         if (midi && midi[0])
         {
@@ -380,7 +393,7 @@ const char *BAE_GetFeatureString()
     #elif USE_FLAC_DECODER != TRUE && USE_FLAC_ENCODER == TRUE
         const char *flac = "FLAC Encoder Support";
     #else
-        const char *flac = NULL;
+        const char *flac = "No FLAC Support";
     #endif
 #endif
         if (flac && flac[0])

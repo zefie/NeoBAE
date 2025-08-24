@@ -23,6 +23,7 @@ int g_about_page = 0;
 #include <windows.h>
 #include <commdlg.h>
 #include <shellapi.h>
+#include <shlobj.h>
 #else
 #include <unistd.h>
 #endif
@@ -72,6 +73,10 @@ char g_bank_tooltip_text[520];
 bool g_file_tooltip_visible = false;
 Rect g_file_tooltip_rect;
 char g_file_tooltip_text[520];
+
+bool g_loop_tooltip_visible = false;
+Rect g_loop_tooltip_rect;
+char g_loop_tooltip_text[520];
 
 // External references
 extern bool g_exporting;
@@ -230,6 +235,201 @@ char *open_file_dialog(void)
         }
     }
     BAE_PRINTF("No GUI file chooser available (zenity/kdialog/yad). Drag & drop still works for media and bank files.\n");
+    return NULL;
+#endif
+}
+
+char *open_playlist_dialog(void)
+{
+#ifdef _WIN32
+    char fileBuf[1024] = {0};
+    OPENFILENAMEA ofn;
+    ZeroMemory(&ofn, sizeof(ofn));
+    ofn.lStructSize = sizeof(ofn);
+    ofn.hwndOwner = NULL;
+    ofn.lpstrFilter = "M3U Playlist Files\0*.m3u;*.m3u8\0"
+                      "All Files\0*.*\0";
+    ofn.lpstrFile = fileBuf;
+    ofn.nMaxFile = sizeof(fileBuf);
+    ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST;
+    if (GetOpenFileNameA(&ofn))
+    {
+        size_t len = strlen(fileBuf);
+        char *ret = (char *)malloc(len + 1);
+        if (ret)
+        {
+            memcpy(ret, fileBuf, len + 1);
+        }
+        return ret;
+    }
+    return NULL;
+#else
+    const char *cmds[] = {
+        "zenity --file-selection --title='Open Playlist File' --file-filter='M3U Playlist Files | *.m3u *.m3u8' --file-filter='All Files | *' 2>/dev/null",
+        "kdialog --getopenfilename . '*.m3u *.m3u8' 2>/dev/null",
+        "yad --file-selection --title='Open Playlist File' 2>/dev/null",
+        NULL};
+    for (int i = 0; cmds[i]; ++i)
+    {
+        FILE *p = popen(cmds[i], "r");
+        if (!p)
+            continue;
+        char buf[1024];
+        if (fgets(buf, sizeof(buf), p))
+        {
+            pclose(p);
+            // strip newline
+            size_t l = strlen(buf);
+            while (l > 0 && (buf[l - 1] == '\n' || buf[l - 1] == '\r'))
+                buf[--l] = '\0';
+            if (l > 0)
+            {
+                char *ret = (char *)malloc(l + 1);
+                if (ret)
+                {
+                    memcpy(ret, buf, l + 1);
+                }
+                return ret;
+            }
+        }
+        pclose(p);
+    }
+    BAE_PRINTF("No GUI file chooser available (zenity/kdialog/yad). Drag & drop still works for playlist files.\n");
+    return NULL;
+#endif
+}
+
+char *save_playlist_dialog(void)
+{
+#ifdef _WIN32
+    char fileBuf[1024] = {0};
+    strcpy(fileBuf, "playlist.m3u"); // Default filename
+    OPENFILENAMEA ofn;
+    ZeroMemory(&ofn, sizeof(ofn));
+    ofn.lStructSize = sizeof(ofn);
+    ofn.hwndOwner = NULL;
+    ofn.lpstrFilter = "M3U Playlist Files\0*.m3u;*.m3u8\0"
+                      "All Files\0*.*\0";
+    ofn.lpstrFile = fileBuf;
+    ofn.nMaxFile = sizeof(fileBuf);
+    ofn.lpstrDefExt = "m3u";
+    ofn.Flags = OFN_PATHMUSTEXIST | OFN_OVERWRITEPROMPT;
+    if (GetSaveFileNameA(&ofn))
+    {
+        size_t len = strlen(fileBuf);
+        char *ret = (char *)malloc(len + 1);
+        if (ret)
+        {
+            memcpy(ret, fileBuf, len + 1);
+        }
+        return ret;
+    }
+    return NULL;
+#else
+    const char *cmds[] = {
+        "zenity --file-selection --save --confirm-overwrite --title='Save Playlist As' --filename='playlist.m3u' --file-filter='M3U Playlist Files | *.m3u *.m3u8' --file-filter='All Files | *' 2>/dev/null",
+        "kdialog --getsavefilename 'playlist.m3u' '*.m3u *.m3u8' 2>/dev/null",
+        "yad --file-selection --save --confirm-overwrite --title='Save Playlist As' --filename='playlist.m3u' 2>/dev/null",
+        NULL};
+    for (int i = 0; cmds[i]; ++i)
+    {
+        FILE *p = popen(cmds[i], "r");
+        if (!p)
+            continue;
+        char buf[1024];
+        if (fgets(buf, sizeof(buf), p))
+        {
+            pclose(p);
+            // strip newline
+            size_t l = strlen(buf);
+            while (l > 0 && (buf[l - 1] == '\n' || buf[l - 1] == '\r'))
+                buf[--l] = '\0';
+            if (l > 0)
+            {
+                char *ret = (char *)malloc(l + 1);
+                if (ret)
+                {
+                    memcpy(ret, buf, l + 1);
+                }
+                return ret;
+            }
+        }
+        else
+        {
+            pclose(p);
+        }
+    }
+    BAE_PRINTF("No GUI file chooser available (zenity/kdialog/yad). Using default filename 'playlist.m3u'.\n");
+    // Fallback to default filename
+    char *ret = (char *)malloc(strlen("playlist.m3u") + 1);
+    if (ret)
+    {
+        strcpy(ret, "playlist.m3u");
+    }
+    return ret;
+#endif
+}
+
+char *open_folder_dialog(void)
+{
+#ifdef _WIN32
+    char folderBuf[1024] = {0};
+    BROWSEINFOA bi;
+    ZeroMemory(&bi, sizeof(bi));
+    bi.hwndOwner = NULL;
+    bi.lpszTitle = "Select Folder to Add All Media Files";
+    bi.ulFlags = BIF_RETURNONLYFSDIRS | BIF_NEWDIALOGSTYLE;
+    
+    LPITEMIDLIST pidl = SHBrowseForFolderA(&bi);
+    if (pidl)
+    {
+        if (SHGetPathFromIDListA(pidl, folderBuf))
+        {
+            size_t len = strlen(folderBuf);
+            char *ret = (char *)malloc(len + 1);
+            if (ret)
+            {
+                memcpy(ret, folderBuf, len + 1);
+            }
+            // Free the pidl
+            CoTaskMemFree(pidl);
+            return ret;
+        }
+        CoTaskMemFree(pidl);
+    }
+    return NULL;
+#else
+    const char *cmds[] = {
+        "zenity --file-selection --directory --title='Select Folder to Add All Media Files' 2>/dev/null",
+        "kdialog --getexistingdirectory . 2>/dev/null",
+        "yad --file-selection --directory --title='Select Folder to Add All Media Files' 2>/dev/null",
+        NULL};
+    for (int i = 0; cmds[i]; ++i)
+    {
+        FILE *p = popen(cmds[i], "r");
+        if (!p)
+            continue;
+        char buf[1024];
+        if (fgets(buf, sizeof(buf), p))
+        {
+            pclose(p);
+            // strip newline
+            size_t l = strlen(buf);
+            while (l > 0 && (buf[l - 1] == '\n' || buf[l - 1] == '\r'))
+                buf[--l] = '\0';
+            if (l > 0)
+            {
+                char *ret = (char *)malloc(l + 1);
+                if (ret)
+                {
+                    memcpy(ret, buf, l + 1);
+                }
+                return ret;
+            }
+        }
+        pclose(p);
+    }
+    BAE_PRINTF("No GUI folder chooser available (zenity/kdialog/yad). Drag & drop individual files still works.\n");
     return NULL;
 #endif
 }
@@ -571,7 +771,7 @@ void render_about_dialog(SDL_Renderer *R, int mx, int my, bool mclick)
             "SDL2 & SDL2_ttf",
             "Copyright (C) 1997-2025 Sam Lantinga <slouken@libsdl.org>",
             "https://www.libsdl.org/",
-#ifdef USE_MPEG_ENCODER
+#if USE_MPEG_ENCODER == TRUE
             "",
             "libmp3lame",
             "https://lame.sourceforge.io/",
@@ -615,18 +815,18 @@ void render_about_dialog(SDL_Renderer *R, int mx, int my, bool mclick)
         }
     }
 
-#if defined(USE_MPEG_DECODER) || defined(USE_MPEG_ENCODER) || defined(SUPPORT_MIDI_HW)
+#if (USE_MPEG_DECODER == TRUE) || (USE_MPEG_ENCODER == TRUE) || (SUPPORT_MIDI_HW == TRUE)
     // Page 2: credits/licenses (part 2)
     else if (g_about_page == 2)
     {
         const char *credits_page2[] = {
-#ifdef USE_MPEG_DECODER
+#if USE_MPEG_DECODER == TRUE
             "",
             "minimp3",
             "Licensed under the CC0",
             "http://creativecommons.org/publicdomain/zero/1.0/",
 #endif
-#ifdef SUPPORT_MIDI_HW
+#if SUPPORT_MIDI_HW == TRUE
             "",
             "RtMidi: realtime MIDI i/o C++ classes",
             "Copyright (c) 2003-2023 Gary P. Scavone",
@@ -679,6 +879,12 @@ void render_about_dialog(SDL_Renderer *R, int mx, int my, bool mclick)
     }
 #endif
     // Page navigation controls (bottom-right)
+    // Calculate max pages dynamically based on available features
+    int max_pages = 2; // Always have pages 0 and 1
+#if (USE_MPEG_DECODER == TRUE) || (USE_MPEG_ENCODER == TRUE) || (SUPPORT_MIDI_HW == TRUE)
+    max_pages = 3; // Add page 2 only if features are available
+#endif
+    
     Rect navPrev = {dlg.x + dlg.w - 70, dlg.y + dlg.h - 34, 24, 20};
     Rect navNext = {dlg.x + dlg.w - 34, dlg.y + dlg.h - 34, 24, 20};
     bool overPrev = point_in(mx, my, navPrev);
@@ -691,7 +897,7 @@ void render_about_dialog(SDL_Renderer *R, int mx, int my, bool mclick)
     draw_text(R, navNext.x + 6, navNext.y, ">", g_button_text);
     // Page indicator
     char pg[32];
-    snprintf(pg, sizeof(pg), "%d / %d", g_about_page + 1, 3);
+    snprintf(pg, sizeof(pg), "%d / %d", g_about_page + 1, max_pages);
     int pw = 0, ph = 0;
     measure_text(pg, &pw, &ph);
     draw_text(R, dlg.x + dlg.w - 100 - pw / 2, dlg.y + dlg.h - 32, pg, g_text_color);
@@ -701,7 +907,7 @@ void render_about_dialog(SDL_Renderer *R, int mx, int my, bool mclick)
         {
             g_about_page--;
         }
-        else if (overNext && g_about_page < 2)
+        else if (overNext && g_about_page < (max_pages - 1))
         {
             g_about_page++;
         }
@@ -725,6 +931,7 @@ void dialogs_init(void)
     g_about_page = 0;
     g_bank_tooltip_visible = false;
     g_file_tooltip_visible = false;
+    g_loop_tooltip_visible = false;
 }
 
 // Dialog cleanup
@@ -734,4 +941,5 @@ void dialogs_cleanup(void)
     g_show_about_dialog = false;
     g_bank_tooltip_visible = false;
     g_file_tooltip_visible = false;
+    g_loop_tooltip_visible = false;
 }
