@@ -5381,12 +5381,28 @@ int main(int argc, char *argv[])
         else
         {
 #endif
-            status = playing ? "♪ Playing" : "■ Stopped";
-            statusCol = playing ? g_highlight_color : g_header_color;
+            if (playing) {
+                status = "♪ Playing";
+                statusCol = g_highlight_color;
+            } else {
+                // Draw a square instead of the '■' character for 'Stopped'
+                int stoppedBoxSize = 8;
+                int stoppedBoxX = 20;
+                int stoppedBoxY = lineY3 + 5;
+                SDL_Color stoppedCol = g_header_color;
+                draw_rect(R, (Rect){stoppedBoxX, stoppedBoxY, stoppedBoxSize, stoppedBoxSize}, stoppedCol);
+                // Draw the text 'Stopped' next to the box
+                int text_w = 0, text_h = 0;
+                measure_text("Stopped", &text_w, &text_h);
+                draw_text(R, stoppedBoxX + stoppedBoxSize + 8, lineY3, "Stopped", stoppedCol);
+                status = NULL; // Don't draw status below
+            }
 #ifdef SUPPORT_MIDI_HW
         }
 #endif
-        draw_text(R, 20, lineY3, status, statusCol);
+        if (status) {
+            draw_text(R, 20, lineY3, status, statusCol);
+        }
 
         // Show status message if recent (within 3 seconds)
         if (g_bae.status_message[0] != '\0' && (now - g_bae.status_message_time) < 3000)
