@@ -273,7 +273,7 @@ endif
 
 ifeq ($(PLAYLIST),1)
 	ifneq ($(BUILD_GUI),)
-		BAE_FLAGS += -DSUPPORT_PLAYLISTS=1
+		BAE_FLAGS += -DSUPPORT_PLAYLIST=1
 		SRC_BIN +=  gui_playlist.c
 	endif
 endif
@@ -303,6 +303,8 @@ OBJ 		:= $(addprefix $(OBJ_DIR),$(addsuffix .o,$(basename ${SRC})))
 OBJ_BIN 	:= $(addprefix $(OBJ_DIR),$(addsuffix .o,$(basename ${SRC_BIN})))
 
 ifeq ($(BUILD_GUI),1)
+
+BAE_FLAGS += -D_ZEFI_GUI=1
 
 # If EMBED_TTF_FONT specified, generate embedded_font.h and define EMBED_TTF_FONT
 ifdef EMBED_TTF_FONT
