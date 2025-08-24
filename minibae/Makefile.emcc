@@ -2,6 +2,8 @@ BAE_BUILT_IN_PATCHES	:= 1
 BAE_API			:= Ansi
 WASM			:=	1
 DEBUG			:= 0
+NOAUTO			:= 1
+MP3_DEC			:= 1
 
 TARGET_LIB	:= libminiBAE.js
 TARGET_BIN	:= playbae.js

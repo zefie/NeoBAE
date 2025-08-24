@@ -311,7 +311,7 @@ const char *BAE_GetFeatureString()
 {
         static char featBuf[512];
         featBuf[0] = '\0';
-        bool first = true;
+        XBOOL first = TRUE;
 
         // Audio backend
 #if (X_PLATFORM == X_SDL2)
@@ -324,7 +324,7 @@ const char *BAE_GetFeatureString()
         if (audio && audio[0])
         {
                 snprintf(featBuf + strlen(featBuf), sizeof(featBuf) - strlen(featBuf), "%s%s", first ? "" : ", ", audio);
-                first = false;
+                first = FALSE;
         }
 
         // Built-in patches
@@ -333,7 +333,7 @@ const char *BAE_GetFeatureString()
         if (patches && patches[0])
         {
                 snprintf(featBuf + strlen(featBuf), sizeof(featBuf) - strlen(featBuf), "%s%s", first ? "" : ", ", patches);
-                first = false;
+                first = FALSE;
         }
 #endif
 
@@ -354,7 +354,7 @@ const char *BAE_GetFeatureString()
         if (mp3 && mp3[0])
         {
                 snprintf(featBuf + strlen(featBuf), sizeof(featBuf) - strlen(featBuf), "%s%s", first ? "" : ", ", mp3);
-                first = false;
+                first = FALSE;
         }
 
         // MIDI hardware
@@ -366,7 +366,7 @@ const char *BAE_GetFeatureString()
         if (midi && midi[0])
         {
                 snprintf(featBuf + strlen(featBuf), sizeof(featBuf) - strlen(featBuf), "%s%s", first ? "" : ", ", midi);
-                first = false;
+                first = FALSE;
         }
 
         // FLAC support
@@ -386,7 +386,7 @@ const char *BAE_GetFeatureString()
         if (flac && flac[0])
         {
                 snprintf(featBuf + strlen(featBuf), sizeof(featBuf) - strlen(featBuf), "%s%s", first ? "" : ", ", flac);
-                first = false;
+                first = FALSE;
         }
 
         // If nothing was added, return an empty string
