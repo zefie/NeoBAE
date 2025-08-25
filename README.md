@@ -1,146 +1,151 @@
-# What is miniBAE?
+# miniBAE
 
- The platform neutral Beatnik Audio Engine, mini edition (miniBAE) is an exceptionally
- mature, well rounded, and reliable computer music and sound system
- specially customized for small footprint and embedded applications.
+A cross-platform audio engine and music player supporting multiple audio formats including MIDI, RMF, WAV, AIFF, AU, FLAC, and more.
 
-Table of Contents (TOC)
-=======================
+## About
 
-   * [miniBAE](#miniBAE)
-   * [Why do we care?](#why-do-we-care)
-   * [What can it be used for](#what-can-it-be-used-for)
-   * [What’s is cost?](#whats-is-cost)
-   * [What happen to beatnik](#What-happen-to-beatnik)
-   * [What’s with all this Javascript code](#whats-with-all-this-javascript-code)
-   * [What’s left to be done](#whats-left-to-be-done)
-   * [New BSD License](#new-bsd-license)
-   * [Acknowledgment](#acknowledgement)
-   * [Software](#software)
-   * [Business Development](#business-development)
-   * [Sound Design, Music Design](#sound-design-music-design)
-  
----  
-  
-## miniBAE is...
+[miniBAE](miniBAE_README.md) (Beatnik Audio Engine, mini edition) is a mature, well-tested audio engine originally developed by Beatnik, Inc. for embedded applications and small footprint environments. The engine has been used in everything from set-top boxes like Microsoft's WebTV to programming languages like Java, as well as several mobile phones, and has found its way into dozens of games and applications over its lifetime.
 
-![Alt text](docs/block.jpg)
+When Beatnik ended business in December 2009, the source code was released under a BSD license. A big thanks to [Steve Hales](https://github.com/heyigor/miniBAE) for not letting this valuable piece of technology disappear.
 
-### Why do we care?
-Nostalgia.
+## Features
 
-### What can it be used for?
-Playing just about any kind of audio content. Either stored locally, via a network stream or stored in an application.
-From the application, there are all kinds of ways to hook into the media as it plays.
-User feedback for visually impaired. Sonified UIX.
-Instantly create musical instruments out of any device or screen.
+- **Multi-format audio support**: MIDI, RMF (Rich Music Format), WAV, AIFF, AU, FLAC, OGG Vorbis, MP3
+- **Real-time synthesis**: Built-in software synthesizer with General MIDI support
+- **Cross-platform**: Runs on Linux, Windows, macOS, and can be compiled to WebAssembly
+- **Command-line player**: `playbae` - a versatile audio file player
+- **GUI application**: `zefidi` - a graphical interface with playlist support
+- **Hardware MIDI support**: MIDI input/output on supported platforms (GUI Only)
+- **Audio export**: Convert MIDI files to audio formats like WAV, MP3, FLAC, and Vorbis
+- **Low latency**: Designed for real-time audio applications
+- **Embeddable**: Can be integrated into other applications
+- **Modular Build System**: Can be slimmed down to its core, to restore the original minimal footprint.
+- **Portable Design**: Easily add new and unique platform support.
 
-### What’s is cost?
- Free. BSD license.
+## Building
 
-### What happened to Beatnik?
- Beatnik ended business December 2009. Decided to release the miniBAE source as a BSD license rather than let it disappear.
+All compilation has been tested on Debian Linux 11+ and Windows via MinGW cross-compilation.
 
-### What’s with all this Javascript code?
- miniBAE’s first incarnation was a plugin for web browsers than included almost a feature for feature Javascript API to match the native API’s. That code is also in the release for potential reuse in Browsers or Frameworks that support Javascript.
+### Linux (SDL2)
 
-### What’s left to be done?
- If the Javascript code is to be used, it will have to be modernized, and a layer between Javascript and the Native code will have to be written.
- A Native Host will have to be written for each platform you want to support. The code release includes Mac OSX, Windows, iOS.
+```bash
+# Install dependencies
+apt-get update
+apt-get install libc6-dev libsdl2-dev
 
-### New BSD License
+# Build
+cd minibae
+make clean
+make -j$(nproc)
 
-    Copyright (c) 2009 Beatnik, Inc All rights reserved.  
-      
-    Redistribution and use in source and binary forms, with or without  
-    modification, are permitted provided that the following conditions are  
-    met:  
-      
-    Redistributions of source code must retain the above copyright notice,  
-    this list of conditions and the following disclaimer.  
-      
-    Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.  
-      
-    Neither the name of the Beatnik, Inc nor the names of its contributors may be used to endorse or promote products derived from this software without specific prior written permission.  
-      
-    THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS  
-    IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED  
-    TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A  
-    PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT  
-    HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,  
-    SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED  
-    TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR  
-    PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF  
-    LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING  
-    NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS  
-    SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.  
+# Run
+./bin/playbae -h
+```
 
----  
+### Windows (MinGW cross-compile)
 
-### Acknowledgment:
+```bash
+# Install MinGW toolchain
+apt-get install binutils-mingw-w64-x86_64 g++-mingw-w64-x86_64 gcc-mingw-w64-x86_64
 
- Everyone on this list made a contribution in some important way. Its amazing to me that two scruffy guys working in our house created something that went around the world and in lots of peoples pockets.
+# Build with SDL2 support
+cd minibae
+make clean
+make -f Makefile.mingw USE_SDL=1 -j$(nproc)
+```
 
-Thank you all.  
+### GUI Application
 
-Steve Hales - steve@igorlabs.com  
+```bash
+# Linux
+apt-get install libsdl2-dev libsdl2-ttf-dev
+make clean
+make -f Makefile.gui -j$(nproc)
 
-#### Software
-  
-Steve Hales - Halestorm/Igor Labs/Beatnik/Danger   
-Jim Nitchals - Halestorm/Igor Labs/Beatnik  
-Chris Muir - Beatnik  
-Chris van Rensburg - Beatnik  
-Christopher Schardt - Beatnik  
-Mark Deggeller - Beatnik  
-Doug Scott - Beatnik/Danger  
-Andrew Ezekiel Rostaing - Beatnik  
-Chris Grigg - Beatnik  
-Sean Echevarria - Beatnik  
-Kara Kytle - Sun Microsystems - Javasoft  
-Chris Rogers - Beatnik  
-Jarrell Irvin - Danger  
-Ian MacDonald - Sapien Technologies  
-  
-#### Business Development  
-Steve Hales - Halestorm/Igor Labs/Beatnik/Danger  
-Don Millers - Beatnik  
-Gavin Bourne - Beatnik  
-Thomas Dolby - Headspace/Beatnik  
-Mary Coller Albert - Headspace/Beatnik  
-John Eckstein - Beatnik  
-Dane Bigham - Presage Software  
-Jim Nitchals - Halestorm/Igor Labs/Beatnik  
-Brian Hales - Halestorm  
-Brett Durrett - Halestorm  
-Joe Britt - WebTV/Danger  
-Andy Rubin - WebTV/Danger  
-David Rivas - Sun Microsystems - Javasoft  
-Bruce Leak - Apple/General Magic/WebTV  
-Phil Goldman - Apple/WebTV  
-Kari Johnson - Beatnik  
-Matti Hamalainen - Nokia  
-Jukka Holm - Nokia  
-Jacek Horos - Nokia  
-Mickey Mantle - Brøderbund Software  
-Doug Carlston - Brøderbund Software  
-Will Wright - Maxis Software/EA  
-Ken Grant - Pixellite Software  
-Paul Lamoreux - Sapien Technologies   
-Ferdinand Rios - Sapien Technologies  
-  
-#### Sound Design, Music Design  
-Thomas Dolby - Headspace/Beatnik  
-Brian Salter - Presage Software/Beatnik  
-Michael Pukish - Presage Software  
-Kim Cascone - Beatnik  
-Blake Leah - Beatnik  
-Chris van Rensburg - Beatnik  
-Steven Clark - Beatnik  
-Thomas Dimuzio - Beatnik  
-Tom Rettig - Brøderbund Software  
-Chris Perry - Halestorm  
-Sal Orlando - Beatnik  
-Peter Drescher - Halestorm  
+# Windows
+make clean
+make -f Makefile.gui-mingw -j$(nproc)
+```
 
----
+### WebAssembly (Emscripten)
+
+```bash
+apt-get install emscripten
+make clean
+make -f Makefile.emcc -j$(nproc)
+```
+
+For detailed build instructions, including slim builds, see [HowToBuild.md](HowToBuild.md).
+
+## Usage
+
+### Command Line Player
+
+```bash
+# Play a MIDI file
+./bin/playbae song.mid
+
+# Export MIDI to WAV
+./bin/playbae input.mid -o output.wav 
+
+# Export to MP3 with custom bitrate
+./bin/playbae input.mid -o output.mp3 -b 192
+
+# Show karaoke lyrics (for supported files)
+./bin/playbae song.mid -k
+
+# Play with custom sample rate
+./bin/playbae audio.wav -r 48000
+```
+
+### GUI Application
+
+The GUI provides an intuitive interface for:
+- Loading and playing audio files
+- Managing playlists
+- Real-time audio visualization
+- MIDI channel control and muting
+- Audio export functionality (WAV/FLAC/MP3/Vorbis)
+- Hardware MIDI device integration
+  - Hardware input support - play the beatnik synth your way
+  - Utilitizes [RtMidi](https://github.com/thestk/rtmidi) for ultra low latency input
+  - Record incoming MIDI events - to MIDI! (or WAV/FLAC/MP3)
+  - Also supports MIDI Output
+- Cross-platform: Runs on any device SDL2 does
+- Dark mode support (Default for Linux, on Windows it will default to your theme settings (10/11))
+
+## Supported Formats
+
+| Format | Extensions | Notes |
+|--------|------------|-------|
+| MIDI | `.mid`, `.midi` | Standard MIDI files |
+| RMF | `.rmf` | Rich Music Format (Beatnik's proprietary format) |
+| Audio | `.wav`, `.aiff`, `.au` | Uncompressed audio |
+| Compressed | `.mp3`, `.flac`, `.ogg` | Various compressed formats |
+
+## Architecture
+
+miniBAE consists of several key components:
+
+- **Audio Engine**: Core synthesis and playback engine
+- **Platform Layer**: Abstraction for different operating systems
+- **Format Handlers**: Support for various audio/music file formats
+- **Applications**: Command-line and GUI frontends
+
+## License
+
+miniBAE is released under the BSD 3-Clause License. See [LICENSE](LICENSE) for details.
+
+## Contributing
+
+This project welcomes contributions! Whether it's bug fixes, new features, or platform support, feel free to submit pull requests.
+
+## History
+
+Originally created by Steve Hales and Jim Nitchals at Halestorm/Igor Labs, miniBAE evolved through several companies including Beatnik and Danger. The audio engine powered everything from web browser plugins to mobile devices, demonstrating its versatility and reliability.
+
+The project has been modernized with contemporary build systems, updated dependencies, and new features while maintaining compatibility with the original API.
+
+## Acknowledgments
+
+See [ACKNOWLEDGEMENTS](minibae/ACKNOWLEDGEMENTS) for the complete list of contributors who made this project possible.
