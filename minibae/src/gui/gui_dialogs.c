@@ -897,8 +897,8 @@ void render_about_dialog(SDL_Renderer *R, int mx, int my, bool mclick)
     }
 
 #if (USE_MPEG_DECODER == TRUE) || (USE_MPEG_ENCODER == TRUE) || (SUPPORT_MIDI_HW == TRUE)
-    // Page 2: credits/licenses (part 2)
-    else if (g_about_page == 2)
+    // Page 2 & 3: credits/licenses (part 2)
+    else if (g_about_page == 2 || g_about_page == 3)
     {
         const char *credits_page2[] = {
 #if USE_MPEG_DECODER == TRUE
@@ -913,6 +913,12 @@ void render_about_dialog(SDL_Renderer *R, int mx, int my, bool mclick)
             "Copyright (c) 2003-2023 Gary P. Scavone",
             "https://github.com/thestk/rtmidi",
 #endif
+#if defined(USE_VORBIS_DECODER) || defined(USE_VORBIS_ENCODER)
+            "",
+            "libvorbis/libogg",
+            "Copyright (C) 2002-2020 Xiph.org Foundation",
+            "https://www.xiph.org/ogg/vorbis/",
+#endif
 #if defined(USE_FLAC_DECODER) || defined(USE_FLAC_ENCODER)
             "",
             "libFLAC",
@@ -920,15 +926,28 @@ void render_about_dialog(SDL_Renderer *R, int mx, int my, bool mclick)
             "Copyright (C) 2011-2025  Xiph.Org Foundation",
             "https://www.xiph.org/flac/",
 #endif
-#if defined(USE_VORBIS_DECODER) || defined(USE_VORBIS_ENCODER)
-            "",
-            "libvorbis/libogg",
-            "Copyright (C) 2002-2020 Xiph.org Foundation",
-            "https://www.xiph.org/ogg/vorbis/",
-#endif
             "",
             NULL};
+        
+        // Calculate how many items fit on page 2
+        int page2_max_items = 0;
+        int temp_y = dlg.y + 40;
         for (int i = 0; credits_page2[i]; ++i)
+        {
+            temp_y += 16;
+            if (temp_y > dlg.y + dlg.h - 36)
+            {
+                page2_max_items = i;
+                break;
+            }
+        }
+        
+        // If we're on page 2, render up to page2_max_items
+        // If we're on page 3, render from page2_max_items onward
+        int start_index = (g_about_page == 2) ? 0 : page2_max_items;
+        int end_index = (g_about_page == 2) ? page2_max_items : -1;
+        
+        for (int i = start_index; credits_page2[i] && (end_index == -1 || i < end_index); ++i)
         {
             const char *txt = credits_page2[i];
             if (strncmp(txt, "http", 4) == 0)
@@ -966,10 +985,48 @@ void render_about_dialog(SDL_Renderer *R, int mx, int my, bool mclick)
     }
 #endif
     // Page navigation controls (bottom-right)
-    // Calculate max pages dynamically based on available features
+    // Calculate max pages dynamically based on available features and content overflow
     int max_pages = 2; // Always have pages 0 and 1
 #if (USE_MPEG_DECODER == TRUE) || (USE_MPEG_ENCODER == TRUE) || (SUPPORT_MIDI_HW == TRUE)
-    max_pages = 3; // Add page 2 only if features are available
+    max_pages = 3; // Add page 2 if features are available
+    
+    // Check if page 2 content would overflow and require page 3
+    const char *credits_page2[] = {
+#if USE_MPEG_DECODER == TRUE
+        "", "minimp3", "Licensed under the CC0", "http://creativecommons.org/publicdomain/zero/1.0/",
+#endif
+#if SUPPORT_MIDI_HW == TRUE
+        "", "RtMidi: realtime MIDI i/o C++ classes", "Copyright (c) 2003-2023 Gary P. Scavone", "https://github.com/thestk/rtmidi",
+#endif
+#if defined(USE_FLAC_DECODER) || defined(USE_FLAC_ENCODER)
+        "", "libFLAC", "Copyright (C) 2000-2009  Josh Coalson", "Copyright (C) 2011-2025  Xiph.Org Foundation", "https://www.xiph.org/flac/",
+#endif
+#if defined(USE_VORBIS_DECODER) || defined(USE_VORBIS_ENCODER)
+        "", "libvorbis/libogg", "Copyright (C) 2002-2020 Xiph.org Foundation", "https://www.xiph.org/ogg/vorbis/",
+#endif
+        "", NULL};
+    
+    // Simulate rendering to see if all items fit on page 2
+    int temp_y = dlg.y + 40;
+    bool page3_needed = false;
+    for (int i = 0; credits_page2[i]; ++i)
+    {
+        temp_y += 16;
+        if (temp_y > dlg.y + dlg.h - 36)
+        {
+            // Check if there are more items after this one
+            if (credits_page2[i + 1] != NULL)
+            {
+                page3_needed = true;
+            }
+            break;
+        }
+    }
+    
+    if (page3_needed)
+    {
+        max_pages = 4; // Add page 3 if content overflows
+    }
 #endif
     
     Rect navPrev = {dlg.x + dlg.w - 70, dlg.y + dlg.h - 34, 24, 20};
