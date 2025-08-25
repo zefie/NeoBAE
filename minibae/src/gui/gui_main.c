@@ -1190,6 +1190,10 @@ int main(int argc, char *argv[])
                 char *dropped = e.drop.file;
                 if (dropped)
                 {
+                    // Get current mouse position to check if drop is over playlist
+                    int drop_mx, drop_my;
+                    SDL_GetMouseState(&drop_mx, &drop_my);
+                    
                     // Check file extension
                     const char *ext = strrchr(dropped, '.');
                     bool is_bank_file = false;
@@ -1240,25 +1244,66 @@ int main(int argc, char *argv[])
                         else
                         {
 #endif
-                            // Try to load as media file (original behavior)
-                            BAE_PRINTF("Drag and drop: Loading media file: %s\n", dropped);
-                            if (bae_load_song_with_settings(dropped, transpose, tempo, volume, loopPlay, reverbType, ch_enable))
-                            {
 #if SUPPORT_PLAYLIST == TRUE
-                                // Add file to playlist and set as current
-                                playlist_update_current_file(dropped);
+                            // Calculate playlist panel bounds to check if drop is over playlist
+                            // Use same calculation as in rendering section
+                            int playlistPanelHeight = 300;
+                            Rect transportPanel_local = {10, 160, 880, 85}; // same as rendering
+                            int keyboardPanelY_local = transportPanel_local.y + transportPanel_local.h + 10;
+                            Rect keyboardPanel_local = {10, keyboardPanelY_local, 880, 110};
+#ifdef SUPPORT_MIDI_HW
+                            bool showKeyboard_local = g_show_virtual_keyboard && (g_midi_input_enabled || (g_bae.song_loaded && !g_bae.is_audio_file));
+#else
+                            bool showKeyboard_local = g_show_virtual_keyboard && (g_bae.song_loaded && !g_bae.is_audio_file);
 #endif
-                                duration = bae_get_len_ms();
-                                progress = 0;
-                                playing = false;    // Ensure we start from stopped state
-                                bae_play(&playing); // Auto-start playback
-                                BAE_PRINTF("Successfully loaded dropped media: %s\n", dropped);
-                                // Status message is set by bae_load_song_with_settings function
+                            bool showWaveform_local = g_bae.is_audio_file && g_bae.sound;
+                            if (showWaveform_local)
+                                showKeyboard_local = false;
+#if SUPPORT_KARAOKE == TRUE
+                            bool showKaraoke_local = g_karaoke_enabled && !g_karaoke_suspended &&
+                                                     (g_lyric_count > 0 || g_karaoke_line_current[0] || g_karaoke_line_previous[0]) &&
+                                                     g_bae.song_loaded && !g_bae.is_audio_file;
+                            int karaokePanelHeight_local = 40;
+#endif
+                            int statusY_local = ((showKeyboard_local || showWaveform_local) ? (keyboardPanel_local.y + keyboardPanel_local.h + 10) : (transportPanel_local.y + transportPanel_local.h + 10));
+#if SUPPORT_KARAOKE == TRUE
+                            if (showKaraoke_local)
+                                statusY_local = statusY_local + karaokePanelHeight_local + 5;
+#endif
+                            int playlistPanelY = statusY_local;
+                            Rect playlistPanel = {10, playlistPanelY, 880, playlistPanelHeight};
+                            
+                            // Check if drop is over playlist panel
+                            if (point_in(drop_mx, drop_my, playlistPanel))
+                            {
+                                // Add to playlist instead of playing immediately
+                                BAE_PRINTF("Drag and drop: Adding media file to playlist: %s\n", dropped);
+                                playlist_add_file(dropped);
+                                set_status_message("File added to playlist");
                             }
                             else
+#endif
                             {
-                                BAE_PRINTF("Failed to load dropped media: %s\n", dropped);
-                                set_status_message("Failed to load dropped media file");
+                                // Try to load as media file (original behavior)
+                                BAE_PRINTF("Drag and drop: Loading media file: %s\n", dropped);
+                                if (bae_load_song_with_settings(dropped, transpose, tempo, volume, loopPlay, reverbType, ch_enable))
+                                {
+#if SUPPORT_PLAYLIST == TRUE
+                                    // Add file to playlist and set as current
+                                    playlist_update_current_file(dropped);
+#endif
+                                    duration = bae_get_len_ms();
+                                    progress = 0;
+                                    playing = false;    // Ensure we start from stopped state
+                                    bae_play(&playing); // Auto-start playback
+                                    BAE_PRINTF("Successfully loaded dropped media: %s\n", dropped);
+                                    // Status message is set by bae_load_song_with_settings function
+                                }
+                                else
+                                {
+                                    BAE_PRINTF("Failed to load dropped media: %s\n", dropped);
+                                    set_status_message("Failed to load dropped media file");
+                                }
                             }
 #ifdef SUPPORT_MIDI_HW
                         }
