@@ -593,7 +593,7 @@ void setWindowTitle(SDL_Window *window)
     const char *libMiniBAECPUArch = BAE_GetCurrentCPUArchitecture(TRUE);
     const char *libMiniBAEVersion = BAE_GetVersion();
     char windowTitle[128];
-    snprintf(windowTitle, sizeof(windowTitle), "miniBAE Player - %s - %s", libMiniBAECPUArch, libMiniBAEVersion);
+    snprintf(windowTitle, sizeof(windowTitle), "zefidi Media Player - %s - %s", libMiniBAECPUArch, libMiniBAEVersion);
     SDL_SetWindowTitle(window, windowTitle);
 }
 
@@ -653,7 +653,7 @@ int main(int argc, char *argv[])
                 const char *pathToSend = argv[1];
                 HWND found = NULL;
                 // Title we expect
-                const char *want = "miniBAE Player";
+                const char *want = "zefidi Media Player";
                 // Enumerator callback
                 struct EnumCtx ctx;
                 ctx.want = want;
@@ -837,7 +837,7 @@ int main(int argc, char *argv[])
         window_y = settings.window_y;
     }
 
-    SDL_Window *win = SDL_CreateWindow("miniBAE Player", window_x, window_y, WINDOW_W, g_window_h, SDL_WINDOW_SHOWN);
+    SDL_Window *win = SDL_CreateWindow("zefidi Media Player", window_x, window_y, WINDOW_W, g_window_h, SDL_WINDOW_SHOWN);
     g_main_window = win; // Store global reference for settings saving
     setWindowTitle(win);
     setWindowIcon(win);

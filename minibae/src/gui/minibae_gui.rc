@@ -21,13 +21,13 @@ BEGIN
     BEGIN
         BLOCK "040904b0"
         BEGIN
-            VALUE "CompanyName", "miniBAE"
-            VALUE "FileDescription", "miniBAE GUI Player"
+            VALUE "CompanyName", "zefie Networks"
+            VALUE "FileDescription", "zefidi Media Player"
             VALUE "FileVersion", "1.0.0.0"
-            VALUE "InternalName", "minibae_gui"
+            VALUE "InternalName", "zefidi"
             VALUE "LegalCopyright", "Copyright (C) 2024"
-            VALUE "OriginalFilename", "minibae_gui.exe"
-            VALUE "ProductName", "miniBAE"
+            VALUE "OriginalFilename", "zefidi.exe"
+            VALUE "ProductName", "zefidi"
             VALUE "ProductVersion", "1.0.0.0"
         END
     END

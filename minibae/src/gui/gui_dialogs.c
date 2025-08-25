@@ -697,13 +697,13 @@ void render_about_dialog(SDL_Renderer *R, int mx, int my, bool mclick)
 
     char line1[256];
     if (baeVersion && cpuArch)
-        snprintf(line1, sizeof(line1), "miniBAE Player (%s) %s", cpuArch, baeVersion);
+        snprintf(line1, sizeof(line1), "zefidi Media Player (%s) %s", cpuArch, baeVersion);
     else if (baeVersion)
-        snprintf(line1, sizeof(line1), "miniBAE Player %s", baeVersion);
+        snprintf(line1, sizeof(line1), "zefidi Media Player %s", baeVersion);
     else if (cpuArch)
-        snprintf(line1, sizeof(line1), "miniBAE Player (%s)", cpuArch);
+        snprintf(line1, sizeof(line1), "zefidi Media Player (%s)", cpuArch);
     else
-        snprintf(line1, sizeof(line1), "miniBAE Player");
+        snprintf(line1, sizeof(line1), "zefidi Media Player");
 
     char line2[256];
     if (compInfo && compInfo[0])
@@ -913,13 +913,19 @@ void render_about_dialog(SDL_Renderer *R, int mx, int my, bool mclick)
             "Copyright (c) 2003-2023 Gary P. Scavone",
             "https://github.com/thestk/rtmidi",
 #endif
-#if defined(USE_VORBIS_DECODER) || defined(USE_VORBIS_ENCODER)
+#if SUPPORT_OGG_FORMAT == TRUE
             "",
-            "libvorbis/libogg",
-            "Copyright (C) 2002-2020 Xiph.org Foundation",
-            "https://www.xiph.org/ogg/vorbis/",
+            "libogg",
+            "Copyright (c) 2002, Xiph.org Foundation",
+            "https://www.xiph.org/ogg/",
 #endif
-#if defined(USE_FLAC_DECODER) || defined(USE_FLAC_ENCODER)
+#if (USE_VORBIS_DECODER == TRUE) || (USE_VORBIS_ENCODER == TRUE)
+            "",
+            "libvorbis",
+            "Copyright (c) 2002-2020 Xiph.org Foundation",
+            "https://www.xiph.org/vorbis/",
+#endif
+#if (USE_FLAC_DECODER == TRUE) || (USE_FLAC_ENCODER == TRUE)
             "",
             "libFLAC",
             "Copyright (C) 2000-2009  Josh Coalson",
@@ -929,67 +935,80 @@ void render_about_dialog(SDL_Renderer *R, int mx, int my, bool mclick)
             "",
             NULL};
         
-        // Calculate how many items fit on page 2
-        int page2_max_items = 0;
-        int temp_y = dlg.y + 40;
+        // Check if credits_page2 has any meaningful content (not just empty strings)
+        bool has_credits_content = false;
         for (int i = 0; credits_page2[i]; ++i)
         {
-            temp_y += 16;
-            if (temp_y > dlg.y + dlg.h - 36)
+            if (credits_page2[i][0] != '\0')
             {
-                page2_max_items = i;
+                has_credits_content = true;
                 break;
             }
         }
         
-        // If we're on page 2, render up to page2_max_items
-        // If we're on page 3, render from page2_max_items onward
-        int start_index = (g_about_page == 2) ? 0 : page2_max_items;
-        int end_index = (g_about_page == 2) ? page2_max_items : -1;
-        
-        for (int i = start_index; credits_page2[i] && (end_index == -1 || i < end_index); ++i)
+        // Only render if there's actual content
+        if (has_credits_content)
         {
-            const char *txt = credits_page2[i];
-            if (strncmp(txt, "http", 4) == 0)
+            // Calculate how many items fit on page 2
+            int page2_max_items = 0;
+            int temp_y = dlg.y + 40;
+            for (int i = 0; credits_page2[i]; ++i)
             {
-                int tw = 0, th = 0;
-                measure_text(txt, &tw, &th);
-                Rect r = {dlg.x + pad + 8, y, tw, th > 0 ? th : 14};
-                bool over = point_in(mx, my, r);
-                SDL_Color col = over ? g_accent_color : g_highlight_color;
-                draw_text(R, r.x, r.y, txt, col);
-                if (over)
+                temp_y += 16;
+                if (temp_y > dlg.y + dlg.h - 36)
                 {
-                    SDL_SetRenderDrawColor(R, col.r, col.g, col.b, col.a);
-                    SDL_RenderDrawLine(R, r.x, r.y + r.h - 2, r.x + r.w, r.y + r.h - 2);
+                    page2_max_items = i;
+                    break;
                 }
-                if (mclick && over)
+            }
+            
+            // If we're on page 2, render up to page2_max_items
+            // If we're on page 3, render from page2_max_items onward
+            int start_index = (g_about_page == 2) ? 0 : page2_max_items;
+            int end_index = (g_about_page == 2) ? page2_max_items : -1;
+            
+            for (int i = start_index; credits_page2[i] && (end_index == -1 || i < end_index); ++i)
+            {
+                const char *txt = credits_page2[i];
+                if (strncmp(txt, "http", 4) == 0)
                 {
+                    int tw = 0, th = 0;
+                    measure_text(txt, &tw, &th);
+                    Rect r = {dlg.x + pad + 8, y, tw, th > 0 ? th : 14};
+                    bool over = point_in(mx, my, r);
+                    SDL_Color col = over ? g_accent_color : g_highlight_color;
+                    draw_text(R, r.x, r.y, txt, col);
+                    if (over)
+                    {
+                        SDL_SetRenderDrawColor(R, col.r, col.g, col.b, col.a);
+                        SDL_RenderDrawLine(R, r.x, r.y + r.h - 2, r.x + r.w, r.y + r.h - 2);
+                    }
+                    if (mclick && over)
+                    {
 #ifdef _WIN32
-                    ShellExecuteA(NULL, "open", txt, NULL, NULL, SW_SHOWNORMAL);
+                        ShellExecuteA(NULL, "open", txt, NULL, NULL, SW_SHOWNORMAL);
 #else
-                    char cmd[512];
-                    snprintf(cmd, sizeof(cmd), "(xdg-open '%s' || open '%s') >/dev/null 2>&1 &", txt, txt);
-                    system(cmd);
+                        char cmd[512];
+                        snprintf(cmd, sizeof(cmd), "(xdg-open '%s' || open '%s') >/dev/null 2>&1 &", txt, txt);
+                        system(cmd);
 #endif
+                    }
                 }
+                else
+                {
+                    draw_text(R, dlg.x + pad + 8, y, txt, g_text_color);
+                }
+                y += 16;
+                if (y > dlg.y + dlg.h - 36)
+                    break;
             }
-            else
-            {
-                draw_text(R, dlg.x + pad + 8, y, txt, g_text_color);
-            }
-            y += 16;
-            if (y > dlg.y + dlg.h - 36)
-                break;
         }
     }
 #endif
     // Page navigation controls (bottom-right)
     // Calculate max pages dynamically based on available features and content overflow
     int max_pages = 2; // Always have pages 0 and 1
-#if (USE_MPEG_DECODER == TRUE) || (USE_MPEG_ENCODER == TRUE) || (SUPPORT_MIDI_HW == TRUE)
-    max_pages = 3; // Add page 2 if features are available
-    
+#if (USE_MPEG_DECODER == TRUE) || (USE_MPEG_ENCODER == TRUE) || (SUPPORT_MIDI_HW == TRUE) || (SUPPORT_OGG_FORMAT == TRUE) || (USE_VORBIS_DECODER == TRUE) || (USE_VORBIS_ENCODER == TRUE) || (USE_FLAC_DECODER == TRUE) || (USE_FLAC_ENCODER == TRUE)
     // Check if page 2 content would overflow and require page 3
     const char *credits_page2[] = {
 #if USE_MPEG_DECODER == TRUE
@@ -998,34 +1017,53 @@ void render_about_dialog(SDL_Renderer *R, int mx, int my, bool mclick)
 #if SUPPORT_MIDI_HW == TRUE
         "", "RtMidi: realtime MIDI i/o C++ classes", "Copyright (c) 2003-2023 Gary P. Scavone", "https://github.com/thestk/rtmidi",
 #endif
-#if defined(USE_FLAC_DECODER) || defined(USE_FLAC_ENCODER)
-        "", "libFLAC", "Copyright (C) 2000-2009  Josh Coalson", "Copyright (C) 2011-2025  Xiph.Org Foundation", "https://www.xiph.org/flac/",
+#if SUPPORT_OGG_FORMAT == TRUE
+        "", "libogg", "Copyright (c) 2002, Xiph.org Foundation", "https://www.xiph.org/ogg/",
 #endif
-#if defined(USE_VORBIS_DECODER) || defined(USE_VORBIS_ENCODER)
-        "", "libvorbis/libogg", "Copyright (C) 2002-2020 Xiph.org Foundation", "https://www.xiph.org/ogg/vorbis/",
+#if (USE_VORBIS_DECODER == TRUE) || (USE_VORBIS_ENCODER == TRUE)
+        "", "libvorbis", "Copyright (c) 2002-2020 Xiph.org Foundation", "https://www.xiph.org/vorbis/",
+#endif
+#if (USE_FLAC_DECODER == TRUE) || (USE_FLAC_ENCODER == TRUE)
+        "", "libFLAC", "Copyright (C) 2000-2009  Josh Coalson", "Copyright (C) 2011-2025  Xiph.Org Foundation", "https://www.xiph.org/flac/",
 #endif
         "", NULL};
     
-    // Simulate rendering to see if all items fit on page 2
-    int temp_y = dlg.y + 40;
-    bool page3_needed = false;
+    // Check if credits_page2 has any meaningful content (not just empty strings)
+    bool has_credits_content = false;
     for (int i = 0; credits_page2[i]; ++i)
     {
-        temp_y += 16;
-        if (temp_y > dlg.y + dlg.h - 36)
+        if (credits_page2[i][0] != '\0')
         {
-            // Check if there are more items after this one
-            if (credits_page2[i + 1] != NULL)
-            {
-                page3_needed = true;
-            }
+            has_credits_content = true;
             break;
         }
     }
     
-    if (page3_needed)
+    if (has_credits_content)
     {
-        max_pages = 4; // Add page 3 if content overflows
+        max_pages = 3; // Add page 2 if features are available and have content
+        
+        // Simulate rendering to see if all items fit on page 2
+        int temp_y = dlg.y + 40;
+        bool page3_needed = false;
+        for (int i = 0; credits_page2[i]; ++i)
+        {
+            temp_y += 16;
+            if (temp_y > dlg.y + dlg.h - 36)
+            {
+                // Check if there are more items after this one
+                if (credits_page2[i + 1] != NULL)
+                {
+                    page3_needed = true;
+                }
+                break;
+            }
+        }
+        
+        if (page3_needed)
+        {
+            max_pages = 4; // Add page 3 if content overflows
+        }
     }
 #endif
     

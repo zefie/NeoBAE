@@ -401,9 +401,6 @@ const char *BAE_GetFeatureString()
     }
 
     // FLAC support
-#if USE_FLAC_DECODER != TRUE && USE_FLAC_ENCODER != TRUE
-    const char *flac = NULL;
-#else
 #if USE_FLAC_DECODER == TRUE && USE_FLAC_ENCODER == TRUE
     const char *flac = "Full FLAC Support";
 #elif USE_FLAC_DECODER == TRUE && USE_FLAC_ENCODER != TRUE
@@ -413,7 +410,6 @@ const char *BAE_GetFeatureString()
 #else
     const char *flac = "No FLAC Support";
 #endif
-#endif
     if (flac && flac[0])
     {
         snprintf(featBuf + strlen(featBuf), sizeof(featBuf) - strlen(featBuf), "%s%s", first ? "" : ", ", flac);
@@ -421,9 +417,6 @@ const char *BAE_GetFeatureString()
     }
 
     // Vorbis support
-#if USE_VORBIS_DECODER != TRUE && USE_VORBIS_ENCODER != TRUE
-    const char *vorbis = NULL;
-#else
 #if USE_VORBIS_DECODER == TRUE && USE_VORBIS_ENCODER == TRUE
     const char *vorbis = "Full Vorbis Support";
 #elif USE_VORBIS_DECODER == TRUE && USE_VORBIS_ENCODER != TRUE
@@ -432,7 +425,6 @@ const char *BAE_GetFeatureString()
     const char *vorbis = "Vorbis Encoder Support";
 #else
     const char *vorbis = "No Vorbis Support";
-#endif
 #endif
     if (vorbis && vorbis[0])
     {

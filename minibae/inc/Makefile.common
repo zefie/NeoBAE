@@ -44,7 +44,7 @@ endif
 
 ifeq ($(TARGET_BIN),)
 	ifneq ($(BUILD_GUI),) 
-		TARGET_BIN	:= minibae_gui
+		TARGET_BIN	:= zefidi
 	else
 		TARGET_BIN	:= playbae
 	endif
@@ -377,7 +377,6 @@ ifeq ($(VORBIS_ENC),1)
 endif
 
 
-# playbae = libMiniBAE srcs + playbae.c
 ifeq ($(BUILD_GUI),1)
 	BAE_FLAGS += -DOUTPUT_TO_LOGFILE=1
 	SRC_BIN	:= $(SRC) src/gui/gui_logging.c \
@@ -392,6 +391,7 @@ ifeq ($(BUILD_GUI),1)
 		src/gui/gui_panels.c \
 		src/gui/gui_main.c
 else
+	# playbae = libMiniBAE srcs + playbae.c
 	SRC_BIN	:= $(SRC) src/playbae/playbae.c
 endif
 
