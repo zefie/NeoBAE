@@ -1097,137 +1097,88 @@ int main(int argc, char *argv[])
                                 other playback controls disabled as before. */
                             bool volume_enabled_local = !g_reverbDropdownOpen;
 
-                            // Try transpose/tempo/volume helpers in order
-                            if (!ui_adjust_transpose(mx, my, sdelta, playback_controls_enabled_local, &transpose))
+                            // Calculate the LSB/MSB rects the same way as in rendering
+                            int keyboardPanelY_wheel = transportPanel.y + transportPanel.h + 10;
+                            Rect keyboardPanel_wheel = {10, keyboardPanelY_wheel, 880, 110};
+                            bool showKeyboard_wheel = g_show_virtual_keyboard && g_bae.song && !g_bae.is_audio_file && g_bae.song_loaded;
+                            bool showWaveform_wheel = g_bae.is_audio_file && g_bae.sound;
+                            if (showWaveform_wheel)
+                                showKeyboard_wheel = false;
+
+                            bool handled_wheel_event = false;
+
+                            // LSB/MSB number pickers wheel handling - check first
+                            if (showKeyboard_wheel && !(g_bae.is_audio_file && g_bae.sound))
                             {
-                                if (!ui_adjust_tempo(mx, my, sdelta, playback_controls_enabled_local, &tempo, &duration, &progress))
+                                // Calculate MSB/LSB rects to match the actual rendering coordinates
+                                int picker_y_wheel = keyboardPanel_wheel.y + 56; // below channel dropdown
+                                int picker_w_wheel = 35;                         // compact width for 3-digit numbers
+                                int picker_h_wheel = 18;
+                                int spacing_wheel = 5;
+
+                                // MSB and LSB number picker rects (match rendering exactly)
+                                Rect msbRect_wheel = {keyboardPanel_wheel.x + 10, picker_y_wheel, picker_w_wheel, picker_h_wheel};
+                                Rect lsbRect_wheel = {msbRect_wheel.x + picker_w_wheel + spacing_wheel, picker_y_wheel, picker_w_wheel, picker_h_wheel};
+
+                                if (point_in(mx, my, msbRect_wheel))
                                 {
-                                    // For volume we pass the ddRect width as currently used in rendering
-                                    // ui_adjust_volume will test using a fixed rect matching rendering
-                                    ui_adjust_volume(mx, my, sdelta, volume_enabled_local, &volume);
+                                    change_bank_value_for_current_channel(true, sdelta);
+                                    handled_wheel_event = true;
+                                }
+                                else if (point_in(mx, my, lsbRect_wheel))
+                                {
+                                    change_bank_value_for_current_channel(false, sdelta);
+                                    handled_wheel_event = true;
                                 }
                             }
-                            // LSB/MSB number pickers wheel handling
-                            else
+
+                            // Try transpose/tempo/volume helpers in order (only if MSB/LSB didn't handle it)
+                            if (!handled_wheel_event)
                             {
-                                // Calculate the LSB/MSB rects the same way as in rendering
-                                int keyboardPanelY_wheel = transportPanel.y + transportPanel.h + 10;
-                                Rect keyboardPanel_wheel = {10, keyboardPanelY_wheel, 880, 110};
-                                bool showKeyboard_wheel = g_show_virtual_keyboard && g_bae.song && !g_bae.is_audio_file && g_bae.song_loaded;
-                                bool showWaveform_wheel = g_bae.is_audio_file && g_bae.sound;
-                                if (showWaveform_wheel)
-                                    showKeyboard_wheel = false;
-
-                                if (showKeyboard_wheel && !(g_bae.is_audio_file && g_bae.sound))
+                                if (!ui_adjust_transpose(mx, my, sdelta, playback_controls_enabled_local, &transpose))
                                 {
-                                    // Calculate MSB/LSB rects to match the actual rendering coordinates
-                                    int picker_y_wheel = keyboardPanel_wheel.y + 56; // below channel dropdown
-                                    int picker_w_wheel = 35;                         // compact width for 3-digit numbers
-                                    int picker_h_wheel = 18;
-                                    int spacing_wheel = 5;
-
-                                    // MSB and LSB number picker rects (match rendering exactly)
-                                    Rect msbRect_wheel = {keyboardPanel_wheel.x + 10, picker_y_wheel, picker_w_wheel, picker_h_wheel};
-                                    Rect lsbRect_wheel = {msbRect_wheel.x + picker_w_wheel + spacing_wheel, picker_y_wheel, picker_w_wheel, picker_h_wheel};
-
-                                    if (point_in(mx, my, msbRect_wheel))
+                                    if (!ui_adjust_tempo(mx, my, sdelta, playback_controls_enabled_local, &tempo, &duration, &progress))
                                     {
-                                        change_bank_value_for_current_channel(true, sdelta);
-                                    }
-                                    else if (point_in(mx, my, lsbRect_wheel))
-                                    {
-                                        change_bank_value_for_current_channel(false, sdelta);
-                                    }
-                                    // If not over LSB/MSB, fall through to playlist handling
+                                        // For volume we pass the ddRect width as currently used in rendering
+                                        // ui_adjust_volume will test using a fixed rect matching rendering
+                                        if (!ui_adjust_volume(mx, my, sdelta, volume_enabled_local, &volume))
+                                        {
+                                        // For volume we pass the ddRect width as currently used in rendering
+                                        // ui_adjust_volume will test using a fixed rect matching rendering
+                                        if (!ui_adjust_volume(mx, my, sdelta, volume_enabled_local, &volume))
+                                        {
 #if SUPPORT_PLAYLIST == TRUE
-                                    else
-                                    {
-                                        // Playlist scroll handling
-                                        // For playlist scroll, we need to match the actual rendered coordinates
-                                        // The playlist panel coordinates are calculated in the main rendering loop
-                                        // Let's just use a simple approximation and let playlist module do detailed check
-
-#if SUPPORT_KARAOKE == TRUE
-                                        bool showKaraoke = g_karaoke_enabled && !g_karaoke_suspended &&
-                                                           (g_lyric_count > 0 || g_karaoke_line_current[0] || g_karaoke_line_previous[0]) &&
-                                                           !g_bae.is_audio_file && g_bae.song;
-#endif
-                                        // Compute the exact playlist panel rect the same way it is calculated
-                                        // during rendering so wheel handling matches the visible list area.
-                                        int playlistPanelHeight = 300; // same as rendering
-                                        int keyboardPanelY_local = transportPanel.y + transportPanel.h + 10;
-                                        Rect keyboardPanel_local = {10, keyboardPanelY_local, 880, 110};
-                                        bool showKeyboard_local = g_show_virtual_keyboard && g_bae.song && !g_bae.is_audio_file && g_bae.song_loaded;
-                                        bool showWaveform_local = g_bae.is_audio_file && g_bae.sound;
-                                        if (showWaveform_local)
-                                            showKeyboard_local = false;
-#if SUPPORT_KARAOKE == TRUE
-                                        bool showKaraoke_local = g_karaoke_enabled && !g_karaoke_suspended &&
-                                                                 (g_lyric_count > 0 || g_karaoke_line_current[0] || g_karaoke_line_previous[0]) &&
-                                                                 g_bae.song_loaded && !g_bae.is_audio_file;
-                                        int karaokePanelHeight_local = 40;
-#endif
-                                        int statusY_local = ((showKeyboard_local || showWaveform_local) ? (keyboardPanel_local.y + keyboardPanel_local.h + 10) : (transportPanel.y + transportPanel.h + 10));
-#if SUPPORT_KARAOKE == TRUE
-                                        if (showKaraoke_local)
-                                            statusY_local = statusY_local + karaokePanelHeight_local + 5;
-#endif
-                                        int playlistPanelY = statusY_local;
-                                        Rect playlistPanel = {10, playlistPanelY, 880, playlistPanelHeight};
-
-                                        // Let the playlist module decide whether the wheel event is inside
-                                        // the actual list area (not the whole panel). It will compute the
-                                        // list rect using the same layout math and handle scrolling.
-                                        if (!playlist_handle_mouse_wheel(mx, my, wy, playlistPanel))
-                                        {
-                                            // not in playlist list area - ignore here
-                                        }
-                                        else
-                                        {
-                                            // Playlist scroll handling when keyboard is not visible
-                                            // For playlist scroll, we need to match the actual rendered coordinates
-                                            // The playlist panel coordinates are calculated in the main rendering loop
-                                            // Let's just use a simple approximation and let playlist module do detailed check
-
-#if SUPPORT_KARAOKE == TRUE
-                                            bool showKaraoke = g_karaoke_enabled && !g_karaoke_suspended &&
-                                                               (g_lyric_count > 0 || g_karaoke_line_current[0] || g_karaoke_line_previous[0]) &&
-                                                               !g_bae.is_audio_file && g_bae.song;
-#endif
+                                            // Handle playlist scroll if no other controls handled the wheel event
                                             // Compute the exact playlist panel rect the same way it is calculated
                                             // during rendering so wheel handling matches the visible list area.
-                                            int playlistPanelHeight_fallback = 300; // same as rendering
-                                            int keyboardPanelY_fallback = transportPanel.y + transportPanel.h + 10;
-                                            Rect keyboardPanel_fallback = {10, keyboardPanelY_fallback, 880, 110};
-                                            bool showKeyboard_fallback = g_show_virtual_keyboard && g_bae.song && !g_bae.is_audio_file && g_bae.song_loaded;
-                                            bool showWaveform_fallback = g_bae.is_audio_file && g_bae.sound;
-                                            if (showWaveform_fallback)
-                                                showKeyboard_fallback = false;
+                                            int playlistPanelHeight = 300; // same as rendering
+                                            int keyboardPanelY_local = transportPanel.y + transportPanel.h + 10;
+                                            Rect keyboardPanel_local = {10, keyboardPanelY_local, 880, 110};
+                                            bool showKeyboard_local = g_show_virtual_keyboard && g_bae.song && !g_bae.is_audio_file && g_bae.song_loaded;
+                                            bool showWaveform_local = g_bae.is_audio_file && g_bae.sound;
+                                            if (showWaveform_local)
+                                                showKeyboard_local = false;
 #if SUPPORT_KARAOKE == TRUE
-                                            bool showKaraoke_fallback = g_karaoke_enabled && !g_karaoke_suspended &&
-                                                                        (g_lyric_count > 0 || g_karaoke_line_current[0] || g_karaoke_line_previous[0]) &&
-                                                                        g_bae.song_loaded && !g_bae.is_audio_file;
-                                            int karaokePanelHeight_fallback = 40;
+                                            bool showKaraoke_local = g_karaoke_enabled && !g_karaoke_suspended &&
+                                                                     (g_lyric_count > 0 || g_karaoke_line_current[0] || g_karaoke_line_previous[0]) &&
+                                                                     g_bae.song_loaded && !g_bae.is_audio_file;
+                                            int karaokePanelHeight_local = 40;
 #endif
-                                            int statusY_fallback = ((showKeyboard_fallback || showWaveform_fallback) ? (keyboardPanel_fallback.y + keyboardPanel_fallback.h + 10) : (transportPanel.y + transportPanel.h + 10));
+                                            int statusY_local = ((showKeyboard_local || showWaveform_local) ? (keyboardPanel_local.y + keyboardPanel_local.h + 10) : (transportPanel.y + transportPanel.h + 10));
 #if SUPPORT_KARAOKE == TRUE
-                                            if (showKaraoke_fallback)
-                                                statusY_fallback = statusY_fallback + karaokePanelHeight_fallback + 5;
+                                            if (showKaraoke_local)
+                                                statusY_local = statusY_local + karaokePanelHeight_local + 5;
 #endif
-                                            int playlistPanelY_fallback = statusY_fallback;
-                                            Rect playlistPanel_fallback = {10, playlistPanelY_fallback, 880, playlistPanelHeight_fallback};
+                                            int playlistPanelY = statusY_local;
+                                            Rect playlistPanel = {10, playlistPanelY, 880, playlistPanelHeight};
 
-                                            // Let the playlist module decide whether the wheel event is inside
-                                            // the actual list area (not the whole panel). It will compute the
-                                            // list rect using the same layout math and handle scrolling.
-                                            if (!playlist_handle_mouse_wheel(mx, my, wy, playlistPanel_fallback))
-                                            {
-                                                // not in playlist list area - ignore here
-                                            }
+                                            // Let the playlist module handle the wheel event
+                                            playlist_handle_mouse_wheel(mx, my, wy, playlistPanel);
+#endif
                                         }
                                     }
-#endif
                                 }
+                            }
                             }
                         }
                     }
