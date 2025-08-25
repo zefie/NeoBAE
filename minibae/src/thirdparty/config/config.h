@@ -35,7 +35,11 @@ typedef long double ieee854_float80_t;
 #ifndef FLAC_CONFIG_H
 #define FLAC_CONFIG_H
 
+#ifdef USE_OGG_FORMAT
+#define FLAC__HAS_OGG 1
+#else
 #define FLAC__HAS_OGG 0
+#endif
 #define FLAC__NO_DLL 1
 #define HAVE_LROUND 1
 #define HAVE_FSEEKO 0

@@ -173,7 +173,7 @@ static bool is_supported_file(const char *filepath)
     const char *supported[] = {
         "mid", "midi", "kar", "rmf",
         "wav", "aif", "aiff", "au", 
-        "mp2", "mp3", "flac",
+        "mp2", "mp3", "flac", "ogg", "oga",
         NULL
     };
     

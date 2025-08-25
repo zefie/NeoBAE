@@ -130,7 +130,17 @@ void XGetShortCompressionName(int32_t compressionType, void *cName)
         case C_ALAW:
             XStrCpy((char *)cName, "alaw");
             break;
-#if USE_MPEG_DECODER != 0
+#if USE_FLAC_DECODER == TRUE
+        case C_FLAC:
+            XStrCpy((char *)cName, "FLAC");
+            break;
+#endif
+#if USE_VORBIS_DECODER == TRUE
+        case C_VORBIS:
+            XStrCpy((char *)cName, "Vorbis");
+            break;
+#endif
+#if USE_MPEG_DECODER == TRUE
         case C_MPEG_32:
             XStrCpy((char *)cName, "MPEG 32k");
             break;
@@ -209,7 +219,17 @@ void XGetCompressionName(int32_t compressionType, void *cName)
         case C_ALAW:
             XStrCpy((char *)cName, "alaw 2 to 1");
             break;
-#if USE_MPEG_DECODER != 0
+#if USE_FLAC_DECODER == TRUE
+        case C_FLAC:
+            XStrCpy((char *)cName, "FLAC lossless");
+            break;
+#endif
+#if USE_VORBIS_DECODER == TRUE
+        case C_VORBIS:
+            XStrCpy((char *)cName, "Ogg Vorbis");
+            break;
+#endif
+#if USE_MPEG_DECODER == TRUE
         case C_MPEG_32:
             XStrCpy((char *)cName, "MPEG I layer 3, 32k bits");
             break;

@@ -1,5 +1,6 @@
 BAE_API			:= SDL2
 DEBUG			:= 0
+
 include inc/Makefile.common
 
 ARCH		:= -static
@@ -80,16 +81,10 @@ $(TARGET_BIN): ${OBJ_BIN}
 pack: ${TARGET_BIN}
 	cat $(TARGET_OUT)${TARGET_BIN} | gzip -9c > $(TARGET_OUT)playbae_linux32_static.gz
 
-# Rules for compiling source files to object files
-$(OBJ_DIR)%.o : %.cpp
-	@echo @compile $<
-	@mkdir -p $(OBJ_DIR)
-	$(SILENT)${CXX} -c ${CXXFLAGS} $< -o $@
 
-$(OBJ_DIR)%.o : %.c
-	@echo @compile $<
-	@mkdir -p $(OBJ_DIR)
-	$(SILENT)${CC} -c ${CFLAGS} $< -o $@
+# Generate rules for all unique source files
+ALL_SOURCES := $(sort $(SRC) $(SRC_BIN))
+$(foreach src,$(ALL_SOURCES),$(eval $(call make_obj_rule,$(src))))
 
 clean:
 	@rm -rf $(TARGET_OUT)

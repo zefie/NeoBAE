@@ -194,6 +194,9 @@
 #if USE_FLAC_ENCODER != FALSE
 #include "FLAC/stream_encoder.h"
 #endif
+#if USE_VORBIS_DECODER != FALSE || USE_VORBIS_ENCODER != FALSE
+#include "XVorbisFiles.h"
+#endif
 #include <stdint.h>
 #include <limits.h>
 
@@ -208,6 +211,12 @@
 #endif
 
 #define ODD(x)          ((int32_t)(x) & 1L)
+
+#if USE_VORBIS_DECODER != FALSE
+// Forward declaration for Vorbis file reading
+static GM_Waveform* PV_ReadIntoMemoryVorbisFile(XFILE file, XBOOL decodeData, 
+                                               int32_t *pFormat, void **ppBlockPtr, uint32_t *pBlockSize, OPErr *pError);
+#endif
 
 #undef X_PACK_FAST
 #include "X_PackStructures.h"
@@ -362,7 +371,8 @@ enum
     X_RIFF          = FOUR_CHAR('R','I','F','F'),       //      'RIFF'
     X_DATA          = FOUR_CHAR('d','a','t','a'),       //      'data'
     X_FMT           = FOUR_CHAR('f','m','t',' '),       //      'fmt '
-    X_SMPL          = FOUR_CHAR('s','m','p','l')        //      'smpl'
+    X_SMPL          = FOUR_CHAR('s','m','p','l'),       //      'smpl'
+    X_FLAC          = FOUR_CHAR('f','L','a','C')        //      'flac'
 };
 
 /**********************- AIFF Defines -**************************/
@@ -3290,6 +3300,178 @@ cleanup:
 
 #endif // USE_FLAC_DECODER != FALSE
 
+#if USE_VORBIS_DECODER != FALSE
+
+// Expand/decode Vorbis compressed data from memory
+OPErr XExpandVorbis(GM_Waveform const* src, UINT32 startFrame, GM_Waveform* dst)
+{
+    OPErr err = NO_ERR;
+    GM_Waveform *decoded = NULL;
+
+    if (!src || !dst)
+        return PARAM_ERR;
+
+    // Create XFILE from memory and decode Vorbis data
+    XFILE file = XFileOpenForReadFromMemory((void*)src->theWaveform, src->waveSize);
+    if (!file)
+        return FILE_NOT_FOUND;
+
+    decoded = PV_ReadIntoMemoryVorbisFile(file, TRUE, NULL, NULL, NULL, &err);
+    XFileClose(file);
+
+    if (!decoded)
+    {
+        return err != NO_ERR ? err : BAD_FILE;
+    }
+
+    // Determine bytes per frame of decoded data
+    {
+        const uint32_t bytesPerFrame = decoded->channels * (decoded->bitSize / 8);
+        uint32_t availableFrames = 0;
+        if (decoded->waveFrames > startFrame)
+        {
+            availableFrames = decoded->waveFrames - startFrame;
+        }
+
+        if (availableFrames > 0)
+        {
+            // Copy metadata from decoded waveform
+            dst->sampledRate = decoded->sampledRate;
+            dst->bitSize = decoded->bitSize;
+            dst->channels = decoded->channels;
+            dst->baseMidiPitch = decoded->baseMidiPitch;
+            dst->compressionType = C_NONE; // Decoded is uncompressed
+            dst->startLoop = decoded->startLoop > startFrame ? decoded->startLoop - startFrame : 0;
+            dst->endLoop = decoded->endLoop > startFrame ? decoded->endLoop - startFrame : 0;
+            
+            // Calculate the size we need for the requested frames
+            const uint32_t requestedBytes = availableFrames * bytesPerFrame;
+            
+            // Allocate memory for decoded audio data
+            dst->theWaveform = (SBYTE*)XNewPtr(requestedBytes);
+            if (!dst->theWaveform)
+            {
+                GM_FreeWaveform(decoded);
+                return MEMORY_ERR;
+            }
+
+            // Copy the decoded audio data starting from the requested frame
+            XBlockMove(decoded->theWaveform + (startFrame * bytesPerFrame), 
+                      dst->theWaveform, requestedBytes);
+            
+            dst->waveSize = requestedBytes;
+            dst->waveFrames = availableFrames;
+        }
+        else
+        {
+            err = PARAM_ERR; // startFrame is beyond the end of the data
+        }
+    }
+
+    GM_FreeWaveform(decoded);
+    return err;
+}
+
+#endif // USE_VORBIS_DECODER != FALSE
+
+#if USE_VORBIS_DECODER != FALSE
+
+// Read a Vorbis file into memory and return a GM_Waveform structure
+static GM_Waveform* PV_ReadIntoMemoryVorbisFile(XFILE file, XBOOL decodeData, 
+                                               int32_t *pFormat, void **ppBlockPtr, uint32_t *pBlockSize, OPErr *pError)
+{
+    GM_Waveform *wave = NULL;
+    void *vorbis_decoder = NULL;
+    UINT32 samples, sample_rate, channels, bit_depth;
+    UINT32 total_bytes;
+    OPErr err = NO_ERR;
+    
+    if (file == NULL || pError == NULL) {
+        if (pError) *pError = PARAM_ERR;
+        return NULL;
+    }
+    
+    // Initialize output parameters
+    if (pFormat) *pFormat = X_NONE;
+    if (ppBlockPtr) *ppBlockPtr = NULL;
+    if (pBlockSize) *pBlockSize = 0;
+    
+    // Check if this is a Vorbis file
+    if (!XIsVorbisFile(file)) {
+        *pError = PARAM_ERR;
+        return NULL;
+    }
+    
+    // Open Vorbis decoder
+    vorbis_decoder = XOpenVorbisFile(file);
+    if (vorbis_decoder == NULL) {
+        *pError = PARAM_ERR;
+        return NULL;
+    }
+    
+    // Get file information
+    err = XGetVorbisFileInfo(vorbis_decoder, &samples, &sample_rate, &channels, &bit_depth);
+    if (err != NO_ERR) {
+        XCloseVorbisFile(vorbis_decoder);
+        *pError = err;
+        return NULL;
+    }
+    
+    // Allocate waveform structure
+    wave = (GM_Waveform*)XNewPtr(sizeof(GM_Waveform));
+    if (wave == NULL) {
+        XCloseVorbisFile(vorbis_decoder);
+        *pError = MEMORY_ERR;
+        return NULL;
+    }
+    
+    // Fill in waveform info
+    wave->waveSize = samples * channels * (bit_depth / 8);
+    wave->waveFrames = samples;
+    wave->sampledRate = sample_rate << 16L; // Convert to fixed point format
+    wave->bitSize = (unsigned char)bit_depth;
+    wave->channels = (unsigned char)channels;
+    wave->baseMidiPitch = 60; // middle C
+    wave->compressionType = C_VORBIS;
+    wave->startLoop = 0;
+    wave->endLoop = 0;
+    
+    if (decodeData) {
+        // Allocate memory for decoded audio data
+        total_bytes = samples * channels * (bit_depth / 8);
+        wave->theWaveform = (SBYTE*)XNewPtr(total_bytes);
+        if (wave->theWaveform == NULL) {
+            XCloseVorbisFile(vorbis_decoder);
+            XDisposePtr(wave);
+            *pError = MEMORY_ERR;
+            return NULL;
+        }
+        
+        // Decode all audio data
+        long bytes_decoded = XDecodeVorbisFile(vorbis_decoder, wave->theWaveform, total_bytes);
+        if (bytes_decoded <= 0) {
+            XCloseVorbisFile(vorbis_decoder);
+            XDisposePtr(wave->theWaveform);
+            XDisposePtr(wave);
+            *pError = BAD_FILE;
+            return NULL;
+        }
+        
+        // Update actual size based on what was decoded
+        wave->waveSize = bytes_decoded;
+        wave->waveFrames = bytes_decoded / (channels * (bit_depth / 8));
+    } else {
+        // Don't decode, just get metadata
+        wave->theWaveform = NULL;
+    }
+    
+    XCloseVorbisFile(vorbis_decoder);
+    *pError = NO_ERR;
+    return wave;
+}
+
+#endif // USE_VORBIS_DECODER != FALSE
+
 // functions used with GM_ReadAndDecodeFileStream to preserve state between decode calls.
 void * GM_CreateFileState(AudioFileType fileType)
 {
@@ -3440,7 +3622,15 @@ GM_Waveform     *waveform;
             waveform = PV_ReadIntoMemoryFLACFile(file, decodeData, NULL, NULL, NULL, &err);
             break;
     #endif
+    #if USE_VORBIS_DECODER != FALSE
+        case FILE_VORBIS_TYPE:
+            waveform = PV_ReadIntoMemoryVorbisFile(file, decodeData, NULL, NULL, NULL, &err);
+            break;
+    #endif
         default :
+            #ifdef _DEBUG
+            printf("DEBUG: Unknown file type: %d\n", fileType);
+            #endif
             err = PARAM_ERR;
             break;
         }
@@ -3549,6 +3739,11 @@ GM_Waveform*    pWave = NULL;
 #if USE_FLAC_DECODER != FALSE
         case FILE_FLAC_TYPE:
             pWave = PV_ReadIntoMemoryFLACFile(file, FALSE, pFormat, ppBlockPtr, pBlockSize, &err);
+            break;
+#endif
+#if USE_VORBIS_DECODER != FALSE
+        case FILE_VORBIS_TYPE:
+            pWave = PV_ReadIntoMemoryVorbisFile(file, FALSE, pFormat, ppBlockPtr, pBlockSize, &err);
             break;
 #endif
         default :
@@ -3783,6 +3978,12 @@ OPErr GM_ReadAndDecodeFileStream(XFILE fileReference,
 #if USE_FLAC_DECODER != FALSE
             case FILE_FLAC_TYPE:
                 // FLAC files are read completely into memory, not streamed
+                fileError = PARAM_ERR;
+                break;
+#endif
+#if USE_VORBIS_DECODER != FALSE
+            case FILE_VORBIS_TYPE:
+                // Vorbis files are read completely into memory, not streamed
                 fileError = PARAM_ERR;
                 break;
 #endif

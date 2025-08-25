@@ -402,6 +402,9 @@ static void init_playFileString(void)
 #if defined(USE_FLAC_DECODER) && (USE_FLAC_DECODER != 0)
    strcat(playFileString, ", FLAC");
 #endif
+#if defined(USE_VORBIS_DECODER) && (USE_VORBIS_DECODER != 0)
+   strcat(playFileString, ", Ogg Vorbis");
+#endif
    strcat(playFileString, ")");
 }
 
@@ -1178,6 +1181,18 @@ BAEResult playFile(BAEMixer theMixer, char *parmFile, BAE_UNSIGNED_FIXED volume,
       {
          playbae_printf("Playing FLAC %s\n", parmFile);
          err = PlayPCM(theMixer, parmFile, BAE_FLAC_TYPE, volume, timeLimit, loopCount);
+      }
+#endif
+#ifdef USE_VORBIS_DECODER
+      else if (PV_IsFileExtension(parmFile, ".ogg"))
+      {
+         playbae_printf("Playing Ogg Vorbis %s\n", parmFile);
+         err = PlayPCM(theMixer, parmFile, BAE_VORBIS_TYPE, volume, timeLimit, loopCount);
+      }
+      else if (PV_IsFileExtension(parmFile, ".oga"))
+      {
+         playbae_printf("Playing Ogg Vorbis %s\n", parmFile);
+         err = PlayPCM(theMixer, parmFile, BAE_VORBIS_TYPE, volume, timeLimit, loopCount);
       }
 #endif
       else

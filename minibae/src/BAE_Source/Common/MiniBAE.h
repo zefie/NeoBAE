@@ -191,6 +191,11 @@ extern "C"
         BAE_COMPRESSION_MPEG_224,
         BAE_COMPRESSION_MPEG_256,
         BAE_COMPRESSION_MPEG_320,
+        // Vorbis quality-bitrate mappings (codec export targets)
+        BAE_COMPRESSION_VORBIS_96,
+        BAE_COMPRESSION_VORBIS_128,
+        BAE_COMPRESSION_VORBIS_256,
+        BAE_COMPRESSION_VORBIS_320,
         BAE_COMPRESSION_TYPE_COUNT
     } BAECompressionType;
 
@@ -270,6 +275,7 @@ extern "C"
         BAE_AU_TYPE,
         BAE_MIDI_TYPE,
         BAE_FLAC_TYPE,
+        BAE_VORBIS_TYPE,
 
         // meta types
         BAE_GROOVOID,

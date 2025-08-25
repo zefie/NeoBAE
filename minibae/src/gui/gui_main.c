@@ -3844,18 +3844,24 @@ int main(int argc, char *argv[])
                         {
                             export_dialog_type = 0; // WAV
                         }
-#if USE_FLAC_ENCODER != FALSE
+#if USE_FLAC_ENCODER == TRUE
                         else if (g_exportCodecIndex == 1)
                         {
                             export_dialog_type = 1; // FLAC
                         }
 #endif
-#if USE_MPEG_ENCODER != FALSE
-                        else
+#if USE_MPEG_ENCODER == TRUE
+                        else if (g_exportCodecIndex == 2 || g_exportCodecIndex == 3 || g_exportCodecIndex == 4 || g_exportCodecIndex == 5)
                         {
                             export_dialog_type = 2; // MP3
                         }
 #endif
+#if USE_VORBIS_ENCODER == TRUE
+                        else 
+                        {
+                            export_dialog_type = 3; // Vorbis
+                        }
+#endif                        
                         char *export_file = save_export_dialog(export_dialog_type);
                         if (export_file)
                         {
@@ -3870,6 +3876,10 @@ int main(int argc, char *argv[])
                             else if (export_dialog_type == 2)
                             {
                                 expected_ext = ".mp3";
+                            }
+                            else if (export_dialog_type == 3)
+                            {
+                                expected_ext = ".ogg";
                             }
                             else
                             {
@@ -3925,16 +3935,22 @@ int main(int argc, char *argv[])
                                 {
                                     export_file_type = BAE_WAVE_TYPE;
                                 }
-#if USE_FLAC_ENCODER != FALSE
+#if USE_FLAC_ENCODER == TRUE
                                 else if (compression == BAE_COMPRESSION_LOSSLESS)
                                 {
                                     export_file_type = BAE_FLAC_TYPE;
                                 }
 #endif
-#if USE_MPEG_ENCODER != FALSE
+#if USE_MPEG_ENCODER == TRUE
                                 else if (compression >= BAE_COMPRESSION_MPEG_64 && compression <= BAE_COMPRESSION_MPEG_320)
                                 {
                                     export_file_type = BAE_MPEG_TYPE;
+                                }
+#endif
+#if USE_VORBIS_ENCODER == TRUE
+                                else if (compression >= BAE_COMPRESSION_VORBIS_96 && compression <= BAE_COMPRESSION_VORBIS_320)
+                                {
+                                    export_file_type = BAE_VORBIS_TYPE;
                                 }
 #endif
 

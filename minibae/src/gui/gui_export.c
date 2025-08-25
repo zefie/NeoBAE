@@ -88,13 +88,21 @@ const char *g_exportCodecNames[] = {
     "FLAC Lossless",
 #endif
 #if USE_MPEG_ENCODER != FALSE
-    "64kbps MP3",
-    "96kbps MP3",
+    /* Removed: 64kbps, 96kbps, 160kbps MP3 per request; keep common MP3 options */
     "128kbps MP3",
-    "160kbps MP3",
     "192kbps MP3",
     "256kbps MP3",
+#if defined(USE_VORBIS_ENCODER) && USE_VORBIS_ENCODER == TRUE    
+    "320kbps MP3",
+#else
     "320kbps MP3"
+#endif
+#endif
+#if defined(USE_VORBIS_ENCODER) && USE_VORBIS_ENCODER == TRUE
+    "96kbps Vorbis",
+    "128kbps Vorbis",
+    "256kbps Vorbis",
+    "320kbps Vorbis"
 #endif
 };
 
@@ -106,18 +114,25 @@ const BAECompressionType g_exportCompressionMap[] = {
 #if USE_FLAC_ENCODER != FALSE
     BAE_COMPRESSION_LOSSLESS,
 #endif
-#if USE_MPEG_ENCODER != FALSE
-    BAE_COMPRESSION_MPEG_64,
-    BAE_COMPRESSION_MPEG_96,
+#if defined(USE_MPEG_ENCODER) && USE_MPEG_ENCODER == TRUE
+    /* Map retained MP3 bitrates */
     BAE_COMPRESSION_MPEG_128,
-    BAE_COMPRESSION_MPEG_160,
     BAE_COMPRESSION_MPEG_192,
     BAE_COMPRESSION_MPEG_256,
-    BAE_COMPRESSION_MPEG_320
+    BAE_COMPRESSION_MPEG_320,
 #endif
+
+#if defined(USE_VORBIS_ENCODER) && USE_VORBIS_ENCODER == TRUE
+    /* Vorbis export mappings */
+    BAE_COMPRESSION_VORBIS_96,
+    BAE_COMPRESSION_VORBIS_128,
+    BAE_COMPRESSION_VORBIS_256,
+    BAE_COMPRESSION_VORBIS_320,
+#endif
+    BAE_COMPRESSION_TYPE_COUNT
 };
 
-#if USE_MPEG_ENCODER != FALSE || USE_FLAC_ENCODER != FALSE
+#if USE_MPEG_ENCODER == TRUE || USE_FLAC_ENCODER == TRUE
 const int g_exportCompressionCount = (int)(sizeof(g_exportCompressionMap) / sizeof(g_exportCompressionMap[0]));
 #else
 const int g_exportCompressionCount = 1; // only WAV
@@ -315,9 +330,9 @@ bool bae_start_mpeg_export(const char *output_file, int codec_index)
         return false;
     }
 
-    if (codec_index < 1 || codec_index >= (int)(sizeof(g_exportCompressionMap) / sizeof(g_exportCompressionMap[0])))
+    if (codec_index < 1 || codec_index >= g_exportCompressionCount)
     {
-        set_status_message("Invalid MP3 codec index");
+        set_status_message("Invalid codec index");
         return false;
     }
 
@@ -338,11 +353,19 @@ bool bae_start_mpeg_export(const char *output_file, int codec_index)
     // Rewind to beginning
     BAESong_SetMicrosecondPosition(g_bae.song, 0);
 
-    // Start MPEG export
+    // Determine output type: default MPEG, but switch to Vorbis if selected compression is Vorbis
+    BAEFileType outType = BAE_MPEG_TYPE;
+    BAECompressionType comp = g_exportCompressionMap[codec_index];
+    if (comp == BAE_COMPRESSION_VORBIS_96 || comp == BAE_COMPRESSION_VORBIS_128 || comp == BAE_COMPRESSION_VORBIS_256 || comp == BAE_COMPRESSION_VORBIS_320)
+    {
+        outType = BAE_VORBIS_TYPE;
+    }
+
+    // Start export
     BAEResult result = BAEMixer_StartOutputToFile(g_bae.mixer,
                                                   (BAEPathName)output_file,
-                                                  BAE_MPEG_TYPE,
-                                                  g_exportCompressionMap[codec_index]);
+                                                  outType,
+                                                  comp);
 
     if (result != BAE_NO_ERROR)
     {
@@ -581,7 +604,7 @@ void bae_service_wav_export()
             BAEMixer_Delete(g_bae.mixer);
             return;
         }
-    }    
+    }
     // Aggressive export processing for maximum speed
     // Process service calls per frame - but check completion more frequently to avoid overrun
 
@@ -684,6 +707,11 @@ char *save_export_dialog(int export_type) // 0=WAV, 1=FLAC, 2=MP3
         ofn.lpstrFilter = "MP3 Files\0*.mp3\0All Files\0*.*\0";
         ofn.lpstrDefExt = "mp3";
     }
+    else if (export_type == 3)
+    {
+        ofn.lpstrFilter = "OGG Files\0*.ogg\0All Files\0*.*\0";
+        ofn.lpstrDefExt = "ogg";
+    }    
     else
     {
         ofn.lpstrFilter = "WAV Files\0*.wav\0All Files\0*.*\0";
@@ -719,6 +747,11 @@ char *save_export_dialog(int export_type) // 0=WAV, 1=FLAC, 2=MP3
         "kdialog --getsavefilename . '*.mp3' 2>/dev/null",
         "yad --file-selection --save --title='Save MP3 Export' 2>/dev/null",
         NULL};
+    const char *cmds_ogg[] = {
+        "zenity --file-selection --save --title='Save OGG Export' --file-filter='OGG Files | *.ogg' 2>/dev/null",
+        "kdialog --getsavefilename . '*.ogg' 2>/dev/null",
+        "yad --file-selection --save --title='Save OGG Export' 2>/dev/null",
+        NULL};
     const char **use_cmds;
     if (export_type == 1)
     {
@@ -727,6 +760,10 @@ char *save_export_dialog(int export_type) // 0=WAV, 1=FLAC, 2=MP3
     else if (export_type == 2)
     {
         use_cmds = cmds_mp3;
+    }
+    else if (export_type == 3)
+    {
+        use_cmds = cmds_ogg;
     }
     else
     {

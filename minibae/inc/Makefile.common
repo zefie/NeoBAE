@@ -2,14 +2,26 @@ BUILD_DIR	:= build/
 TEST_OUT_DIR	:= tests/
 TARGET_OUT	:= bin/
 BAE_FLAGS	:=
+.DEFAULT_GOAL := all
+
 ifneq ($(WASM),1)
 	ifneq ($(NOAUTO),1)
 		MP3_DEC := 1
 		MP3_ENC := 1
 		FLAC_DEC := 1
 		FLAC_ENC := 1
+		OGG_SUPPORT := 1
+		VORBIS_DEC := 1
+		VORBIS_ENC := 1
 		KARAOKE := 1
 		PLAYLIST :=1
+	endif
+endif
+
+# Force OGG support if VORBIS is chosen
+ifneq ($(OGG_SUPPORT),1)
+	ifneq ($(filter 1,$(VORBIS_ENC) $(VORBIS_DEC)),) 
+		OGG_SUPPORT := 1
 	endif
 endif
 
@@ -45,23 +57,11 @@ else
 endif
 # End Allow Overrides
 
-vpath	%.c src/BAE_Source/Common src/BAE_Source/Platform
-vpath	%.c src/banks/patches111
-vpath	%.c src/BAE_MPEG_Source_II
-
-ifeq ($(BUILD_GUI),1) 
-	vpath	%.c src/gui
-else
-	vpath	%.c src/playbae
-endif
-
-
 INC_PATH	:= -Isrc/BAE_Source/Common
 INC_PATH	+= -Isrc/BAE_Source/Platform
 INC_PATH	+= -Isrc/thirdparty/config
 
 ifneq ($(filter 1,$(MP3_ENC) $(MP3_DEC)),) 
-	vpath	%.cpp src/BAE_MPEG_Source_II
 	INC_PATH  += -Isrc/BAE_MPEG_Source_II
 endif
 
@@ -69,7 +69,7 @@ endif
 # decoder support is enabled. XMPEG_BAE_API.c implements MPG_* and
 # X* MPEG helper functions needed across the codebase.
 ifeq ($(filter 1,$(MP3_ENC) $(MP3_DEC)),1)
-	SRC += XMPEG_BAE_API.c
+	SRC += src/BAE_MPEG_Source_II/XMPEG_BAE_API.c
 endif
 
 ifeq ($(BAE_BUILT_IN_PATCHES),1)
@@ -82,18 +82,29 @@ endif
 
 ifeq ($(ENABLE_MIDI_HW),1)
 INC_PATH	+= -Isrc/thirdparty/rtmidi
-	vpath	%.cpp src/thirdparty/rtmidi
-	vpath	%.c src/thirdparty/rtmidi
 endif
 
 ifneq ($(filter 1,$(FLAC_ENC) $(FLAC_DEC)),) 
-	vpath	%.c src/thirdparty/flac/src/libFLAC
 	INC_PATH	+= -Isrc/thirdparty/flac/include -Isrc/thirdparty/flac/src/libFLAC/include
 	# Build libFLAC sources into the binary/static library instead of
 	# expecting a DLL import. Ensure headers don't declare functions as
 	# __declspec(dllimport).
 	BAE_FLAGS += -DFLAC__NO_DLL -DHAVE_CONFIG_H=1
-	BAE_FLAGS += -DHAVE_STDINT_H=1 -DHAVE_INTTYPES_H=1 -DFLAC__HAS_OGG=0 -DSIZE_T_MAX=SIZE_MAX
+	ifeq ($(OGG_SUPPORT),1)
+		BAE_FLAGS += -DHAVE_STDINT_H=1 -DHAVE_INTTYPES_H=1 -DFLAC__HAS_OGG=1 -DSIZE_T_MAX=SIZE_MAX
+	else
+		BAE_FLAGS += -DHAVE_STDINT_H=1 -DHAVE_INTTYPES_H=1 -DFLAC__HAS_OGG=0 -DSIZE_T_MAX=SIZE_MAX
+	endif
+endif
+
+ifeq ($(OGG_SUPPORT),1)
+	INC_PATH	+= -Isrc/thirdparty/libogg/include
+	BAE_FLAGS	+= -DSUPPORT_OGG_FORMAT=1
+endif
+
+ifneq ($(filter 1,$(VORBIS_DEC) $(VORBIS_ENC)),) 
+	INC_PATH	+= -Isrc/thirdparty/libvorbis/include -Isrc/thirdparty/libvorbis/lib
+	BAE_FLAGS += -DHAVE_CONFIG_H=1
 endif
 
 # default to ANSI
@@ -105,31 +116,32 @@ endif
 # Supported APIs
 ifeq ($(BAE_API),Ansi)
 	BAE_FLAGS += 	-DX_PLATFORM=X_ANSI
-	SRC       :=	BAE_API_$(BAE_API).c
+	SRC       :=	src/BAE_Source/Platform/BAE_API_$(BAE_API).c
 endif
 ifeq ($(BAE_API),WinOS)
 	BAE_FLAGS += 	-DX_PLATFORM=X_WIN95
-	SRC       :=	BAE_API_$(BAE_API).c \
-			BAE_API_$(BAE_API)_Capture.c \
-			BAE_API_$(BAE_API)_Thread.c
+	SRC       :=	src/BAE_Source/Platform/BAE_API_$(BAE_API).c \
+			src/BAE_Source/Platform/BAE_API_$(BAE_API)_Capture.c \
+			src/BAE_Source/Platform/BAE_API_$(BAE_API)_Thread.c
 endif
+ifeq ($(BAE_API),SDL2)
+	BAE_FLAGS += 	-DX_PLATFORM=X_SDL2
+	SRC       :=	src/BAE_Source/Platform/BAE_API_$(BAE_API).c
+endif
+
 
 # zefie has not tested these APIs
 ifeq ($(BAE_API),MacOSX)
 	BAE_FLAGS += 	-DX_PLATFORM=X_MACINTOSH
-	SRC       :=	BAE_API_$(BAE_API).c
+	SRC       :=	src/BAE_Source/Platform/BAE_API_$(BAE_API).c
 endif
 ifeq ($(BAE_API),Android)
 	BAE_FLAGS += 	-DX_PLATFORM=X_ANDROID
-	SRC       :=	BAE_API_$(BAE_API).c
+	SRC       :=	src/BAE_Source/Platform/BAE_API_$(BAE_API).c
 endif
 ifeq ($(BAE_API),IOS)
 	BAE_FLAGS += 	-DX_PLATFORM=X_IOS
-	SRC       :=	BAE_API_$(BAE_API).c
-endif
-ifeq ($(BAE_API),SDL2)
-	BAE_FLAGS += 	-DX_PLATFORM=X_SDL2
-	SRC       :=	BAE_API_$(BAE_API).c
+	SRC       :=	src/BAE_Source/Platform/BAE_API_$(BAE_API).c
 endif
 ## End Easy API -> X_PLATFORM
 ### End configure BAE API
@@ -141,49 +153,49 @@ endif
 
 
 # Primary libMiniBAE sources
-SRC		+=	DriverTools.c \
-			GenAudioStreams.c \
-			GenCache.c \
-			GenChorus.c \
-			GenFiltersReverbU3232.c \
-			GenInterp2ReverbU3232.c \
-			GenOutput.c \
-			GenPatch.c \
-			GenReverb.c \
-			GenReverbNew.c \
-			GenSample.c \
-			GenSeq.c \
-			GenSeqTools.c \
-			GenSetup.c \
-			GenSong.c \
-			GenSoundFiles.c \
-			GenSynth.c \
-			GenSynthFiltersSimple.c \
-			GenSynthFiltersU3232.c \
-			GenSynthInterp2Simple.c \
-			GenSynthInterp2U3232.c \
-			MiniBAE.c \
-			NewNewLZSS.c \
-			SampleTools.c \
-			X_API.c \
-			X_Decompress.c \
-			X_IMA.c \
-			g711.c \
-			g721.c \
-			g723_24.c \
-			g723_40.c \
-			g72x.c \
-			sha1mini.c
+SRC		+=	src/BAE_Source/Common/DriverTools.c \
+			src/BAE_Source/Common/GenAudioStreams.c \
+			src/BAE_Source/Common/GenCache.c \
+			src/BAE_Source/Common/GenChorus.c \
+			src/BAE_Source/Common/GenFiltersReverbU3232.c \
+			src/BAE_Source/Common/GenInterp2ReverbU3232.c \
+			src/BAE_Source/Common/GenOutput.c \
+			src/BAE_Source/Common/GenPatch.c \
+			src/BAE_Source/Common/GenReverb.c \
+			src/BAE_Source/Common/GenReverbNew.c \
+			src/BAE_Source/Common/GenSample.c \
+			src/BAE_Source/Common/GenSeq.c \
+			src/BAE_Source/Common/GenSeqTools.c \
+			src/BAE_Source/Common/GenSetup.c \
+			src/BAE_Source/Common/GenSong.c \
+			src/BAE_Source/Common/GenSoundFiles.c \
+			src/BAE_Source/Common/GenSynth.c \
+			src/BAE_Source/Common/GenSynthFiltersSimple.c \
+			src/BAE_Source/Common/GenSynthFiltersU3232.c \
+			src/BAE_Source/Common/GenSynthInterp2Simple.c \
+			src/BAE_Source/Common/GenSynthInterp2U3232.c \
+			src/BAE_Source/Common/MiniBAE.c \
+			src/BAE_Source/Common/NewNewLZSS.c \
+			src/BAE_Source/Common/SampleTools.c \
+			src/BAE_Source/Common/X_API.c \
+			src/BAE_Source/Common/X_Decompress.c \
+			src/BAE_Source/Common/X_IMA.c \
+			src/BAE_Source/Common/g711.c \
+			src/BAE_Source/Common/g721.c \
+			src/BAE_Source/Common/g723_24.c \
+			src/BAE_Source/Common/g723_40.c \
+			src/BAE_Source/Common/g72x.c \
+			src/BAE_Source/Common/sha1mini.c
 
 ifeq ($(MP3_DEC),1)
 	# Enable minimp3 wrapper for MPG_* API (decoder only)
 	BAE_FLAGS += -DUSE_MINIMP3_WRAPPER=1 -DUSE_MPEG_DECODER=1
-	SRC += XMPEG_minimp3_wrapper.c
+	SRC += src/BAE_MPEG_Source_II/XMPEG_minimp3_wrapper.c
 endif
 
 # Include XMPEGFilesSun.c when either encoder or decoder is enabled
 ifneq ($(filter 1,$(MP3_ENC) $(MP3_DEC)),) 
-	SRC += XMPEGFilesSun.c
+	SRC += src/BAE_MPEG_Source_II/XMPEGFilesSun.c
 endif
 
 # Optional MP3 encoder integration
@@ -200,57 +212,167 @@ ifeq ($(MP3_ENC),1)
 	INC_PATH += -Isrc/thirdparty/lame-3.100-slim
 	INC_PATH += -Isrc/thirdparty/lame-3.100-slim/libmp3lame
 	# Let the build find LAME source files (libmp3lame and mpglib)
-	vpath	%.c src/thirdparty/lame-3.100-slim/libmp3lame
-	vpath	%.c src/thirdparty/lame-3.100-slim/mpglib
 	# Add all libmp3lame and mpglib C sources and the LAME adapter.
 	# Using wildcard keeps this list maintainable when LAME sources change.
 	ifeq ($(shell [ -d src/thirdparty/lame-3.100-slim/libmp3lame ] && echo yes),yes)
-		SRC += bitstream.c \
-			newmdct.c \
-			tables.c \
-			encoder.c \
-			presets.c \
-			takehiro.c \
-			fft.c \
-			psymodel.c \
-			util.c \
-			gain_analysis.c \
-			quantize.c \
-			vbrquantize.c \
-			id3tag.c \
-			quantize_pvt.c \
-			VbrTag.c \
-			lame.c \
-			reservoir.c \
-			version.c \
-			mpglib_interface.c \
-			set_get.c \
-			common.c \
-			decode_i386.c \
-			layer1.c \
-			layer3.c \
-			dct64_i386.c \
-			interface.c \
-			layer2.c \
-			tabinit.c
+		SRC += src/thirdparty/lame-3.100-slim/libmp3lame/bitstream.c \
+			src/thirdparty/lame-3.100-slim/libmp3lame/newmdct.c \
+			src/thirdparty/lame-3.100-slim/libmp3lame/tables.c \
+			src/thirdparty/lame-3.100-slim/libmp3lame/encoder.c \
+			src/thirdparty/lame-3.100-slim/libmp3lame/presets.c \
+			src/thirdparty/lame-3.100-slim/libmp3lame/takehiro.c \
+			src/thirdparty/lame-3.100-slim/libmp3lame/fft.c \
+			src/thirdparty/lame-3.100-slim/libmp3lame/psymodel.c \
+			src/thirdparty/lame-3.100-slim/libmp3lame/util.c \
+			src/thirdparty/lame-3.100-slim/libmp3lame/gain_analysis.c \
+			src/thirdparty/lame-3.100-slim/libmp3lame/quantize.c \
+			src/thirdparty/lame-3.100-slim/libmp3lame/vbrquantize.c \
+			src/thirdparty/lame-3.100-slim/libmp3lame/id3tag.c \
+			src/thirdparty/lame-3.100-slim/libmp3lame/quantize_pvt.c \
+			src/thirdparty/lame-3.100-slim/libmp3lame/VbrTag.c \
+			src/thirdparty/lame-3.100-slim/libmp3lame/lame.c \
+			src/thirdparty/lame-3.100-slim/libmp3lame/reservoir.c \
+			src/thirdparty/lame-3.100-slim/libmp3lame/version.c \
+			src/thirdparty/lame-3.100-slim/libmp3lame/mpglib_interface.c \
+			src/thirdparty/lame-3.100-slim/libmp3lame/set_get.c \
+			src/thirdparty/lame-3.100-slim/mpglib/common.c \
+			src/thirdparty/lame-3.100-slim/mpglib/decode_i386.c \
+			src/thirdparty/lame-3.100-slim/mpglib/layer1.c \
+			src/thirdparty/lame-3.100-slim/mpglib/layer3.c \
+			src/thirdparty/lame-3.100-slim/mpglib/dct64_i386.c \
+			src/thirdparty/lame-3.100-slim/mpglib/interface.c \
+			src/thirdparty/lame-3.100-slim/mpglib/layer2.c \
+			src/thirdparty/lame-3.100-slim/mpglib/tabinit.c
 	endif
-	SRC += XMPEG_lame_encoder.cpp
+	SRC += src/BAE_MPEG_Source_II/XMPEG_lame_encoder.cpp
 endif
 
 # Add FLAC decoder source files
 ifeq ($(FLAC_DEC),1)
 	BAE_FLAGS += -DUSE_FLAC_DECODER=1
-	SRC += stream_decoder.c bitreader.c bitmath.c bitwriter.c cpu.c crc.c fixed.c format.c lpc.c md5.c memory.c metadata_iterators.c metadata_object.c stream_encoder_framing.c window.c
+	SRC += src/thirdparty/flac/src/libFLAC/stream_decoder.c \
+		src/thirdparty/flac/src/libFLAC/bitreader.c \
+		src/thirdparty/flac/src/libFLAC/bitmath.c \
+		src/thirdparty/flac/src/libFLAC/bitwriter.c \
+		src/thirdparty/flac/src/libFLAC/cpu.c \
+		src/thirdparty/flac/src/libFLAC/crc.c \
+		src/thirdparty/flac/src/libFLAC/fixed.c \
+		src/thirdparty/flac/src/libFLAC/format.c \
+		src/thirdparty/flac/src/libFLAC/lpc.c \
+		src/thirdparty/flac/src/libFLAC/md5.c \
+		src/thirdparty/flac/src/libFLAC/memory.c \
+		src/thirdparty/flac/src/libFLAC/metadata_iterators.c \
+		src/thirdparty/flac/src/libFLAC/metadata_object.c \
+		src/thirdparty/flac/src/libFLAC/stream_encoder_framing.c \
+		src/thirdparty/flac/src/libFLAC/window.c
+	# Add OGG support files for FLAC if OGG is enabled
+	ifeq ($(OGG_SUPPORT),1)
+		SRC += src/thirdparty/flac/src/libFLAC/ogg_decoder_aspect.c \
+			src/thirdparty/flac/src/libFLAC/ogg_helper.c \
+			src/thirdparty/flac/src/libFLAC/ogg_mapping.c
+	endif
 endif
 
 # Add FLAC encoder source files  
 ifeq ($(FLAC_ENC),1)
 	BAE_FLAGS += -DUSE_FLAC_ENCODER=1
 	# stream_encoder.c is the main encoding engine, and it depends on decoder for verification
-	SRC += stream_encoder.c
+	SRC += src/thirdparty/flac/src/libFLAC/stream_encoder.c
+	# Add OGG support files for FLAC if OGG is enabled
+	ifeq ($(OGG_SUPPORT),1)
+		SRC += src/thirdparty/flac/src/libFLAC/ogg_encoder_aspect.c
+		# Only add common OGG files if not already added by decoder
+		ifneq ($(FLAC_DEC),1)
+			SRC += src/thirdparty/flac/src/libFLAC/ogg_helper.c src/thirdparty/flac/src/libFLAC/ogg_mapping.c
+		endif
+	endif
 	ifneq ($(FLAC_DEC),1)
 		# Add required FLAC files for encoding, including decoder support for verification
-		SRC += stream_decoder.c bitreader.c bitmath.c bitwriter.c cpu.c crc.c fixed.c format.c lpc.c md5.c memory.c metadata_iterators.c metadata_object.c stream_encoder_framing.c window.c
+		SRC += src/thirdparty/flac/src/libFLAC/stream_decoder.c \
+			src/thirdparty/flac/src/libFLAC/bitreader.c \
+			src/thirdparty/flac/src/libFLAC/bitmath.c \
+			src/thirdparty/flac/src/libFLAC/bitwriter.c \
+			src/thirdparty/flac/src/libFLAC/cpu.c \
+			src/thirdparty/flac/src/libFLAC/crc.c \
+			src/thirdparty/flac/src/libFLAC/fixed.c \
+			src/thirdparty/flac/src/libFLAC/format.c \
+			src/thirdparty/flac/src/libFLAC/lpc.c \
+			src/thirdparty/flac/src/libFLAC/md5.c \
+			src/thirdparty/flac/src/libFLAC/memory.c \
+			src/thirdparty/flac/src/libFLAC/metadata_iterators.c \
+			src/thirdparty/flac/src/libFLAC/metadata_object.c \
+			src/thirdparty/flac/src/libFLAC/stream_encoder_framing.c \
+			src/thirdparty/flac/src/libFLAC/window.c
+		# Add OGG support files for FLAC if OGG is enabled
+		ifeq ($(OGG_SUPPORT),1)
+			SRC += src/thirdparty/flac/src/libFLAC/ogg_decoder_aspect.c \
+				src/thirdparty/flac/src/libFLAC/ogg_helper.c \
+				src/thirdparty/flac/src/libFLAC/ogg_mapping.c
+		endif
+	endif
+endif
+
+# Add libogg source files
+ifeq ($(OGG_SUPPORT),1)
+	BAE_FLAGS += -DUSE_OGG_FORMAT=1
+	SRC += src/thirdparty/libogg/src/bitwise.c src/thirdparty/libogg/src/framing.c
+endif
+
+# Add libvorbis decoder source files
+ifeq ($(VORBIS_DEC),1)
+	BAE_FLAGS += -DUSE_VORBIS_DECODER=1
+	SRC += src/thirdparty/libvorbis/lib/analysis.c \
+		src/thirdparty/libvorbis/lib/bitrate.c \
+		src/thirdparty/libvorbis/lib/block.c \
+		src/thirdparty/libvorbis/lib/codebook.c \
+		src/thirdparty/libvorbis/lib/envelope.c \
+		src/thirdparty/libvorbis/lib/floor0.c \
+		src/thirdparty/libvorbis/lib/floor1.c \
+		src/thirdparty/libvorbis/lib/info.c \
+		src/thirdparty/libvorbis/lib/lookup.c \
+		src/thirdparty/libvorbis/lib/lsp.c \
+		src/thirdparty/libvorbis/lib/mapping0.c \
+		src/thirdparty/libvorbis/lib/mdct.c \
+		src/thirdparty/libvorbis/lib/psy.c \
+		src/thirdparty/libvorbis/lib/registry.c \
+		src/thirdparty/libvorbis/lib/res0.c \
+		src/thirdparty/libvorbis/lib/sharedbook.c \
+		src/thirdparty/libvorbis/lib/smallft.c \
+		src/thirdparty/libvorbis/lib/synthesis.c \
+		src/thirdparty/libvorbis/lib/vorbisfile.c \
+		src/BAE_Source/Common/XVorbisFiles.c \
+		src/thirdparty/libvorbis/lib/lpc.c \
+		src/thirdparty/libvorbis/lib/window.c
+endif
+
+# Add libvorbis encoder source files  
+ifeq ($(VORBIS_ENC),1)
+	BAE_FLAGS += -DUSE_VORBIS_ENCODER=1
+	SRC += src/thirdparty/libvorbis/lib/vorbisenc.c
+	# If decoder not already included, add required decoder files for encoder
+	ifneq ($(VORBIS_DEC),1)
+		SRC += src/thirdparty/libvorbis/lib/analysis.c \
+			src/thirdparty/libvorbis/lib/bitrate.c \
+			src/thirdparty/libvorbis/lib/block.c \
+			src/thirdparty/libvorbis/lib/codebook.c \
+			src/thirdparty/libvorbis/lib/envelope.c \
+			src/thirdparty/libvorbis/lib/floor0.c \
+			src/thirdparty/libvorbis/lib/floor1.c \
+			src/thirdparty/libvorbis/lib/info.c \
+			src/thirdparty/libvorbis/lib/lookup.c \
+			src/thirdparty/libvorbis/lib/lsp.c \
+			src/thirdparty/libvorbis/lib/mapping0.c \
+			src/thirdparty/libvorbis/lib/mdct.c \
+			src/thirdparty/libvorbis/lib/psy.c \
+			src/thirdparty/libvorbis/lib/registry.c \
+			src/thirdparty/libvorbis/lib/res0.c \
+			src/thirdparty/libvorbis/lib/sharedbook.c \
+			src/thirdparty/libvorbis/lib/smallft.c \
+			src/thirdparty/libvorbis/lib/synthesis.c \
+			src/thirdparty/libvorbis/lib/vorbisfile.c \
+			src/BAE_Source/Common/XVorbisFiles.c \
+			src/thirdparty/libvorbis/lib/lpc.c \
+			src/thirdparty/libvorbis/lib/window.c
 	endif
 endif
 
@@ -258,23 +380,43 @@ endif
 # playbae = libMiniBAE srcs + playbae.c
 ifeq ($(BUILD_GUI),1)
 	BAE_FLAGS += -DOUTPUT_TO_LOGFILE=1
-	SRC_BIN	:= $(SRC) gui_logging.c gui_theme.c gui_widgets.c gui_text.c gui_midi_vkbd.c gui_karaoke.c gui_export.c gui_dialogs.c gui_bae.c gui_settings.c gui_panels.c gui_main.c
+	SRC_BIN	:= $(SRC) src/gui/gui_logging.c \
+		src/gui/gui_theme.c \
+		src/gui/gui_widgets.c \
+		src/gui/gui_text.c \
+		src/gui/gui_midi_vkbd.c \
+		src/gui/gui_export.c \
+		src/gui/gui_dialogs.c \
+		src/gui/gui_bae.c \
+		src/gui/gui_settings.c \
+		src/gui/gui_panels.c \
+		src/gui/gui_main.c
 else
-	SRC_BIN	:= $(SRC) playbae.c
+	SRC_BIN	:= $(SRC) src/playbae/playbae.c
+endif
+
+ifeq ($(KARAOKE),1)
+	ifneq ($(BUILD_GUI),)
+		SRC_BIN += src/gui/gui_karaoke.c
+	endif
 endif
 
 ifeq ($(ENABLE_MIDI_HW),1)
 	ifneq ($(BUILD_GUI),)
 		# RtMidi (C wrapper) - provide real-time MIDI input for GUI
 		BAE_FLAGS += -DSUPPORT_MIDI_HW=1
-		SRC_BIN +=  gui_midi_hw.c gui_midi_hw_input.c gui_midi_hw_output.c rtmidi_c.cpp RtMidi.cpp
+		SRC_BIN +=  src/gui/gui_midi_hw.c \
+			src/gui/gui_midi_hw_input.c \
+			src/gui/gui_midi_hw_output.c \
+			src/thirdparty/rtmidi/rtmidi_c.cpp \
+			src/thirdparty/rtmidi/RtMidi.cpp
 	endif
 endif
 
 ifeq ($(PLAYLIST),1)
 	ifneq ($(BUILD_GUI),)
 		BAE_FLAGS += -DSUPPORT_PLAYLIST=1
-		SRC_BIN +=  gui_playlist.c
+		SRC_BIN +=  src/gui/gui_playlist.c
 	endif
 endif
 
@@ -285,11 +427,10 @@ endif
 
 ifeq ($(WINDOWS),1)
 	ifneq ($(filter 1,$(FLAC_DEC) $(FLAC_ENC)),)
-		vpath	%.c src/thirdparty/flac/src/share/win_utf8_io
 		INC_PATH += -Isrc/thirdparty/flac/src/share/win_utf8_io
 		BAE_FLAGS += -DFLAC__NO_DLL
-		SRC += win_utf8_io.c
-		SRC_BIN += win_utf8_io.c
+		SRC += src/thirdparty/flac/src/share/win_utf8_io/win_utf8_io.c
+		SRC_BIN += src/thirdparty/flac/src/share/win_utf8_io/win_utf8_io.c
 	endif
 endif
 
@@ -299,8 +440,20 @@ endif
 
 
 OBJ_DIR 	:= $(BUILD_DIR)obj/
-OBJ 		:= $(addprefix $(OBJ_DIR),$(addsuffix .o,$(basename ${SRC})))
-OBJ_BIN 	:= $(addprefix $(OBJ_DIR),$(addsuffix .o,$(basename ${SRC_BIN})))
+# Create unique object names by including source directory info for conflicting files
+SRC_UNIQUE := $(SRC)
+SRC_UNIQUE := $(subst src/thirdparty/flac/src/libFLAC/lpc.c,src/thirdparty/flac/src/libFLAC/flac_lpc.c,$(SRC_UNIQUE))
+SRC_UNIQUE := $(subst src/thirdparty/flac/src/libFLAC/window.c,src/thirdparty/flac/src/libFLAC/flac_window.c,$(SRC_UNIQUE))
+SRC_UNIQUE := $(subst src/thirdparty/libvorbis/lib/lpc.c,src/thirdparty/libvorbis/lib/vorbis_lpc.c,$(SRC_UNIQUE))
+SRC_UNIQUE := $(subst src/thirdparty/libvorbis/lib/window.c,src/thirdparty/libvorbis/lib/vorbis_window.c,$(SRC_UNIQUE))
+OBJ 		:= $(addprefix $(OBJ_DIR),$(addsuffix .o,$(notdir $(basename ${SRC_UNIQUE}))))
+
+SRC_BIN_UNIQUE := $(SRC_BIN)
+SRC_BIN_UNIQUE := $(subst src/thirdparty/flac/src/libFLAC/lpc.c,src/thirdparty/flac/src/libFLAC/flac_lpc.c,$(SRC_BIN_UNIQUE))
+SRC_BIN_UNIQUE := $(subst src/thirdparty/flac/src/libFLAC/window.c,src/thirdparty/flac/src/libFLAC/flac_window.c,$(SRC_BIN_UNIQUE))
+SRC_BIN_UNIQUE := $(subst src/thirdparty/libvorbis/lib/lpc.c,src/thirdparty/libvorbis/lib/vorbis_lpc.c,$(SRC_BIN_UNIQUE))
+SRC_BIN_UNIQUE := $(subst src/thirdparty/libvorbis/lib/window.c,src/thirdparty/libvorbis/lib/vorbis_window.c,$(SRC_BIN_UNIQUE))
+OBJ_BIN 	:= $(addprefix $(OBJ_DIR),$(addsuffix .o,$(notdir $(basename ${SRC_BIN_UNIQUE}))))
 
 ifeq ($(BUILD_GUI),1)
 
@@ -334,5 +487,15 @@ $(OBJ_DIR)MiniBAE.o: $(EMBED_PATCH_HEADER)
 
 # Ensure generated header is available to build when EMBED_PATCH_FILE is used
 endif # EMBED_PATCH_FILE
+
+
+# Rules for compiling source files to object files
+# Create a function to map source files to object files with unique names for conflicts
+define make_obj_rule
+$(OBJ_DIR)$(basename $(notdir $(subst src/thirdparty/flac/src/libFLAC/lpc.c,flac_lpc.c,$(subst src/thirdparty/flac/src/libFLAC/window.c,flac_window.c,$(subst src/thirdparty/libvorbis/lib/lpc.c,vorbis_lpc.c,$(subst src/thirdparty/libvorbis/lib/window.c,vorbis_window.c,$(1))))))).o: $(1)
+	@echo @compile $$<
+	@mkdir -p $(OBJ_DIR)
+	$(SILENT)$(if $(filter %.cpp,$(1)),${CXX} -c ${CXXFLAGS},${CC} -c ${CFLAGS}) $$< -o $$@
+endef
 
 #### End Makefile.common

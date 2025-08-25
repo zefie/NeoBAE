@@ -580,6 +580,11 @@ UINT32          const decodingBytes = decodingFrames * bytesPerFrame;
         return XExpandFLAC(src, startFrame, dst);
 #endif
 
+#if USE_VORBIS_DECODER != 0
+    case C_VORBIS:
+        return XExpandVorbis(src, startFrame, dst);
+#endif
+
 #if X_PLATFORM == X_MACINTOSH_9
     case C_MACE3 :
     case C_MACE6 :

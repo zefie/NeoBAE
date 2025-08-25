@@ -189,16 +189,60 @@ void rmf_info_load_if_needed(void)
 char *open_file_dialog(void)
 {
 #ifdef _WIN32
+/* Compile-time built extension list, Windows Style*/
+static const char AUDIO_EXT_FILTER[] =
+#if USE_FLAC_DECODER == TRUE
+    "*.flac;"
+#else
+    ""
+#endif
+#if USE_MP3_DECODER == TRUE
+    "*.mp3;"
+#else
+    ""
+#endif
+#if USE_VORBIS_DECODER == TRUE && SUPPORT_OGG_FORMAT == TRUE
+    "*.ogg;"
+#else
+    ""
+#endif
+    "*.wav;*.aif;*.aiff;*.au;";
     char fileBuf[1024] = {0};
     OPENFILENAMEA ofn;
     ZeroMemory(&ofn, sizeof(ofn));
     ofn.lStructSize = sizeof(ofn);
     ofn.hwndOwner = NULL;
-    ofn.lpstrFilter = "All Supported\0*.mid;*.midi;*.kar;*.rmf;*.wav;*.aif;*.aiff;*.au;*.mp2;*.mp3;*.flac\0"
-                      "MIDI Files\0*.mid;*.midi;*.kar\0"
-                      "RMF Files\0*.rmf\0"
-                      "Audio Files\0*.wav;*.aif;*.aiff;*.au;*.mp2;*.mp3;*.flac\0"
-                      "All Files\0*.*\0";
+    /* Build a proper Windows multi-string filter using compiled-in extensions.
+       We must provide sequences of: DisplayName\0Pattern\0...\0 (double-null terminated).
+       AUDIO_EXT_FILTER here contains semicolon-separated patterns (e.g. "*.flac;*.mp3;...")
+       so we insert it into the appropriate pattern slots. */
+    char filterBuf[1024];
+    char *p = filterBuf;
+    size_t rem = sizeof(filterBuf);
+
+    #define APPEND_STR(s) do { size_t _l = strlen(s); if (_l + 1 > rem) break; memcpy(p, (s), _l); p += _l; *p++ = '\0'; rem -= (_l + 1); } while(0)
+
+    APPEND_STR("All Supported");
+    {
+        char pattern[512];
+        /* include the always-available patterns plus the compiled-in ones */
+        snprintf(pattern, sizeof(pattern), "*.mid;*.midi;*.kar;*.rmf;%s", AUDIO_EXT_FILTER);
+        /* Remove possible duplicate separators if AUDIO_EXT_FILTER is empty */
+        APPEND_STR(pattern);
+    }
+    APPEND_STR("MIDI Files"); APPEND_STR("*.mid;*.midi;*.kar");
+    APPEND_STR("RMF Files"); APPEND_STR("*.rmf");
+    APPEND_STR("Audio Files");
+    {
+        char audioPattern[512];
+        snprintf(audioPattern, sizeof(audioPattern), "%s", AUDIO_EXT_FILTER);
+        APPEND_STR(audioPattern);
+    }
+    APPEND_STR("All Files"); APPEND_STR("*.*");
+    /* double-null terminate */
+    if (rem > 0)
+        *p++ = '\0';
+    ofn.lpstrFilter = filterBuf;
     ofn.lpstrFile = fileBuf;
     ofn.nMaxFile = sizeof(fileBuf);
     ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST;
@@ -214,11 +258,32 @@ char *open_file_dialog(void)
     }
     return NULL;
 #else
-    const char *cmds[] = {
-        "zenity --file-selection --title='Open Media File' --file-filter='Supported Files | *.mid *.midi *.kar *.rmf *.wav *.aif *.aiff *.au *.mp2 *.mp3 *.flac' --file-filter='All Files | *' 2>/dev/null",
-        "kdialog --getopenfilename . '*.mid *.midi *.kar *.rmf *.wav *.aif *.aiff *.au *.mp2 *.mp3 *.flac' 2>/dev/null",
-        "yad --file-selection --title='Open Media File' 2>/dev/null",
-        NULL};
+/* Compile-time built extension list, Linux Style */
+static const char AUDIO_EXT_FILTER[] =
+#if USE_FLAC_DECODER == TRUE
+    "*.flac "
+#else
+    ""
+#endif
+#if USE_MP3_DECODER == TRUE
+    "*.mp3 "
+#else
+    ""
+#endif
+#if USE_VORBIS_DECODER == TRUE && SUPPORT_OGG_FORMAT == TRUE
+    "*.ogg "
+#else
+    ""
+#endif
+    "*.wav *.aif *.aiff *.au";
+
+     /* Build desktop file-chooser commands using the compiled-in extension list.
+         AUDIO_EXT_FILTER on Unix is a space-separated list like "*.flac *.mp3 ...". */
+     char cmd_zenity[1024];
+     char cmd_kdialog[1024];
+     snprintf(cmd_zenity, sizeof(cmd_zenity), "zenity --file-selection --title='Open Media File' --file-filter='Supported Files | *.mid *.midi *.kar *.rmf %s' --file-filter='All Files | *' 2>/dev/null", AUDIO_EXT_FILTER);
+     snprintf(cmd_kdialog, sizeof(cmd_kdialog), "kdialog --getopenfilename . '*.mid *.midi *.kar *.rmf %s' 2>/dev/null", AUDIO_EXT_FILTER);
+     const char *cmds[] = { cmd_zenity, cmd_kdialog, "yad --file-selection --title='Open Media File' 2>/dev/null", NULL };
     for (int i = 0; cmds[i]; ++i)
     {
         FILE *p = popen(cmds[i], "r");
@@ -252,6 +317,8 @@ char *open_file_dialog(void)
 #endif
 }
 
+
+#if SUPPORT_PLAYLIST == TRUE
 char *open_playlist_dialog(void)
 {
 #ifdef _WIN32
@@ -446,6 +513,7 @@ char *open_folder_dialog(void)
     return NULL;
 #endif
 }
+#endif
 
 // RMF Info dialog rendering
 void render_rmf_info_dialog(SDL_Renderer *R, int mx, int my, bool mclick)
@@ -851,6 +919,12 @@ void render_about_dialog(SDL_Renderer *R, int mx, int my, bool mclick)
             "Copyright (C) 2000-2009  Josh Coalson",
             "Copyright (C) 2011-2025  Xiph.Org Foundation",
             "https://www.xiph.org/flac/",
+#endif
+#if defined(USE_VORBIS_DECODER) || defined(USE_VORBIS_ENCODER)
+            "",
+            "libvorbis/libogg",
+            "Copyright (C) 2002-2020 Xiph.org Foundation",
+            "https://www.xiph.org/ogg/vorbis/",
 #endif
             "",
             NULL};

@@ -845,8 +845,17 @@ typedef enum SndCompressionType
     C_ALAW              = FOUR_CHAR('a','l','a','w'),   // 'ulaw'   aLaw; 2 to 1
 
     // FLAC lossless compression
-    C_FLAC              = FOUR_CHAR('f','l','a','c'),   // 'flac'   FLAC lossless
+#if USE_FLAC_DECODER == TRUE
+    C_FLAC              = FOUR_CHAR('f','L','a','C'),   // 'flac'   FLAC lossless
+#endif
 
+#if USE_OGG_FORMAT == TRUE
+    C_OGG               = FOUR_CHAR('O','g','g','S'),   // 'ogg '   Ogg container, need to detect codec
+#endif
+
+#if USE_VORBIS_DECODER == TRUE
+    C_VORBIS            = FOUR_CHAR('O','g','g','V'),   // 'OggV'   Ogg Vorbis audio
+#endif
                                                         // for all of these compression types
                                                         // the SndCompressionSubType (CS_DEFAULT)
                                                         // is CS_MPEG2.
@@ -1192,6 +1201,10 @@ OPErr XExpandMPEG(GM_Waveform const* src, UINT32 startFrame, GM_Waveform* dst);
 
 #if USE_FLAC_DECODER != 0
 OPErr XExpandFLAC(GM_Waveform const* src, UINT32 startFrame, GM_Waveform* dst);
+#endif
+
+#if USE_VORBIS_DECODER != 0
+OPErr XExpandVorbis(GM_Waveform const* src, UINT32 startFrame, GM_Waveform* dst);
 #endif
 
 

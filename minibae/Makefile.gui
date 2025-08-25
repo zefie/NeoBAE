@@ -153,4 +153,8 @@ clean:
 	@rm -rdf $(TEST_OUT_DIR)
 	@echo Cleaned!
 
+# Generate rules for all unique source files (same approach as top-level Makefile)
+ALL_SOURCES := $(sort $(SRC) $(SRC_BIN))
+$(foreach src,$(ALL_SOURCES),$(eval $(call make_obj_rule,$(src))))
+
 include inc/Makefile.tests

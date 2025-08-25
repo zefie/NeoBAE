@@ -2163,6 +2163,10 @@ typedef int32_t UNIT_TYPE;
         ,
         FILE_FLAC_TYPE
 #endif
+#if USE_VORBIS_DECODER != FALSE || USE_VORBIS_ENCODER != FALSE
+        ,
+        FILE_VORBIS_TYPE
+#endif
     } AudioFileType;
 
     // This will read into memory the entire file and return a GM_Waveform structure.

@@ -594,7 +594,7 @@ bool bae_load_song(const char *path)
     {
         if (strcmp(ext, ".wav") == 0 || strcmp(ext, ".aif") == 0 || strcmp(ext, ".aiff") == 0 ||
             strcmp(ext, ".au") == 0 || strcmp(ext, ".mp2") == 0 || strcmp(ext, ".mp3") == 0 ||
-            strcmp(ext, ".flac") == 0)
+            strcmp(ext, ".flac") == 0 || strcmp(ext, ".ogg") == 0 || strcmp(ext, ".oga") == 0)
         {
             isAudio = true;
         }
@@ -619,6 +619,8 @@ bool bae_load_song(const char *path)
             ftype = BAE_MPEG_TYPE;
         else if (strcmp(ext, ".flac") == 0)
             ftype = BAE_FLAC_TYPE;
+        else if (strcmp(ext, ".ogg") == 0 || strcmp(ext, ".oga") == 0)
+            ftype = BAE_VORBIS_TYPE;
 
         BAEResult sr = (ftype != BAE_INVALID_TYPE) ? BAESound_LoadFileSample(g_bae.sound, (BAEPathName)path, ftype) : BAE_BAD_FILE_TYPE;
         if (sr != BAE_NO_ERROR)

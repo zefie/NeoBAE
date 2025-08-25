@@ -149,7 +149,7 @@
 /*****************************************************************************/
 
 #include "MiniBAE.h"
-#if USE_MPEG_ENCODER != FALSE
+#if USE_MPEG_ENCODER == TRUE
 #include "XMPEG_BAE_API.h" /* for MPG_Encode* encoder API prototypes */
 #endif
 #include "X_API.h"
@@ -162,7 +162,7 @@
 #include <stdint.h>
 #include "bankinfo.h" // embedded bank metadata (hash -> friendly)
 
-#if USE_FLAC_ENCODER != FALSE
+#if USE_FLAC_ENCODER == TRUE
 #include "FLAC/stream_encoder.h"
 // Forward declaration of FLAC encoding function from GenSoundFiles.c
 OPErr PV_WriteFromMemoryFLACFile(XFILENAME *file, GM_Waveform const *pAudioData, XWORD formatTag);
@@ -265,7 +265,8 @@ const char *BAE_GetVersion()
 {
     size_t maxStrSize = 64;
     char *versionString = (char *)malloc(sizeof(char) * maxStrSize);
-    if (!versionString) return "";
+    if (!versionString)
+        return "";
 #ifdef _VERSION
     snprintf(versionString, maxStrSize, "version %s", _VERSION);
 #else
@@ -278,7 +279,8 @@ const char *BAE_GetCompileInfo()
 {
     size_t maxStrSize = 128;
     char *versionString = (char *)malloc(sizeof(char) * maxStrSize);
-    if (!versionString) return "";
+    if (!versionString)
+        return "";
 #ifdef __EMSCRIPTEN__
 #ifdef __cplusplus
     snprintf(versionString, maxStrSize, "clang++ v%d.%d, emscripten v%d.%d", __clang_major__, __clang_minor__, __EMSCRIPTEN_major__, __EMSCRIPTEN_minor__);
@@ -311,76 +313,76 @@ const char *BAE_GetCompileInfo()
 
 const char *BAE_GetFeatureString()
 {
-        static char featBuf[512];
-        featBuf[0] = '\0';
-        XBOOL first = TRUE;
+    static char featBuf[512];
+    featBuf[0] = '\0';
+    XBOOL first = TRUE;
 
-        // Audio backend
+    // Audio backend
 #if (X_PLATFORM == X_SDL2)
-        const char *audio = "SDL2";
+    const char *audio = "SDL2";
 #elif (X_PLATFORM == X_WIN95)
-        const char *audio = "DirectSound";
+    const char *audio = "DirectSound";
 #else
-        const char *audio = NULL;
+    const char *audio = NULL;
 #endif
-        if (audio && audio[0])
-        {
-                snprintf(featBuf + strlen(featBuf), sizeof(featBuf) - strlen(featBuf), "%s%s", first ? "" : ", ", audio);
-                first = FALSE;
-        }
+    if (audio && audio[0])
+    {
+        snprintf(featBuf + strlen(featBuf), sizeof(featBuf) - strlen(featBuf), "%s%s", first ? "" : ", ", audio);
+        first = FALSE;
+    }
 
-        // Built-in patches
+    // Built-in patches
 #ifdef _BUILT_IN_PATCHES
-        const char *patches = "Built-in Patches";
-        if (patches && patches[0])
-        {
-                snprintf(featBuf + strlen(featBuf), sizeof(featBuf) - strlen(featBuf), "%s%s", first ? "" : ", ", patches);
-                first = FALSE;
-        }
+    const char *patches = "Built-in Patches";
+    if (patches && patches[0])
+    {
+        snprintf(featBuf + strlen(featBuf), sizeof(featBuf) - strlen(featBuf), "%s%s", first ? "" : ", ", patches);
+        first = FALSE;
+    }
 #endif
 #if _ZEFI_GUI == TRUE
 #if SUPPORT_KARAOKE == TRUE
-        const char *karaoke = "Karaoke Support";
-        if (karaoke && karaoke[0])
-        {
-                snprintf(featBuf + strlen(featBuf), sizeof(featBuf) - strlen(featBuf), "%s%s", first ? "" : ", ", karaoke);
-                first = FALSE;
-        }
+    const char *karaoke = "Karaoke Support";
+    if (karaoke && karaoke[0])
+    {
+        snprintf(featBuf + strlen(featBuf), sizeof(featBuf) - strlen(featBuf), "%s%s", first ? "" : ", ", karaoke);
+        first = FALSE;
+    }
 #else
-        const char *karaoke = "No Karaoke Support";
-        if (karaoke && karaoke[0])
-        {
-                snprintf(featBuf + strlen(featBuf), sizeof(featBuf) - strlen(featBuf), "%s%s", first ? "" : ", ", karaoke);
-                first = FALSE;
-        }
+    const char *karaoke = "No Karaoke Support";
+    if (karaoke && karaoke[0])
+    {
+        snprintf(featBuf + strlen(featBuf), sizeof(featBuf) - strlen(featBuf), "%s%s", first ? "" : ", ", karaoke);
+        first = FALSE;
+    }
 #endif
 
-        // Playlist support
+    // Playlist support
 #if SUPPORT_PLAYLIST == TRUE
-        const char *playlist = "Playlist Support";
+    const char *playlist = "Playlist Support";
 #else
-        const char *playlist = NULL;
+    const char *playlist = NULL;
 #endif
-        if (playlist && playlist[0])
-        {
-                snprintf(featBuf + strlen(featBuf), sizeof(featBuf) - strlen(featBuf), "%s%s", first ? "" : ", ", playlist);
-                first = FALSE;
-        }
-        
-        // MIDI hardware
+    if (playlist && playlist[0])
+    {
+        snprintf(featBuf + strlen(featBuf), sizeof(featBuf) - strlen(featBuf), "%s%s", first ? "" : ", ", playlist);
+        first = FALSE;
+    }
+
+    // MIDI hardware
 #if SUPPORT_MIDI_HW == TRUE
-        const char *midi = "MIDI Hardware Support";
+    const char *midi = "MIDI Hardware Support";
 #else
-        const char *midi = "No MIDI Hardware Support";
+    const char *midi = "No MIDI Hardware Support";
 #endif
-        if (midi && midi[0])
-        {
-                snprintf(featBuf + strlen(featBuf), sizeof(featBuf) - strlen(featBuf), "%s%s", first ? "" : ", ", midi);
-                first = FALSE;
-        }
+    if (midi && midi[0])
+    {
+        snprintf(featBuf + strlen(featBuf), sizeof(featBuf) - strlen(featBuf), "%s%s", first ? "" : ", ", midi);
+        first = FALSE;
+    }
 #endif
 
-        // MP3 support
+    // MP3 support
 
 #if USE_MPEG_DECODER == TRUE && USE_MPEG_ENCODER == TRUE
     const char *mp3 = "Full MP3 Support";
@@ -392,37 +394,57 @@ const char *BAE_GetFeatureString()
     const char *mp3 = "No MP3 Support";
 #endif
 
-        if (mp3 && mp3[0])
-        {
-                snprintf(featBuf + strlen(featBuf), sizeof(featBuf) - strlen(featBuf), "%s%s", first ? "" : ", ", mp3);
-                first = FALSE;
-        }
+    if (mp3 && mp3[0])
+    {
+        snprintf(featBuf + strlen(featBuf), sizeof(featBuf) - strlen(featBuf), "%s%s", first ? "" : ", ", mp3);
+        first = FALSE;
+    }
 
-        // FLAC support
+    // FLAC support
 #if USE_FLAC_DECODER != TRUE && USE_FLAC_ENCODER != TRUE
-        const char *flac = NULL;
+    const char *flac = NULL;
 #else
-    #if USE_FLAC_DECODER == TRUE && USE_FLAC_ENCODER == TRUE
-        const char *flac = "Full FLAC Support";
-    #elif USE_FLAC_DECODER == TRUE && USE_FLAC_ENCODER != TRUE
-        const char *flac = "FLAC Decoder Support";
-    #elif USE_FLAC_DECODER != TRUE && USE_FLAC_ENCODER == TRUE
-        const char *flac = "FLAC Encoder Support";
-    #else
-        const char *flac = "No FLAC Support";
-    #endif
+#if USE_FLAC_DECODER == TRUE && USE_FLAC_ENCODER == TRUE
+    const char *flac = "Full FLAC Support";
+#elif USE_FLAC_DECODER == TRUE && USE_FLAC_ENCODER != TRUE
+    const char *flac = "FLAC Decoder Support";
+#elif USE_FLAC_DECODER != TRUE && USE_FLAC_ENCODER == TRUE
+    const char *flac = "FLAC Encoder Support";
+#else
+    const char *flac = "No FLAC Support";
 #endif
-        if (flac && flac[0])
-        {
-                snprintf(featBuf + strlen(featBuf), sizeof(featBuf) - strlen(featBuf), "%s%s", first ? "" : ", ", flac);
-                first = FALSE;
-        }
+#endif
+    if (flac && flac[0])
+    {
+        snprintf(featBuf + strlen(featBuf), sizeof(featBuf) - strlen(featBuf), "%s%s", first ? "" : ", ", flac);
+        first = FALSE;
+    }
 
-        // If nothing was added, return an empty string
-        if (featBuf[0] == '\0')
-                featBuf[0] = '\0';
+    // Vorbis support
+#if USE_VORBIS_DECODER != TRUE && USE_VORBIS_ENCODER != TRUE
+    const char *vorbis = NULL;
+#else
+#if USE_VORBIS_DECODER == TRUE && USE_VORBIS_ENCODER == TRUE
+    const char *vorbis = "Full Vorbis Support";
+#elif USE_VORBIS_DECODER == TRUE && USE_VORBIS_ENCODER != TRUE
+    const char *vorbis = "Vorbis Decoder Support";
+#elif USE_VORBIS_DECODER != TRUE && USE_VORBIS_ENCODER == TRUE
+    const char *vorbis = "Vorbis Encoder Support";
+#else
+    const char *vorbis = "No Vorbis Support";
+#endif
+#endif
+    if (vorbis && vorbis[0])
+    {
+        snprintf(featBuf + strlen(featBuf), sizeof(featBuf) - strlen(featBuf), "%s%s", first ? "" : ", ", vorbis);
+        first = FALSE;
+    }
 
-        return featBuf;
+    // If nothing was added, return an empty string
+    if (featBuf[0] == '\0')
+        featBuf[0] = '\0';
+
+    return featBuf;
 }
 
 const char *BAE_GetCurrentCPUArchitecture()
@@ -727,6 +749,9 @@ ReverbMode BAE_TranslateFromBAEReverb(BAEReverbType igorVerb);
 BAEReverbType BAE_TranslateToBAEReverb(ReverbMode r);
 #endif
 
+// Vorbis quality helper
+float BAE_TranslateVorbisTypeToQuality(BAECompressionType ct);
+
 // Private function prototypes
 // ----------------------------------------------------------------------------
 #if TRACKING
@@ -962,6 +987,11 @@ AudioFileType BAE_TranslateBAEFileType(BAEFileType fileType)
 #if (USE_FLAC_DECODER != FALSE) || (USE_FLAC_ENCODER != FALSE)
     case BAE_FLAC_TYPE:
         haeFileType = FILE_FLAC_TYPE;
+        break;
+#endif
+#if (USE_VORBIS_DECODER != FALSE) || (USE_VORBIS_ENCODER != FALSE)
+    case BAE_VORBIS_TYPE:
+        haeFileType = FILE_VORBIS_TYPE;
         break;
 #endif
     case BAE_AU_TYPE:
@@ -3414,6 +3444,61 @@ BAEResult BAEMixer_StartOutputToFile(BAEMixer theMixer,
         }
     }
     break;
+
+    case BAE_VORBIS_TYPE:
+    {
+#if USE_VORBIS_ENCODER != FALSE
+        if (theModifiers & BAE_USE_16)
+        {
+            mWritingToFileReference = (void *)XFileOpenForWrite(&theFile, TRUE);
+            if (mWritingToFileReference)
+            {
+                XDWORD channels = (theModifiers & BAE_USE_STEREO) ? 2 : 1;
+
+                /* Initialize Vorbis encoder and write headers. */
+                extern void *XInitVorbisEncoder(UINT32 sample_rate, UINT32 channels, float quality);
+                extern long XWriteVorbisHeader(void *encoder_handle, XFILE output_file);
+
+                float quality = BAE_TranslateVorbisTypeToQuality(compressionType);
+                mWritingEncoder = XInitVorbisEncoder(GM_ConvertFromOutputRateToRate((Rate)theRate), channels, quality);
+                if (mWritingEncoder)
+                {
+                    /* write header pages to file */
+                    (void)XWriteVorbisHeader(mWritingEncoder, (XFILE)mWritingToFileReference);
+
+                    GM_StopHardwareSoundManager(NULL);
+                    mWritingToFile = TRUE;
+                }
+                else
+                {
+                    BAE_STDERR("audio: XInitVorbisEncoder FAILED\n");
+                    theErr = BAD_FILE;
+                    if (mWritingToFileReference)
+                    {
+                        XFileClose((XFILE)mWritingToFileReference);
+                        mWritingToFileReference = NULL;
+                    }
+                }
+            }
+            else
+            {
+                theErr = BAD_FILE;
+            }
+        }
+        else
+        {
+            /* Can only encode 16bit data. */
+            theErr = PARAM_ERR;
+        }
+#else
+        /* Vorbis encoder not available in this build. */
+        compressionType;
+        outputType;
+        theModifiers;
+        theRate;
+#endif
+    }
+    break;
 #else
         compressionType;
 #endif
@@ -3544,12 +3629,25 @@ void BAEMixer_StopOutputToFile(void)
     {
         switch (mWriteToFileType)
         {
-#if USE_MPEG_ENCODER != FALSE
+#if USE_MPEG_ENCODER == TRUE
         case BAE_MPEG_TYPE:
             BAE_PRINTF("audio: BAEMixer_StopOutputToFile freeing mWritingEncoder=%p\n", mWritingEncoder);
             MPG_EncodeFreeStream(mWritingEncoder);
             mWritingEncoder = NULL;
             BAE_PRINTF("audio: BAEMixer_StopOutputToFile mWritingEncoder now NULL\n");
+            break;
+#endif
+        case BAE_VORBIS_TYPE:
+#if USE_VORBIS_ENCODER == TRUE
+            BAE_PRINTF("audio: BAEMixer_StopOutputToFile freeing vorbis encoder=%p\n", mWritingEncoder);
+            if (mWritingEncoder)
+            {
+                extern void XCloseVorbisEncoder(void *encoder_handle);
+                XCloseVorbisEncoder(mWritingEncoder);
+                mWritingEncoder = NULL;
+            }
+            break;
+#else
             break;
 #endif
         case BAE_WAVE_TYPE:
@@ -3558,7 +3656,7 @@ void BAEMixer_StopOutputToFile(void)
             GM_FinalizeFileHeader((XFILE)mWritingToFileReference, BAE_TranslateBAEFileType(mWriteToFileType));
             break;
 
-#if USE_FLAC_ENCODER != FALSE
+#if USE_FLAC_ENCODER == TRUE
         case BAE_FLAC_TYPE:
             // Encode accumulated audio data to FLAC and write to file
             if (mFLACAccumulatedSamples && mFLACAccumulatedFrames > 0)
@@ -3785,6 +3883,55 @@ BAEResult BAEMixer_ServiceAudioOutputToFile(BAEMixer theMixer)
                 }
                 break;
 #endif
+
+                case BAE_VORBIS_TYPE:
+                {
+#if USE_VORBIS_ENCODER != FALSE
+                    // Build PCM slice into mWritingDataBlock
+                    uint32_t framesToProcess = (uint32_t)(mWritingDataBlockSize / sampleSize / channels);
+                    BAE_BuildMixerSlice(NULL, mWritingDataBlock, mWritingDataBlockSize, framesToProcess);
+
+                    // Convert interleaved 16-bit PCM to planar float arrays expected by encoder
+                    extern long XEncodeVorbisData(void *encoder_handle, float **pcm_data, long samples, XFILE output_file);
+                    int ch = channels;
+                    float *chanBufs[2] = {0};
+                    // Allocate channel buffers on stack for typical stereo/mono
+                    for (int c = 0; c < ch; c++)
+                    {
+                        chanBufs[c] = (float *)XNewPtr(sizeof(float) * framesToProcess);
+                    }
+
+                    // deinterleave and convert
+                    int16_t *pcm = (int16_t *)mWritingDataBlock;
+                    for (uint32_t i = 0; i < framesToProcess; i++)
+                    {
+                        for (int c = 0; c < ch; c++)
+                        {
+                            int16_t s = *pcm++;
+                            chanBufs[c][i] = ((float)s) / 32768.0f;
+                        }
+                    }
+
+                    // Call encoder; passing NULL output file if no file ref
+                    XFILE out = (XFILE)mWritingToFileReference;
+                    long written = XEncodeVorbisData(mWritingEncoder, chanBufs, (long)framesToProcess, out);
+
+                    // free channel buffers
+                    for (int c = 0; c < ch; c++)
+                    {
+                        if (chanBufs[c])
+                            XDisposePtr((XPTR)chanBufs[c]);
+                    }
+
+                    if (written < 0)
+                    {
+                        theErr = BAD_FILE;
+                    }
+#else
+                    theErr = BAD_FILE_TYPE;
+#endif
+                }
+                break;
 
                 default:
                 {
@@ -9667,8 +9814,6 @@ uint32_t BAE_TranslateMPEGTypeToBitrate(BAECompressionType ct)
 {
     switch (ct)
     {
-    case BAE_COMPRESSION_MPEG_8:
-        return 8000;
     case BAE_COMPRESSION_MPEG_16:
         return 16000;
     case BAE_COMPRESSION_MPEG_24:
@@ -9703,6 +9848,24 @@ uint32_t BAE_TranslateMPEGTypeToBitrate(BAECompressionType ct)
         return 320000;
     default:
         return 128000; // safe default
+    }
+}
+
+// Map Vorbis compression enum to libvorbis quality parameter (approximate)
+float BAE_TranslateVorbisTypeToQuality(BAECompressionType ct)
+{
+    switch (ct)
+    {
+    case BAE_COMPRESSION_VORBIS_96:
+        return 0.1f; // low quality
+    case BAE_COMPRESSION_VORBIS_128:
+        return 0.3f;
+    case BAE_COMPRESSION_VORBIS_256:
+        return 0.7f;
+    case BAE_COMPRESSION_VORBIS_320:
+        return 0.95f; // near transparent
+    default:
+        return 0.4f; // safe default
     }
 }
 

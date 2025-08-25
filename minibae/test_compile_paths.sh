@@ -12,37 +12,48 @@ runtest() {
 
 for f in Makefile.gui-mingw Makefile.mingw Makefile.gui Makefile Makefile.clang; do
     # basic
-    runtest make -f ${f} all
+    runtest make -f ${f}
     # mp3dec
-    runtest make -f ${f} MP3_DEC=1 all
+    runtest make -f ${f} MP3_DEC=1
     # mp3enc
-    runtest make -f ${f} MP3_ENC=1 all
+    runtest make -f ${f} MP3_ENC=1
     # full mp3
-    runtest make -f ${f} MP3_ENC=1 MP3_DEC=1 all
+    runtest make -f ${f} MP3_ENC=1 MP3_DEC=1
     # flac dec
-    runtest make -f ${f} FLAC_DEC=1 all
+    runtest make -f ${f} FLAC_DEC=1
     # flac enc
-    runtest make -f ${f} FLAC_ENC=1 all
+    runtest make -f ${f} FLAC_ENC=1
     # flac full
-    runtest make -f ${f} FLAC_ENC=1 FLAC_DEC=1 all
+    runtest make -f ${f} FLAC_ENC=1 FLAC_DEC=1
     # karaoke support
-    runtest make -f ${f} KARAOKE=1 all
+    runtest make -f ${f} KARAOKE=1
+    # ogg support, no vorbis
+    runtest make -f ${f} OGG_SUPPORT=1
+    # vorbis dec
+    runtest make -f ${f} VORBIS_DEC=1
+    # vorbis enc
+    runtest make -f ${f} VORBIS_ENC=1
+    # vorbis full
+    runtest make -f ${f} VORBIS_ENC=1 VORBIS_DEC=1
     if [ "$(echo "${f}" | grep "gui" -c)" -eq 1 ]; then
         # midi hw only
-        runtest make -f ${f} ENABLE_MIDI_HW=1 all
+        runtest make -f ${f} ENABLE_MIDI_HW=1
         # playlist support only
-        runtest make -f ${f} PLAYLIST=1 all
-        # full build
-        runtest make -f ${f} ENABLE_MIDI_HW=1 MP3_ENC=1 MP3_DEC=1 FLAC_ENC=1 FLAC_DEC=1 KARAOKE=1 PLAYLIST=1 all
+        runtest make -f ${f} PLAYLIST=1
+        # full build (gui)
+        runtest make -f ${f} ENABLE_MIDI_HW=1 MP3_ENC=1 MP3_DEC=1 FLAC_ENC=1 FLAC_DEC=1 KARAOKE=1 VORBIS_ENC=1 VORBIS_DEC=1 PLAYLIST=1
+    else
+        # full build (cli)
+        runtest make -f ${f} MP3_ENC=1 MP3_DEC=1 FLAC_ENC=1 FLAC_DEC=1 KARAOKE=1 VORBIS_ENC=1 VORBIS_DEC=1     
     fi
     if [ "${f}" == "Makefile.gui" ]; then
         # Linux HW Midi Drivers
-        runtest make -f ${f} ENABLE_MIDI_HW=1 MP3_ENC=1 MP3_DEC=1 FLAC_ENC=1 FLAC_DEC=1 ENABLE_ALSA=1 all
-        runtest make -f ${f} ENABLE_MIDI_HW=1 MP3_ENC=1 MP3_DEC=1 FLAC_ENC=1 FLAC_DEC=1 ENABLE_JACK=1 all
-        runtest make -f ${f} ENABLE_MIDI_HW=1 MP3_ENC=1 MP3_DEC=1 FLAC_ENC=1 FLAC_DEC=1 ENABLE_ALSA=1 ENABLE_JACK=1 all
+        runtest make -f ${f} ENABLE_MIDI_HW=1 MP3_ENC=1 MP3_DEC=1 FLAC_ENC=1 FLAC_DEC=1 ENABLE_ALSA=1
+        runtest make -f ${f} ENABLE_MIDI_HW=1 MP3_ENC=1 MP3_DEC=1 FLAC_ENC=1 FLAC_DEC=1 ENABLE_JACK=1
+        runtest make -f ${f} ENABLE_MIDI_HW=1 MP3_ENC=1 MP3_DEC=1 FLAC_ENC=1 FLAC_DEC=1 ENABLE_ALSA=1 ENABLE_JACK=1
     fi
     if [ "${f}" == "Makefile.mingw" ]; then
         # Windows playbae SDL
-        runtest make -f ${f} USE_SDL=1 all
+        runtest make -f ${f} USE_SDL=1
     fi
 done
