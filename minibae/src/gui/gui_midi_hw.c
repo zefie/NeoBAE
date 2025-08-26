@@ -106,6 +106,9 @@ bool g_pcm_mp3_recording = false; // platform MP3 recorder active (MIDI-in)
 #if USE_FLAC_ENCODER != FALSE
 bool g_pcm_flac_recording = false;
 #endif
+#if USE_VORBIS_ENCODER == TRUE
+bool g_pcm_vorbis_recording = false;
+#endif
 FILE *g_pcm_wav_fp = NULL;
 uint64_t g_pcm_wav_data_bytes = 0;
 int g_pcm_wav_channels = 2;
@@ -121,6 +124,17 @@ static uint32_t g_pcm_flac_accumulated_frames = 0;
 static uint32_t g_pcm_flac_max_accumulated_frames = 0;
 static char g_pcm_flac_output_path[1024] = {0};
 #include "FLAC/stream_encoder.h"
+#endif
+
+#if USE_VORBIS_ENCODER == TRUE
+// Vorbis recording state
+static void *g_pcm_vorbis_accumulated_samples = NULL;
+static uint32_t g_pcm_vorbis_accumulated_frames = 0;
+static uint32_t g_pcm_vorbis_max_accumulated_frames = 0;
+static char g_pcm_vorbis_output_path[1024] = {0};
+static int g_pcm_vorbis_bitrate = 128000;
+#include "vorbis/vorbisenc.h"
+#include "ogg/ogg.h"
 #endif
 
 // ===== MIDI Event Callback =====
@@ -854,5 +868,276 @@ void pcm_flac_write_samples(int16_t *left, int16_t *right, int frames)
     g_pcm_flac_accumulated_frames += frames;
 }
 #endif // USE_FLAC_ENCODER
+
+#if USE_VORBIS_ENCODER == TRUE
+// Vorbis recording functions
+bool pcm_vorbis_start(const char *path, int channels, int sample_rate, int bits, int bitrate)
+{
+    BAE_PRINTF("Vorbis recording start attempt: %s (%d Hz, %d ch, %d bits, %d bps)\n", path, sample_rate, channels, bits, bitrate);
+
+    if (!path)
+    {
+        BAE_PRINTF("Vorbis recording: null path\n");
+        return false;
+    }
+
+    if (g_pcm_vorbis_recording)
+    {
+        BAE_PRINTF("Vorbis recording: already recording\n");
+        return false;
+    }
+
+    // Store recording parameters
+    g_pcm_wav_channels = channels;
+    g_pcm_wav_sample_rate = sample_rate;
+    g_pcm_wav_bits = bits;
+    g_pcm_vorbis_bitrate = bitrate;
+
+    strncpy(g_pcm_vorbis_output_path, path, sizeof(g_pcm_vorbis_output_path) - 1);
+    g_pcm_vorbis_output_path[sizeof(g_pcm_vorbis_output_path) - 1] = '\0';
+
+    // Allocate buffer for accumulating samples (2 minutes max)
+    g_pcm_vorbis_max_accumulated_frames = sample_rate * 120; // 2 minutes
+    g_pcm_vorbis_accumulated_samples = malloc(g_pcm_vorbis_max_accumulated_frames * channels * (bits / 8));
+    if (!g_pcm_vorbis_accumulated_samples)
+    {
+        BAE_PRINTF("Vorbis recording: failed to allocate %u bytes for buffer\n",
+                   (unsigned)(g_pcm_vorbis_max_accumulated_frames * channels * (bits / 8)));
+        return false;
+    }
+
+    g_pcm_vorbis_accumulated_frames = 0;
+    g_pcm_vorbis_recording = true;
+
+    // Register the callback to capture audio from the audio callback
+    BAE_Platform_SetVorbisRecorderCallback(pcm_vorbis_write_samples);
+
+    set_status_message("Vorbis recording started");
+    BAE_PRINTF("Vorbis recording started: %s (%d Hz, %d ch, %d bits, %d bps)\n", path, sample_rate, channels, bits, bitrate);
+    return true;
+}
+
+void pcm_vorbis_finalize(void)
+{
+    if (!g_pcm_vorbis_recording || !g_pcm_vorbis_accumulated_samples)
+        return;
+
+    BAE_PRINTF("Vorbis finalize: %u frames accumulated\n", g_pcm_vorbis_accumulated_frames);
+
+    if (g_pcm_vorbis_accumulated_frames == 0)
+    {
+        set_status_message("No Vorbis audio data to save");
+        BAE_Platform_ClearVorbisRecorderCallback();
+        if (g_pcm_vorbis_accumulated_samples)
+        {
+            free(g_pcm_vorbis_accumulated_samples);
+            g_pcm_vorbis_accumulated_samples = NULL;
+        }
+        g_pcm_vorbis_recording = false;
+        g_midi_recording = false;
+        return;
+    }
+
+    // Create Vorbis encoder and encode all accumulated data
+    vorbis_info vi;
+    vorbis_comment vc;
+    vorbis_dsp_state vd;
+    vorbis_block vb;
+
+    vorbis_info_init(&vi);
+    
+    // Initialize Vorbis encoder with VBR mode
+    int ret = vorbis_encode_init(&vi, g_pcm_wav_channels, g_pcm_wav_sample_rate, -1, g_pcm_vorbis_bitrate, -1);
+    if (ret == 0)
+    {
+        vorbis_comment_init(&vc);
+        vorbis_comment_add_tag(&vc, "ENCODER", "miniBAE");
+
+        vorbis_analysis_init(&vd, &vi);
+        vorbis_block_init(&vd, &vb);
+
+        // Open output file
+        FILE *fp = fopen(g_pcm_vorbis_output_path, "wb");
+        if (fp)
+        {
+            ogg_stream_state os;
+            ogg_page og;
+            ogg_packet header_main, header_comments, header_codebooks;
+
+            ogg_stream_init(&os, rand());
+
+            // Write Vorbis headers - need separate packets for each header
+            vorbis_analysis_headerout(&vd, &vc, &header_main, &header_comments, &header_codebooks);
+            
+            // Write the three headers to the Ogg stream
+            ogg_stream_packetin(&os, &header_main);
+            ogg_stream_packetin(&os, &header_comments);
+            ogg_stream_packetin(&os, &header_codebooks);
+
+            // Flush headers to file
+            while (ogg_stream_flush(&os, &og) != 0)
+            {
+                fwrite(og.header, 1, og.header_len, fp);
+                fwrite(og.body, 1, og.body_len, fp);
+            }
+
+            // Process all accumulated samples
+            if (g_pcm_wav_bits == 16)
+            {
+                const int16_t *src = (const int16_t *)g_pcm_vorbis_accumulated_samples;
+                uint32_t frames_to_process = g_pcm_vorbis_accumulated_frames;
+
+                // Process in chunks
+                const uint32_t chunk_size = 4096;
+                uint32_t frames_processed = 0;
+
+                while (frames_processed < frames_to_process)
+                {
+                    uint32_t frames_this_chunk = frames_to_process - frames_processed;
+                    if (frames_this_chunk > chunk_size)
+                        frames_this_chunk = chunk_size;
+
+                    float **buffer = vorbis_analysis_buffer(&vd, frames_this_chunk);
+                    
+                    // Convert 16-bit samples to float
+                    for (uint32_t i = 0; i < frames_this_chunk; i++)
+                    {
+                        for (int ch = 0; ch < g_pcm_wav_channels; ch++)
+                        {
+                            buffer[ch][i] = src[(frames_processed + i) * g_pcm_wav_channels + ch] / 32768.0f;
+                        }
+                    }
+
+                    vorbis_analysis_wrote(&vd, frames_this_chunk);
+                    frames_processed += frames_this_chunk;
+
+                    // Encode and write packets
+                    while (vorbis_analysis_blockout(&vd, &vb) == 1)
+                    {
+                        vorbis_analysis(&vb, NULL);
+                        vorbis_bitrate_addblock(&vb);
+
+                        ogg_packet op;
+                        while (vorbis_bitrate_flushpacket(&vd, &op))
+                        {
+                            ogg_stream_packetin(&os, &op);
+
+                            while (ogg_stream_pageout(&os, &og) != 0)
+                            {
+                                fwrite(og.header, 1, og.header_len, fp);
+                                fwrite(og.body, 1, og.body_len, fp);
+                            }
+                        }
+                    }
+                }
+
+                // Signal end of data
+                vorbis_analysis_wrote(&vd, 0);
+
+                // Flush remaining packets
+                while (vorbis_analysis_blockout(&vd, &vb) == 1)
+                {
+                    vorbis_analysis(&vb, NULL);
+                    vorbis_bitrate_addblock(&vb);
+
+                    ogg_packet op;
+                    while (vorbis_bitrate_flushpacket(&vd, &op))
+                    {
+                        ogg_stream_packetin(&os, &op);
+
+                        while (ogg_stream_pageout(&os, &og) != 0)
+                        {
+                            fwrite(og.header, 1, og.header_len, fp);
+                            fwrite(og.body, 1, og.body_len, fp);
+                        }
+                    }
+                }
+
+                // Flush remaining pages
+                while (ogg_stream_flush(&os, &og) != 0)
+                {
+                    fwrite(og.header, 1, og.header_len, fp);
+                    fwrite(og.body, 1, og.body_len, fp);
+                }
+            }
+
+            ogg_stream_clear(&os);
+            fclose(fp);
+            set_status_message("Vorbis recording saved");
+        }
+        else
+        {
+            set_status_message("Vorbis file creation failed");
+        }
+
+        vorbis_block_clear(&vb);
+        vorbis_dsp_clear(&vd);
+        vorbis_comment_clear(&vc);
+    }
+    else
+    {
+        set_status_message("Vorbis encoder initialization failed");
+    }
+
+    vorbis_info_clear(&vi);
+
+    // Clear the audio callback
+    BAE_Platform_ClearVorbisRecorderCallback();
+
+    // Clean up
+    if (g_pcm_vorbis_accumulated_samples)
+    {
+        free(g_pcm_vorbis_accumulated_samples);
+        g_pcm_vorbis_accumulated_samples = NULL;
+    }
+    g_pcm_vorbis_accumulated_frames = 0;
+    g_pcm_vorbis_recording = false;
+    g_midi_recording = false;
+}
+
+void pcm_vorbis_write_samples(int16_t *left, int16_t *right, int frames)
+{
+    if (!g_pcm_vorbis_recording || !g_pcm_vorbis_accumulated_samples || frames <= 0)
+        return;
+
+    // Check if we have room in the accumulation buffer
+    if (g_pcm_vorbis_accumulated_frames + frames > g_pcm_vorbis_max_accumulated_frames)
+    {
+        // Buffer overflow - just ignore the extra samples
+        static int warned = 0;
+        if (!warned)
+        {
+            set_status_message("Vorbis buffer full, recording may be truncated");
+            warned = 1;
+        }
+        return;
+    }
+
+    // Append samples to accumulation buffer
+    int16_t *dest = (int16_t *)g_pcm_vorbis_accumulated_samples +
+                    (g_pcm_vorbis_accumulated_frames * g_pcm_wav_channels);
+
+    if (g_pcm_wav_channels == 1)
+    {
+        // Mono - use left channel if available, otherwise right
+        int16_t *src = left ? left : right;
+        for (int i = 0; i < frames; i++)
+        {
+            dest[i] = src[i];
+        }
+    }
+    else
+    {
+        // Stereo
+        for (int i = 0; i < frames; i++)
+        {
+            dest[i * 2] = left ? left[i] : 0;
+            dest[i * 2 + 1] = right ? right[i] : 0;
+        }
+    }
+
+    g_pcm_vorbis_accumulated_frames += frames;
+}
+#endif // USE_VORBIS_ENCODER
 
 #endif // SUPPORT_MIDI_HW

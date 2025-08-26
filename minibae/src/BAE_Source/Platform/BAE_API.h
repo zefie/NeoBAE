@@ -374,6 +374,16 @@ void BAE_Platform_SetFlacRecorderCallback(void (*callback)(int16_t *left, int16_
 // Clear the FLAC recorder callback. Safe to call if no callback is set.
 void BAE_Platform_ClearFlacRecorderCallback(void);
 
+#if USE_VORBIS_ENCODER == TRUE
+// Vorbis recording callback functions - similar to FLAC
+// The callback receives separate left/right channel arrays and frame count.
+// Pass NULL to clear the callback.
+void BAE_Platform_SetVorbisRecorderCallback(void (*callback)(int16_t *left, int16_t *right, int frames));
+
+// Clear the Vorbis recorder callback. Safe to call if no callback is set.
+void BAE_Platform_ClearVorbisRecorderCallback(void);
+#endif
+
 // **** Audio Engine feedback functions. These functions are used to direct or get
 //      information about the engine.
 //

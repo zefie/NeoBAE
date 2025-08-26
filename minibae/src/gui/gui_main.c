@@ -3426,7 +3426,7 @@ int main(int argc, char *argv[])
                         measure_text(nb, &tw, &th);
                         draw_text(R, x + 2, kbY + kbH - (th + 2), nb, g_is_dark_mode ? (SDL_Color){20, 20, 25, 255} : (SDL_Color){30, 30, 30, 255});
                     }
-                    if (!g_keyboard_channel_dd_open && !modal_block && !g_reverbDropdownOpen && !g_exportDropdownOpen && !g_exporting && ui_mx >= x && ui_mx < x + w && ui_my >= kbY && ui_my < kbY + kbH)
+                    if (!g_keyboard_channel_dd_open && !modal_block && !g_reverbDropdownOpen && !g_exportDropdownOpen && !g_midiRecordFormatDropdownOpen && !g_exporting && ui_mx >= x && ui_mx < x + w && ui_my >= kbY && ui_my < kbY + kbH)
                     {
                         mouseNoteCandidateWhite = n;
                     }
@@ -3486,7 +3486,7 @@ int main(int argc, char *argv[])
                         keyCol = g_highlight_color;
                     draw_rect(R, (Rect){bx, kbY, bw, bh}, keyCol);
                     draw_frame(R, (Rect){bx, kbY, bw, bh}, g_panel_border);
-                    if (!g_keyboard_channel_dd_open && !modal_block && !g_reverbDropdownOpen && !g_exportDropdownOpen && !g_exporting && ui_mx >= bx && ui_mx < bx + bw && ui_my >= kbY && ui_my < kbY + bh)
+                    if (!g_keyboard_channel_dd_open && !modal_block && !g_reverbDropdownOpen && !g_exportDropdownOpen && !g_midiRecordFormatDropdownOpen && !g_exporting && ui_mx >= bx && ui_mx < bx + bw && ui_my >= kbY && ui_my < kbY + bh)
                     {
                         mouseNoteCandidateBlack = n;
                     }
@@ -3495,7 +3495,7 @@ int main(int argc, char *argv[])
             // Determine hovered note (black takes precedence over white)
             int mouseNote = (mouseNoteCandidateBlack != -1) ? mouseNoteCandidateBlack : mouseNoteCandidateWhite;
             // Interaction: monophonic click-n-drag play (velocity varies by vertical position)
-            if (!modal_block && !g_keyboard_channel_dd_open && !g_reverbDropdownOpen && !g_exportDropdownOpen && !g_exporting)
+            if (!modal_block && !g_keyboard_channel_dd_open && !g_reverbDropdownOpen && !g_exportDropdownOpen && !g_midiRecordFormatDropdownOpen && !g_exporting)
             {
                 if (ui_mdown)
                 {
@@ -4128,8 +4128,8 @@ int main(int argc, char *argv[])
             }
             // Also draw Record/Stop in the Export slot so MIDI users can record even when panel is dimmed
             Rect recRect = {348, 215, 80, 22}; // Moved from 320 to 348
-            // Dropdown button to right of record (two-column list)
-            Rect recFmtBtn = {recRect.x + recRect.w + 8, 215, 200, 22};
+            // Dropdown button to right of record (extend to match progress bar width)
+            Rect recFmtBtn = {recRect.x + recRect.w + 8, 215, 234, 22};
             // Only show format selector when MIDI input is enabled
             if (g_midi_input_enabled)
             {
@@ -4173,11 +4173,6 @@ int main(int argc, char *argv[])
                     draw_text(R, text_x, text_y, g_midiRecordFormatNames[g_midiRecordFormatIndex], disabledTxt);
                 }
 
-                // Render two-column dropdown list when open (only if enabled and open)
-                if (recFmtEnabled && g_midiRecordFormatDropdownOpen)
-                {
-                    ui_dropdown_two_column(R, recFmtBtn, &g_midiRecordFormatIndex, g_midiRecordFormatNames, g_midiRecordFormatCount, &g_midiRecordFormatDropdownOpen, mx, my, mdown, mclick);
-                }
             }
             if (!g_midi_recording)
             {
@@ -4223,21 +4218,26 @@ int main(int argc, char *argv[])
                         }
                         else
                         {
-                            // Choose save dialog and extension based on format
+                            // Choose save dialog and extension based on format using helper function
+                            MidiRecordFormatInfo format_info = get_midi_record_format_info(g_midiRecordFormatIndex);
                             int export_dialog_type = 0; // Default to WAV
-                            if (g_midiRecordFormatIndex == 1)
-                            {
-                                export_dialog_type = 0; // WAV
-                            }
-#if USE_FLAC_ENCODER != FALSE
-                            else if (g_midiRecordFormatIndex == 2)
-                            {
-                                export_dialog_type = 1; // FLAC
-                            }
-#endif
-                            else if (g_midiRecordFormatIndex >= 3)
-                            {
-                                export_dialog_type = 2; // MP3
+                            
+                            switch (format_info.type) {
+                                case MIDI_RECORD_FORMAT_WAV:
+                                    export_dialog_type = 0; // WAV
+                                    break;
+                                case MIDI_RECORD_FORMAT_FLAC:
+                                    export_dialog_type = 1; // FLAC
+                                    break;
+                                case MIDI_RECORD_FORMAT_MP3:
+                                    export_dialog_type = 2; // MP3
+                                    break;
+                                case MIDI_RECORD_FORMAT_VORBIS:
+                                    export_dialog_type = 3; // OGG/Vorbis
+                                    break;
+                                default:
+                                    export_dialog_type = 0; // fallback to WAV
+                                    break;
                             }
                             char *export_file = save_export_dialog(export_dialog_type);
                             if (export_file)
@@ -4275,14 +4275,19 @@ int main(int argc, char *argv[])
                                 }
 #endif
                                 else if (g_midiRecordFormatIndex >= 3)
-                                { // MP3
-                                    if (L < 4 || strcasecmp(export_file + L - 4, ".mp3") != 0)
+                                {
+                                    // Use helper function to determine format and extension
+                                    MidiRecordFormatInfo format_info = get_midi_record_format_info(g_midiRecordFormatIndex);
+                                    const char *ext = format_info.extension;
+                                    int ext_len = strlen(ext);
+                                    
+                                    if (L < ext_len || strcasecmp(export_file + L - ext_len, ext) != 0)
                                     {
-                                        size_t n = L + 5;
+                                        size_t n = L + ext_len + 1;
                                         char *tmp = malloc(n);
                                         if (tmp)
                                         {
-                                            snprintf(tmp, n, "%s.mp3", export_file);
+                                            snprintf(tmp, n, "%s%s", export_file, ext);
                                             free(export_file);
                                             export_file = tmp;
                                         }
@@ -4307,31 +4312,49 @@ int main(int argc, char *argv[])
                                     g_bae.is_playing = false;
                                 }
 
-                                // Map selected format to BAE types
+                                // Map selected format to BAE types using helper function
                                 BAECompressionType compression = BAE_COMPRESSION_NONE;
                                 int selectedCodecIndex = 0; // for UI state
-#if USE_MPEG_ENCODER != FALSE || USE_FLAC_ENCODER != FALSE
-                                if (g_midiRecordFormatIndex == 1)
-                                {                           // WAV
+                                MidiRecordFormatInfo format_info = get_midi_record_format_info(g_midiRecordFormatIndex);
+                                
+                                if (format_info.type == MIDI_RECORD_FORMAT_WAV)
+                                {
                                     selectedCodecIndex = 0; // WAV
+                                    compression = BAE_COMPRESSION_NONE;
                                 }
 #if USE_FLAC_ENCODER != FALSE
-                                else if (g_midiRecordFormatIndex == 2)
-                                {                           // FLAC
-                                    selectedCodecIndex = 1; // FLAC
+                                else if (format_info.type == MIDI_RECORD_FORMAT_FLAC)
+                                {
+                                    selectedCodecIndex = 1; // FLAC  
+                                    compression = BAE_COMPRESSION_LOSSLESS;
                                 }
 #endif
-                                else
+#if USE_MPEG_ENCODER != FALSE
+                                else if (format_info.type == MIDI_RECORD_FORMAT_MP3)
                                 {
-                                    // Map our index (3..n) to the compression map defined earlier
-                                    // Adjust for FLAC insertion: subtract 1 to account for FLAC at index 2
-                                    selectedCodecIndex = g_midiRecordFormatIndex - 1;
-                                    if (selectedCodecIndex < 0)
-                                        selectedCodecIndex = 0;
-                                    if (selectedCodecIndex >= g_exportCompressionCount)
-                                        selectedCodecIndex = g_exportCompressionCount - 1;
-                                    compression = g_exportCompressionMap[selectedCodecIndex];
+                                    // Map MP3 bitrate to compression type
+                                    switch (format_info.bitrate) {
+                                        case 128000: compression = BAE_COMPRESSION_MPEG_128; break;
+                                        case 192000: compression = BAE_COMPRESSION_MPEG_192; break;
+                                        case 256000: compression = BAE_COMPRESSION_MPEG_256; break;
+                                        case 320000: compression = BAE_COMPRESSION_MPEG_320; break;
+                                        default: compression = BAE_COMPRESSION_MPEG_128; break;
+                                    }
                                 }
+#endif
+#if USE_VORBIS_ENCODER == TRUE
+                                else if (format_info.type == MIDI_RECORD_FORMAT_VORBIS)
+                                {
+                                    // Map Vorbis bitrate to compression type
+                                    switch (format_info.bitrate) {
+                                        case 96000:  compression = BAE_COMPRESSION_VORBIS_96; break;
+                                        case 128000: compression = BAE_COMPRESSION_VORBIS_128; break;
+                                        case 256000: compression = BAE_COMPRESSION_VORBIS_256; break;
+                                        case 320000: compression = BAE_COMPRESSION_VORBIS_320; break;
+                                        default: compression = BAE_COMPRESSION_VORBIS_128; break;
+                                    }
+                                }
+#endif
 #else
                                 if (g_midiRecordFormatIndex != 1)
                                 {
@@ -4456,97 +4479,126 @@ int main(int argc, char *argv[])
 #endif
                                     else
                                     {
-                                        // MP3 selected
+                                        // MP3 or Vorbis selected - check format type
+                                        if (format_info.type == MIDI_RECORD_FORMAT_MP3)
+                                        {
 #if USE_MPEG_ENCODER != FALSE
-                                        if (g_midi_input_enabled)
-                                        {
-                                            // Use platform MP3 recorder for MIDI-in; do not start BAESong
-                                            int mp3_channels = g_stereo_output ? 2 : 1;
-                                            int mp3_sr = g_sample_rate_hz > 0 ? g_sample_rate_hz : 44100;
-                                            // Map MIDI record index (3..8) to bitrate table (FLAC now at index 2)
-                                            static const int mp3_rates[] = {96000, 128000, 160000, 192000, 256000, 320000};
-                                            int sel = g_midiRecordFormatIndex - 3; // Adjusted for FLAC at index 2
-                                            if (sel < 0)
-                                                sel = 0;
-                                            if (sel > 5)
-                                                sel = 5;
-                                            int bitrate = mp3_rates[sel];
-                                            int rc = BAE_Platform_MP3Recorder_Start(export_file, (uint32_t)mp3_channels, (uint32_t)mp3_sr, 16, (uint32_t)bitrate);
-                                            if (rc != 0)
+                                            if (g_midi_input_enabled)
                                             {
-                                                set_status_message("Failed to start MP3 recorder");
-                                                free(export_file);
-                                            }
-                                            else
-                                            {
-                                                g_pcm_mp3_recording = true;
-                                                g_midi_recording = true;
-                                                g_exporting = false;
-                                                strncpy(g_export_path, export_file, sizeof(g_export_path) - 1);
-                                                g_export_path[sizeof(g_export_path) - 1] = '\0';
-                                                set_status_message("MP3 recording started");
-                                                free(export_file);
-                                            }
-                                        }
-                                        else
-                                        {
-                                            // Fallback to BAEMixer path for normal song export to MP3
-                                            BAEResult result = BAEMixer_StartOutputToFile(g_bae.mixer, (BAEPathName)export_file,
-                                                                                          BAE_MPEG_TYPE,
-                                                                                          (BAECompressionType)compression);
-                                            if (result != BAE_NO_ERROR)
-                                            {
-                                                char msg[128];
-                                                snprintf(msg, sizeof(msg), "Export failed to start (%d)", result);
-                                                set_status_message(msg);
-                                                free(export_file);
-                                            }
-                                            else
-                                            {
-                                                g_export_file_type = BAE_MPEG_TYPE;
-                                                if (g_show_virtual_keyboard)
+                                                // Use platform MP3 recorder for MIDI-in; do not start BAESong
+                                                int mp3_channels = g_stereo_output ? 2 : 1;
+                                                int mp3_sr = g_sample_rate_hz > 0 ? g_sample_rate_hz : 44100;
+                                                int bitrate = format_info.bitrate;
+                                                int rc = BAE_Platform_MP3Recorder_Start(export_file, (uint32_t)mp3_channels, (uint32_t)mp3_sr, 16, (uint32_t)bitrate);
+                                                if (rc != 0)
                                                 {
-                                                    BAESong target = g_bae.song ? g_bae.song : g_live_song;
-                                                    if (g_keyboard_mouse_note != -1)
-                                                    {
-                                                        if (target)
-                                                            BAESong_NoteOff(target, (unsigned char)g_keyboard_channel, (unsigned char)g_keyboard_mouse_note, 0, 0);
-                                                        g_keyboard_mouse_note = -1;
-                                                    }
-                                                    memset(g_keyboard_active_notes, 0, sizeof(g_keyboard_active_notes));
-                                                }
-
-                                                BAESong_Stop(g_bae.song, FALSE);
-                                                BAESong_SetMicrosecondPosition(g_bae.song, 0);
-                                                BAESong_Preroll(g_bae.song);
-                                                result = BAESong_Start(g_bae.song, 0);
-                                                if (result != BAE_NO_ERROR)
-                                                {
-                                                    char msg[128];
-                                                    snprintf(msg, sizeof(msg), "Export BAESong_Start failed (%d)", result);
-                                                    set_status_message(msg);
-                                                    BAEMixer_StopOutputToFile();
+                                                    set_status_message("Failed to start MP3 recorder");
                                                     free(export_file);
                                                 }
                                                 else
                                                 {
-                                                    g_bae.is_playing = true;
-                                                    g_exporting = true;
-                                                    g_export_path[0] = 0;
+                                                    g_pcm_mp3_recording = true;
+                                                    g_midi_recording = true;
+                                                    g_exporting = false;
                                                     strncpy(g_export_path, export_file, sizeof(g_export_path) - 1);
                                                     g_export_path[sizeof(g_export_path) - 1] = '\0';
-                                                    g_exportCodecIndex = selectedCodecIndex;
-                                                    g_export_realtime_mode = true;
-                                                    set_status_message("Export started");
+                                                    set_status_message("MP3 recording started");
                                                     free(export_file);
                                                 }
                                             }
-                                        }
+                                            else
+                                            {
+                                                // Fallback to BAEMixer path for normal song export to MP3
+                                                BAEResult result = BAEMixer_StartOutputToFile(g_bae.mixer, (BAEPathName)export_file,
+                                                                                              BAE_MPEG_TYPE,
+                                                                                              compression);
+                                                if (result != BAE_NO_ERROR)
+                                                {
+                                                    char msg[128];
+                                                    snprintf(msg, sizeof(msg), "MP3 export failed to start (%d)", result);
+                                                    set_status_message(msg);
+                                                    free(export_file);
+                                                }
+                                                else
+                                                {
+                                                    g_exporting = true;
+                                                    g_export_file_type = BAE_MPEG_TYPE;
+                                                    strncpy(g_export_path, export_file, sizeof(g_export_path) - 1);
+                                                    g_export_path[sizeof(g_export_path) - 1] = '\0';
+                                                    set_status_message("MP3 export started");
+                                                    free(export_file);
+                                                }
+                                            }
 #else
-                                        // no MPEG support and not WAV => fail
-                                        set_status_message("MP3 export not supported in this build");
-                                        free(export_file);
+                                            set_status_message("MP3 export not supported in this build");
+                                            free(export_file);
 #endif
+                                        }
+                                        else if (format_info.type == MIDI_RECORD_FORMAT_VORBIS)
+                                        {
+#if USE_VORBIS_ENCODER == TRUE
+                                            // Use our own PCM Vorbis writer for real-time recording
+                                            int vorbis_channels = g_stereo_output ? 2 : 1;
+                                            int vorbis_sr = g_sample_rate_hz > 0 ? g_sample_rate_hz : 44100;
+                                            int bitrate = format_info.bitrate;
+                                            bool started = pcm_vorbis_start(export_file, vorbis_channels, vorbis_sr, 16, bitrate);
+                                            if (!started)
+                                            {
+                                                set_status_message("Failed to open Vorbis file for recording");
+                                                free(export_file);
+                                            }
+                                            else
+                                            {
+                                                // If not in MIDI-in mode, start/seek/preroll the target song to drive engine audio.
+                                                if (!g_midi_input_enabled)
+                                                {
+                                                    if (target)
+                                                    {
+                                                        BAESong_Stop(target, FALSE);
+                                                        BAESong_SetMicrosecondPosition(target, 0);
+                                                        BAESong_Preroll(target);
+                                                    }
+                                                    BAEResult rs = target ? BAESong_Start(target, 0) : BAE_NO_ERROR;
+                                                    if (rs != BAE_NO_ERROR)
+                                                    {
+                                                        set_status_message("Failed to start song for Vorbis recording");
+                                                        pcm_vorbis_finalize();
+                                                        free(export_file);
+                                                    }
+                                                    else
+                                                    {
+                                                        g_bae.is_playing = true;
+                                                        g_pcm_vorbis_recording = true;
+                                                        g_midi_recording = true;
+                                                        g_exporting = false; // use our own writer
+                                                        strncpy(g_export_path, export_file, sizeof(g_export_path) - 1);
+                                                        g_export_path[sizeof(g_export_path) - 1] = '\0';
+                                                        set_status_message("Vorbis recording started");
+                                                        free(export_file);
+                                                    }
+                                                }
+                                                else
+                                                {
+                                                    // MIDI-in mode: do not change engine playback; just enable PCM writer.
+                                                    g_pcm_vorbis_recording = true;
+                                                    g_midi_recording = true;
+                                                    g_exporting = false; // use our own writer
+                                                    strncpy(g_export_path, export_file, sizeof(g_export_path) - 1);
+                                                    g_export_path[sizeof(g_export_path) - 1] = '\0';
+                                                    set_status_message("Vorbis recording started");
+                                                    free(export_file);
+                                                }
+                                            }
+#else
+                                            set_status_message("Vorbis export not supported in this build");
+                                            free(export_file);
+#endif
+                                        }
+                                        else
+                                        {
+                                            set_status_message("Unsupported export format");
+                                            free(export_file);
+                                        }
                                     }
                                 }
                             }
@@ -4575,15 +4627,17 @@ int main(int argc, char *argv[])
                 // Stop either MIDI recording or active export
                 if (ui_button(R, recRect, "Stop", mx, my, mdown) && mclick)
                 {
-                    // If MIDI recording is active, stop and save
-                    if (g_midiRecordFormatIndex == 0)
+                    // If MIDI recording is active, stop and save - use helper function
+                    MidiRecordFormatInfo stop_format_info = get_midi_record_format_info(g_midiRecordFormatIndex);
+                    
+                    if (stop_format_info.type == MIDI_RECORD_FORMAT_MIDI)
                     {
                         if (!midi_record_stop())
                         {
                             set_status_message("Failed to finalize MIDI file");
                         }
                     }
-                    else if (g_midiRecordFormatIndex == 1)
+                    else if (stop_format_info.type == MIDI_RECORD_FORMAT_WAV)
                     {
                         // WAV: if using our PCM writer, finalize it
                         if (g_pcm_wav_recording)
@@ -4600,7 +4654,7 @@ int main(int argc, char *argv[])
                         }
                     }
 #if USE_FLAC_ENCODER != FALSE
-                    else if (g_midiRecordFormatIndex == 2)
+                    else if (stop_format_info.type == MIDI_RECORD_FORMAT_FLAC)
                     {
                         // FLAC: if using our PCM writer, finalize it
                         if (g_pcm_flac_recording)
@@ -4617,9 +4671,9 @@ int main(int argc, char *argv[])
                         }
                     }
 #endif
-                    else
+                    else if (stop_format_info.type == MIDI_RECORD_FORMAT_MP3)
                     {
-                        // Other formats (MP3)
+                        // MP3 format
                         if (g_midi_input_enabled && g_pcm_mp3_recording)
                         {
                             BAE_Platform_MP3Recorder_Stop();
@@ -4634,6 +4688,38 @@ int main(int argc, char *argv[])
                         }
                         else
                         {
+                            set_status_message("No MP3 export in progress");
+                        }
+                    }
+                    else if (stop_format_info.type == MIDI_RECORD_FORMAT_VORBIS)
+                    {
+#if USE_VORBIS_ENCODER == TRUE
+                        // Vorbis: if using our PCM writer, finalize it
+                        if (g_pcm_vorbis_recording)
+                        {
+                            pcm_vorbis_finalize();
+                        }
+                        else if (g_exporting)
+                        {
+                            bae_stop_wav_export(); // Generic export stop function
+                        }
+                        else
+                        {
+                            set_status_message("No Vorbis export in progress");
+                        }
+#else
+                        set_status_message("Vorbis not supported in this build");
+#endif
+                    }
+                    else
+                    {
+                        // Unknown format - fallback
+                        if (g_exporting)
+                        {
+                            bae_stop_wav_export();
+                        }
+                        else
+                        {
                             set_status_message("No export in progress");
                         }
                     }
@@ -4641,7 +4727,6 @@ int main(int argc, char *argv[])
                 }
             }
         }
-#endif
 #ifdef SUPPORT_KARAOKE
         // Karaoke panel rendering (two lines: current + next)
         if (showKaraoke)
@@ -5533,6 +5618,15 @@ int main(int argc, char *argv[])
                 g_exportDropdownOpen = false;
         }
 #endif
+
+        // Render record format dropdown on top of everything else if open
+        if (g_midiRecordFormatDropdownOpen)
+        {
+            // Reconstruct the record format button rect using the same calculation as above
+            Rect recRect = {348, 215, 80, 22}; // Same as record button
+            Rect recFmtBtn = {recRect.x + recRect.w + 8, 215, 234, 22}; // Same calculation as in button creation
+            ui_dropdown_two_column(R, recFmtBtn, &g_midiRecordFormatIndex, g_midiRecordFormatNames, g_midiRecordFormatCount, &g_midiRecordFormatDropdownOpen, mx, my, mdown, mclick);
+        }
 
         // If exporting, render a slight dim overlay that disables everything except the Stop button.
         if (g_exporting)

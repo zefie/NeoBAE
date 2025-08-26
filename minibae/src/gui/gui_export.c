@@ -92,11 +92,7 @@ const char *g_exportCodecNames[] = {
     "128kbps MP3",
     "192kbps MP3",
     "256kbps MP3",
-#if defined(USE_VORBIS_ENCODER) && USE_VORBIS_ENCODER == TRUE    
     "320kbps MP3",
-#else
-    "320kbps MP3"
-#endif
 #endif
 #if defined(USE_VORBIS_ENCODER) && USE_VORBIS_ENCODER == TRUE
     "96kbps Vorbis",
@@ -149,15 +145,73 @@ const char *g_midiRecordFormatNames[] = {
     "FLAC Lossless",
 #endif
 #if USE_MPEG_ENCODER != FALSE
-    "96kbps MP3",
     "128kbps MP3",
-    "160kbps MP3",
     "192kbps MP3",
     "256kbps MP3",
-    "320kbps MP3"
+    "320kbps MP3",
+#endif
+#if defined(USE_VORBIS_ENCODER) && USE_VORBIS_ENCODER == TRUE
+    "96kbps Vorbis",
+    "128kbps Vorbis",
+    "256kbps Vorbis",
+    "320kbps Vorbis"
 #endif
 };
 const int g_midiRecordFormatCount = sizeof(g_midiRecordFormatNames) / sizeof(g_midiRecordFormatNames[0]);
+
+// Helper function to determine format type and bitrate for MIDI record format index
+MidiRecordFormatInfo get_midi_record_format_info(int index) {
+    MidiRecordFormatInfo info = {MIDI_RECORD_FORMAT_MIDI, 0, ".mid"};
+    
+    if (index == 0) {
+        info.type = MIDI_RECORD_FORMAT_MIDI;
+        info.extension = ".mid";
+        return info;
+    }
+    
+    if (index == 1) {
+        info.type = MIDI_RECORD_FORMAT_WAV;
+        info.extension = ".wav";
+        return info;
+    }
+    
+    int current_index = 2;
+    
+#if USE_FLAC_ENCODER != FALSE
+    if (index == current_index) {
+        info.type = MIDI_RECORD_FORMAT_FLAC;
+        info.extension = ".flac";
+        return info;
+    }
+    current_index++;
+#endif
+
+#if USE_MPEG_ENCODER != FALSE
+    // MP3 formats: 128, 192, 256, 320
+    if (index >= current_index && index < current_index + 4) {
+        info.type = MIDI_RECORD_FORMAT_MP3;
+        info.extension = ".mp3";
+        int mp3_bitrates[] = {128, 192, 256, 320};
+        info.bitrate = mp3_bitrates[index - current_index] * 1000; // convert to bps
+        return info;
+    }
+    current_index += 4;
+#endif
+
+#if defined(USE_VORBIS_ENCODER) && USE_VORBIS_ENCODER == TRUE
+    // Vorbis formats: 96, 128, 256, 320
+    if (index >= current_index && index < current_index + 4) {
+        info.type = MIDI_RECORD_FORMAT_VORBIS;
+        info.extension = ".ogg";
+        int vorbis_bitrates[] = {96, 128, 256, 320};
+        info.bitrate = vorbis_bitrates[index - current_index] * 1000; // convert to bps
+        return info;
+    }
+#endif
+
+    // Default fallback
+    return info;
+}
 
 // External references to virtual keyboard and PCM recording
 extern bool g_show_virtual_keyboard;
@@ -689,7 +743,7 @@ void bae_service_wav_export()
 }
 
 // File dialog for save export
-char *save_export_dialog(int export_type) // 0=WAV, 1=FLAC, 2=MP3
+char *save_export_dialog(int export_type) // 0=WAV, 1=FLAC, 2=MP3, 3=OGG
 {
 #ifdef _WIN32
     char fileBuf[1024] = {0};
