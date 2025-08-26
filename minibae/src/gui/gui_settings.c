@@ -1,5 +1,6 @@
 // gui_settings.c - Settings management and persistence
 
+#include "BAE_API.h"
 #include "gui_settings.h"
 #include "gui_bae.h"
 #include "gui_export.h"
@@ -389,7 +390,7 @@ void render_settings_dialog(SDL_Renderer *R, int mx, int my, bool mclick, bool m
         {
             g_sampleRateDropdownOpen = false;
             g_exportDropdownOpen = false;
-#ifdef SUPPORT_MIDI_HW
+#if SUPPORT_MIDI_HW == TRUE
             g_midi_input_device_dd_open = false;
             g_midi_output_device_dd_open = false;
 #endif
@@ -448,7 +449,7 @@ void render_settings_dialog(SDL_Renderer *R, int mx, int my, bool mclick, bool m
         if (g_sampleRateDropdownOpen)
         {
             g_exportDropdownOpen = false;
-#ifdef SUPPORT_MIDI_HW
+#if SUPPORT_MIDI_HW == TRUE
             g_midi_input_device_dd_open = false;
             g_midi_output_device_dd_open = false;
 #endif
@@ -456,7 +457,7 @@ void render_settings_dialog(SDL_Renderer *R, int mx, int my, bool mclick, bool m
     }
 
     // Export codec selector (left column, below sample rate)
-#if USE_MPEG_ENCODER != FALSE
+#if USE_MPEG_ENCODER == TRUE
     Rect expRect = {controlRightX, dlg.y + 104, controlW, 24};
     draw_text(R, leftX, dlg.y + 108, "Export Codec:", g_text_color);
     bool exportEnabled = !g_volumeCurveDropdownOpen && !g_sampleRateDropdownOpen;
@@ -486,14 +487,14 @@ void render_settings_dialog(SDL_Renderer *R, int mx, int my, bool mclick, bool m
         {
             g_volumeCurveDropdownOpen = false;
             g_sampleRateDropdownOpen = false;
-#ifdef SUPPORT_MIDI_HW
+#if SUPPORT_MIDI_HW == TRUE
             g_midi_input_device_dd_open = false;
             g_midi_output_device_dd_open = false;
 #endif
         }
     }
 #endif
-#ifdef SUPPORT_MIDI_HW
+#if SUPPORT_MIDI_HW == TRUE
     // MIDI input enable checkbox and device selector (left column, below Export)
     Rect midiEnRect = {leftX, dlg.y + 140, 18, 18};
     if (ui_toggle(R, midiEnRect, &g_midi_input_enabled, "MIDI Input", mx, my, mclick))
@@ -503,13 +504,6 @@ void render_settings_dialog(SDL_Renderer *R, int mx, int my, bool mclick, bool m
         {
             // Start background service first (so events queue safely as soon as RtMidi is opened)
             midi_service_start();
-            /* Apply remembered master volume intent via bae_set_volume so the
-               same normalization used for song loads is applied to the live
-               synth and mixer before ports are opened or events arrive. */
-            if (volume)
-            {
-                bae_set_volume(*volume);
-            }
             if (g_bae.mixer)
             {
                 BAEMixer_Idle(g_bae.mixer);
@@ -546,13 +540,14 @@ void render_settings_dialog(SDL_Renderer *R, int mx, int my, bool mclick, bool m
                 if (g_live_song)
                 {
                     BAESong_Preroll(g_live_song);
-                    /* Use bae_set_volume so per-type normalization is applied to
-                       the newly created live synth and mixer state. */
-                    if (volume)
-                    {
-                        bae_set_volume(*volume);
-                    }
                 }
+            }
+            /* Apply remembered master volume intent via bae_set_volume so the
+               same normalization used for song loads is applied to the live
+               synth and mixer after cleanup and live song creation. */
+            if (volume)
+            {
+                bae_set_volume(*volume);
             }
             // If the user has chosen a specific input device, open that one
             if (g_midi_input_device_index >= 0 && g_midi_input_device_index < g_midi_input_device_count)
@@ -567,7 +562,7 @@ void render_settings_dialog(SDL_Renderer *R, int mx, int my, bool mclick, bool m
             }
             if (g_bae.mixer)
             {
-                for (int _i = 0; _i < 3; ++_i)
+                for (int _i = 0; _i < 8; ++_i)
                 {
                     BAEMixer_Idle(g_bae.mixer);
                     BAEMixer_ServiceStreams(g_bae.mixer);
@@ -576,10 +571,12 @@ void render_settings_dialog(SDL_Renderer *R, int mx, int my, bool mclick, bool m
             /* Re-apply stored master volume intent after MIDI input is opened.
                Call bae_set_volume to ensure the same normalization/boost
                behavior used for loaded songs is also used for MIDI-in. */
+            BAE_WaitMicroseconds(150000);
             if (volume)
             {
                 bae_set_volume(*volume);
-            }            
+            }
+            BAESong_SetVelocityCurve(g_live_song, g_volume_curve);
         }
         else
         {
@@ -918,7 +915,7 @@ void render_settings_dialog(SDL_Renderer *R, int mx, int my, bool mclick, bool m
                 }
                 *playing = false;
             }
-#ifdef SUPPORT_MIDI_HW
+#if SUPPORT_MIDI_HW == TRUE
             // If MIDI input was active, reinitialize it so hardware stays in a consistent state
             if (g_midi_input_enabled)
             {
@@ -1024,7 +1021,7 @@ void render_settings_dialog(SDL_Renderer *R, int mx, int my, bool mclick, bool m
                             *duration = bae_get_len_ms();
                             *playing = false;
                         }
-#ifdef SUPPORT_MIDI_HW
+#if SUPPORT_MIDI_HW == TRUE
                         // If MIDI input was active when we changed sample rate, reinit MIDI hardware so it stays connected
                         if (g_midi_input_enabled)
                         {
@@ -1052,7 +1049,7 @@ void render_settings_dialog(SDL_Renderer *R, int mx, int my, bool mclick, bool m
         if (mclick && !point_in(mx, my, srRect) && !point_in(mx, my, box))
             g_sampleRateDropdownOpen = false;
     }
-#ifdef SUPPORT_MIDI_HW
+#if SUPPORT_MIDI_HW == TRUE
     // MIDI input device dropdown
     if (g_midi_input_device_dd_open)
     {
@@ -1216,6 +1213,11 @@ void render_settings_dialog(SDL_Renderer *R, int mx, int my, bool mclick, bool m
                 {
                     BAESong_SetVelocityCurve(g_bae.song, g_volume_curve);
                 }
+#if SUPPORT_MIDI_HW == TRUE
+                if (g_live_song && g_midi_input_enabled) {
+                    BAESong_SetVelocityCurve(g_live_song, g_volume_curve);
+                }
+#endif
                 save_settings(g_current_bank_path[0] ? g_current_bank_path : NULL, *reverbType, *loopPlay);
             }
         }

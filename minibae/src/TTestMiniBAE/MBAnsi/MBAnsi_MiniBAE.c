@@ -3799,7 +3799,7 @@ static BAEResult PV_BAESong_InitLiveSong(BAESong song)
 			{
 				while (GM_FreeSong(NULL, song->pSong) == STILL_PLAYING)
 				{
-					XWaitMicroseocnds(BAE_GetSliceTimeInMicroseconds());
+					XWaitMicroseconds(BAE_GetSliceTimeInMicroseconds());
 				}
 				song->pSong = NULL;
 			}
@@ -3904,7 +3904,7 @@ void PV_BAESong_Unload(BAESong song)
 	GM_KillSongNotes(song->pSong);
 	while (GM_FreeSong(NULL, song->pSong) == STILL_PLAYING)
 	{
-		XWaitMicroseocnds(BAE_GetSliceTimeInMicroseconds());
+		XWaitMicroseconds(BAE_GetSliceTimeInMicroseconds());
 	}
 	song->pSong = NULL;
 }
@@ -4869,8 +4869,8 @@ BAEResult BAESong_NoteOnWithLoad(BAESong song,
 		BAESong_GetMixer(song, &mixer);
 		// wait around for at least one slice to let events catch up
 		BAEMixer_GetAudioLatency(mixer, &latency);
-		XWaitMicroseocnds(latency / 1000);
-		XWaitMicroseocnds(latency / 1000);
+		XWaitMicroseconds(latency / 1000);
+		XWaitMicroseconds(latency / 1000);
 
 		// pull the current program, bank from the current state. Should be valid by this time.
 		BAESong_GetProgramBank(song, channel, &program, &bank);

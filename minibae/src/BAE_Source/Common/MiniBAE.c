@@ -4121,7 +4121,7 @@ static void PV_BAESound_Unload(BAESound sound)
     while (GM_IsSampleProcessing(voice))
     {
         //      BAE_PRINTF("BAE:deleting sound...\n");
-        XWaitMicroseocnds(BAE_GetSliceTimeInMicroseconds());
+        XWaitMicroseconds(BAE_GetSliceTimeInMicroseconds());
     }
 
     if (sound->pWave)
@@ -6643,7 +6643,7 @@ static BAEResult PV_BAESong_InitLiveSong(BAESong song, BAE_BOOL addToMixer)
                     song->mInMixer = TRUE;
                     while (GM_FreeSong(NULL, song->pSong) == STILL_PLAYING)
                     {
-                        XWaitMicroseocnds(BAE_GetSliceTimeInMicroseconds());
+                        XWaitMicroseconds(BAE_GetSliceTimeInMicroseconds());
                     }
                     song->pSong = NULL;
                 }
@@ -6677,7 +6677,7 @@ void PV_BAESong_Unload(BAESong song)
 
     while (GM_FreeSong(NULL, song->pSong) == STILL_PLAYING)
     {
-        XWaitMicroseocnds(BAE_GetSliceTimeInMicroseconds());
+        XWaitMicroseconds(BAE_GetSliceTimeInMicroseconds());
     }
     song->pSong = NULL;
 }
@@ -7943,8 +7943,8 @@ BAEResult BAESong_NoteOnWithLoad(BAESong song,
         BAESong_GetMixer(song, &mixer);
         // wait around for at least one slice to let events catch up
         BAEMixer_GetAudioLatency(mixer, &latency);
-        XWaitMicroseocnds(latency / 1000);
-        XWaitMicroseocnds(latency / 1000);
+        XWaitMicroseconds(latency / 1000);
+        XWaitMicroseconds(latency / 1000);
 
         // pull the current program, bank from the current state. Should be valid by this time.
         BAESong_GetProgramBank(song, channel, &program, &bank);

@@ -2209,7 +2209,7 @@ void GM_AudioStreamDrain(void *threadContext, STREAM_REFERENCE reference)
         // if we get here, the stream is still valid and active and has samples still to play.
         // wait 10 milliseconds
         GM_AudioStreamService(threadContext);
-        XWaitMicroseocnds(10000);
+        XWaitMicroseconds(10000);
     }
 }
 
@@ -3268,7 +3268,7 @@ OPErr GM_StartLinkedStreams(LINKED_STREAM_REFERENCE pTop)
             // ok, now wait for mixer to be free
             while (MusicGlobals->insideAudioInterrupt)
             {
-                XWaitMicroseocnds(BAE_GetSliceTimeInMicroseconds());
+                XWaitMicroseconds(BAE_GetSliceTimeInMicroseconds());
             }
             pNext = (GM_LinkedStream *)pTop;
             while (pNext)

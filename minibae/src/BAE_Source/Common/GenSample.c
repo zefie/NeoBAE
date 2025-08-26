@@ -1967,7 +1967,7 @@ OPErr GM_StartLinkedSamples(LINKED_VOICE_REFERENCE pTop)
             // ok, now wait for mixer to be free
             while (MusicGlobals->insideAudioInterrupt)
             {
-                XWaitMicroseocnds(BAE_GetSliceTimeInMicroseconds());
+                XWaitMicroseconds(BAE_GetSliceTimeInMicroseconds());
             }
             pNext = (GM_LinkedVoice *)pTop;
             while (pNext)

@@ -869,7 +869,7 @@ XBOOL XIsStereoSupported(void)
 // wait for a waitAmount of microseconds to pass
 // CLS??: If this function is called from within the frame thread and
 // JAVA_THREAD is non-zero, we'll probably crash.
-void XWaitMicroseocnds(uint32_t waitAmount)
+void XWaitMicroseconds(uint32_t waitAmount)
 {
     BAE_WaitMicroseconds(waitAmount);
 }

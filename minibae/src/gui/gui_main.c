@@ -2124,9 +2124,13 @@ int main(int argc, char *argv[])
         for (int _i = 0; _i < 16; ++_i)
             realtime_channel_level[_i] = 0.0f;
         bool have_realtime_levels = false;
+#ifdef SUPPORT_MIDI_HW
+        if (g_bae.mixer && !g_exporting && (playing || g_midi_input_enabled))
+#else
         if (g_bae.mixer && !g_exporting && playing)
+#endif
         {
-            // Only get realtime levels when actually playing
+            // Get realtime levels when playing files or when MIDI input is active
             // Prefer PCM-derived per-channel estimates when available from the engine.
             float chL[16], chR[16];
             GM_GetRealtimeChannelLevels(chL, chR);
@@ -2136,7 +2140,7 @@ int main(int argc, char *argv[])
                 float lvl = (chL[ch] + chR[ch]) * 0.5f;
                 realtime_channel_level[ch] = lvl;
             }
-            // Always trust the engine's realtime levels when playing, even if they're all zero
+            // Always trust the engine's realtime levels when playing or MIDI input is active
             have_realtime_levels = true;
         }
 
@@ -2336,9 +2340,18 @@ int main(int argc, char *argv[])
             }
             // Channel peak markers intentionally removed — we only draw the realtime fill.
             // Decay the realtime meter value gradually (small additional smoothing pass)
-            g_channel_vu[i] *= 0.92f;
-            if (g_channel_vu[i] < 0.0005f)
-                g_channel_vu[i] = 0.0f;
+            // But skip this extra decay when MIDI input is active, since the MIDI service thread
+            // manages VU levels directly and this interferes with that.
+#ifdef SUPPORT_MIDI_HW
+            if (!g_midi_input_enabled)
+            {
+#endif
+                g_channel_vu[i] *= 0.92f;
+                if (g_channel_vu[i] < 0.0005f)
+                    g_channel_vu[i] = 0.0f;
+#ifdef SUPPORT_MIDI_HW
+            }
+#endif
         }
 
         // 'All' checkbox: moved to render after the virtual keyboard so it appears on top.

@@ -636,7 +636,7 @@ void    XClearBit(void *pBitArray, uint32_t whichbit);
 XBOOL   XTestBit(void *pBitArray, uint32_t whichbit);
 
 uint32_t XMicroseconds(void);
-void XWaitMicroseocnds(uint32_t waitAmount);
+void XWaitMicroseconds(uint32_t waitAmount);
 
 
 // Resource Manager
