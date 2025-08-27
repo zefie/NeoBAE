@@ -212,7 +212,7 @@ void gui_audio_task(void *reference)
 
 #ifdef _WIN32
 // Single-instance support: mutex name must be stable across runs.
-static const char *g_single_instance_mutex_name = "miniBAE_single_instance_mutex_v1";
+static const char *g_single_instance_mutex_name = "zefidi_single_instance_mutex_v1";
 // Previous window proc so we can chain messages we don't handle
 static WNDPROC g_prev_wndproc = NULL;
 
@@ -222,7 +222,7 @@ struct EnumCtx
     const char *want;
     HWND found;
 };
-static BOOL CALLBACK miniBAE_EnumProc(HWND hwnd, LPARAM lparam)
+static BOOL CALLBACK zefidi_EnumProc(HWND hwnd, LPARAM lparam)
 {
     struct EnumCtx *ctx = (struct EnumCtx *)lparam;
     char title[512];
@@ -238,7 +238,7 @@ static BOOL CALLBACK miniBAE_EnumProc(HWND hwnd, LPARAM lparam)
 }
 
 // Custom window proc to receive WM_COPYDATA and forward to SDL event queue.
-static LRESULT CALLBACK miniBAE_WndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
+static LRESULT CALLBACK zefidi_WndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
     if (uMsg == WM_COPYDATA)
     {
@@ -572,11 +572,11 @@ bool recreate_mixer_and_restore(int sampleRateHz, bool stereo, int reverbType,
         {
             int api = g_midi_device_api[g_midi_input_device_index];
             int port = g_midi_device_port[g_midi_input_device_index];
-            midi_input_init("miniBAE", api, port);
+            midi_input_init("zefidi", api, port);
         }
         else
         {
-            midi_input_init("miniBAE", -1, -1);
+            midi_input_init("zefidi", -1, -1);
         }
         midi_service_start();
     }
@@ -659,7 +659,7 @@ int main(int argc, char *argv[])
                 ctx.want = want;
                 ctx.found = NULL;
                 // Enumerate windows using the global helper
-                EnumWindows(miniBAE_EnumProc, (LPARAM)&ctx);
+                EnumWindows(zefidi_EnumProc, (LPARAM)&ctx);
                 found = ctx.found;
                 if (found)
                 {
@@ -907,8 +907,8 @@ int main(int argc, char *argv[])
     if (SDL_GetWindowWMInfo(win, &wminfo) && wminfo.subsystem == SDL_SYSWM_WINDOWS)
     {
         HWND hwnd = wminfo.info.win.window;
-        g_prev_wndproc = (WNDPROC)SetWindowLongPtr(hwnd, GWLP_WNDPROC, (LONG_PTR)miniBAE_WndProc);
-        BAE_PRINTF("Installed miniBAE_WndProc chain (prev=%p)\n", (void *)g_prev_wndproc);
+        g_prev_wndproc = (WNDPROC)SetWindowLongPtr(hwnd, GWLP_WNDPROC, (LONG_PTR)zefidi_WndProc);
+        BAE_PRINTF("Installed zefidi_WndProc chain (prev=%p)\n", (void *)g_prev_wndproc);
     }
 #endif
 
@@ -942,9 +942,9 @@ int main(int argc, char *argv[])
                     if (ext)
                     {
 #ifdef _WIN32
-                        is_bank_file = (_stricmp(ext, ".hsb") == 0);
+                        is_bank_file = (_stricmp(ext, ".hsb") == 0 || _stricmp(ext, ".sf2") == 0);
 #else
-                        is_bank_file = (strcasecmp(ext, ".hsb") == 0);
+                        is_bank_file = (strcasecmp(ext, ".hsb") == 0 || strcasecmp(ext, ".sf2") == 0);
 #endif
                     }
                     if (is_bank_file)
@@ -1201,10 +1201,10 @@ int main(int argc, char *argv[])
                     if (ext)
                     {
 #ifdef _WIN32
-                        is_bank_file = (_stricmp(ext, ".hsb") == 0);
+                        is_bank_file = (_stricmp(ext, ".hsb") == 0 || _stricmp(ext, ".sf2") == 0);
                         is_playlist_file = (_stricmp(ext, ".m3u") == 0);
 #else
-                        is_bank_file = (strcasecmp(ext, ".hsb") == 0);
+                        is_bank_file = (strcasecmp(ext, ".hsb") == 0 || strcasecmp(ext, ".sf2") == 0);
                         is_playlist_file = (strcasecmp(ext, ".m3u") == 0);
 #endif
                     }
@@ -5226,7 +5226,7 @@ int main(int argc, char *argv[])
                 ZeroMemory(&ofn, sizeof(ofn));
                 ofn.lStructSize = sizeof(ofn);
                 ofn.hwndOwner = NULL;
-                ofn.lpstrFilter = "Bank Files (*.hsb)\0*.hsb\0All Files\0*.*\0";
+                ofn.lpstrFilter = "Bank Files (*.hsb;*.sf2)\0*.hsb;*.sf2\0HSB Banks\0*.hsb\0SF2 SoundFonts\0*.sf2\0All Files\0*.*\0";
                 ofn.lpstrFile = fileBuf;
                 ofn.nMaxFile = sizeof(fileBuf);
                 ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST;
@@ -5235,9 +5235,9 @@ int main(int argc, char *argv[])
                     load_bank(fileBuf, playing, transpose, tempo, volume, loopPlay, reverbType, ch_enable, true);
 #else
                 const char *cmds[] = {
-                    "zenity --file-selection --title='Load Patch Bank' --file-filter='HSB | *.hsb' 2>/dev/null",
-                    "kdialog --getopenfilename . '*.hsb' 2>/dev/null",
-                    "yad --file-selection --title='Load Patch Bank' 2>/dev/null",
+                    "zenity --file-selection --title='Load Patch Bank' --file-filter='Bank Files | *.hsb *.sf2' 2>/dev/null",
+                    "kdialog --getopenfilename . '*.hsb *.sf2' 2>/dev/null",
+                    "yad --file-selection --title='Load Patch Bank' --file-filter='Bank Files | *.hsb *.sf2' 2>/dev/null",
                     NULL};
                 for (int ci = 0; cmds[ci]; ++ci)
                 {
@@ -5252,13 +5252,14 @@ int main(int argc, char *argv[])
                             fileBuf[--l] = '\0';
                         if (l > 0)
                         {
-                            if (l > 4 && strcasecmp(fileBuf + l - 4, ".hsb") == 0)
+                            if ((l > 4 && strcasecmp(fileBuf + l - 4, ".hsb") == 0) || 
+                                (l > 4 && strcasecmp(fileBuf + l - 4, ".sf2") == 0))
                             {
                                 load_bank(fileBuf, playing, transpose, tempo, volume, loopPlay, reverbType, ch_enable, true);
                             }
                             else
                             {
-                                BAE_PRINTF("Not an .hsb file: %s\n", fileBuf);
+                                BAE_PRINTF("Not a bank file (.hsb or .sf2): %s\n", fileBuf);
                             }
                         }
                         break;

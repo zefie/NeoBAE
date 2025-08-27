@@ -7,6 +7,9 @@
 #include "gui_midi.h"    // For gui_midi_event_callback and midi output functions
 #include "gui_karaoke.h" // For karaoke functions
 #include "X_API.h"
+#if USE_SF2_SUPPORT
+#include "GenSF2.h"
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -73,6 +76,9 @@ void set_status_message(const char *msg)
     g_bae.status_message[sizeof(g_bae.status_message) - 1] = '\0';
     g_bae.status_message_time = SDL_GetTicks();
 }
+
+// Forward declarations
+bool bae_load_bank(const char *bank_path);
 
 // Stub implementations for missing functions
 void load_bankinfo()
@@ -180,21 +186,12 @@ bool load_bank(const char *path, bool current_playing_state, int transpose, int 
     else
     {
 #endif
-        FILE *f = fopen(path, "rb");
-        if (!f)
+        // Use the bae_load_bank function which handles both HSB and SF2 files
+        if (!bae_load_bank(path))
         {
-            BAE_PRINTF("Bank file not found: %s (errno=%d: %s)\n", path, errno, strerror(errno));
+            BAE_PRINTF("Failed to load bank: %s\n", path);
             return false;
         }
-        fclose(f);
-        BAEBankToken t;
-        BAEResult br = BAEMixer_AddBankFromFile(g_bae.mixer, (BAEPathName)path, &t);
-        if (br != BAE_NO_ERROR)
-        {
-            BAE_PRINTF("AddBankFromFile failed %d for %s\n", br, path);
-            return false;
-        }
-        g_bae.bank_token = t;
 
         // Use friendly name if available, otherwise use filename
         const char *friendly_name = get_bank_friendly_name();
@@ -473,6 +470,18 @@ bool bae_init(int sampleRateHz, bool stereo)
         return false;
     }
 
+#if USE_SF2_SUPPORT
+    // Initialize SF2 bank manager
+    if (SF2_InitBankManager() != NO_ERR)
+    {
+        BAE_PRINTF("SF2 bank manager initialization failed\n");
+        BAEMixer_Close(g_bae.mixer);
+        BAEMixer_Delete(g_bae.mixer);
+        g_bae.mixer = NULL;
+        return false;
+    }
+#endif
+
     BAE_PRINTF("BAE initialized: %d Hz, %s\n",
                sampleRateHz, stereo ? "stereo" : "mono");
 
@@ -503,6 +512,11 @@ void bae_shutdown(void)
         g_live_song = NULL;
     }
 
+#if USE_SF2_SUPPORT
+    // Shutdown SF2 bank manager (cleans up all loaded SF2 banks)
+    SF2_ShutdownBankManager();
+#endif
+
     // Close and delete mixer
     if (g_bae.mixer)
     {
@@ -521,7 +535,54 @@ bool bae_load_bank(const char *bank_path)
     if (!g_bae.mixer || !bank_path)
         return false;
 
-    // Load the bank
+#if USE_SF2_SUPPORT
+    // Check if this is an SF2 file
+    const char *ext = strrchr(bank_path, '.');
+    if (ext && strcasecmp(ext, ".sf2") == 0)
+    {
+        // Load SF2 bank
+        SF2_Bank *sf2Bank = NULL;
+        XFILENAME filename;
+        XConvertPathToXFILENAME((BAEPathName)bank_path, &filename);
+        
+        OPErr err = SF2_LoadBank(&filename, &sf2Bank);
+        if (err != NO_ERR || !sf2Bank)
+        {
+            BAE_PRINTF("SF2 bank load failed: %d %s\n", err, bank_path);
+            return false;
+        }
+        
+        // Add to SF2 bank manager
+        err = SF2_AddBankToManager(sf2Bank, bank_path);
+        if (err != NO_ERR)
+        {
+            BAE_PRINTF("SF2 bank manager add failed: %d\n", err);
+            SF2_UnloadBank(sf2Bank);
+            return false;
+        }
+        
+        BAE_PRINTF("SF2 bank loaded: %s (presets=%u)\n", bank_path, sf2Bank->numPresets);
+        
+        // Debug: List first few presets
+        if (sf2Bank->presets && sf2Bank->numPresets > 0)
+        {
+            BAE_PRINTF("SF2 Debug: First few presets:\n");
+            uint32_t maxShow = sf2Bank->numPresets > 10 ? 10 : sf2Bank->numPresets;
+            for (uint32_t i = 0; i < maxShow; i++)
+            {
+                SF2_Preset *preset = &sf2Bank->presets[i];
+                BAE_PRINTF("  Preset %u: bank=%d, program=%d, name=%.*s\n", 
+                          i, preset->bank, preset->preset, 20, preset->name);
+            }
+        }
+        
+        // Mark as loaded
+        g_bae.bank_loaded = true;
+        return true;
+    }
+#endif
+
+    // Load the bank (HSB format)
     BAEResult result = BAEMixer_AddBankFromFile(g_bae.mixer, (BAEPathName)bank_path, &g_bae.bank_token);
     if (result != BAE_NO_ERROR)
     {

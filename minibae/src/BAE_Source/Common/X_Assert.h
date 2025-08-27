@@ -116,11 +116,16 @@
 #endif
 
 #ifdef OUTPUT_TO_LOGFILE
-    #define BAE_STDOUT(...)                \
+#ifdef _ZEFI_GUI
+    #define LOGFILE_NAME "/zefidi.log"
+#else
+    #define LOGFILE_NAME "/minibae.log"
+#endif
+#define BAE_STDOUT(...)                \
     do {                                \
         char logPath[1024];             \
         get_executable_directory(logPath, sizeof(logPath)); \
-        strncat(logPath, "/minibae.log", sizeof(logPath) - strlen(logPath) - 1); \
+        strncat(logPath, LOGFILE_NAME, sizeof(logPath) - strlen(logPath) - 1); \
         FILE *logFile = fopen(logPath, "a"); \
         if (logFile) {                  \
             fprintf(logFile, __VA_ARGS__); \

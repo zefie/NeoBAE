@@ -240,6 +240,10 @@
 #include "X_Assert.h"
 #include <stdint.h>
 
+#if USE_SF2_SUPPORT
+#include "GenSF2.h"
+#endif
+
 #define DEBUG_DISPLAY_PATCHES   1
 
 #if BAE_NOT_USED
@@ -1017,7 +1021,21 @@ OPErr GM_LoadInstrument(GM_Song *pSong,
             // use cached instrument, if its not there, then load it
             if (theI == NULL)
             {
-                theI = PV_GetInstrument(GM_GetCurrentMixer(), pSong, instrument, bankToken, NULL, 0, &theErr);
+#if USE_SF2_SUPPORT
+                // Try loading from SF2 banks first
+                theI = PV_GetSF2Instrument(pSong, instrument, &theErr);
+                if (theI != NULL && theErr == NO_ERR)
+                {
+                    // Store the SF2 instrument in the song's instrument array
+                    pSong->instrumentData[instrument] = theI;
+                }
+                else
+#endif
+                {
+                    // Reset error code for HSB loading attempt
+                    theErr = NO_ERR;
+                    theI = PV_GetInstrument(GM_GetCurrentMixer(), pSong, instrument, bankToken, NULL, 0, &theErr);
+                }
             }
             if (theErr == BAD_SAMPLE)
             {
@@ -1027,7 +1045,14 @@ OPErr GM_LoadInstrument(GM_Song *pSong,
             if (theI)
             {
                 theI->usageReferenceCount++;        // increment reference count
-                pSong->instrumentData[instrument] = theI;
+                // Only store if not already stored (SF2 instruments are stored earlier)
+                if (pSong->instrumentData[instrument] == NULL)
+                {
+                    pSong->instrumentData[instrument] = theI;
+                }
+                BAE_PRINTF("Debug: Instrument %d loaded successfully, refCount=%d, stored=%s\n", 
+                          instrument, theI->usageReferenceCount, 
+                          pSong->instrumentData[instrument] ? "yes" : "no");
             }
             else
             {

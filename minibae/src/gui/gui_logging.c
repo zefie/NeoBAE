@@ -36,11 +36,11 @@ void write_to_log(const char *format, ...)
         size_t dlen = strnlen(execDir, sizeof(execDir));
         if (dlen > 0 && (execDir[dlen - 1] == '/' || execDir[dlen - 1] == '\\'))
         {
-            snprintf(log_path, sizeof(log_path), "%s%cgui.log", execDir, sep);
+            snprintf(log_path, sizeof(log_path), "%s%czefidi.log", execDir, sep);
         }
         else
         {
-            snprintf(log_path, sizeof(log_path), "%s%cgui.log", execDir, sep);
+            snprintf(log_path, sizeof(log_path), "%s%czefidi.log", execDir, sep);
         }
     }
 

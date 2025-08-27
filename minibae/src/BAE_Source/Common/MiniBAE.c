@@ -161,6 +161,9 @@
 #include <limits.h>
 #include <stdint.h>
 #include "bankinfo.h" // embedded bank metadata (hash -> friendly)
+#if USE_SF2_SUPPORT
+#include "GenSF2.h"
+#endif
 
 #if USE_FLAC_ENCODER == TRUE
 #include "FLAC/stream_encoder.h"
@@ -1921,6 +1924,11 @@ static BAEResult PV_BAEMixer_AddBank(BAEMixer mixer, XFILE newPatchFile)
             mixer->numPatchFiles++;
 
             XFileUseThisResourceFile(newPatchFile);
+            
+#if USE_SF2_SUPPORT
+            // Clear any loaded SF2 banks when loading a new HSB bank
+            SF2_ShutdownBankManager();
+#endif
         }
         else
         {
@@ -2131,6 +2139,11 @@ BAEResult BAEMixer_UnloadBanks(BAEMixer mixer)
             if (err)
                 break;
         }
+        
+#if USE_SF2_SUPPORT
+        // Also clear any loaded SF2 banks
+        SF2_ShutdownBankManager();
+#endif
     }
     else
     {
