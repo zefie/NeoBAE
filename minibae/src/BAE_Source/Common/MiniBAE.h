@@ -771,6 +771,11 @@ extern "C"
                                        BAEPathName pAudioPathName,
                                        BAEBankToken *outToken);
 
+
+#if _BUILT_IN_PATCHES == TRUE
+    BAEResult BAEMixer_LoadBuiltinBank(BAEMixer mixer, BAEBankToken *outToken);
+#endif
+
     // BAEMixer_AddBankFromMemory()
     // ------------------------------------
     // Causes the indicated BAEMixer to begin using the instrument bank resource at

@@ -11,6 +11,7 @@ gen/
 */gen/
 tests/
 */tests/
+*/__pycache__/
 
 local.properties
 .idea/

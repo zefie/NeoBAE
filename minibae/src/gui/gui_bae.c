@@ -1,7 +1,6 @@
 // gui_bae.c - BAE (Audio Engine) subsystem management
 
 #include "gui_bae.h"
-#include "BAEPatches.h"
 #include "bankinfo.h"
 #include "gui_widgets.h"
 #include "gui_midi.h"    // For gui_midi_event_callback and midi output functions
@@ -9,6 +8,9 @@
 #include "X_API.h"
 #if USE_SF2_SUPPORT
 #include "GenSF2.h"
+#endif
+#if USE_DLS_SUPPORT
+#include "GenDLS.h"
 #endif
 #include <stdio.h>
 #include <stdlib.h>
@@ -132,10 +134,8 @@ bool load_bank(const char *path, bool current_playing_state, int transpose, int 
 #ifdef _BUILT_IN_PATCHES
     if (strcmp(path, "__builtin__") == 0)
     {
-        extern unsigned char BAE_PATCHES[];
-        extern unsigned long BAE_PATCHES_size;
         BAEBankToken t;
-        BAEResult br = BAEMixer_AddBankFromMemory(g_bae.mixer, BAE_PATCHES, (uint32_t)BAE_PATCHES_size, &t);
+        BAEResult br = BAEMixer_LoadBuiltinBank(g_bae.mixer, &t);
         if (br == BAE_NO_ERROR)
         {
             g_bae.bank_token = t;
@@ -470,11 +470,23 @@ bool bae_init(int sampleRateHz, bool stereo)
         return false;
     }
 
-#if USE_SF2_SUPPORT
+#if USE_SF2_SUPPORT == TRUE
     // Initialize SF2 bank manager
     if (SF2_InitBankManager() != NO_ERR)
     {
         BAE_PRINTF("SF2 bank manager initialization failed\n");
+        BAEMixer_Close(g_bae.mixer);
+        BAEMixer_Delete(g_bae.mixer);
+        g_bae.mixer = NULL;
+        return false;
+    }
+#endif
+
+#if USE_DLS_SUPPORT == TRUE
+    // Initialize DLS bank manager
+    if (DLS_InitBankManager() != NO_ERR)
+    {
+        BAE_PRINTF("DLS bank manager initialization failed\n");
         BAEMixer_Close(g_bae.mixer);
         BAEMixer_Delete(g_bae.mixer);
         g_bae.mixer = NULL;
@@ -517,6 +529,11 @@ void bae_shutdown(void)
     SF2_ShutdownBankManager();
 #endif
 
+#if USE_DLS_SUPPORT
+    // Shutdown DLS bank manager
+    DLS_ShutdownBankManager();
+#endif
+
     // Close and delete mixer
     if (g_bae.mixer)
     {
@@ -535,9 +552,9 @@ bool bae_load_bank(const char *bank_path)
     if (!g_bae.mixer || !bank_path)
         return false;
 
-#if USE_SF2_SUPPORT
-    // Check if this is an SF2 file
     const char *ext = strrchr(bank_path, '.');
+#if USE_SF2_SUPPORT == TRUE
+    // Check if this is an SF2 file
     if (ext && strcasecmp(ext, ".sf2") == 0)
     {
         // Load SF2 bank
@@ -577,6 +594,33 @@ bool bae_load_bank(const char *bank_path)
         }
         
         // Mark as loaded
+        g_bae.bank_loaded = true;
+        return true;
+    }
+#endif
+
+#if USE_DLS_SUPPORT == TRUE
+    // Check if this is a DLS file
+    if (ext && (strcasecmp(ext, ".dls") == 0))
+    {
+        DLS_Bank *dls = NULL;
+        XFILENAME filename;
+        XConvertPathToXFILENAME((BAEPathName)bank_path, &filename);
+
+        OPErr err = DLS_LoadBank(&filename, &dls);
+        if (err != NO_ERR || !dls)
+        {
+            BAE_PRINTF("DLS bank load failed: %d %s\n", err, bank_path);
+            return false;
+        }
+        err = DLS_AddBankToManager(dls, bank_path);
+        if (err != NO_ERR)
+        {
+            BAE_PRINTF("DLS bank manager add failed: %d\n", err);
+            DLS_UnloadBank(dls);
+            return false;
+        }
+        BAE_PRINTF("DLS bank loaded: %s (waves=%u, instruments=%u)\n", bank_path, dls->waveCount, dls->instrumentCount);
         g_bae.bank_loaded = true;
         return true;
     }

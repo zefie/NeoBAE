@@ -165,6 +165,10 @@
 #include "GenSF2.h"
 #endif
 
+#if _BUILT_IN_PATCHES == TRUE
+#include "BAEPatches.h"
+#endif
+
 #if USE_FLAC_ENCODER == TRUE
 #include "FLAC/stream_encoder.h"
 // Forward declaration of FLAC encoding function from GenSoundFiles.c
@@ -1942,6 +1946,14 @@ static BAEResult PV_BAEMixer_AddBank(BAEMixer mixer, XFILE newPatchFile)
     }
     return BAE_TranslateOPErr(err);
 }
+
+#if _BUILT_IN_PATCHES == TRUE
+BAEResult BAEMixer_LoadBuiltinBank(BAEMixer mixer, BAEBankToken *outToken) {
+    extern const unsigned char BAE_PATCHES[];
+    extern const unsigned long BAE_PATCHES_size;
+    return BAEMixer_AddBankFromMemory(mixer, (void *)BAE_PATCHES, BAE_PATCHES_size, outToken);
+}
+#endif
 
 // BAEMixer_AddBankFromMemory()
 // ------------------------------------

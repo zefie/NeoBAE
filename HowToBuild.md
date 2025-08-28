@@ -71,7 +71,7 @@ When using the `-j` flag with `make`, do not run `clean` and `all` in the same c
     - `apt-get update`
     - `apt-get install binutils-mingw-w64-x86_64 g++-mingw-w64-x86_64 g++-mingw-w64-x86_64-posix g++-mingw-w64-x86_64-win32 gcc-mingw-w64-base gcc-mingw-w64-x86_64 gcc-mingw-w64-x86_64-posix gcc-mingw-w64-x86_64-posix-runtime gcc-mingw-w64-x86_64-win32 gcc-mingw-w64-x86_64-win32-runtime mingw-w64-common mingw-w64-x86_64-dev`
 - Build playbae
-    - `cd minibae/Tools/playbae`
+    - `cd minibae`
     - For DirectSound support:
        - `make clean`
        - `make -f Makefile.mingw -j$(nproc)`
@@ -88,6 +88,7 @@ When using the `-j` flag with `make`, do not run `clean` and `all` in the same c
     - `apt-get install binutils-mingw-w64-x86_64 g++-mingw-w64-x86_64 g++-mingw-w64-x86_64-posix g++-mingw-w64-x86_64-win32 gcc-mingw-w64-base gcc-mingw-w64-x86_64 gcc-mingw-w64-x86_64-posix gcc-mingw-w64-x86_64-posix-runtime gcc-mingw-w64-x86_64-win32 gcc-mingw-w64-x86_64-win32-runtime mingw-w64-common mingw-w64-x86_64-dev`
     - SDL dependency for mingw is provided in the repo
 - Build GUI
+    - `cd minibae`
     - `make clean`
     - `make -f Makefile.gui-mingw -j$(nproc)`
     - Hardware MIDI support is already enabled for mingw builds
@@ -156,6 +157,7 @@ When passed `NOAUTO=1`, the build is under your control, and the automatic enabl
 - `FLAC_ENC=1` - Enable FLAC exporting
 - `VORBIS_DEC=1` - Enable OGG Vorbis playback
 - `VORBIS_ENC=1` - Enables OGG Vorbis exporting
+- `SF2_SUPPORT=1` - Enable SF2 SoundFont 2 support
 - `PLAYLIST=1` - Enable playlist support in the GUI
 - `USE_SDL=1` - To enable usage of SDL2 on platforms that support other native audio
 - `OGG_SUPPORT=1` - Enable OGG Support (useless without Vorbis)

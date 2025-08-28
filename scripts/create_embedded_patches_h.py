@@ -33,7 +33,7 @@ def main():
         f.write("#ifndef BAE_PATCHES_EMBED_H\n#define BAE_PATCHES_EMBED_H\n\n")
         f.write("#include <stddef.h>\n#include <stdint.h>\n\n")
         # Generate non-static definitions to match existing BAEPatches.c / .h symbols
-        f.write(f"unsigned char {sym}[] = {{\n")
+        f.write(f"static const unsigned char {sym}[] = {{\n")
         for i in range(0, len(data), 16):
             chunk = data[i:i+16]
             f.write("    " + ", ".join(f"0x{b:02X}" for b in chunk))
@@ -43,8 +43,8 @@ def main():
         # compile-time constant. Also provide the runtime variable for code that
         # expects an exported unsigned long symbol.
         f.write(f"#define BAE_PATCHES_SIZE {len(data)}UL\n\n")
-        f.write(f"unsigned long {sym}_size = BAE_PATCHES_SIZE;\n")
-        f.write(f"unsigned char* {sym}_end = {sym} + BAE_PATCHES_SIZE;\n\n")
+        f.write(f"static const unsigned long {sym}_size = BAE_PATCHES_SIZE;\n")
+        f.write(f"static const unsigned char* {sym}_end = {sym} + BAE_PATCHES_SIZE;\n\n")
         # Provide compatibility macros for older code expecting names without trailing _data
         f.write("#define BAE_PATCHES_ARRAY " + f"{sym}\n\n")
         f.write("#endif // BAE_PATCHES_EMBED_H\n")

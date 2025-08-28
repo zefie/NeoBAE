@@ -44,6 +44,12 @@
 #include <stdarg.h>
 #include <stdint.h>
 #include "bankinfo.h" // reuse embedded bank metadata for friendly names
+#if USE_SF2_SUPPORT
+#include "GenSF2.h"
+#endif
+#if USE_DLS_SUPPORT
+#include "GenDLS.h"
+#endif
 #ifdef main
 #undef main
 #endif
@@ -261,10 +267,6 @@ static void cli_karaoke_meta_callback(void *threadContext, struct GM_Song *pSong
 }
 #endif
 
-#ifdef _BUILT_IN_PATCHES
-#include <BAEPatches.h>
-#endif
-
 static volatile int interruptPlayBack = FALSE;
 static volatile int verboseMode = FALSE;
 static volatile int silentMode = FALSE;
@@ -412,12 +414,6 @@ char const usageStringFmt[] =
     "USAGE:  playbae  -p  {patches.hsb}\n"
     "                 -f  {%s}\n"
     "                 -o  {write output to file}\n"
-#if defined(USE_MPEG_ENCODER) && (USE_MPEG_ENCODER != 0)
-    "                 -om {write MP3 output to file}\n"
-#endif
-#if defined(USE_FLAC_ENCODER) && (USE_FLAC_ENCODER != 0)
-    "                 -of {write FLAC output to file}\n"
-#endif
 #ifdef SUPPORT_KARAOKE
     "                 -k  {enable karaoke lyric display (MIDI/RMF with lyrics)}\n"
 #endif
@@ -1224,7 +1220,7 @@ int main(int argc, char *argv[])
    int maxVoices = BAE_MAX_VOICES;
    BAEBankToken bank;
    int doneCommand = 0;
-   BAEReverbType reverbType = BAE_REVERB_TYPE_8; // early reflections
+   BAEReverbType reverbType = BAE_REVERB_TYPE_7; // small reflections
    char parmFile[1024];
    char midiMuteChannels[512];
    const char *libMiniBAECPUArch;
@@ -1425,6 +1421,11 @@ int main(int argc, char *argv[])
       playbae_dprintf("BAEMixer_Open returned error code: %d (%s)\n", err, BAE_GetErrorString(err));
       if (err == BAE_NO_ERROR)
       {
+#if USE_DLS_SUPPORT == TRUE
+         // Initialize DLS bank manager
+         OPErr dls_err = DLS_InitBankManager();
+         playbae_dprintf("DLS manager initialization result: %d\n", dls_err);
+#endif
          BAEMixer_SetAudioTask(theMixer, PV_Task, (void *)theMixer);
 
          // turn on nice verb
@@ -1435,14 +1436,44 @@ int main(int argc, char *argv[])
             if (reverbType > 11)
             {
                playbae_printf("Invalid reverbType %d, expected 1-11. Ignored.\n", reverbType);
-               reverbType = 8;
+               reverbType = 7;
             }
          }
          playbae_dprintf("BAE memory used during idle prior to SetBankToFile: %ld bytes\n\n", BAE_GetSizeOfMemoryUsed());
 
          if (PV_ParseCommands(argc, argv, "-p", TRUE, parmFile))
          {
-            err = BAEMixer_AddBankFromFile(theMixer, (BAEPathName)parmFile, &bank);
+            const char *ext = strrchr(parmFile, '.');
+#if USE_SF2_SUPPORT == TRUE
+            if (ext && strcasecmp(ext, ".sf2") == 0) {
+               SF2_Bank *sf2Bank = NULL;
+               XFILENAME filename;
+               XConvertPathToXFILENAME((BAEPathName)parmFile, &filename);
+               err = SF2_LoadBank(&filename, &sf2Bank);
+               if (err != NO_ERR && !sf2Bank) {
+                  playbae_printf("Error %d loading SF2 bank %s", err, parmFile);
+                  return 1;
+               }
+               err = SF2_AddBankToManager(sf2Bank, parmFile);
+            }
+#endif
+#if USE_DLS_SUPPORT == TRUE
+            if (ext && strcasecmp(ext, ".dls") == 0) {
+               DLS_Bank *dls = NULL;
+               XFILENAME filename;
+               XConvertPathToXFILENAME((BAEPathName)parmFile, &filename);
+
+               err = DLS_LoadBank(&filename, &dls);
+               if (err != NO_ERR || !dls) {
+                  playbae_printf("Error %d loading DLS bank %s", err, parmFile);
+                  return 1;                  
+               }
+               err = DLS_AddBankToManager(dls, parmFile);
+            }
+#endif
+            if (ext && strcasecmp(ext, ".hsb") == 0) {
+               err = BAEMixer_AddBankFromFile(theMixer, (BAEPathName)parmFile, &bank);
+            }
             if (err == BAE_NO_ERROR)
             {
                char friendlyBuf[128];
@@ -1466,7 +1497,7 @@ int main(int argc, char *argv[])
          {
 #ifdef _BUILT_IN_PATCHES
             // Attempt to identify default built-in bank if present among embedded list
-            err = BAEMixer_AddBankFromMemory(theMixer, BAE_PATCHES, (unsigned int)BAE_PATCHES_size, &bank);
+            err = BAEMixer_LoadBuiltinBank(theMixer, &bank);
             if (err == BAE_NO_ERROR)
             {
                char friendlyBuf[128];
@@ -1576,11 +1607,33 @@ int main(int argc, char *argv[])
                   playbae_printf("Writing FLAC (lossless) to %s\n", parmFile);
                }
 #else
-               playbae_printf("FLAC encoder not built. Rebuild with FLAC_ENC=1, e.g.: make clean && make FLAC_ENC=1 all\n");
+               playbae_printf("FLAC encoder not built. Rebuild with FLAC_ENC=1, e.g.: make clean && make FLAC_ENC=1\n");
                BAEMixer_Delete(theMixer);
                return 1;
 #endif
             }
+            else if (PV_IsFileExtension(parmFile, ".ogg"))
+            {
+#if defined(USE_VORBIS_ENCODER) && (USE_VORBIS_ENCODER != 0)
+               err = BAEMixer_StartOutputToFile(theMixer, (BAEPathName)parmFile, BAE_VORBIS_TYPE, BAE_COMPRESSION_VORBIS_256);
+               if (err)
+               {
+                  playbae_printf("Error %d starting OGG Vorbis export: %s\n", err, parmFile);
+                  BAEMixer_Delete(theMixer);
+                  return 1;
+               }
+               else
+               {
+                  gWriteToFile = TRUE;
+                  gWriteToFileType = BAE_VORBIS_TYPE;
+                  playbae_printf("Writing OGG Vorbis to %s\n", parmFile);
+               }
+#else
+               playbae_printf("OGG Vorbis encoder not built. Rebuild with VORBIS_ENC=1, e.g.: make clean && make VORBIS_ENC=1\n");
+               BAEMixer_Delete(theMixer);
+               return 1;
+#endif
+            }            
             else
             {
                // default/wav path
@@ -1602,98 +1655,6 @@ int main(int argc, char *argv[])
                   playbae_printf("Writing to file %s\n", parmFile);
                }
             }
-         }
-         if (PV_ParseCommands(argc, argv, "-om", TRUE, parmFile))
-         {
-#if defined(USE_MPEG_ENCODER) && (USE_MPEG_ENCODER != 0)
-            positionDisplayMultiplier = 100;
-            /* Map total kbps directly to the compression enum (no per-channel inference).
-             * -b specifies TOTAL kbps. Pick the closest supported total kbps and use that. */
-            BAEAudioModifiers modsTmp;
-            BAEMixer_GetModifiers(theMixer, &modsTmp);
-            int channels = (modsTmp & BAE_USE_STEREO) ? 2 : 1;
-            int totalReq = gMP3BitrateKbps;
-            if (totalReq < 32)
-            {
-               playbae_printf("MP3 export requires a minimum total bitrate of 32kbps; requested %dkbps. Aborting MP3 export.\n", totalReq);
-               BAEMixer_Delete(theMixer);
-               return 1;
-            }
-            if (totalReq > 320)
-               totalReq = 320;                                   /* clamp to practical max total */
-            BAECompressionType cType = BAE_COMPRESSION_MPEG_128; // default
-            struct
-            {
-               int rate;
-               BAECompressionType ct;
-            } mapTbl[] = {
-                {32, BAE_COMPRESSION_MPEG_32}, {40, BAE_COMPRESSION_MPEG_40}, {48, BAE_COMPRESSION_MPEG_48}, {56, BAE_COMPRESSION_MPEG_56}, {64, BAE_COMPRESSION_MPEG_64}, {80, BAE_COMPRESSION_MPEG_80}, {96, BAE_COMPRESSION_MPEG_96}, {112, BAE_COMPRESSION_MPEG_112}, {128, BAE_COMPRESSION_MPEG_128}, {160, BAE_COMPRESSION_MPEG_160}, {192, BAE_COMPRESSION_MPEG_192}, {224, BAE_COMPRESSION_MPEG_224}, {256, BAE_COMPRESSION_MPEG_256}, {320, BAE_COMPRESSION_MPEG_320}};
-            /* Choose closest match based on total kbps */
-            int bestDiff = 100000;
-            for (size_t i = 0; i < sizeof(mapTbl) / sizeof(mapTbl[0]); ++i)
-            {
-               int d = abs(mapTbl[i].rate - totalReq);
-               if (d < bestDiff)
-               {
-                  bestDiff = d;
-                  cType = mapTbl[i].ct;
-               }
-            }
-            err = BAEMixer_StartOutputToFile(theMixer, (BAEPathName)parmFile, BAE_MPEG_TYPE, cType);
-            if (err)
-            {
-               playbae_printf("Error %d starting MP3 export: %s\n", err, parmFile);
-               /* Fail fast: user explicitly requested MP3 export, so do not fall back to playback. */
-               BAEMixer_Delete(theMixer);
-               return 1;
-            }
-            else
-            {
-               gWriteToFile = TRUE;
-               gWriteToFileType = BAE_MPEG_TYPE;
-               int total = totalReq;
-               if (channels > 1)
-               {
-                  playbae_printf("Writing MP3 (CBR %d kbps, joint stereo) to %s\n", total, parmFile);
-               }
-               else
-               {
-                  playbae_printf("Writing MP3 (CBR %d kbps, mono) to %s\n", total, parmFile);
-               }
-            }
-#else
-            playbae_printf("MP3 encoder not built. Rebuild with MP3_ENC=1, e.g.: make clean && make MP3_ENC=1\n");
-            /* User explicitly requested MP3 export; fail rather than continuing to playback. */
-            BAEMixer_Delete(theMixer);
-            return 1;
-#endif
-         }
-
-         if (PV_ParseCommands(argc, argv, "-of", TRUE, parmFile))
-         {
-#if defined(USE_FLAC_ENCODER) && (USE_FLAC_ENCODER != 0)
-            positionDisplayMultiplier = 100;
-            /* Start FLAC (lossless) export via mixer output path. */
-            err = BAEMixer_StartOutputToFile(theMixer, (BAEPathName)parmFile, BAE_FLAC_TYPE, BAE_COMPRESSION_LOSSLESS);
-            if (err)
-            {
-               playbae_printf("Error %d starting FLAC export: %s\n", err, parmFile);
-               /* Fail fast: user explicitly requested FLAC export, so do not fall back to playback. */
-               BAEMixer_Delete(theMixer);
-               return 1;
-            }
-            else
-            {
-               gWriteToFile = TRUE;
-               gWriteToFileType = BAE_FLAC_TYPE;
-               playbae_printf("Writing FLAC (lossless) to %s\n", parmFile);
-            }
-#else
-            playbae_printf("FLAC encoder not built. Rebuild with FLAC_ENC=1, e.g.: make clean && make FLAC_ENC=1\n");
-            /* User explicitly requested FLAC export; fail rather than continuing to playback. */
-            BAEMixer_Delete(theMixer);
-            return 1;
-#endif
          }
 
          if (argc > 1 && argv[1][0] != (char)'-')
@@ -1808,6 +1769,9 @@ int main(int argc, char *argv[])
    }
 
    BAE_WaitMicroseconds(160000);
+#if USE_DLS_SUPPORT == TRUE
+   DLS_ShutdownBankManager();
+#endif
    BAEMixer_Delete(theMixer);
    return (0);
 }
