@@ -1158,6 +1158,7 @@ static INLINE INT32 PV_GetWaveShape(INT32 where, INT32 what_kind)
 {
     switch (what_kind)
     {
+    // this matches TRIANGLE_WAVE, but we cant change it, to preserve the existing processing
     case SINE_WAVE:
         if (where > 32768)
         {
@@ -1166,6 +1167,18 @@ static INLINE INT32 PV_GetWaveShape(INT32 where, INT32 what_kind)
         else
         {
             return (where * 4) - 65536;
+        }
+    // So we'll add another case for the real sine wave
+    case SINE_WAVE_REAL:
+        // Calculate a sine wave using the 'where' parameter (0..65535 maps to 0..2π)
+        // Output range: -65536 to +65536 (16.16 fixed point)
+        // Use a Taylor series approximation for sine, or call a fixed-point sine function if available
+        // Here, we use a simple lookup-free approximation:
+        {
+            // Convert 'where' (0..65535) to radians (0..2π)
+            double radians = ((double)where / 65536.0) * (2.0 * 3.14159265358979323846);
+            double s = sin(radians);
+            return (INT32)(s * 65536.0);
         }
     case SAWTOOTH_WAVE:
         return (32768 - where) * 2;

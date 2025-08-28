@@ -43,10 +43,11 @@ Settings load_settings(void)
     get_executable_directory(exe_dir, sizeof(exe_dir));
 
     char settings_path[768];
+
 #ifdef _WIN32
-    snprintf(settings_path, sizeof(settings_path), "%s\\minibae.ini", exe_dir);
+    snprintf(settings_path, sizeof(settings_path), "%s\\zefidi.ini", exe_dir);
 #else
-    snprintf(settings_path, sizeof(settings_path), "%s/minibae.ini", exe_dir);
+    snprintf(settings_path, sizeof(settings_path), "%s/zefidi.ini", exe_dir);
 #endif
 
     FILE *f = fopen(settings_path, "r");
@@ -149,9 +150,9 @@ void save_settings(const char *last_bank_path, int reverb_type, bool loop_enable
 
     char settings_path[768];
 #ifdef _WIN32
-    snprintf(settings_path, sizeof(settings_path), "%s\\minibae.ini", exe_dir);
+    snprintf(settings_path, sizeof(settings_path), "%s\\zefidi.ini", exe_dir);
 #else
-    snprintf(settings_path, sizeof(settings_path), "%s/minibae.ini", exe_dir);
+    snprintf(settings_path, sizeof(settings_path), "%s/zefidi.ini", exe_dir);
 #endif
 
     FILE *f = fopen(settings_path, "w");
@@ -169,7 +170,7 @@ void save_settings(const char *last_bank_path, int reverb_type, bool loop_enable
         fprintf(f, "show_keyboard=%d\n", g_show_virtual_keyboard ? 1 : 0);
         fprintf(f, "disable_webtv_progress_bar=%d\n", g_disable_webtv_progress_bar ? 1 : 0);
         fprintf(f, "export_codec_index=%d\n", g_exportCodecIndex);
-#if SUPPORT_PLAYLIST == TRUE        
+#if SUPPORT_PLAYLIST == TRUE
         fprintf(f, "shuffle_enabled=%d\n", g_playlist.shuffle_enabled ? 1 : 0);
         fprintf(f, "repeat_mode=%d\n", g_playlist.repeat_mode);
 #endif
@@ -182,7 +183,7 @@ void save_settings(const char *last_bank_path, int reverb_type, bool loop_enable
             fprintf(f, "window_x=%d\n", x);
             fprintf(f, "window_y=%d\n", y);
         }
-        
+
         fclose(f);
     }
 }
@@ -197,9 +198,9 @@ void save_full_settings(const Settings *settings)
 
     char settings_path[768];
 #ifdef _WIN32
-    snprintf(settings_path, sizeof(settings_path), "%s\\minibae.ini", exe_dir);
+    snprintf(settings_path, sizeof(settings_path), "%s\\zefidi.ini", exe_dir);
 #else
-    snprintf(settings_path, sizeof(settings_path), "%s/minibae.ini", exe_dir);
+    snprintf(settings_path, sizeof(settings_path), "%s/zefidi.ini", exe_dir);
 #endif
 
     FILE *f = fopen(settings_path, "w");
@@ -1214,7 +1215,8 @@ void render_settings_dialog(SDL_Renderer *R, int mx, int my, bool mclick, bool m
                     BAESong_SetVelocityCurve(g_bae.song, g_volume_curve);
                 }
 #if SUPPORT_MIDI_HW == TRUE
-                if (g_live_song && g_midi_input_enabled) {
+                if (g_live_song && g_midi_input_enabled)
+                {
                     BAESong_SetVelocityCurve(g_live_song, g_volume_curve);
                 }
 #endif

@@ -557,7 +557,7 @@ UINT32          const decodingBytes = decodingFrames * bytesPerFrame;
         }
         break;
 
-#if USE_MPEG_DECODER != FALSE
+#if USE_MPEG_DECODER == TRUE
     case C_MPEG_32:
     case C_MPEG_40:
     case C_MPEG_48:
@@ -575,12 +575,12 @@ UINT32          const decodingBytes = decodingFrames * bytesPerFrame;
         return XExpandMPEG(src, startFrame, dst);
 #endif
 
-#if USE_FLAC_DECODER != 0
+#if USE_FLAC_DECODER == TRUE
     case C_FLAC:
         return XExpandFLAC(src, startFrame, dst);
 #endif
 
-#if USE_VORBIS_DECODER != 0
+#if USE_VORBIS_DECODER == TRUE
     case C_VORBIS:
         return XExpandVorbis(src, startFrame, dst);
 #endif

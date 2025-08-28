@@ -98,8 +98,6 @@ static inline uint32_t PV_SF2_TimecentsToUSec(int16_t timecents)
     // Clamp extreme values to safe bounds
     if (timecents < -12000)
         timecents = -12000;
-    if (timecents > 8000) // clamp very long values to ~5 minutes max
-        timecents = 8000;
 
     // Correct SF2 formula: seconds = 2^(timecents/1200)
     float seconds = powf(2.0f, (float)timecents / 1200.0f);
@@ -109,9 +107,12 @@ static inline uint32_t PV_SF2_TimecentsToUSec(int16_t timecents)
     double usec = (double)seconds * 1000000.0;
     if (usec < 0.0)
         usec = 0.0;
-    if (usec > 60000000.0) // clamp at 60s to avoid overflow/very long stages
-        usec = 60000000.0;
-    // For very small positive values, ensure a minimum of 1 microsecond (non-zero tc only)
+    // Don't arbitrarily clamp to small human-friendly values here; return the
+    // correctly computed microseconds per spec. Clamp only to the return type
+    // limits to avoid overflow in callers.
+    const double kMaxUsec = (double)UINT32_MAX;
+    if (usec > kMaxUsec)
+        usec = kMaxUsec;
     if (usec < 1.0)
         usec = 1.0;
 
@@ -172,7 +173,7 @@ static void PV_SF2_InitLFO(GM_LFO *l, uint32_t period_us, int16_t delay_tc)
         return;
     XSetMemory(l, sizeof(GM_LFO), 0);
     l->period = period_us;
-    l->waveShape = SINE_WAVE; // SF2 LFOs are sine waves
+    l->waveShape = SINE_WAVE_REAL; // SF2 LFOs are sine waves
     l->DC_feed = 0;
     l->currentWaveValue = 0;
     l->currentTime = 0;
@@ -231,7 +232,7 @@ static void PV_SF2_FillLFORecords(SF2_Bank *pBank, int32_t instrumentID, uint32_
     if (modLfoToPitch != 0 && lfoCount < MAX_LFOS)
     {
         pLFO = &pInstrument->LFORecords[lfoCount];
-    PV_SF2_InitLFO(pLFO, PV_SF2_FreqToLFOPeriod(modLfoFreq), modLfoDelay);
+        PV_SF2_InitLFO(pLFO, PV_SF2_FreqToLFOPeriod(modLfoFreq), modLfoDelay);
         pLFO->where_to_feed = PITCH_LFO;
         pLFO->level = modLfoToPitch * 4; // cents -> engine units
         BAE_PRINTF("SF2 Debug: Created mod LFO %d -> PITCH: level=%d, period=%u µs, delay=%d tc\n",
@@ -241,7 +242,7 @@ static void PV_SF2_FillLFORecords(SF2_Bank *pBank, int32_t instrumentID, uint32_
     if (modLfoToVolume != 0 && lfoCount < MAX_LFOS)
     {
         pLFO = &pInstrument->LFORecords[lfoCount];
-    PV_SF2_InitLFO(pLFO, PV_SF2_FreqToLFOPeriod(modLfoFreq), modLfoDelay);
+        PV_SF2_InitLFO(pLFO, PV_SF2_FreqToLFOPeriod(modLfoFreq), modLfoDelay);
         pLFO->where_to_feed = VOLUME_LFO;
         pLFO->level = modLfoToVolume * 16; // cB -> engine units
         BAE_PRINTF("SF2 Debug: Created mod LFO %d -> VOLUME: level=%d, period=%u µs, delay=%d tc\n",
@@ -251,7 +252,7 @@ static void PV_SF2_FillLFORecords(SF2_Bank *pBank, int32_t instrumentID, uint32_
     if (modLfoToFilterFc != 0 && lfoCount < MAX_LFOS)
     {
         pLFO = &pInstrument->LFORecords[lfoCount];
-    PV_SF2_InitLFO(pLFO, PV_SF2_FreqToLFOPeriod(modLfoFreq), modLfoDelay);
+        PV_SF2_InitLFO(pLFO, PV_SF2_FreqToLFOPeriod(modLfoFreq), modLfoDelay);
         pLFO->where_to_feed = LPF_FREQUENCY;
         pLFO->level = modLfoToFilterFc * 4; // cents -> engine units
         BAE_PRINTF("SF2 Debug: Created mod LFO %d -> LPF_FREQUENCY: level=%d, period=%u µs, delay=%d tc\n",
@@ -262,8 +263,8 @@ static void PV_SF2_FillLFORecords(SF2_Bank *pBank, int32_t instrumentID, uint32_
     // Create vibrato LFO for pitch if specified and different from mod LFO
     if (vibLfoToPitch != 0 && lfoCount < MAX_LFOS)
     {
-    pLFO = &pInstrument->LFORecords[lfoCount];
-    PV_SF2_InitLFO(pLFO, PV_SF2_FreqToLFOPeriod(vibLfoFreq), vibLfoDelay);
+        pLFO = &pInstrument->LFORecords[lfoCount];
+        PV_SF2_InitLFO(pLFO, PV_SF2_FreqToLFOPeriod(vibLfoFreq), vibLfoDelay);
         pLFO->where_to_feed = PITCH_LFO;
         pLFO->level = vibLfoToPitch * 4; // cents -> engine units
 
@@ -333,37 +334,18 @@ static void PV_SF2_FillVolumeADSR(SF2_Bank *pBank, int32_t instrumentID, uint32_
     int16_t tcRel = PV_FindInstGenMerged(pBank, instrumentID, genStart, genEnd, SF2_GEN_RELEASE_VOL_ENV, -12000);
     int16_t cBInitAtt = PV_FindInstGenMerged(pBank, instrumentID, genStart, genEnd, SF2_GEN_INITIAL_ATTENUATION, 0);
 
-    // If using extreme defaults, replace with more reasonable values
-    if (tcAttack == -12000)
-        tcAttack = -7973; // ~100ms
-    if (tcDecay == -12000)
-        tcDecay = -7973; // ~100ms
-    if (tcRel == -12000)
-        tcRel = -7973; // ~100ms
-
-    // Sustain of 0 means sustain at full scale (no attenuation). Do not invent decay here.
-
     // Clamp timecents to prevent extreme values that could cause issues
+    // Only enforce the SF2 lower sentinel meaning of -12000 (instant/zero).
     if (tcDelay < -12000)
         tcDelay = -12000;
-    if (tcDelay > 8000)
-        tcDelay = 8000;
     if (tcAttack < -12000)
         tcAttack = -12000;
-    if (tcAttack > 8000)
-        tcAttack = 8000;
     if (tcHold < -12000)
         tcHold = -12000;
-    if (tcHold > 8000)
-        tcHold = 8000;
     if (tcDecay < -12000)
         tcDecay = -12000;
-    if (tcDecay > 8000)
-        tcDecay = 8000;
     if (tcRel < -12000)
         tcRel = -12000;
-    if (tcRel > 8000)
-        tcRel = 8000;
 
     // Convert to engine units
     uint32_t tDelay = PV_SF2_TimecentsToUSec(tcDelay);
@@ -380,7 +362,6 @@ static void PV_SF2_FillVolumeADSR(SF2_Bank *pBank, int32_t instrumentID, uint32_
 
     // Ensure minimum timing to prevent zero-time stages and single-slice jumps.
     // Use the engine's slice time so ramps span at least one slice.
-    // Ensure a minimum of four slices for audible smoothness across engine updates
     const uint32_t kMinStageUS = (uint32_t)BUFFER_SLICE_TIME;
     if (tAttack > 0 && tAttack < kMinStageUS)
         tAttack = kMinStageUS;
@@ -413,8 +394,6 @@ static void PV_SF2_FillVolumeADSR(SF2_Bank *pBank, int32_t instrumentID, uint32_
     // For SF2, use sustainingDecayLevel only during sustain phase.
     // Set it to 1.0 initially, and let the ADSR_SUSTAIN handler apply the attenuation.
     pADSR->sustainingDecayLevel = XFIXED_1;
-
-    pADSR->isSF2Envelope = TRUE; // Mark as SF2
 
     // Build proper SF2 ADSR: Delay -> Attack -> Hold -> Decay -> Sustain -> Release
     // Skip very short delay/hold stages to avoid engine timing issues
@@ -624,8 +603,7 @@ static OPErr PV_ReadSF2Chunk(XFILE file, SF2_ChunkHeader *header)
 #if X_WORD_ORDER == TRUE // little endian - need to swap ID for FOURCC comparison, but not size
     header->id = XSwapLong(header->id);
     // Don't swap size
-#else // big endian - need to swap both
-    header->id = XSwapLong(header->id);
+#else // big endian
     header->size = XSwapLong(header->size);
 #endif
 
@@ -766,8 +744,6 @@ OPErr SF2_LoadBank(XFILENAME *file, SF2_Bank **ppBank)
     }
 #if X_WORD_ORDER == TRUE // little endian - need to swap for FOURCC comparison
     fourcc = XSwapLong(fourcc);
-#else // big endian
-    fourcc = XSwapLong(fourcc);
 #endif
 
     if (fourcc != SF2_SFBK)
@@ -781,9 +757,7 @@ OPErr SF2_LoadBank(XFILENAME *file, SF2_Bank **ppBank)
         // So we need to swap the ID to match our constants, but not the size
 #if X_WORD_ORDER == TRUE // little endian - need to swap ID for FOURCC comparison, but not size
         chunk.id = XSwapLong(chunk.id);
-        // Don't swap size - it's already in correct format
-#else // big endian - need to swap both
-        chunk.id = XSwapLong(chunk.id);
+#else // big endian
         chunk.size = XSwapLong(chunk.size);
 #endif
 
@@ -824,8 +798,7 @@ OPErr SF2_LoadBank(XFILENAME *file, SF2_Bank **ppBank)
 #if X_WORD_ORDER == TRUE // little endian - need to swap ID for FOURCC comparison, but not size
                     subchunk.id = XSwapLong(subchunk.id);
                     // Don't swap size
-#else // big endian - need to swap both
-                    subchunk.id = XSwapLong(subchunk.id);
+#else // big endian
                     subchunk.size = XSwapLong(subchunk.size);
 #endif
 
@@ -861,8 +834,7 @@ OPErr SF2_LoadBank(XFILENAME *file, SF2_Bank **ppBank)
 #if X_WORD_ORDER == TRUE // little endian - need to swap ID for FOURCC comparison, but not size
                     subchunk.id = XSwapLong(subchunk.id);
                     // Don't swap size
-#else // big endian - need to swap both
-                    subchunk.id = XSwapLong(subchunk.id);
+#else // big endian
                     subchunk.size = XSwapLong(subchunk.size);
 #endif
 
@@ -993,9 +965,12 @@ static int16_t PV_FindGeneratorValue(SF2_Generator *generators, uint32_t genCoun
 static void PV_GetInstGlobalGenRange(SF2_Bank *pBank, int32_t instrumentID,
                                      uint32_t *pGStart, uint32_t *pGEnd, XBOOL *pHasGlobal)
 {
-    if (pGStart) *pGStart = 0;
-    if (pGEnd) *pGEnd = 0;
-    if (pHasGlobal) *pHasGlobal = FALSE;
+    if (pGStart)
+        *pGStart = 0;
+    if (pGEnd)
+        *pGEnd = 0;
+    if (pHasGlobal)
+        *pHasGlobal = FALSE;
     if (!pBank || instrumentID < 0 || instrumentID >= (int32_t)pBank->numInstruments)
         return;
 
@@ -1013,9 +988,12 @@ static void PV_GetInstGlobalGenRange(SF2_Bank *pBank, int32_t instrumentID,
                                                   gStart, gEnd, SF2_GEN_SAMPLE_ID, -1);
     if (sampleInFirst < 0)
     {
-        if (pGStart) *pGStart = gStart;
-        if (pGEnd) *pGEnd = gEnd;
-        if (pHasGlobal) *pHasGlobal = TRUE;
+        if (pGStart)
+            *pGStart = gStart;
+        if (pGEnd)
+            *pGEnd = gEnd;
+        if (pHasGlobal)
+            *pHasGlobal = TRUE;
     }
 }
 
@@ -1030,7 +1008,8 @@ static int16_t PV_FindInstGenMerged(SF2_Bank *pBank, int32_t instrumentID,
         return v;
 
     // Then instrument-global
-    uint32_t gStart = 0, gEnd = 0; XBOOL hasGlobal = FALSE;
+    uint32_t gStart = 0, gEnd = 0;
+    XBOOL hasGlobal = FALSE;
     PV_GetInstGlobalGenRange(pBank, instrumentID, &gStart, &gEnd, &hasGlobal);
     if (hasGlobal)
     {
@@ -2783,13 +2762,13 @@ static GM_Instrument *PV_SF2_CreateKeymapSplitInstrument(SF2_Bank *pBank, int32_
 #endif
 
         // Fill ADSR from SF2 generators for this zone
-    PV_SF2_FillVolumeADSR(pBank, zone->instrumentID, zone->genStart, zone->genEnd, &pSubInstrument->volumeADSRRecord);
+        PV_SF2_FillVolumeADSR(pBank, zone->instrumentID, zone->genStart, zone->genEnd, &pSubInstrument->volumeADSRRecord);
 
         // Fill LFO records from SF2 generators for this zone
-    PV_SF2_FillLFORecords(pBank, zone->instrumentID, zone->genStart, zone->genEnd, pSubInstrument);
+        PV_SF2_FillLFORecords(pBank, zone->instrumentID, zone->genStart, zone->genEnd, pSubInstrument);
 
         // Create waveform for this zone
-    OPErr waveErr = PV_SF2_CreateWaveformFromSample(pBank, zone->instrumentID, zone->sampleID, zone->genStart, zone->genEnd, &pSubInstrument->u.w);
+        OPErr waveErr = PV_SF2_CreateWaveformFromSample(pBank, zone->instrumentID, zone->sampleID, zone->genStart, zone->genEnd, &pSubInstrument->u.w);
         if (waveErr != NO_ERR)
         {
             // Cleanup

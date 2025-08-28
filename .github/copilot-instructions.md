@@ -133,8 +133,8 @@ struct GM_Instrument {
 - Hardware MIDI input/output (GUI)
 - Real-time audio mixing and effects
 
-## ADSR Envelope Processing
-See [ADSR.md](ADSR.md) for detailed information on the ADSR envelope implementation.
+## HSB File Format
+See [HSB.md](HSB.md) for detailed information on the HSB file format and its structure.
 
 ## Integration Points
 

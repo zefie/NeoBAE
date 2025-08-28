@@ -870,19 +870,109 @@ int main(int argc, char *argv[])
     if (settings.has_bank && strlen(settings.bank_path) > 0)
     {
         BAE_PRINTF("Loading saved bank: %s\n", settings.bank_path);
-        load_bank_simple(settings.bank_path, false, reverbType, loopPlay); // false = don't save to settings (it's already saved)
-        // Set current bank path for future settings saves
+        bool loaded_saved = load_bank_simple(settings.bank_path, false, reverbType, loopPlay); // false = don't save to settings (it's already saved)
 
-        if (g_bae.bank_loaded)
+        if (!loaded_saved)
         {
+            BAE_PRINTF("Saved bank missing or failed to load. Trying patches.hsb in executable dir...\n");
+
+            // Next priority: patches.hsb located next to the executable
+            char exe_dir_try[512];
+            char patches_try[1024];
+            get_executable_directory(exe_dir_try, sizeof(exe_dir_try));
+#ifdef _WIN32
+            snprintf(patches_try, sizeof(patches_try), "%s\\patches.hsb", exe_dir_try);
+#else
+            snprintf(patches_try, sizeof(patches_try), "%s/patches.hsb", exe_dir_try);
+#endif
+            FILE *tf = fopen(patches_try, "r");
+            if (tf)
+            {
+                fclose(tf);
+                if (load_bank_simple(patches_try, false, reverbType, loopPlay))
+                {
+                    // Remember which bank we loaded for UI (do not overwrite user settings file)
+                    strncpy(g_current_bank_path, patches_try, sizeof(g_current_bank_path) - 1);
+                    g_current_bank_path[sizeof(g_current_bank_path) - 1] = '\0';
+                    loaded_saved = true; // treat as loaded to skip built-in fallback
+                }
+                else
+                {
+                    BAE_PRINTF("Found patches.hsb but failed to load it: %s\n", patches_try);
+                }
+            }
+
+            if (!loaded_saved)
+            {
+                BAE_PRINTF("Falling back to built-in/default discovery...\n");
+#ifdef _BUILT_IN_PATCHES
+                // Try built-in bank when compiled in
+                if (!load_bank_simple("__builtin__", false, reverbType, loopPlay))
+                {
+                    // Final fallback to default discovery
+                    (void)load_bank_simple(NULL, false, reverbType, loopPlay);
+                }
+#else
+                // No built-in bank compiled. Try default discovery
+                (void)load_bank_simple(NULL, false, reverbType, loopPlay);
+#endif
+            }
+        }
+        else
+        {
+            // Only record the saved path if that specific bank actually loaded
             strncpy(g_current_bank_path, settings.bank_path, sizeof(g_current_bank_path) - 1);
             g_current_bank_path[sizeof(g_current_bank_path) - 1] = '\0';
         }
     }
     else
     {
-        BAE_PRINTF("No saved bank found, using fallback bank loading\n");
-        load_bank_simple(NULL, false, reverbType, loopPlay); // Load default bank without saving
+        BAE_PRINTF("No saved bank found, trying patches.hsb in executable dir then built-in...\n");
+
+        // First try patches.hsb next to the executable
+        char exe_dir_try[512];
+        char patches_try[1024];
+        get_executable_directory(exe_dir_try, sizeof(exe_dir_try));
+#ifdef _WIN32
+        snprintf(patches_try, sizeof(patches_try), "%s\\patches.hsb", exe_dir_try);
+#else
+        snprintf(patches_try, sizeof(patches_try), "%s/patches.hsb", exe_dir_try);
+#endif
+        FILE *tf = fopen(patches_try, "r");
+        if (tf)
+        {
+            fclose(tf);
+            if (load_bank_simple(patches_try, false, reverbType, loopPlay))
+            {
+                strncpy(g_current_bank_path, patches_try, sizeof(g_current_bank_path) - 1);
+                g_current_bank_path[sizeof(g_current_bank_path) - 1] = '\0';
+            }
+            else
+            {
+                BAE_PRINTF("Found patches.hsb but failed to load it: %s\n", patches_try);
+#ifdef _BUILT_IN_PATCHES
+                if (!load_bank_simple("__builtin__", false, reverbType, loopPlay))
+                {
+                    (void)load_bank_simple(NULL, false, reverbType, loopPlay);
+                }
+#else
+                (void)load_bank_simple(NULL, false, reverbType, loopPlay);
+#endif
+            }
+        }
+        else
+        {
+#ifdef _BUILT_IN_PATCHES
+            // No patches.hsb; try built-in if available
+            if (!load_bank_simple("__builtin__", false, reverbType, loopPlay))
+            {
+                (void)load_bank_simple(NULL, false, reverbType, loopPlay);
+            }
+#else
+            // Final fallback: auto-discovery (npatches/patches)
+            (void)load_bank_simple(NULL, false, reverbType, loopPlay);
+#endif
+        }
     }
 
     // Initialize MSB/LSB values for the default channel
@@ -949,17 +1039,17 @@ int main(int argc, char *argv[])
 #if USE_SF2_SUPPORT == TRUE
                         if (!is_bank_file)
                             is_bank_file = _stricmp(ext, ".sf2") == 0;
-#endif                            
+#endif
 #if USE_DLS_SUPPORT == TRUE
                         if (!is_bank_file)
                             is_bank_file = _stricmp(ext, ".dls") == 0;
 #endif
 #else
-                        is_bank_file = strcasecmp(ext, ".hsb") == 0;                    
+                        is_bank_file = strcasecmp(ext, ".hsb") == 0;
 #if USE_SF2_SUPPORT == TRUE
                         if (!is_bank_file)
                             is_bank_file = strcasecmp(ext, ".sf2") == 0;
-#endif                            
+#endif
 #if USE_DLS_SUPPORT == TRUE
                         if (!is_bank_file)
                             is_bank_file = strcasecmp(ext, ".dls") == 0;
@@ -1162,42 +1252,42 @@ int main(int argc, char *argv[])
                                         // ui_adjust_volume will test using a fixed rect matching rendering
                                         if (!ui_adjust_volume(mx, my, sdelta, volume_enabled_local, &volume))
                                         {
-                                        // For volume we pass the ddRect width as currently used in rendering
-                                        // ui_adjust_volume will test using a fixed rect matching rendering
-                                        if (!ui_adjust_volume(mx, my, sdelta, volume_enabled_local, &volume))
-                                        {
+                                            // For volume we pass the ddRect width as currently used in rendering
+                                            // ui_adjust_volume will test using a fixed rect matching rendering
+                                            if (!ui_adjust_volume(mx, my, sdelta, volume_enabled_local, &volume))
+                                            {
 #if SUPPORT_PLAYLIST == TRUE
-                                            // Handle playlist scroll if no other controls handled the wheel event
-                                            // Compute the exact playlist panel rect the same way it is calculated
-                                            // during rendering so wheel handling matches the visible list area.
-                                            int playlistPanelHeight = 300; // same as rendering
-                                            int keyboardPanelY_local = transportPanel.y + transportPanel.h + 10;
-                                            Rect keyboardPanel_local = {10, keyboardPanelY_local, 880, 110};
-                                            bool showKeyboard_local = g_show_virtual_keyboard && g_bae.song && !g_bae.is_audio_file && g_bae.song_loaded;
-                                            bool showWaveform_local = g_bae.is_audio_file && g_bae.sound;
-                                            if (showWaveform_local)
-                                                showKeyboard_local = false;
+                                                // Handle playlist scroll if no other controls handled the wheel event
+                                                // Compute the exact playlist panel rect the same way it is calculated
+                                                // during rendering so wheel handling matches the visible list area.
+                                                int playlistPanelHeight = 300; // same as rendering
+                                                int keyboardPanelY_local = transportPanel.y + transportPanel.h + 10;
+                                                Rect keyboardPanel_local = {10, keyboardPanelY_local, 880, 110};
+                                                bool showKeyboard_local = g_show_virtual_keyboard && g_bae.song && !g_bae.is_audio_file && g_bae.song_loaded;
+                                                bool showWaveform_local = g_bae.is_audio_file && g_bae.sound;
+                                                if (showWaveform_local)
+                                                    showKeyboard_local = false;
 #if SUPPORT_KARAOKE == TRUE
-                                            bool showKaraoke_local = g_karaoke_enabled && !g_karaoke_suspended &&
-                                                                     (g_lyric_count > 0 || g_karaoke_line_current[0] || g_karaoke_line_previous[0]) &&
-                                                                     g_bae.song_loaded && !g_bae.is_audio_file;
-                                            int karaokePanelHeight_local = 40;
+                                                bool showKaraoke_local = g_karaoke_enabled && !g_karaoke_suspended &&
+                                                                         (g_lyric_count > 0 || g_karaoke_line_current[0] || g_karaoke_line_previous[0]) &&
+                                                                         g_bae.song_loaded && !g_bae.is_audio_file;
+                                                int karaokePanelHeight_local = 40;
 #endif
-                                            int statusY_local = ((showKeyboard_local || showWaveform_local) ? (keyboardPanel_local.y + keyboardPanel_local.h + 10) : (transportPanel.y + transportPanel.h + 10));
+                                                int statusY_local = ((showKeyboard_local || showWaveform_local) ? (keyboardPanel_local.y + keyboardPanel_local.h + 10) : (transportPanel.y + transportPanel.h + 10));
 #if SUPPORT_KARAOKE == TRUE
-                                            if (showKaraoke_local)
-                                                statusY_local = statusY_local + karaokePanelHeight_local + 5;
+                                                if (showKaraoke_local)
+                                                    statusY_local = statusY_local + karaokePanelHeight_local + 5;
 #endif
-                                            int playlistPanelY = statusY_local;
-                                            Rect playlistPanel = {10, playlistPanelY, 880, playlistPanelHeight};
+                                                int playlistPanelY = statusY_local;
+                                                Rect playlistPanel = {10, playlistPanelY, 880, playlistPanelHeight};
 
-                                            // Let the playlist module handle the wheel event
-                                            playlist_handle_mouse_wheel(mx, my, wy, playlistPanel);
+                                                // Let the playlist module handle the wheel event
+                                                playlist_handle_mouse_wheel(mx, my, wy, playlistPanel);
 #endif
+                                            }
                                         }
                                     }
                                 }
-                            }
                             }
                         }
                     }
@@ -1212,7 +1302,7 @@ int main(int argc, char *argv[])
                     // Get current mouse position to check if drop is over playlist
                     int drop_mx, drop_my;
                     SDL_GetMouseState(&drop_mx, &drop_my);
-                    
+
                     // Check file extension
                     const char *ext = strrchr(dropped, '.');
                     bool is_bank_file = false;
@@ -1224,18 +1314,18 @@ int main(int argc, char *argv[])
 #if USE_SF2_SUPPORT == TRUE
                         if (!is_bank_file)
                             is_bank_file = _stricmp(ext, ".sf2") == 0;
-#endif                            
+#endif
 #if USE_DLS_SUPPORT == TRUE
                         if (!is_bank_file)
                             is_bank_file = _stricmp(ext, ".dls") == 0;
 #endif
                         is_playlist_file = (_stricmp(ext, ".m3u") == 0);
 #else
-                        is_bank_file = strcasecmp(ext, ".hsb") == 0;                    
+                        is_bank_file = strcasecmp(ext, ".hsb") == 0;
 #if USE_SF2_SUPPORT == TRUE
                         if (!is_bank_file)
                             is_bank_file = strcasecmp(ext, ".sf2") == 0;
-#endif                            
+#endif
 #if USE_DLS_SUPPORT == TRUE
                         if (!is_bank_file)
                             is_bank_file = strcasecmp(ext, ".dls") == 0;
@@ -1307,7 +1397,7 @@ int main(int argc, char *argv[])
 #endif
                             int playlistPanelY = statusY_local;
                             Rect playlistPanel = {10, playlistPanelY, 880, playlistPanelHeight};
-                            
+
                             // Check if drop is over playlist panel
                             if (point_in(drop_mx, drop_my, playlistPanel))
                             {
@@ -2066,9 +2156,9 @@ int main(int argc, char *argv[])
 #endif
         SDL_RenderClear(R);
 
-    // Clear tooltips each frame
-    ui_clear_tooltip(&g_lsb_tooltip_visible);
-    ui_clear_tooltip(&g_msb_tooltip_visible);
+        // Clear tooltips each frame
+        ui_clear_tooltip(&g_lsb_tooltip_visible);
+        ui_clear_tooltip(&g_msb_tooltip_visible);
 
         // Colors driven by theme globals
         SDL_Color labelCol = g_text_color;
@@ -3901,11 +3991,11 @@ int main(int argc, char *argv[])
                         }
 #endif
 #if USE_VORBIS_ENCODER == TRUE
-                        else 
+                        else
                         {
                             export_dialog_type = 3; // Vorbis
                         }
-#endif                        
+#endif
                         char *export_file = save_export_dialog(export_dialog_type);
                         if (export_file)
                         {
@@ -4220,7 +4310,6 @@ int main(int argc, char *argv[])
                     int text_y = recFmtBtn.y + (recFmtBtn.h - text_h) / 2;
                     draw_text(R, text_x, text_y, g_midiRecordFormatNames[g_midiRecordFormatIndex], disabledTxt);
                 }
-
             }
             if (!g_midi_recording)
             {
@@ -4269,23 +4358,24 @@ int main(int argc, char *argv[])
                             // Choose save dialog and extension based on format using helper function
                             MidiRecordFormatInfo format_info = get_midi_record_format_info(g_midiRecordFormatIndex);
                             int export_dialog_type = 0; // Default to WAV
-                            
-                            switch (format_info.type) {
-                                case MIDI_RECORD_FORMAT_WAV:
-                                    export_dialog_type = 0; // WAV
-                                    break;
-                                case MIDI_RECORD_FORMAT_FLAC:
-                                    export_dialog_type = 1; // FLAC
-                                    break;
-                                case MIDI_RECORD_FORMAT_MP3:
-                                    export_dialog_type = 2; // MP3
-                                    break;
-                                case MIDI_RECORD_FORMAT_VORBIS:
-                                    export_dialog_type = 3; // OGG/Vorbis
-                                    break;
-                                default:
-                                    export_dialog_type = 0; // fallback to WAV
-                                    break;
+
+                            switch (format_info.type)
+                            {
+                            case MIDI_RECORD_FORMAT_WAV:
+                                export_dialog_type = 0; // WAV
+                                break;
+                            case MIDI_RECORD_FORMAT_FLAC:
+                                export_dialog_type = 1; // FLAC
+                                break;
+                            case MIDI_RECORD_FORMAT_MP3:
+                                export_dialog_type = 2; // MP3
+                                break;
+                            case MIDI_RECORD_FORMAT_VORBIS:
+                                export_dialog_type = 3; // OGG/Vorbis
+                                break;
+                            default:
+                                export_dialog_type = 0; // fallback to WAV
+                                break;
                             }
                             char *export_file = save_export_dialog(export_dialog_type);
                             if (export_file)
@@ -4328,7 +4418,7 @@ int main(int argc, char *argv[])
                                     MidiRecordFormatInfo format_info = get_midi_record_format_info(g_midiRecordFormatIndex);
                                     const char *ext = format_info.extension;
                                     int ext_len = strlen(ext);
-                                    
+
                                     if (L < ext_len || strcasecmp(export_file + L - ext_len, ext) != 0)
                                     {
                                         size_t n = L + ext_len + 1;
@@ -4364,7 +4454,7 @@ int main(int argc, char *argv[])
                                 BAECompressionType compression = BAE_COMPRESSION_NONE;
                                 int selectedCodecIndex = 0; // for UI state
                                 MidiRecordFormatInfo format_info = get_midi_record_format_info(g_midiRecordFormatIndex);
-                                
+
                                 if (format_info.type == MIDI_RECORD_FORMAT_WAV)
                                 {
                                     selectedCodecIndex = 0; // WAV
@@ -4373,7 +4463,7 @@ int main(int argc, char *argv[])
 #if USE_FLAC_ENCODER != FALSE
                                 else if (format_info.type == MIDI_RECORD_FORMAT_FLAC)
                                 {
-                                    selectedCodecIndex = 1; // FLAC  
+                                    selectedCodecIndex = 1; // FLAC
                                     compression = BAE_COMPRESSION_LOSSLESS;
                                 }
 #endif
@@ -4381,12 +4471,23 @@ int main(int argc, char *argv[])
                                 else if (format_info.type == MIDI_RECORD_FORMAT_MP3)
                                 {
                                     // Map MP3 bitrate to compression type
-                                    switch (format_info.bitrate) {
-                                        case 128000: compression = BAE_COMPRESSION_MPEG_128; break;
-                                        case 192000: compression = BAE_COMPRESSION_MPEG_192; break;
-                                        case 256000: compression = BAE_COMPRESSION_MPEG_256; break;
-                                        case 320000: compression = BAE_COMPRESSION_MPEG_320; break;
-                                        default: compression = BAE_COMPRESSION_MPEG_128; break;
+                                    switch (format_info.bitrate)
+                                    {
+                                    case 128000:
+                                        compression = BAE_COMPRESSION_MPEG_128;
+                                        break;
+                                    case 192000:
+                                        compression = BAE_COMPRESSION_MPEG_192;
+                                        break;
+                                    case 256000:
+                                        compression = BAE_COMPRESSION_MPEG_256;
+                                        break;
+                                    case 320000:
+                                        compression = BAE_COMPRESSION_MPEG_320;
+                                        break;
+                                    default:
+                                        compression = BAE_COMPRESSION_MPEG_128;
+                                        break;
                                     }
                                 }
 #endif
@@ -4394,22 +4495,33 @@ int main(int argc, char *argv[])
                                 else if (format_info.type == MIDI_RECORD_FORMAT_VORBIS)
                                 {
                                     // Map Vorbis bitrate to compression type
-                                    switch (format_info.bitrate) {
-                                        case 96000:  compression = BAE_COMPRESSION_VORBIS_96; break;
-                                        case 128000: compression = BAE_COMPRESSION_VORBIS_128; break;
-                                        case 256000: compression = BAE_COMPRESSION_VORBIS_256; break;
-                                        case 320000: compression = BAE_COMPRESSION_VORBIS_320; break;
-                                        default: compression = BAE_COMPRESSION_VORBIS_128; break;
+                                    switch (format_info.bitrate)
+                                    {
+                                    case 96000:
+                                        compression = BAE_COMPRESSION_VORBIS_96;
+                                        break;
+                                    case 128000:
+                                        compression = BAE_COMPRESSION_VORBIS_128;
+                                        break;
+                                    case 256000:
+                                        compression = BAE_COMPRESSION_VORBIS_256;
+                                        break;
+                                    case 320000:
+                                        compression = BAE_COMPRESSION_VORBIS_320;
+                                        break;
+                                    default:
+                                        compression = BAE_COMPRESSION_VORBIS_128;
+                                        break;
                                     }
                                 }
 #endif
 #else
-                                if (g_midiRecordFormatIndex != 1)
-                                {
-                                    set_status_message("MP3 export not supported in this build");
-                                    free(export_file);
-                                    export_file = NULL;
-                                }
+        if (g_midiRecordFormatIndex != 1)
+        {
+            set_status_message("MP3 export not supported in this build");
+            free(export_file);
+            export_file = NULL;
+        }
 #endif
 
                                 if (export_file)
@@ -4578,8 +4690,8 @@ int main(int argc, char *argv[])
                                                 }
                                             }
 #else
-                                            set_status_message("MP3 export not supported in this build");
-                                            free(export_file);
+                    set_status_message("MP3 export not supported in this build");
+                    free(export_file);
 #endif
                                         }
                                         else if (format_info.type == MIDI_RECORD_FORMAT_VORBIS)
@@ -4638,8 +4750,8 @@ int main(int argc, char *argv[])
                                                 }
                                             }
 #else
-                                            set_status_message("Vorbis export not supported in this build");
-                                            free(export_file);
+                    set_status_message("Vorbis export not supported in this build");
+                    free(export_file);
 #endif
                                         }
                                         else
@@ -4677,7 +4789,7 @@ int main(int argc, char *argv[])
                 {
                     // If MIDI recording is active, stop and save - use helper function
                     MidiRecordFormatInfo stop_format_info = get_midi_record_format_info(g_midiRecordFormatIndex);
-                    
+
                     if (stop_format_info.type == MIDI_RECORD_FORMAT_MIDI)
                     {
                         if (!midi_record_stop())
@@ -4756,7 +4868,7 @@ int main(int argc, char *argv[])
                             set_status_message("No Vorbis export in progress");
                         }
 #else
-                        set_status_message("Vorbis not supported in this build");
+            set_status_message("Vorbis not supported in this build");
 #endif
                     }
                     else
@@ -4997,7 +5109,7 @@ int main(int argc, char *argv[])
 #ifdef SUPPORT_MIDI_HW
             if (!g_exporting && !g_pcm_wav_recording && g_bae.mixer)
 #else
-            if (!g_exporting && g_bae.mixer)
+    if (!g_exporting && g_bae.mixer)
 #endif
             {
                 short sL = 0, sR = 0, out = 0;
@@ -5198,7 +5310,7 @@ int main(int argc, char *argv[])
             int pad = 4; // panel-relative padding
             int btnW = 90;
             int btnH = 30;            // fixed size (uniform for Settings and bank buttons)
-            int builtinW = btnW + 30; // make Builtin Bank wider to fit text
+            int builtinW = btnW + 10; // make Default Bank button width appropriate for text
             // Anchor buttons to bottom-right corner of statusPanel
             int baseX = statusPanel.x + statusPanel.w - pad - btnW;
             int baseY = statusPanel.y + statusPanel.h - pad - btnH;
@@ -5206,9 +5318,9 @@ int main(int argc, char *argv[])
             Rect settingsBtn = {baseX, baseY, btnW, btnH};
             // Spacing between buttons
             int gap = 8;
-            // Builtin Bank immediately left of Settings (wider)
+            // Default Bank immediately left of Settings (wider)
             Rect builtinBtn = {baseX - gap - builtinW, baseY, builtinW, btnH};
-            // Load Bank to the left of Builtin Bank
+            // Load Bank to the left of Default Bank
             Rect loadBankBtn = {builtinBtn.x - gap - btnW, baseY, btnW, btnH};
             bool settingsEnabled = !g_reverbDropdownOpen;
             bool overSettings = settingsEnabled && point_in(ui_mx, ui_my, settingsBtn);
@@ -5257,14 +5369,12 @@ int main(int argc, char *argv[])
             {
                 char fileBuf[1024] = {0};
 
-
-                
 #ifdef _WIN32
                 OPENFILENAMEA ofn;
                 ZeroMemory(&ofn, sizeof(ofn));
                 ofn.lStructSize = sizeof(ofn);
                 ofn.hwndOwner = NULL;
-                ofn.lpstrFilter = 
+                ofn.lpstrFilter =
 #if defined(USE_DLS_SUPPORT) && defined(USE_SF2_SUPPORT)
                     "Bank Files (*.hsb;*.dls;*.sf2)\0*.hsb;*.dls;*.sf2\0HSB Banks\0*.hsb\0DLS Banks\0*.dls\0SF2 SoundFonts\0*.sf2\0All Files\0*.*\0"
 #elif defined(USE_DLS_SUPPORT)
@@ -5282,73 +5392,104 @@ int main(int argc, char *argv[])
                 if (GetOpenFileNameA(&ofn))
                     load_bank(fileBuf, playing, transpose, tempo, volume, loopPlay, reverbType, ch_enable, true);
 #else
-                const char *cmds[] = {
+        const char *cmds[] = {
 #if defined(USE_DLS_SUPPORT) && defined(USE_SF2_SUPPORT)
-                    "zenity --file-selection --title='Load Patch Bank' --file-filter='Bank Files | *.hsb *.dls *.sf2' 2>/dev/null",
-                    "kdialog --getopenfilename . '*.hsb *.dls *.sf2' 2>/dev/null",
-                    "yad --file-selection --title='Load Patch Bank' --file-filter='Bank Files | *.hsb *.dls *.sf2' 2>/dev/null",
+            "zenity --file-selection --title='Load Patch Bank' --file-filter='Bank Files | *.hsb *.dls *.sf2' 2>/dev/null",
+            "kdialog --getopenfilename . '*.hsb *.dls *.sf2' 2>/dev/null",
+            "yad --file-selection --title='Load Patch Bank' --file-filter='Bank Files | *.hsb *.dls *.sf2' 2>/dev/null",
 #elif defined(USE_DLS_SUPPORT)
-                    "zenity --file-selection --title='Load Patch Bank' --file-filter='Bank Files | *.hsb *.dls' 2>/dev/null",
-                    "kdialog --getopenfilename . '*.hsb *.dls' 2>/dev/null",
-                    "yad --file-selection --title='Load Patch Bank' --file-filter='Bank Files | *.hsb *.dls' 2>/dev/null",
+            "zenity --file-selection --title='Load Patch Bank' --file-filter='Bank Files | *.hsb *.dls' 2>/dev/null",
+            "kdialog --getopenfilename . '*.hsb *.dls' 2>/dev/null",
+            "yad --file-selection --title='Load Patch Bank' --file-filter='Bank Files | *.hsb *.dls' 2>/dev/null",
 #elif defined(USE_SF2_SUPPORT)
-                    "zenity --file-selection --title='Load Patch Bank' --file-filter='Bank Files | *.hsb *.sf2' 2>/dev/null",
-                    "kdialog --getopenfilename . '*.hsb *.sf2' 2>/dev/null",
-                    "yad --file-selection --title='Load Patch Bank' --file-filter='Bank Files | *.hsb *.sf2' 2>/dev/null",
+            "zenity --file-selection --title='Load Patch Bank' --file-filter='Bank Files | *.hsb *.sf2' 2>/dev/null",
+            "kdialog --getopenfilename . '*.hsb *.sf2' 2>/dev/null",
+            "yad --file-selection --title='Load Patch Bank' --file-filter='Bank Files | *.hsb *.sf2' 2>/dev/null",
 #else
-                    "zenity --file-selection --title='Load Patch Bank' --file-filter='Bank Files | *.hsb' 2>/dev/null",
-                    "kdialog --getopenfilename . '*.hsb' 2>/dev/null",
-                    "yad --file-selection --title='Load Patch Bank' --file-filter='Bank Files | *.hsb' 2>/dev/null",
+            "zenity --file-selection --title='Load Patch Bank' --file-filter='Bank Files | *.hsb' 2>/dev/null",
+            "kdialog --getopenfilename . '*.hsb' 2>/dev/null",
+            "yad --file-selection --title='Load Patch Bank' --file-filter='Bank Files | *.hsb' 2>/dev/null",
 #endif
-                    NULL};
-                for (int ci = 0; cmds[ci]; ++ci)
+            NULL};
+        for (int ci = 0; cmds[ci]; ++ci)
+        {
+            FILE *p = popen(cmds[ci], "r");
+            if (!p)
+                continue;
+            if (fgets(fileBuf, sizeof(fileBuf), p))
+            {
+                pclose(p);
+                size_t l = strlen(fileBuf);
+                while (l > 0 && (fileBuf[l - 1] == '\n' || fileBuf[l - 1] == '\r'))
+                    fileBuf[--l] = '\0';
+                if (l > 0)
                 {
-                    FILE *p = popen(cmds[ci], "r");
-                    if (!p)
-                        continue;
-                    if (fgets(fileBuf, sizeof(fileBuf), p))
-                    {
-                        pclose(p);
-                        size_t l = strlen(fileBuf);
-                        while (l > 0 && (fileBuf[l - 1] == '\n' || fileBuf[l - 1] == '\r'))
-                            fileBuf[--l] = '\0';
-                        if (l > 0)
-                        {
-                            if ((l > 4 && strcasecmp(fileBuf + l - 4, ".hsb") == 0)
+                    if ((l > 4 && strcasecmp(fileBuf + l - 4, ".hsb") == 0)
 #if defined(USE_DLS_SUPPORT)
-                                || (l > 4 && strcasecmp(fileBuf + l - 4, ".dls") == 0)
+                        || (l > 4 && strcasecmp(fileBuf + l - 4, ".dls") == 0)
 #endif
 #if defined(USE_SF2_SUPPORT)
-                                || (l > 4 && strcasecmp(fileBuf + l - 4, ".sf2") == 0)
+                        || (l > 4 && strcasecmp(fileBuf + l - 4, ".sf2") == 0)
 #endif
-                                )
-                            {
-                                load_bank(fileBuf, playing, transpose, tempo, volume, loopPlay, reverbType, ch_enable, true);
-                            }
-                            else
-                            {
-#if defined(USE_DLS_SUPPORT) && defined(USE_SF2_SUPPORT)
-                                BAE_PRINTF("Not a bank file (.hsb, .dls, or .sf2): %s\n", fileBuf);
-#elif defined(USE_DLS_SUPPORT)
-                                BAE_PRINTF("Not a bank file (.hsb or .dls): %s\n", fileBuf);
-#elif defined(USE_SF2_SUPPORT)
-                                BAE_PRINTF("Not a bank file (.hsb or .sf2): %s\n", fileBuf);
-#else
-                                BAE_PRINTF("Not a bank file (.hsb): %s\n", fileBuf);
-#endif
-                            }
-                        }
-                        break;
+                    )
+                    {
+                        load_bank(fileBuf, playing, transpose, tempo, volume, loopPlay, reverbType, ch_enable, true);
                     }
-                    pclose(p);
+                    else
+                    {
+#if defined(USE_DLS_SUPPORT) && defined(USE_SF2_SUPPORT)
+                        BAE_PRINTF("Not a bank file (.hsb, .dls, or .sf2): %s\n", fileBuf);
+#elif defined(USE_DLS_SUPPORT)
+                        BAE_PRINTF("Not a bank file (.hsb or .dls): %s\n", fileBuf);
+#elif defined(USE_SF2_SUPPORT)
+                        BAE_PRINTF("Not a bank file (.hsb or .sf2): %s\n", fileBuf);
+#else
+                        BAE_PRINTF("Not a bank file (.hsb): %s\n", fileBuf);
+#endif
+                    }
                 }
+                break;
+            }
+            pclose(p);
+        }
 #endif
             }
 
-// Built-in Bank button (right of Load Bank)
-#ifdef _BUILT_IN_PATCHES
-            bool builtin_loaded = (g_current_bank_path[0] && strcmp(g_current_bank_path, "__builtin__") == 0);
-            bool builtinEnabled = !builtin_loaded && !modal_block && !g_reverbDropdownOpen;
+            // Default Bank button (right of Load Bank)
+            bool defaultBankExists = false;
+#if defined(_WIN32) || defined(__linux__) || defined(__APPLE__)
+            // Check if we should show the Default Bank button
+
+            // Check if patches.hsb exists in executable directory
+
+            char exe_dir[512];
+            char patches_path[1024];
+            get_executable_directory(exe_dir, sizeof(exe_dir));
+#ifdef _WIN32
+            snprintf(patches_path, sizeof(patches_path), "%s\\patches.hsb", exe_dir);
+#else
+            snprintf(patches_path, sizeof(patches_path), "%s/patches.hsb", exe_dir);
+#endif
+            FILE *test_file = fopen(patches_path, "r");
+            if (test_file)
+            {
+                fclose(test_file);
+                defaultBankExists = true;
+            }
+
+#endif
+
+            bool default_loaded = false;
+            bool builtin_loaded = false;
+            if (defaultBankExists)
+            {
+                default_loaded = (g_current_bank_path[0] && strcmp(g_current_bank_path, patches_path) == 0);
+            }
+#if _BUILT_IN_PATCHES == TRUE
+            builtin_loaded = (g_current_bank_path[0] && strcmp(g_current_bank_path, "__builtin__") == 0);
+#endif
+
+            bool builtinEnabled = !modal_block && !g_reverbDropdownOpen;
             bool overBuiltin = builtinEnabled && point_in(ui_mx, ui_my, builtinBtn);
             SDL_Color bbg = builtinEnabled ? (overBuiltin ? g_button_hover : g_button_base) : g_button_base;
             if (!builtinEnabled)
@@ -5356,9 +5497,30 @@ int main(int argc, char *argv[])
             draw_rect(R, builtinBtn, bbg);
             draw_frame(R, builtinBtn, g_button_border);
             int btw = 0, bth = 0;
-            measure_text("Built-in Bank", &btw, &bth);
-            draw_text(R, builtinBtn.x + (builtinBtn.w - btw) / 2, builtinBtn.y + (builtinBtn.h - bth) / 2, "Built-in Bank", g_button_text);
+            measure_text("Default Bank", &btw, &bth);
+            draw_text(R, builtinBtn.x + (builtinBtn.w - btw) / 2, builtinBtn.y + (builtinBtn.h - bth) / 2, "Default Bank", g_button_text);
             if (builtinEnabled && ui_mclick && overBuiltin)
+            {
+                if (defaultBankExists && !default_loaded)
+                {
+                    if (!load_bank(patches_path, playing, transpose, tempo, volume, loopPlay, reverbType, ch_enable, true))
+                    {
+                        set_status_message("Failed to load default bank");
+                    }
+#if _BUILT_IN_PATCHES == TRUE
+                }
+                else if (!builtin_loaded && !defaultBankExists)
+                {
+                    if (!load_bank("__builtin__", playing, transpose, tempo, volume, loopPlay, reverbType, ch_enable, true))
+                    {
+                        set_status_message("Failed to load default bank");
+                    }
+#endif
+                }
+            }
+            // Right-click loads built-in bank (if available) regardless of default bank existence
+#if _BUILT_IN_PATCHES == TRUE
+            if (overBuiltin && ui_rclick && !builtin_loaded)
             {
                 if (!load_bank("__builtin__", playing, transpose, tempo, volume, loopPlay, reverbType, ch_enable, true))
                 {
@@ -5713,7 +5875,7 @@ int main(int argc, char *argv[])
         if (g_midiRecordFormatDropdownOpen)
         {
             // Reconstruct the record format button rect using the same calculation as above
-            Rect recRect = {348, 215, 80, 22}; // Same as record button
+            Rect recRect = {348, 215, 80, 22};                          // Same as record button
             Rect recFmtBtn = {recRect.x + recRect.w + 8, 215, 234, 22}; // Same calculation as in button creation
             ui_dropdown_two_column(R, recFmtBtn, &g_midiRecordFormatIndex, g_midiRecordFormatNames, g_midiRecordFormatCount, &g_midiRecordFormatDropdownOpen, mx, my, mdown, mclick);
         }

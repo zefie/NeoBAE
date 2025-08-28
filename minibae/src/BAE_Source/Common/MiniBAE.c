@@ -1955,14 +1955,6 @@ static BAEResult PV_BAEMixer_AddBank(BAEMixer mixer, XFILE newPatchFile)
     return BAE_TranslateOPErr(err);
 }
 
-#if _BUILT_IN_PATCHES == TRUE
-BAEResult BAEMixer_LoadBuiltinBank(BAEMixer mixer, BAEBankToken *outToken) {
-    extern const unsigned char BAE_PATCHES[];
-    extern const unsigned long BAE_PATCHES_size;
-    return BAEMixer_AddBankFromMemory(mixer, (void *)BAE_PATCHES, BAE_PATCHES_size, outToken);
-}
-#endif
-
 // BAEMixer_AddBankFromMemory()
 // ------------------------------------
 //
@@ -2010,6 +2002,19 @@ BAEResult BAEMixer_AddBankFromMemory(BAEMixer mixer, void *pAudioFile, uint32_t 
     }
     return theErr;
 }
+
+#if _BUILT_IN_PATCHES == TRUE
+// BAEMixer_AddBankFromFile()
+// ------------------------------------
+//
+// Loads the built in patches via BAEMixer_AddBankFromMemory
+//
+BAEResult BAEMixer_LoadBuiltinBank(BAEMixer mixer, BAEBankToken *outToken) {
+    extern const unsigned char BAE_PATCHES[];
+    extern const unsigned long BAE_PATCHES_size;
+    return BAEMixer_AddBankFromMemory(mixer, (void *)BAE_PATCHES, BAE_PATCHES_size, outToken);
+}
+#endif
 
 // BAEMixer_AddBankFromFile()
 // ------------------------------------

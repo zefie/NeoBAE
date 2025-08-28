@@ -794,7 +794,8 @@ typedef int32_t UNIT_TYPE;
         SQUARE_WAVE = 23,
         SQUARE_WAVE2 = 24,
         SAWTOOTH_WAVE = 25,
-        SAWTOOTH_WAVE2 = 26
+        SAWTOOTH_WAVE2 = 26,
+        SINE_WAVE_REAL = 27,
 #else
     SINE_WAVE = SINE_WAVE_LONG,
     TRIANGLE_WAVE = TRIANGLE_WAVE_LONG,

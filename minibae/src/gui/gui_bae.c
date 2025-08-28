@@ -561,14 +561,14 @@ bool bae_load_bank(const char *bank_path)
         SF2_Bank *sf2Bank = NULL;
         XFILENAME filename;
         XConvertPathToXFILENAME((BAEPathName)bank_path, &filename);
-        
+
         OPErr err = SF2_LoadBank(&filename, &sf2Bank);
         if (err != NO_ERR || !sf2Bank)
         {
             BAE_PRINTF("SF2 bank load failed: %d %s\n", err, bank_path);
             return false;
         }
-        
+
         // Add to SF2 bank manager
         err = SF2_AddBankToManager(sf2Bank, bank_path);
         if (err != NO_ERR)
@@ -577,9 +577,9 @@ bool bae_load_bank(const char *bank_path)
             SF2_UnloadBank(sf2Bank);
             return false;
         }
-        
+
         BAE_PRINTF("SF2 bank loaded: %s (presets=%u)\n", bank_path, sf2Bank->numPresets);
-        
+
         // Debug: List first few presets
         if (sf2Bank->presets && sf2Bank->numPresets > 0)
         {
@@ -588,11 +588,11 @@ bool bae_load_bank(const char *bank_path)
             for (uint32_t i = 0; i < maxShow; i++)
             {
                 SF2_Preset *preset = &sf2Bank->presets[i];
-                BAE_PRINTF("  Preset %u: bank=%d, program=%d, name=%.*s\n", 
-                          i, preset->bank, preset->preset, 20, preset->name);
+                BAE_PRINTF("  Preset %u: bank=%d, program=%d, name=%.*s\n",
+                           i, preset->bank, preset->preset, 20, preset->name);
             }
         }
-        
+
         // Mark as loaded
         g_bae.bank_loaded = true;
         return true;
@@ -845,7 +845,7 @@ bool bae_load_song(const char *path)
 #ifdef SUPPORT_MIDI_HW
     // If MIDI Output already enabled, register engine MIDI event callback so events are forwarded
     if (g_midi_output_enabled && g_bae.song)
-    {        
+    {
         BAESong_SetMidiEventCallback(g_bae.song, gui_midi_event_callback, NULL);
     }
 #endif
@@ -890,18 +890,18 @@ void bae_set_volume(int volPct)
 
     if (g_bae.is_audio_file && g_bae.sound)
     {
-          /* For raw audio files we apply an extra per-sound multiplier so the
-              UI's "100%" feels louder. Use a smooth, monotonic mapping so
-              increasing the UI percent never reduces the resulting gain. */
-          double soundMultiplierBase = 3.0;
-          double soundMultiplier = soundMultiplierBase * (1.0 + (double)volPct / 100.0);
-          double soundGain = engineGain * soundMultiplier;
+        /* For raw audio files we apply an extra per-sound multiplier so the
+            UI's "100%" feels louder. Use a smooth, monotonic mapping so
+            increasing the UI percent never reduces the resulting gain. */
+        double soundMultiplierBase = 3.0;
+        double soundMultiplier = soundMultiplierBase * (1.0 + (double)volPct / 100.0);
+        double soundGain = engineGain * soundMultiplier;
         if (soundGain < 0.0)
             soundGain = 0.0;
         BAESound_SetVolume(g_bae.sound, FLOAT_TO_UNSIGNED_FIXED(soundGain));
-          /* remember actual per-sound engine gain applied so BAESound_Start
-              can use the same value when it starts playback */
-          g_last_applied_sound_volume = soundGain;
+        /* remember actual per-sound engine gain applied so BAESound_Start
+            can use the same value when it starts playback */
+        g_last_applied_sound_volume = soundGain;
     }
     else if (!g_bae.is_audio_file && g_bae.song)
     {
@@ -994,14 +994,14 @@ void bae_seek_ms(int ms)
         return;
 
     uint32_t us = (uint32_t)ms * 1000UL;
-    
+
 #ifdef SUPPORT_MIDI_HW
     // Suppress MIDI output during seeking to avoid sending events prematurely
     g_midi_output_suppressed_during_seek = true;
 #endif
-    
+
     BAESong_SetMicrosecondPosition(g_bae.song, us);
-    
+
 #ifdef SUPPORT_MIDI_HW
     g_midi_output_suppressed_during_seek = false;
 #endif
