@@ -209,6 +209,7 @@ void SF2_UnloadBank(SF2_Bank *pBank);
 GM_Instrument *SF2_CreateInstrumentFromPreset(SF2_Bank *pBank, uint16_t bank, uint16_t preset, OPErr *pErr);
 GM_Instrument *SF2_CreateInstrumentFromPresetWithNote(SF2_Bank *pBank, uint16_t bank, uint16_t preset, uint16_t note, OPErr *pErr);
 OPErr SF2_GetPresetInfo(SF2_Bank *pBank, uint16_t index, char *name, uint16_t *bank, uint16_t *preset);
+uint32_t SF2_LoadedBankCount(void);
 
 // SF2 Bank manager functions
 OPErr SF2_InitBankManager(void);

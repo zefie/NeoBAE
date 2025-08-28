@@ -16,7 +16,7 @@ ifneq ($(WASM),1)
 		KARAOKE := 1
 		PLAYLIST :=1
 		#SF2_SUPPORT := 1 # Optional enable, incomplete, disabled by default
-		DLS_SUPPORT := 0 # explicitly disable, not implemented
+		#DLS_SUPPORT := 0 # explicitly disable, not implemented
 	endif
 endif
 

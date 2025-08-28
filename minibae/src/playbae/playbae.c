@@ -44,10 +44,10 @@
 #include <stdarg.h>
 #include <stdint.h>
 #include "bankinfo.h" // reuse embedded bank metadata for friendly names
-#if USE_SF2_SUPPORT
+#if USE_SF2_SUPPORT == TRUE
 #include "GenSF2.h"
 #endif
-#if USE_DLS_SUPPORT
+#if USE_DLS_SUPPORT == TRUE
 #include "GenDLS.h"
 #endif
 #ifdef main
@@ -1444,8 +1444,9 @@ int main(int argc, char *argv[])
          if (PV_ParseCommands(argc, argv, "-p", TRUE, parmFile))
          {
             const char *ext = strrchr(parmFile, '.');
+            XBOOL bankLoaded = FALSE;
 #if USE_SF2_SUPPORT == TRUE
-            if (ext && strcasecmp(ext, ".sf2") == 0) {
+            if (ext && strcasecmp(ext, ".sf2") == 0 && !bankLoaded) {
                SF2_Bank *sf2Bank = NULL;
                XFILENAME filename;
                XConvertPathToXFILENAME((BAEPathName)parmFile, &filename);
@@ -1455,10 +1456,11 @@ int main(int argc, char *argv[])
                   return 1;
                }
                err = SF2_AddBankToManager(sf2Bank, parmFile);
+               bankLoaded = TRUE;
             }
 #endif
 #if USE_DLS_SUPPORT == TRUE
-            if (ext && strcasecmp(ext, ".dls") == 0) {
+            if (ext && strcasecmp(ext, ".dls") == 0 && !bankLoaded) {
                DLS_Bank *dls = NULL;
                XFILENAME filename;
                XConvertPathToXFILENAME((BAEPathName)parmFile, &filename);
@@ -1469,10 +1471,16 @@ int main(int argc, char *argv[])
                   return 1;                  
                }
                err = DLS_AddBankToManager(dls, parmFile);
+               bankLoaded = TRUE;
             }
 #endif
-            if (ext && strcasecmp(ext, ".hsb") == 0) {
+            if (ext && strcasecmp(ext, ".hsb") == 0 && !bankLoaded) {
                err = BAEMixer_AddBankFromFile(theMixer, (BAEPathName)parmFile, &bank);
+               bankLoaded = TRUE;
+            }
+            if (!bankLoaded) {
+               playbae_printf("Unsupported bank file type: %s\n", parmFile);
+               return 1;
             }
             if (err == BAE_NO_ERROR)
             {

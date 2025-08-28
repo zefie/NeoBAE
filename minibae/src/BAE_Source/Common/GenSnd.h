@@ -2158,15 +2158,15 @@ typedef int32_t UNIT_TYPE;
         FILE_AIFF_TYPE = 1,
         FILE_WAVE_TYPE,
         FILE_AU_TYPE
-#if USE_MPEG_DECODER != FALSE
+#if USE_MPEG_DECODER == TRUE
         ,
         FILE_MPEG_TYPE
 #endif
-#if USE_FLAC_DECODER != FALSE || USE_FLAC_ENCODER != FALSE
+#if USE_FLAC_DECODER == TRUE || USE_FLAC_ENCODER == TRUE
         ,
         FILE_FLAC_TYPE
 #endif
-#if USE_VORBIS_DECODER != FALSE || USE_VORBIS_ENCODER != FALSE
+#if USE_VORBIS_DECODER == TRUE || USE_VORBIS_ENCODER == TRUE
         ,
         FILE_VORBIS_TYPE
 #endif
@@ -2182,7 +2182,7 @@ typedef int32_t UNIT_TYPE;
 
     OPErr GM_WriteAudioBufferToFile(XFILE file, AudioFileType type, void *buffer, int32_t size, int32_t channels, int32_t sampleSize);
 
-#if USE_SF2_SUPPORT != FALSE
+#if USE_SF2_SUPPORT == TRUE
     // SF2 SoundFont support functions
     struct SF2_Bank;
     typedef struct SF2_Bank SF2_Bank;

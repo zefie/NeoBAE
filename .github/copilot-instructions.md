@@ -39,6 +39,21 @@ make -f Makefile.gui -j$(nproc)
 
 # WebAssembly
 make -f Makefile.emcc -j$(nproc)
+
+# When debugging
+make DEBUG=1 -j$(nproc)
+
+# When debugging DLS
+make DEBUG=1 DLS_SUPPORT=1 -j$(nproc)
+
+# When debugging SF2
+make DEBUG=1 SF2_SUPPORT=1 -j$(nproc)
+
+# Debugging with playbae (DLS)
+bin/playbae -f /mnt/d/Music/MIDI/Mario/kart-credits.mid -p /home/zefie/Downloads/gm.dls -t 3 2>&1
+
+# Debugging with playbae (SF2)
+bin/playbae -f /mnt/d/Music/MIDI/Mario/kart-credits.mid -p /mnt/d/Music/MIDI/_Soundfonts/CT8MGM.sf2 -t 3 2>&1
 ```
 
 ### Platform Support

@@ -240,8 +240,12 @@
 #include "X_Assert.h"
 #include <stdint.h>
 
-#if USE_SF2_SUPPORT
+#if USE_SF2_SUPPORT == TRUE
 #include "GenSF2.h"
+#endif
+
+#if USE_DLS_SUPPORT == TRUE
+#include "GenDLS.h"
 #endif
 
 #define DEBUG_DISPLAY_PATCHES   1
@@ -1016,21 +1020,38 @@ OPErr GM_LoadInstrument(GM_Song *pSong,
         if (pSong)
         {
             theErr = NO_ERR;
-
+            XBOOL instrumentLoaded = FALSE;
             theI = pSong->instrumentData[instrument];
             // use cached instrument, if its not there, then load it
             if (theI == NULL)
             {
-#if USE_SF2_SUPPORT
-                // Try loading from SF2 banks first
-                theI = PV_GetSF2Instrument(pSong, instrument, &theErr);
-                if (theI != NULL && theErr == NO_ERR)
+#if USE_SF2_SUPPORT == TRUE                
+                if (SF2_LoadedBankCount() > 0)
                 {
-                    // Store the SF2 instrument in the song's instrument array
-                    pSong->instrumentData[instrument] = theI;
+                    // Try loading from SF2 banks first
+                    theI = PV_GetSF2Instrument(pSong, instrument, &theErr);
+                    if (theI != NULL && theErr == NO_ERR)
+                    {
+                        // Store the SF2 instrument in the song's instrument array
+                        pSong->instrumentData[instrument] = theI;
+                        instrumentLoaded = TRUE;
+                    }
                 }
-                else
 #endif
+#if USE_DLS_SUPPORT == TRUE                
+                if (DLS_LoadedBankCount() > 0)
+                {
+                    // Try loading from DLS banks first
+                    theI = PV_GetDLSInstrument(pSong, instrument, &theErr);
+                    if (theI != NULL && theErr == NO_ERR)
+                    {
+                        // Store the SF2 instrument in the song's instrument array
+                        pSong->instrumentData[instrument] = theI;
+                        instrumentLoaded = TRUE;
+                    }
+                }
+#endif
+                if (!instrumentLoaded)
                 {
                     // Reset error code for HSB loading attempt
                     theErr = NO_ERR;

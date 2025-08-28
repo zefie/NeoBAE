@@ -2822,4 +2822,9 @@ static GM_Instrument *PV_SF2_CreateKeymapSplitInstrument(SF2_Bank *pBank, int32_
     return pMainInstrument;
 }
 
+uint32_t SF2_LoadedBankCount(void)
+{
+    return g_sf2Manager.numBanks;
+}
+
 #endif // USE_SF2_SUPPORT
