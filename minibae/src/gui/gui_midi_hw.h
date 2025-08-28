@@ -51,6 +51,7 @@ extern unsigned char g_midi_bank_lsb[16];
 
 // MIDI output control
 extern bool g_master_muted_for_midi_out;
+extern bool g_midi_output_suppressed_during_seek;
 
 // PCM recording state
 extern bool g_pcm_wav_recording;

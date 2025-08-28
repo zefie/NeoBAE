@@ -800,6 +800,9 @@ int main(int argc, char *argv[])
     // Auto-load playlist.m3u from application directory if it exists
 #endif
 
+    // Initialize export subsystem
+    export_init();
+
     char exe_dir[512];
     get_executable_directory(exe_dir, sizeof(exe_dir));
 #if SUPPORT_PLAYLIST == TRUE // Initialize playlist system

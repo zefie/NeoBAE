@@ -994,7 +994,17 @@ void bae_seek_ms(int ms)
         return;
 
     uint32_t us = (uint32_t)ms * 1000UL;
+    
+#ifdef SUPPORT_MIDI_HW
+    // Suppress MIDI output during seeking to avoid sending events prematurely
+    g_midi_output_suppressed_during_seek = true;
+#endif
+    
     BAESong_SetMicrosecondPosition(g_bae.song, us);
+    
+#ifdef SUPPORT_MIDI_HW
+    g_midi_output_suppressed_during_seek = false;
+#endif
 
     // If the song had previously finished and the user is allowed to seek
     // past the end via the UI, preserve this position so Play will resume
@@ -1206,15 +1216,27 @@ bool bae_play(bool *playing)
                 if (startPosUs == 0)
                 {
                     // Standard start from beginning: position then preroll
+#ifdef SUPPORT_MIDI_HW
+                    g_midi_output_suppressed_during_seek = true;
+#endif
                     BAESong_SetMicrosecondPosition(g_bae.song, 0);
+#ifdef SUPPORT_MIDI_HW
+                    g_midi_output_suppressed_during_seek = false;
+#endif
                     BAESong_Preroll(g_bae.song);
                 }
                 else
                 {
                     // For resume, preroll from start (engine needs initial setup) then seek to desired position AFTER preroll
+#ifdef SUPPORT_MIDI_HW
+                    g_midi_output_suppressed_during_seek = true;
+#endif
                     BAESong_SetMicrosecondPosition(g_bae.song, 0);
                     BAESong_Preroll(g_bae.song);
                     BAESong_SetMicrosecondPosition(g_bae.song, startPosUs);
+#ifdef SUPPORT_MIDI_HW
+                    g_midi_output_suppressed_during_seek = false;
+#endif
                 }
 
                 BAE_PRINTF("Preroll complete. Start position now %u us for '%s'\n", startPosUs == 0 ? 0 : startPosUs, g_bae.loaded_path);
@@ -1224,12 +1246,18 @@ bool bae_play(bool *playing)
                 {
                     BAE_PRINTF("BAESong_Start failed (%d) for '%s' (will try preroll+restart)\n", sr, g_bae.loaded_path);
                     // Try a safety preroll + rewind then attempt once more
+#ifdef SUPPORT_MIDI_HW
+                    g_midi_output_suppressed_during_seek = true;
+#endif
                     BAESong_SetMicrosecondPosition(g_bae.song, 0);
                     BAESong_Preroll(g_bae.song);
                     if (startPosUs)
                     {
                         BAESong_SetMicrosecondPosition(g_bae.song, startPosUs);
                     }
+#ifdef SUPPORT_MIDI_HW
+                    g_midi_output_suppressed_during_seek = false;
+#endif
                     sr = BAESong_Start(g_bae.song, 0);
                     if (sr != BAE_NO_ERROR)
                     {
@@ -1360,7 +1388,13 @@ void bae_stop(bool *playing, int *progress)
             midi_output_send_all_notes_off();
         }
 #endif
+#ifdef SUPPORT_MIDI_HW
+        g_midi_output_suppressed_during_seek = true;
+#endif
         BAESong_SetMicrosecondPosition(g_bae.song, 0);
+#ifdef SUPPORT_MIDI_HW
+        g_midi_output_suppressed_during_seek = false;
+#endif
         *playing = false;
         *progress = 0;
         g_bae.is_playing = false;

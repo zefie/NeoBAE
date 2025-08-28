@@ -99,6 +99,7 @@ unsigned char g_midi_bank_lsb[16] = {0};
 
 // MIDI output control
 bool g_master_muted_for_midi_out = false;
+bool g_midi_output_suppressed_during_seek = false;
 
 // PCM recording state
 bool g_pcm_wav_recording = false;
@@ -146,6 +147,8 @@ void gui_midi_event_callback(void *threadContext, struct GM_Song *pSong, const u
     (void)timeMicroseconds;
     (void)ref;
     if (!g_midi_output_enabled)
+        return;
+    if (g_midi_output_suppressed_during_seek)
         return;
     if (!midiMessage || length <= 0)
         return;

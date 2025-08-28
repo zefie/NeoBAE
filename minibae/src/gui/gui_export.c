@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "X_Assert.h"
+#include "gui_midi_hw.h"
 
 #ifdef _WIN32
 #include <windows.h>
@@ -253,7 +254,9 @@ bool bae_start_wav_export(const char *output_file)
     }
 
     // Rewind to beginning (export always starts from start)
+    g_midi_output_suppressed_during_seek = true;
     BAESong_SetMicrosecondPosition(g_bae.song, 0);
+    g_midi_output_suppressed_during_seek = false;
 
     // CORRECTED ORDER: Start export FIRST, then start song
     // This is the correct order based on working MBAnsi test code
@@ -272,14 +275,18 @@ bool bae_start_wav_export(const char *output_file)
 
     // Auto-start path: preroll then start
     BAESong_Stop(g_bae.song, FALSE);
+    g_midi_output_suppressed_during_seek = true;
     BAESong_SetMicrosecondPosition(g_bae.song, 0);
+    g_midi_output_suppressed_during_seek = false;
     BAESong_Preroll(g_bae.song);
     result = BAESong_Start(g_bae.song, 0);
     if (result != BAE_NO_ERROR)
     {
         BAE_PRINTF("Export: initial BAESong_Start failed (%d), retrying with re-preroll\n", result);
         BAESong_Stop(g_bae.song, FALSE);
+        g_midi_output_suppressed_during_seek = true;
         BAESong_SetMicrosecondPosition(g_bae.song, 0);
+        g_midi_output_suppressed_during_seek = false;
         BAESong_Preroll(g_bae.song);
         result = BAESong_Start(g_bae.song, 0);
         if (result != BAE_NO_ERROR)
@@ -405,7 +412,9 @@ bool bae_start_mpeg_export(const char *output_file, int codec_index)
     }
 
     // Rewind to beginning
+    g_midi_output_suppressed_during_seek = true;
     BAESong_SetMicrosecondPosition(g_bae.song, 0);
+    g_midi_output_suppressed_during_seek = false;
 
     // Determine output type: default MPEG, but switch to Vorbis if selected compression is Vorbis
     BAEFileType outType = BAE_MPEG_TYPE;
@@ -431,7 +440,9 @@ bool bae_start_mpeg_export(const char *output_file, int codec_index)
 
     // Start the song to drive export
     BAESong_Stop(g_bae.song, FALSE);
+    g_midi_output_suppressed_during_seek = true;
     BAESong_SetMicrosecondPosition(g_bae.song, 0);
+    g_midi_output_suppressed_during_seek = false;
     BAESong_Preroll(g_bae.song);
     result = BAESong_Start(g_bae.song, 0);
     if (result != BAE_NO_ERROR)
@@ -565,7 +576,9 @@ void bae_stop_wav_export()
         // Restore original position
         if (g_bae.song)
         {
+            g_midi_output_suppressed_during_seek = true;
             BAESong_SetMicrosecondPosition(g_bae.song, g_bae.position_us_before_export);
+            g_midi_output_suppressed_during_seek = false;
         }
 
         // Re-engage hardware audio if we had it before
@@ -585,7 +598,9 @@ void bae_stop_wav_export()
         {
             // Restart song from restored position
             BAESong_Preroll(g_bae.song);
+            g_midi_output_suppressed_during_seek = true;
             BAESong_SetMicrosecondPosition(g_bae.song, g_bae.position_us_before_export);
+            g_midi_output_suppressed_during_seek = false;
             if (BAESong_Start(g_bae.song, 0) == BAE_NO_ERROR)
             {
                 g_bae.is_playing = true;
@@ -637,7 +652,9 @@ void bae_service_wav_export()
                 g_bae.loop_was_enabled_before_export = false;
                 if (g_bae.song)
                 {
+                    g_midi_output_suppressed_during_seek = true;
                     BAESong_SetMicrosecondPosition(g_bae.song, g_bae.position_us_before_export);
+                    g_midi_output_suppressed_during_seek = false;
                 }
                 g_bae.is_playing = g_bae.was_playing_before_export;
             }
@@ -664,7 +681,9 @@ void bae_service_wav_export()
 
     // The lower this is, the higher the chance of a note ending prematurely?? - zef
     // But setting it too high can also slow it down and do the same?? - zef
-    short max_iterations = 9999; // <-- no touch
+    // 9999 is too fast though, the GUI can freeze in BAE Loop mode, making it hard to recover.
+    // can't thread it, still drops notes... 
+    short max_iterations = 9999; // no touchy
 
     for (int i = 0; i < max_iterations && g_exporting; ++i)
     {
