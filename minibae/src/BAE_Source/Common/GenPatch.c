@@ -240,10 +240,6 @@
 #include "X_Assert.h"
 #include <stdint.h>
 
-#if USE_SF2_SUPPORT == TRUE
-#include "GenSF2.h"
-#endif
-
 #define DEBUG_DISPLAY_PATCHES   1
 
 #if BAE_NOT_USED
@@ -1021,19 +1017,6 @@ OPErr GM_LoadInstrument(GM_Song *pSong,
             // use cached instrument, if its not there, then load it
             if (theI == NULL)
             {
-#if USE_SF2_SUPPORT == TRUE                
-                if (SF2_LoadedBankCount() > 0)
-                {
-                    // Try loading from SF2 banks first
-                    theI = PV_GetSF2Instrument(pSong, instrument, &theErr);
-                    if (theI != NULL && theErr == NO_ERR)
-                    {
-                        // Store the SF2 instrument in the song's instrument array
-                        pSong->instrumentData[instrument] = theI;
-                        instrumentLoaded = TRUE;
-                    }
-                }
-#endif
                 if (!instrumentLoaded)
                 {
                     // Reset error code for HSB loading attempt

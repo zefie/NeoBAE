@@ -44,9 +44,6 @@
 #include <stdarg.h>
 #include <stdint.h>
 #include "bankinfo.h" // reuse embedded bank metadata for friendly names
-#if USE_SF2_SUPPORT == TRUE
-#include "GenSF2.h"
-#endif
 #ifdef main
 #undef main
 #endif
@@ -1437,20 +1434,6 @@ int main(int argc, char *argv[])
          {
             const char *ext = strrchr(parmFile, '.');
             XBOOL bankLoaded = FALSE;
-#if USE_SF2_SUPPORT == TRUE
-            if (ext && strcasecmp(ext, ".sf2") == 0 && !bankLoaded) {
-               SF2_Bank *sf2Bank = NULL;
-               XFILENAME filename;
-               XConvertPathToXFILENAME((BAEPathName)parmFile, &filename);
-               err = SF2_LoadBank(&filename, &sf2Bank);
-               if (err != NO_ERR && !sf2Bank) {
-                  playbae_printf("Error %d loading SF2 bank %s", err, parmFile);
-                  return 1;
-               }
-               err = SF2_AddBankToManager(sf2Bank, parmFile);
-               bankLoaded = TRUE;
-            }
-#endif
             if (ext && strcasecmp(ext, ".hsb") == 0 && !bankLoaded) {
                err = BAEMixer_AddBankFromFile(theMixer, (BAEPathName)parmFile, &bank);
                bankLoaded = TRUE;

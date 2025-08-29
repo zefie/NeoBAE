@@ -737,9 +737,6 @@ typedef int32_t UNIT_TYPE;
         UNIT_TYPE ADSRFlags[ADSR_STAGES];
         UNIT_TYPE mode;
         XBYTE currentPosition; //  ranges from 0 to ADSR_STAGES
-#if USE_SF2_SUPPORT == TRUE
-        XBOOL isSF2Envelope;   // TRUE if this is an SF2 envelope (don't modify sustainingDecayLevel)
-#endif
     };
     typedef struct GM_ADSR GM_ADSR;
 
@@ -1021,6 +1018,7 @@ typedef int32_t UNIT_TYPE;
         XBOOL useSoundModifierAsRootKey;
 #if REVERB_USED != REVERB_DISABLED
         XBOOL avoidReverb; // if TRUE, this instrument is not mixed into reverb unit
+        XBYTE reverbLevel; // 0-127 reverb send level
 #endif
         XBYTE usageReferenceCount; // number of references this instrument is associated to
 
@@ -1135,7 +1133,7 @@ typedef int32_t UNIT_TYPE;
 
         XBOOL songEndAtFade;      // when true, stop song at end of fade
         XFIXED songFadeRate;      // when non-zero fading is enabled
-        XFIXED songFixedVolume;   // inital volume level that will be changed by songFadeRate
+        XFIXED songFixedVolume;   // inital volume 44 that will be changed by songFadeRate
         XSWORD songFadeMaxVolume; // max volume
         XSWORD songFadeMinVolume; // min volume
 
@@ -2182,27 +2180,6 @@ typedef int32_t UNIT_TYPE;
                                  GM_Waveform const *pAudioData, AudioFileType fileType);
 
     OPErr GM_WriteAudioBufferToFile(XFILE file, AudioFileType type, void *buffer, int32_t size, int32_t channels, int32_t sampleSize);
-
-#if USE_SF2_SUPPORT == TRUE
-    // SF2 SoundFont support functions
-    struct SF2_Bank;
-    typedef struct SF2_Bank SF2_Bank;
-    
-    // Load an SF2 bank from file
-    OPErr GM_LoadSF2Bank(XFILENAME *file, SF2_Bank **ppBank);
-    
-    // Unload an SF2 bank
-    void GM_UnloadSF2Bank(SF2_Bank *pBank);
-    
-    // Load an instrument from SF2 bank into a song
-    OPErr GM_LoadSF2Instrument(GM_Song *pSong, SF2_Bank *pBank, 
-                              XLongResourceID instrument, 
-                              uint16_t sf2Bank, uint16_t sf2Preset);
-    
-    // Get preset information from SF2 bank
-    OPErr GM_GetSF2PresetInfo(SF2_Bank *pBank, uint16_t index, 
-                             char *name, uint16_t *bank, uint16_t *preset);
-#endif
 
     // fill in empty fields in the file header.
     OPErr GM_FinalizeFileHeader(XFILE file, AudioFileType fileType);

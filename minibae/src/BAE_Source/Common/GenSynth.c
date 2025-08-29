@@ -3305,7 +3305,11 @@ void PV_StartMIDINote(GM_Song *pSong, INT16 the_instrument,
 
 #if REVERB_USED != REVERB_DISABLED
         the_entry->avoidReverb = pInstrument->avoidReverb;          // use instrument default. in case instrument designer
-        the_entry->reverbLevel = pSong->channelReverb[the_channel]; // set current verb level
+        if (the_entry->pInstrument->reverbLevel) {
+            the_entry->reverbLevel = the_entry->pInstrument->reverbLevel;
+        } else {
+            the_entry->reverbLevel = pSong->channelReverb[the_channel]; // set current verb level
+        }
         the_entry->chorusLevel = (INT16)PV_ModifyVelocityFromCurve(pSong, pSong->channelChorus[the_channel]);
         // wants no verb enabled
         if (GM_IsReverbFixed())
