@@ -1040,19 +1040,11 @@ int main(int argc, char *argv[])
                         if (!is_bank_file)
                             is_bank_file = _stricmp(ext, ".sf2") == 0;
 #endif
-#if USE_DLS_SUPPORT == TRUE
-                        if (!is_bank_file)
-                            is_bank_file = _stricmp(ext, ".dls") == 0;
-#endif
 #else
                         is_bank_file = strcasecmp(ext, ".hsb") == 0;
 #if USE_SF2_SUPPORT == TRUE
                         if (!is_bank_file)
                             is_bank_file = strcasecmp(ext, ".sf2") == 0;
-#endif
-#if USE_DLS_SUPPORT == TRUE
-                        if (!is_bank_file)
-                            is_bank_file = strcasecmp(ext, ".dls") == 0;
 #endif
 #endif
                     }
@@ -1315,20 +1307,12 @@ int main(int argc, char *argv[])
                         if (!is_bank_file)
                             is_bank_file = _stricmp(ext, ".sf2") == 0;
 #endif
-#if USE_DLS_SUPPORT == TRUE
-                        if (!is_bank_file)
-                            is_bank_file = _stricmp(ext, ".dls") == 0;
-#endif
                         is_playlist_file = (_stricmp(ext, ".m3u") == 0);
 #else
                         is_bank_file = strcasecmp(ext, ".hsb") == 0;
 #if USE_SF2_SUPPORT == TRUE
                         if (!is_bank_file)
                             is_bank_file = strcasecmp(ext, ".sf2") == 0;
-#endif
-#if USE_DLS_SUPPORT == TRUE
-                        if (!is_bank_file)
-                            is_bank_file = strcasecmp(ext, ".dls") == 0;
 #endif
                         is_playlist_file = (strcasecmp(ext, ".m3u") == 0);
 #endif
@@ -5375,11 +5359,7 @@ int main(int argc, char *argv[])
                 ofn.lStructSize = sizeof(ofn);
                 ofn.hwndOwner = NULL;
                 ofn.lpstrFilter =
-#if defined(USE_DLS_SUPPORT) && defined(USE_SF2_SUPPORT)
-                    "Bank Files (*.hsb;*.dls;*.sf2)\0*.hsb;*.dls;*.sf2\0HSB Banks\0*.hsb\0DLS Banks\0*.dls\0SF2 SoundFonts\0*.sf2\0All Files\0*.*\0"
-#elif defined(USE_DLS_SUPPORT)
-                    "Bank Files (*.hsb;*.dls)\0*.hsb;*.dls\0HSB Banks\0*.hsb\0DLS Banks\0*.dls\0All Files\0*.*\0"
-#elif defined(USE_SF2_SUPPORT)
+#if defined(USE_SF2_SUPPORT)
                     "Bank Files (*.hsb;*.sf2)\0*.hsb;*.sf2\0HSB Banks\0*.hsb\0SF2 SoundFonts\0*.sf2\0All Files\0*.*\0"
 #else
                     "Bank Files (*.hsb)\0*.hsb\0HSB Banks\0*.hsb\0All Files\0*.*\0"
@@ -5393,15 +5373,7 @@ int main(int argc, char *argv[])
                     load_bank(fileBuf, playing, transpose, tempo, volume, loopPlay, reverbType, ch_enable, true);
 #else
         const char *cmds[] = {
-#if defined(USE_DLS_SUPPORT) && defined(USE_SF2_SUPPORT)
-            "zenity --file-selection --title='Load Patch Bank' --file-filter='Bank Files | *.hsb *.dls *.sf2' 2>/dev/null",
-            "kdialog --getopenfilename . '*.hsb *.dls *.sf2' 2>/dev/null",
-            "yad --file-selection --title='Load Patch Bank' --file-filter='Bank Files | *.hsb *.dls *.sf2' 2>/dev/null",
-#elif defined(USE_DLS_SUPPORT)
-            "zenity --file-selection --title='Load Patch Bank' --file-filter='Bank Files | *.hsb *.dls' 2>/dev/null",
-            "kdialog --getopenfilename . '*.hsb *.dls' 2>/dev/null",
-            "yad --file-selection --title='Load Patch Bank' --file-filter='Bank Files | *.hsb *.dls' 2>/dev/null",
-#elif defined(USE_SF2_SUPPORT)
+#if defined(USE_SF2_SUPPORT)
             "zenity --file-selection --title='Load Patch Bank' --file-filter='Bank Files | *.hsb *.sf2' 2>/dev/null",
             "kdialog --getopenfilename . '*.hsb *.sf2' 2>/dev/null",
             "yad --file-selection --title='Load Patch Bank' --file-filter='Bank Files | *.hsb *.sf2' 2>/dev/null",
@@ -5425,9 +5397,6 @@ int main(int argc, char *argv[])
                 if (l > 0)
                 {
                     if ((l > 4 && strcasecmp(fileBuf + l - 4, ".hsb") == 0)
-#if defined(USE_DLS_SUPPORT)
-                        || (l > 4 && strcasecmp(fileBuf + l - 4, ".dls") == 0)
-#endif
 #if defined(USE_SF2_SUPPORT)
                         || (l > 4 && strcasecmp(fileBuf + l - 4, ".sf2") == 0)
 #endif
@@ -5437,11 +5406,7 @@ int main(int argc, char *argv[])
                     }
                     else
                     {
-#if defined(USE_DLS_SUPPORT) && defined(USE_SF2_SUPPORT)
-                        BAE_PRINTF("Not a bank file (.hsb, .dls, or .sf2): %s\n", fileBuf);
-#elif defined(USE_DLS_SUPPORT)
-                        BAE_PRINTF("Not a bank file (.hsb or .dls): %s\n", fileBuf);
-#elif defined(USE_SF2_SUPPORT)
+#if defined(USE_SF2_SUPPORT)
                         BAE_PRINTF("Not a bank file (.hsb or .sf2): %s\n", fileBuf);
 #else
                         BAE_PRINTF("Not a bank file (.hsb): %s\n", fileBuf);

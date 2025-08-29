@@ -9,9 +9,6 @@
 #if USE_SF2_SUPPORT
 #include "GenSF2.h"
 #endif
-#if USE_DLS_SUPPORT
-#include "GenDLS.h"
-#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -482,18 +479,6 @@ bool bae_init(int sampleRateHz, bool stereo)
     }
 #endif
 
-#if USE_DLS_SUPPORT == TRUE
-    // Initialize DLS bank manager
-    if (DLS_InitBankManager() != NO_ERR)
-    {
-        BAE_PRINTF("DLS bank manager initialization failed\n");
-        BAEMixer_Close(g_bae.mixer);
-        BAEMixer_Delete(g_bae.mixer);
-        g_bae.mixer = NULL;
-        return false;
-    }
-#endif
-
     BAE_PRINTF("BAE initialized: %d Hz, %s\n",
                sampleRateHz, stereo ? "stereo" : "mono");
 
@@ -527,11 +512,6 @@ void bae_shutdown(void)
 #if USE_SF2_SUPPORT
     // Shutdown SF2 bank manager (cleans up all loaded SF2 banks)
     SF2_ShutdownBankManager();
-#endif
-
-#if USE_DLS_SUPPORT
-    // Shutdown DLS bank manager
-    DLS_ShutdownBankManager();
 #endif
 
     // Close and delete mixer
@@ -594,33 +574,6 @@ bool bae_load_bank(const char *bank_path)
         }
 
         // Mark as loaded
-        g_bae.bank_loaded = true;
-        return true;
-    }
-#endif
-
-#if USE_DLS_SUPPORT == TRUE
-    // Check if this is a DLS file
-    if (ext && (strcasecmp(ext, ".dls") == 0))
-    {
-        DLS_Bank *dls = NULL;
-        XFILENAME filename;
-        XConvertPathToXFILENAME((BAEPathName)bank_path, &filename);
-
-        OPErr err = DLS_LoadBank(&filename, &dls);
-        if (err != NO_ERR || !dls)
-        {
-            BAE_PRINTF("DLS bank load failed: %d %s\n", err, bank_path);
-            return false;
-        }
-        err = DLS_AddBankToManager(dls, bank_path);
-        if (err != NO_ERR)
-        {
-            BAE_PRINTF("DLS bank manager add failed: %d\n", err);
-            DLS_UnloadBank(dls);
-            return false;
-        }
-        BAE_PRINTF("DLS bank loaded: %s (waves=%u, instruments=%u)\n", bank_path, dls->waveCount, dls->instrumentCount);
         g_bae.bank_loaded = true;
         return true;
     }

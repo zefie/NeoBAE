@@ -244,10 +244,6 @@
 #include "GenSF2.h"
 #endif
 
-#if USE_DLS_SUPPORT == TRUE
-#include "GenDLS.h"
-#endif
-
 #define DEBUG_DISPLAY_PATCHES   1
 
 #if BAE_NOT_USED
@@ -1030,19 +1026,6 @@ OPErr GM_LoadInstrument(GM_Song *pSong,
                 {
                     // Try loading from SF2 banks first
                     theI = PV_GetSF2Instrument(pSong, instrument, &theErr);
-                    if (theI != NULL && theErr == NO_ERR)
-                    {
-                        // Store the SF2 instrument in the song's instrument array
-                        pSong->instrumentData[instrument] = theI;
-                        instrumentLoaded = TRUE;
-                    }
-                }
-#endif
-#if USE_DLS_SUPPORT == TRUE                
-                if (DLS_LoadedBankCount() > 0)
-                {
-                    // Try loading from DLS banks first
-                    theI = PV_GetDLSInstrument(pSong, instrument, &theErr);
                     if (theI != NULL && theErr == NO_ERR)
                     {
                         // Store the SF2 instrument in the song's instrument array
