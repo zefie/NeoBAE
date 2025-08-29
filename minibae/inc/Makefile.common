@@ -15,6 +15,7 @@ ifneq ($(WASM),1)
 		VORBIS_ENC := 1
 		KARAOKE := 1
 		PLAYLIST :=1
+		#SF2_SUPPORT := 1 # Optional enable, incomplete, disabled by default
 	endif
 endif
 
@@ -107,6 +108,10 @@ ifneq ($(filter 1,$(VORBIS_DEC) $(VORBIS_ENC)),)
 	BAE_FLAGS += -DHAVE_CONFIG_H=1
 endif
 
+ifeq ($(SF2_SUPPORT),1)
+	BAE_FLAGS += -DUSE_SF2_SUPPORT=1
+endif
+
 # default to ANSI
 ifeq ($(BAE_API),)
 	BAE_API		:= Ansi
@@ -186,6 +191,10 @@ SRC		+=	src/BAE_Source/Common/DriverTools.c \
 			src/BAE_Source/Common/g723_40.c \
 			src/BAE_Source/Common/g72x.c \
 			src/BAE_Source/Common/sha1mini.c
+
+ifeq ($(SF2_SUPPORT),1)
+	SRC += src/BAE_Source/Common/GenSF2.c
+endif
 
 ifeq ($(MP3_DEC),1)
 	# Enable minimp3 wrapper for MPG_* API (decoder only)
