@@ -559,7 +559,7 @@ extern "C"
 #define PERCUSSION_CHANNEL 9      // which channel (zero based) is the default percussion channel
 #define MAX_SAMPLE_FRAMES 1048576 // max number of sample frames that we can play in one voice
                                   // 1024 * 1024 = 1MB. This limit exisits only in DROP_SAMPLE, TERP1, TERP2 cases
-#define MIN_LOOP_SIZE 2          // min number of loop samples that can be processed
+#define MIN_LOOP_SIZE 2           // min number of loop samples that can be processed
 
 #define MIN_SAMPLE_RATE ((uint32_t)1L) // min sample rate. 1.5258789E-5 kHz
 #define MAX_SAMPLE_RATE rate48khz      // max sample rate  48 kHz
@@ -738,7 +738,7 @@ typedef int32_t UNIT_TYPE;
         UNIT_TYPE mode;
         XBYTE currentPosition; //  ranges from 0 to ADSR_STAGES
 #if USE_SF2_SUPPORT == TRUE
-        XBOOL isSF2Envelope;   // TRUE if this is an SF2 envelope (don't modify sustainingDecayLevel)
+        XBOOL isSF2Envelope; // TRUE if this is an SF2 envelope (don't modify sustainingDecayLevel)
 #endif
     };
     typedef struct GM_ADSR GM_ADSR;
@@ -1016,7 +1016,12 @@ typedef int32_t UNIT_TYPE;
         XBOOL extendedFormat; // extended format instrument
         XBOOL sampleAndHold;
         XBOOL useSampleRate; // factor in sample rate into pitch calculation
-
+#if USE_SF2_SUPPORT == TRUE
+        /* If TRUE, this instrument was created from an SF2 preset. When true and
+            doKeymapSplit is also true, the engine may need to start multiple
+            sub-instruments for a single MIDI note (SF2 layered/zoned presets). */
+        XBOOL isSF2Instrument;
+#endif
         XBOOL processingSlice;
         XBOOL useSoundModifierAsRootKey;
 #if REVERB_USED != REVERB_DISABLED
@@ -2187,21 +2192,21 @@ typedef int32_t UNIT_TYPE;
     // SF2 SoundFont support functions
     struct SF2_Bank;
     typedef struct SF2_Bank SF2_Bank;
-    
+
     // Load an SF2 bank from file
     OPErr GM_LoadSF2Bank(XFILENAME *file, SF2_Bank **ppBank);
-    
+
     // Unload an SF2 bank
     void GM_UnloadSF2Bank(SF2_Bank *pBank);
-    
+
     // Load an instrument from SF2 bank into a song
-    OPErr GM_LoadSF2Instrument(GM_Song *pSong, SF2_Bank *pBank, 
-                              XLongResourceID instrument, 
-                              uint16_t sf2Bank, uint16_t sf2Preset);
-    
+    OPErr GM_LoadSF2Instrument(GM_Song *pSong, SF2_Bank *pBank,
+                               XLongResourceID instrument,
+                               uint16_t sf2Bank, uint16_t sf2Preset);
+
     // Get preset information from SF2 bank
-    OPErr GM_GetSF2PresetInfo(SF2_Bank *pBank, uint16_t index, 
-                             char *name, uint16_t *bank, uint16_t *preset);
+    OPErr GM_GetSF2PresetInfo(SF2_Bank *pBank, uint16_t index,
+                              char *name, uint16_t *bank, uint16_t *preset);
 #endif
 
     // fill in empty fields in the file header.

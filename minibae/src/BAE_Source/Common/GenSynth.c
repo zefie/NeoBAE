@@ -3101,6 +3101,10 @@ EnterNote:
 // This function also will kill notes if needed to activate this new note.
 //
 // This function is primarly called from the BAE midi sequencer. There's no need to call it directly.
+// Forward-declare helper used for SF2 split instruments
+static void PV_StartMIDINoteForSplit(GM_Song *pSong, INT16 parent_instrument, INT16 the_channel,
+                                     INT16 the_track, INT16 notePitch, INT32 Volume,
+                                     INT32 sampleNumber, GM_Instrument *pInstrument);
 void PV_StartMIDINote(GM_Song *pSong, INT16 the_instrument,
                       INT16 the_channel, INT16 the_track, INT16 notePitch, INT32 Volume)
 {
@@ -3171,42 +3175,75 @@ void PV_StartMIDINote(GM_Song *pSong, INT16 the_instrument,
         { // yes, find an instrument
             splitCount = theI->u.k.KeymapSplitCount;
             k = theI->u.k.keySplits;
-            for (count = 0; count < splitCount; count++)
+#if USE_SF2_SUPPORT == TRUE
+            // If this is an SF2-created instrument, it may have multiple zones
+            // that should all be triggered for a single MIDI note (layered zones).
+            // In that case, start a voice for every matching split. For legacy
+            // HSB instruments keep the original behaviour of selecting the first match.
+            if (theI->isSF2Instrument)
             {
-                if ((playPitch >= k->lowMidi) && (playPitch <= k->highMidi))
+                for (count = 0; count < splitCount; count++)
                 {
-                    theI = k->pSplitInstrument;
-                    if (theI)
+                    if ((playPitch >= k->lowMidi) && (playPitch <= k->highMidi))
                     {
-                        pInstrument = theI;
-                        // NOTE!! If useSoundModifierAsRootKey is TRUE, then we are using
-                        // the Sound Modifier data blocks as a root key replacement for samples in
-                        // the particular split
-                        if (theI->useSoundModifierAsRootKey)
+                        GM_Instrument *splitInst = k->pSplitInstrument;
+                        if (splitInst)
                         {
-                            if (theI->masterRootKey)
-                            {
-                                playPitch = notePitch - theI->masterRootKey + 60;
-                            }
-                            playPitch = playPitch + 60 - theI->miscParameter1;
-                            Volume = (Volume * theI->miscParameter2) / 100; // scale volume based upon split
+                            // Start a voice for this split instrument. Use a small helper
+                            // to avoid duplicating the large voice-setup code.
+                            PV_StartMIDINoteForSplit(pSong, the_instrument, the_channel, the_track, notePitch, Volume, sampleNumber, splitInst);
                         }
                         else
                         {
-                            if (theI->masterRootKey)
-                            {
-                                playPitch = notePitch - theI->masterRootKey + 60;
-                            }
+                            BAE_PRINTF("bad sample in instrument %d split %d\n", the_instrument, (int)count);
                         }
-                        break;
                     }
-                    else
-                    {
-                        BAE_PRINTF("bad sample in instrument %d split %d\n", the_instrument, (int)count);
-                    }
+                    k++;
+                    sampleNumber++;
                 }
-                k++;
-                sampleNumber++;
+                // We've spawned voices for all matching splits; nothing more to do here.
+                return;
+            }
+            else
+#endif
+            {
+                for (count = 0; count < splitCount; count++)
+                {
+                    if ((playPitch >= k->lowMidi) && (playPitch <= k->highMidi))
+                    {
+                        theI = k->pSplitInstrument;
+                        if (theI)
+                        {
+                            pInstrument = theI;
+                            // NOTE!! If useSoundModifierAsRootKey is TRUE, then we are using
+                            // the Sound Modifier data blocks as a root key replacement for samples in
+                            // the particular split
+                            if (theI->useSoundModifierAsRootKey)
+                            {
+                                if (theI->masterRootKey)
+                                {
+                                    playPitch = notePitch - theI->masterRootKey + 60;
+                                }
+                                playPitch = playPitch + 60 - theI->miscParameter1;
+                                Volume = (Volume * theI->miscParameter2) / 100; // scale volume based upon split
+                            }
+                            else
+                            {
+                                if (theI->masterRootKey)
+                                {
+                                    playPitch = notePitch - theI->masterRootKey + 60;
+                                }
+                            }
+                            break;
+                        }
+                        else
+                        {
+                            BAE_PRINTF("bad sample in instrument %d split %d\n", the_instrument, (int)count);
+                        }
+                    }
+                    k++;
+                    sampleNumber++;
+                }
             }
         }
         else
@@ -3623,6 +3660,187 @@ void PV_StartMIDINote(GM_Song *pSong, INT16 the_instrument,
 #endif
     }
 }
+#if USE_SF2_SUPPORT == TRUE
+// Helper: start a single voice for a split instrument (used by SF2 layered presets)
+// This mirrors the minimal portion of PV_StartMIDINote required to initialize a voice
+// for a given split instrument instance. It intentionally avoids disturbing the
+// outer function's local variables.
+static void PV_StartMIDINoteForSplit(GM_Song *pSong, INT16 parent_instrument, INT16 the_channel,
+                                     INT16 the_track, INT16 notePitch, INT32 Volume,
+                                     INT32 sampleNumber, GM_Instrument *pInstrument)
+{
+    GM_Mixer *pMixer = GM_GetCurrentMixer();
+    GM_Voice *the_entry;
+    INT32 volume32;
+    INT16 playPitch = notePitch;
+    INT16 newPitch;
+
+    if (!pInstrument || Volume == 0)
+        return;
+
+    // apply root key if instrument wants it
+    if (pInstrument->useSoundModifierAsRootKey)
+    {
+        playPitch = playPitch + 60 - pInstrument->miscParameter1;
+        Volume = (Volume * pInstrument->miscParameter2) / 100;
+    }
+
+    // compute initial scaled volume
+    volume32 = (Volume * pMixer->scaleBackAmount) >> 8;
+    volume32 = PV_ScaleVolumeFromChannelAndSong(pSong, the_channel, volume32);
+
+    if (pInstrument->useSoundModifierAsRootKey)
+        newPitch = playPitch;
+    else
+        newPitch = playPitch + 60 - pInstrument->u.w.baseMidiPitch;
+    while (newPitch < -24)
+        newPitch += 12;
+    while (newPitch > 144)
+        newPitch -= 12;
+
+    the_entry = PV_FindFreeVoice(pMixer, pSong, volume32, newPitch, parent_instrument, the_channel);
+    if (!the_entry)
+        return;
+
+    the_entry->voiceMode = VOICE_ALLOCATED;
+    PV_CleanNoteEntry(the_entry);
+    the_entry->pInstrument = pInstrument;
+    the_entry->pSong = pSong;
+    the_entry->NoteVolumeEnvelopeBeforeLFO = VOLUME_PRECISION_SCALAR;
+    the_entry->NotePtr = (UBYTE *)pInstrument->u.w.theWaveform;
+    the_entry->NotePtrEnd = the_entry->NotePtr + pInstrument->u.w.waveFrames;
+    the_entry->NoteChannel = (SBYTE)the_channel;
+    the_entry->NoteTrack = (SBYTE)the_track;
+
+    the_entry->volumeADSRRecord = pInstrument->volumeADSRRecord;
+    the_entry->sampleAndHold = pInstrument->sampleAndHold;
+    the_entry->LFORecordCount = pInstrument->LFORecordCount;
+    if (the_entry->LFORecordCount)
+    {
+        for (int i = 0; i < the_entry->LFORecordCount; ++i)
+            the_entry->LFORecords[i] = pInstrument->LFORecords[i];
+    }
+
+    // Reset LFO timing/state so each voice has independent LFO progress and does not
+    // inherit any running phase from the instrument template or other voices.
+    if (the_entry->LFORecordCount)
+    {
+        for (int i = 0; i < the_entry->LFORecordCount; ++i)
+        {
+            the_entry->LFORecords[i].currentTime = 0;
+            the_entry->LFORecords[i].LFOcurrentTime = 0;
+            the_entry->LFORecords[i].currentWaveValue = 0;
+            // Reset ADSR internal tracking for the LFO envelope to start fresh per voice
+            the_entry->LFORecords[i].a.currentTime = 0;
+            the_entry->LFORecords[i].a.currentPosition = 0;
+            // Keep currentLevel as defined by instrument (PV_SF2_InitLFO sets a.currentLevel)
+            /* Debug: print LFO state to help diagnose slow vibrato issues */
+            BAE_PRINTF("SF2 Debug: StartSplit note=%d inst=%d split=%d LFO[%d] period=%u level=%d a.currentLevel=%ld a.time0=%u\n",
+                       (int)notePitch, (int)parent_instrument, (int)sampleNumber, i,
+                       (unsigned)the_entry->LFORecords[i].period,
+                       (int)the_entry->LFORecords[i].level,
+                       (long)the_entry->LFORecords[i].a.currentLevel,
+                       (unsigned)the_entry->LFORecords[i].a.ADSRTime[0]);
+        }
+    }
+
+    if (pInstrument->playAtSampledFreq == FALSE)
+    {
+        the_entry->ProcessedPitch = newPitch;
+        the_entry->NotePitch = majorPitchTable[newPitch + 24];
+    }
+    else
+    {
+        the_entry->ProcessedPitch = 0;
+        the_entry->NotePitch = 0x10000; // 1.0
+    }
+
+    if (pInstrument->useSampleRate)
+    {
+        the_entry->noteSamplePitchAdjust = XFixedDivide(pInstrument->u.w.sampledRate >> 2, 22050L << 14);
+        the_entry->NotePitch = XFixedMultiply(the_entry->NotePitch, the_entry->noteSamplePitchAdjust);
+    }
+    else
+    {
+        the_entry->noteSamplePitchAdjust = 0x10000;
+    }
+
+    if (pInstrument->u.w.endLoop > pInstrument->u.w.startLoop &&
+        (pInstrument->u.w.endLoop - pInstrument->u.w.startLoop) >= MIN_LOOP_SIZE)
+    {
+        the_entry->NoteLoopPtr = (XBYTE *)the_entry->NotePtr + pInstrument->u.w.startLoop;
+        the_entry->NoteLoopEnd = (XBYTE *)the_entry->NotePtr + pInstrument->u.w.endLoop;
+    }
+    else
+    {
+        the_entry->NoteLoopPtr = NULL;
+        the_entry->NoteLoopEnd = NULL;
+    }
+
+    the_entry->NoteDecay = 8;
+    the_entry->NoteNextSize = 0;
+    the_entry->NoteWave = 0;
+
+    the_entry->NoteProgram = parent_instrument;
+    the_entry->NoteMIDIPitch = (SBYTE)notePitch;
+    the_entry->noteOffsetStart = (SBYTE)pSong->songPitchShift;
+    the_entry->NoteMIDIVolume = (INT16)Volume;
+    the_entry->NoteVolume = volume32;
+
+    the_entry->LPF_base_frequency = pInstrument->LPF_frequency;
+    the_entry->LPF_base_resonance = pInstrument->LPF_resonance;
+    the_entry->LPF_base_lowpassAmount = pInstrument->LPF_lowpassAmount;
+    the_entry->LPF_frequency = pInstrument->LPF_frequency;
+    the_entry->LPF_resonance = pInstrument->LPF_resonance;
+    the_entry->LPF_lowpassAmount = pInstrument->LPF_lowpassAmount;
+
+    the_entry->routeBus = pSong->routeBus;
+
+    // Set initial pan placement and bit/channel format
+    the_entry->stereoPosition = SetChannelStereoPosition(pSong, the_channel, pSong->channelStereoPosition[the_channel]);
+    the_entry->stereoPanBend = pInstrument->panPlacement;
+    the_entry->bitSize = pInstrument->u.w.bitSize;
+    the_entry->channels = pInstrument->u.w.channels;
+
+    if (the_entry->volumeADSRRecord.ADSRTime[0] == 0)
+    {
+        the_entry->volumeADSRRecord.currentLevel = the_entry->volumeADSRRecord.ADSRLevel[0];
+        the_entry->NoteVolumeEnvelope = (INT16)the_entry->volumeADSRRecord.ADSRLevel[0];
+        if (pMixer->generateStereoOutput)
+        {
+            PV_CalculateStereoVolume(the_entry, &the_entry->lastAmplitudeL, &the_entry->lastAmplitudeR);
+        }
+        else
+        {
+            PV_CalculateMonoVolume(the_entry, &the_entry->lastAmplitudeL);
+            the_entry->lastAmplitudeR = 0;
+        }
+    }
+    else
+    {
+        the_entry->lastAmplitudeL = 0;
+        the_entry->lastAmplitudeR = 0;
+    }
+
+    the_entry->voiceStartTimeStamp = XMicroseconds();
+    the_entry->NoteLoopCount = 0;
+    the_entry->NotePitchBend = pSong->channelBend[the_channel];
+    the_entry->LastPitchBend = 0;
+    the_entry->ModWheelValue = pSong->channelModWheel[the_channel];
+    the_entry->LastModWheelValue = 0;
+
+    if (pSong->channelSustain[the_channel])
+    {
+        the_entry->sustainMode = SUS_ON_NOTE_ON;
+    }
+    else
+    {
+        the_entry->sustainMode = SUS_NORMAL;
+    }
+
+    the_entry->voiceMode = VOICE_SUSTAINING;
+}
+#endif
 
 // Given a valid GM_Song, an instrument, track, channel, midi pitch, stop a voice
 // in the mixer
@@ -3645,6 +3863,59 @@ void PV_StopMIDINote(GM_Song *pSong, XSWORD the_instrument, XSWORD the_channel, 
     the_track = the_track;
     the_instrument = the_instrument;
     // BAE_PRINTF("NoteOff i %d c %d p %d\n", the_instrument, the_channel, notePitch);
+    // Special-case for SF2 instruments: they may spawn multiple split/layered voices
+    // per single MIDI note. Handle note-off by releasing all matching SF2 voices and
+    // then return. This keeps the original behavior unchanged for legacy HSB.
+    if (pSong)
+    {
+        GM_Instrument *pCheckInst = pSong->instrumentData[pSong->remapArray[the_instrument]];
+        if (pCheckInst && pCheckInst->isSF2Instrument)
+        {
+            for (count = 0; count < pMixer->MaxNotes; count++)
+            {
+                pNote = &pMixer->NoteEntry[count];
+                if (pNote->voiceMode != VOICE_UNUSED)
+                {
+                    if (pNote->pSong == pSong && pNote->NoteChannel == the_channel)
+                    {
+                        realNote = pNote->NoteMIDIPitch - pNote->noteOffsetStart;
+                        if (GM_DoesChannelAllowPitchOffset(pSong, (uint16_t)pNote->NoteChannel))
+                        {
+                            compareNote = notePitch - pSong->songPitchShift;
+                        }
+                        else
+                        {
+                            compareNote = notePitch - pNote->noteOffsetStart;
+                        }
+                        if (realNote == compareNote)
+                        {
+                            /* Make sure it's a voice belonging to this SF2 instrument or another SF2 instrument
+                               (cover layer voices started by SF2 presets). Use NoteProgram match or instrument flag. */
+                            if ((pNote->NoteProgram == the_instrument) || (pNote->pInstrument && pNote->pInstrument->isSF2Instrument))
+                            {
+                                pNote->voiceStartTimeStamp = 0;
+                                if (pSong->channelSustain[the_channel])
+                                {
+                                    pNote->sustainMode = SUS_ON_NOTE_OFF;
+                                }
+                                else
+                                {
+                                    pNote->voiceMode = VOICE_RELEASING;
+                                    decay = pNote->NoteDecay;
+                                    if ((decay > 500) || (decay < 0))
+                                    {
+                                        BAE_ASSERT(FALSE);
+                                        pNote->NoteDecay = 1;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            return;
+        }
+    }
     pNoteToKill = NULL;
     youngestTime = 0; // min time
     for (count = 0; count < pMixer->MaxNotes; count++)

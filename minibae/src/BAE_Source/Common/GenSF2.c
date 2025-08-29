@@ -123,7 +123,7 @@ static inline uint32_t PV_SF2_TimecentsToUSec(int16_t timecents)
 // level = fullLevel * 10^(-cB/200)
 static inline XSDWORD PV_SF2_LevelFromCentibels(int16_t centibels, XSDWORD fullLevel)
 {
-    float gain = powf(10.0f, -(float)centibels / 200.0f);
+    float gain = powf(10.0f, -(float)centibels / 2000.0f);
     double lvl = (double)fullLevel * (double)gain;
     if (lvl < 0.0)
         lvl = 0.0;
@@ -144,7 +144,7 @@ static inline uint32_t PV_SF2_FreqToLFOPeriod(int16_t frequency_centiHz)
 {
     if (frequency_centiHz <= 0)
     {
-        return 8000000; // Default to 8 second period (~0.125 Hz)
+        return 0; // Default to 8 second period (~0.125 Hz)
     }
 
     // Convert from centi-Hz to Hz: frequency_centiHz is in hundredths of Hz
@@ -660,13 +660,7 @@ static int16_t PV_EffectiveRootKey(SF2_Bank *pBank, int32_t sampleID, int16_t zo
             BAE_PRINTF("SF2 Debug EffectiveRootKey: Sample originalPitch=%d invalid, using fallback\n", orig);
         }
     }
-    // Fallback to zone midpoint if range is valid; else middle C
-    if (keyLo <= keyHi && keyHi <= 127)
-    {
-        int16_t midpoint = (int16_t)((keyLo + keyHi) / 2);
-        BAE_PRINTF("SF2 Debug EffectiveRootKey: Using zone midpoint=%d (range %d-%d)\n", midpoint, keyLo, keyHi);
-        return midpoint;
-    }
+
     BAE_PRINTF("SF2 Debug EffectiveRootKey: Using default rootKey=60\n");
     return 60;
 }
@@ -1345,12 +1339,22 @@ GM_Instrument *SF2_CreateInstrumentFromPreset(SF2_Bank *pBank, uint16_t bankNum,
     if (totalZones <= 1)
     {
         BAE_PRINTF("SF2 Debug: Single zone detected, creating simple instrument\n");
-        return PV_SF2_CreateSimpleInstrument(pBank, instrumentIDs, instrumentCount, pErr);
+        {
+            GM_Instrument *inst = PV_SF2_CreateSimpleInstrument(pBank, instrumentIDs, instrumentCount, pErr);
+            if (inst)
+                inst->isSF2Instrument = TRUE;
+            return inst;
+        }
     }
     else
     {
         BAE_PRINTF("SF2 Debug: Multiple zones detected (%u), creating keymap split instrument\n", (unsigned)totalZones);
-        return PV_SF2_CreateKeymapSplitInstrument(pBank, instrumentIDs, instrumentCount, pErr);
+        {
+            GM_Instrument *inst = PV_SF2_CreateKeymapSplitInstrument(pBank, instrumentIDs, instrumentCount, pErr);
+            if (inst)
+                inst->isSF2Instrument = TRUE;
+            return inst;
+        }
     }
 }
 
@@ -1874,6 +1878,7 @@ GM_Instrument *SF2_CreateInstrumentFromPresetWithNote(SF2_Bank *pBank, uint16_t 
 
     BAE_PRINTF("SF2 Debug: Created note-specific instrument - note=%d, rootKey=%d, frames=%u\n",
                note, rootKey, (unsigned)pInstrument->u.w.waveFrames);
+    pInstrument->isSF2Instrument = TRUE;
 
     *pErr = NO_ERR;
     return pInstrument;
