@@ -1619,6 +1619,43 @@ static void PV_ServeThisInstrument(GM_Voice *pVoice)
     {
         pVoice->LPF_frequency = 0;
     }
+
+#if USE_SF2_SUPPORT == TRUE
+    // Apply modulation envelope to filter frequency for SF2 instruments
+    if (pVoice->modEnvelopeToFilter != 0)
+    {
+        // SF2 spec: modEnvToFilter is in cents (1/100 semitone)
+        // Convert envelope level and scaling to filter frequency offset
+        INT32 modEnvCents = (pVoice->modEnvelopeRecord.currentLevel * pVoice->modEnvelopeToFilter) >> 16;
+        if (modEnvCents != 0 && pVoice->LPF_base_frequency > 0)
+        {
+            // Convert cents to frequency multiplier: 2^(cents/1200)
+            // For filter frequency, apply as additive offset rather than multiplicative
+            INT32 freqOffset = modEnvCents / 10; // Scale down for reasonable filter range
+            pVoice->LPF_frequency = pVoice->LPF_base_frequency + freqOffset;
+            
+            // Clamp to reasonable filter frequency range
+            if (pVoice->LPF_frequency < 0) 
+                pVoice->LPF_frequency = 0;
+            if (pVoice->LPF_frequency > 127) 
+                pVoice->LPF_frequency = 127;
+        }
+        else if (pVoice->LPF_base_frequency > 0)
+        {
+            pVoice->LPF_frequency = pVoice->LPF_base_frequency;
+        }
+    }
+    else if (pVoice->LPF_base_frequency > 0)
+    {
+        pVoice->LPF_frequency = pVoice->LPF_base_frequency;
+    }
+#else
+    if (pVoice->LPF_base_frequency > 0)
+    {
+        pVoice->LPF_frequency = pVoice->LPF_base_frequency;
+    }
+#endif
+
     if (pVoice->LFORecordCount)
     {
         for (i = 0; i < pVoice->LFORecordCount; i++)
@@ -1706,10 +1743,56 @@ static void PV_ServeThisInstrument(GM_Voice *pVoice)
             resonantFilterLookup[(n + ((pVoice->NoteMIDIPitch - pVoice->LPF_base_frequency) << 8) + 0x80) >> 8] * 256 + pVoice->LPF_frequency;
     }
 
-    if (n != pVoice->LastPitchBend)
+#if USE_SF2_SUPPORT == TRUE
+    // Force pitch recalculation for SF2 instruments with modulation envelope
+    XBOOL forcePitchRecalc = FALSE;
+    if (pVoice->modEnvelopeToPitch != 0)
     {
+        forcePitchRecalc = TRUE; // Always recalculate when mod envelope affects pitch
+    }
+#endif
+
+    if (n != pVoice->LastPitchBend
+#if USE_SF2_SUPPORT == TRUE
+        || forcePitchRecalc
+#endif
+        )
+    {
+#if USE_SF2_SUPPORT == TRUE
+        // Only update LastPitchBend if pitch bend actually changed, not for mod envelope
+        if (n != pVoice->LastPitchBend)
+        {
+#endif
         pVoice->LastPitchBend = (INT16)n;
+#if USE_SF2_SUPPORT == TRUE
+        }
+#endif
         n += pVoice->ProcessedPitch << 8; // ProcessedPitch is based on the sample data and MIDI pitch.
+
+#if USE_SF2_SUPPORT == TRUE
+        // Apply modulation envelope to pitch for SF2 instruments
+        if (pVoice->modEnvelopeToPitch != 0)
+        {
+            // SF2 spec: modEnvToPitch is in cents (1/100 semitone)
+            // Scale for reasonable modulation effect - aim for subtle pitch changes
+            // Normalize envelope level to 0-100 range, then apply moderate scaling
+            INT32 envelopePercent = pVoice->modEnvelopeRecord.currentLevel / (VOLUME_RANGE / 100);
+            // Scale modulation amount - divide by 4 for reasonable effect
+            INT32 modEnvCents = (envelopePercent * pVoice->modEnvelopeToPitch) / 400;
+            // Convert cents to 8.8 fixed point pitch offset
+            INT32 pitchOffset = (modEnvCents << 8) / 100;
+            
+            // Debug output
+            BAE_PRINTF("SF2 ModEnv: currentLevel=%ld, percent=%ld, toPitch=%ld, cents=%ld, offset=%ld\n",
+                       (long)pVoice->modEnvelopeRecord.currentLevel,
+                       (long)envelopePercent,
+                       (long)pVoice->modEnvelopeToPitch,
+                       (long)modEnvCents,
+                       (long)pitchOffset);
+            
+            n += pitchOffset;
+        }
+#endif
 
         // Clip value to within reasonable MIDI pitch range
         if (n < -0x1800)
@@ -1800,6 +1883,25 @@ static void PV_ServeThisInstrument(GM_Voice *pVoice)
     PV_ADSRModule(&(pVoice->volumeADSRRecord),
                   (XBOOL)((pVoice->voiceMode == VOICE_SUSTAINING) ||
                           (pVoice->sustainMode == SUS_ON_NOTE_ON)), pVoice);
+
+#if USE_SF2_SUPPORT == TRUE
+    // Process modulation envelope for SF2 instruments
+    if (pVoice->modEnvelopeToPitch != 0 || pVoice->modEnvelopeToFilter != 0)
+    {
+        // Process the modulation envelope ADSR
+        PV_ADSRModule(&(pVoice->modEnvelopeRecord),
+                      (XBOOL)((pVoice->voiceMode == VOICE_SUSTAINING) ||
+                              (pVoice->sustainMode == SUS_ON_NOTE_ON)), pVoice);
+        
+        // Debug: show modulation envelope state
+        BAE_PRINTF("SF2 ModEnv ADSR: pos=%d, currentLevel=%ld, time=%ld, toPitch=%ld, toFilter=%ld\n",
+                   (int)pVoice->modEnvelopeRecord.currentPosition,
+                   (long)pVoice->modEnvelopeRecord.currentLevel,
+                   (long)pVoice->modEnvelopeRecord.currentTime,
+                   (long)pVoice->modEnvelopeToPitch,
+                   (long)pVoice->modEnvelopeToFilter);
+    }
+#endif
 
     // now reduce the current volume by the sustainDecayLevel which is fixed point
     pVoice->NoteVolumeEnvelope = (INT16)XFixedMultiply(pVoice->volumeADSRRecord.currentLevel,
@@ -3384,6 +3486,18 @@ void PV_StartMIDINote(GM_Song *pSong, INT16 the_instrument,
         // copy the volume ADSR record into the GM_Voice
         the_entry->volumeADSRRecord = pInstrument->volumeADSRRecord;
 
+#if USE_SF2_SUPPORT == TRUE
+        // Copy the modulation envelope record for SF2 instruments
+        the_entry->modEnvelopeRecord = pInstrument->modEnvelopeRecord;
+        the_entry->modEnvelopeToPitch = pInstrument->modEnvelopeToPitch;
+        the_entry->modEnvelopeToFilter = pInstrument->modEnvelopeToFilter;
+        
+        // Reset modulation envelope timing state for each voice
+        the_entry->modEnvelopeRecord.currentTime = 0;
+        the_entry->modEnvelopeRecord.currentPosition = 0;
+        // Keep currentLevel as set by PV_SF2_FillModulationADSR
+#endif
+
         // copy the sample-and-hold flag
         the_entry->sampleAndHold = pInstrument->sampleAndHold;
 
@@ -3773,6 +3887,17 @@ static void PV_StartMIDINoteForSplit(GM_Song *pSong, INT16 parent_instrument, IN
 
     the_entry->volumeADSRRecord = pInstrument->volumeADSRRecord;
     the_entry->sampleAndHold = pInstrument->sampleAndHold;
+    
+    // Copy the modulation envelope record for SF2 instruments
+    the_entry->modEnvelopeRecord = pInstrument->modEnvelopeRecord;
+    the_entry->modEnvelopeToPitch = pInstrument->modEnvelopeToPitch;
+    the_entry->modEnvelopeToFilter = pInstrument->modEnvelopeToFilter;
+    
+    // Reset modulation envelope timing state for each voice
+    the_entry->modEnvelopeRecord.currentTime = 0;
+    the_entry->modEnvelopeRecord.currentPosition = 0;
+    // Keep currentLevel as set by PV_SF2_FillModulationADSR
+    
     the_entry->LFORecordCount = pInstrument->LFORecordCount;
     if (the_entry->LFORecordCount)
     {

@@ -1046,6 +1046,11 @@ typedef int32_t UNIT_TYPE;
 
         GM_LFO LFORecords[MAX_LFOS];
         GM_ADSR volumeADSRRecord;
+#if USE_SF2_SUPPORT == TRUE
+        GM_ADSR modEnvelopeRecord;      // SF2 modulation envelope for pitch/filter
+        XSDWORD modEnvelopeToPitch;     // cents to apply modulation envelope to pitch
+        XSDWORD modEnvelopeToFilter;    // cents to apply modulation envelope to filter cutoff
+#endif
         GM_TieTo curve[MAX_CURVES];
         union
         {

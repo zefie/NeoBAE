@@ -558,6 +558,126 @@ static void PV_SF2_FillVolumeADSR(SF2_Bank *pBank, int32_t instrumentID, uint32_
     }
 }
 
+#if USE_SF2_SUPPORT == TRUE
+// Build a GM_ADSR modulation envelope from SF2 modulation envelope generators
+static void PV_SF2_FillModulationADSR(SF2_Bank *pBank, int32_t instrumentID, uint32_t genStart, uint32_t genEnd, GM_ADSR *pADSR)
+{
+    if (!pBank || !pADSR)
+        return;
+
+    // Get SF2 modulation envelope generators (merged local + instrument-global)
+    int16_t tcDelay = PV_FindInstGenMerged(pBank, instrumentID, genStart, genEnd, SF2_GEN_DELAY_MOD_ENV, -12000);
+    int16_t tcAttack = PV_FindInstGenMerged(pBank, instrumentID, genStart, genEnd, SF2_GEN_ATTACK_MOD_ENV, -12000);
+    int16_t tcHold = PV_FindInstGenMerged(pBank, instrumentID, genStart, genEnd, SF2_GEN_HOLD_MOD_ENV, -12000);
+    int16_t tcDecay = PV_FindInstGenMerged(pBank, instrumentID, genStart, genEnd, SF2_GEN_DECAY_MOD_ENV, -12000);
+    int16_t cBSus = PV_FindInstGenMerged(pBank, instrumentID, genStart, genEnd, SF2_GEN_SUSTAIN_MOD_ENV, 0);
+    int16_t tcRel = PV_FindInstGenMerged(pBank, instrumentID, genStart, genEnd, SF2_GEN_RELEASE_MOD_ENV, -12000);
+
+    // Clamp timecents to prevent extreme values
+    if (tcDelay < -12000) tcDelay = -12000;
+    if (tcAttack < -12000) tcAttack = -12000;
+    if (tcHold < -12000) tcHold = -12000;
+    if (tcDecay < -12000) tcDecay = -12000;
+    if (tcRel < -12000) tcRel = -12000;
+
+    // Convert to engine units
+    uint32_t tDelay = PV_SF2_TimecentsToUSec(tcDelay);
+    uint32_t tAttack = PV_SF2_TimecentsToUSec(tcAttack);
+    uint32_t tHold = PV_SF2_TimecentsToUSec(tcHold);
+    uint32_t tDecay = PV_SF2_TimecentsToUSec(tcDecay);
+    uint32_t tRel = PV_SF2_TimecentsToUSec(tcRel);
+
+    BAE_PRINTF("SF2 Debug: ModEnv generators - Delay:%d, Attack:%d, Hold:%d, Decay:%d, Sustain:%d, Release:%d\n",
+               (int)tcDelay, (int)tcAttack, (int)tcHold, (int)tcDecay, (int)cBSus, (int)tcRel);
+
+    // Ensure minimum timing to prevent zero-time stages
+    const uint32_t kMinStageUS = (uint32_t)BUFFER_SLICE_TIME;
+    if (tAttack > 0 && tAttack < kMinStageUS) tAttack = kMinStageUS;
+    if (tDecay > 0 && tDecay < kMinStageUS) tDecay = kMinStageUS;
+    if (tRel > 0 && tRel < kMinStageUS) tRel = kMinStageUS;
+
+    // Initialize modulation envelope - start from zero modulation
+    pADSR->sustainingDecayLevel = XFIXED_1;
+    pADSR->currentTime = 0;
+    pADSR->currentPosition = 0;
+    pADSR->currentLevel = 0; // Start from zero modulation
+    pADSR->previousTarget = 0;
+    pADSR->mode = 0;
+    // Mark as SF2 envelope
+    pADSR->isSF2Envelope = TRUE;
+    pADSR->currentLevelCB = 0; // Modulation envelope uses 1/10ths of a percent, not centibels
+
+    // Build SF2 modulation ADSR: Delay -> Attack -> Hold -> Decay -> Sustain -> Release
+    int stageIndex = 0;
+
+    // Stage: Delay (optional - stay at zero modulation)
+    if (stageIndex < ADSR_STAGES && tcDelay > -12000)
+    {
+        pADSR->ADSRLevel[stageIndex] = 0; // Start from zero
+        pADSR->ADSRTime[stageIndex] = tDelay;
+        pADSR->ADSRFlags[stageIndex] = ADSR_LINEAR_RAMP;
+        stageIndex++;
+        BAE_PRINTF("SF2 Debug: ModEnv added delay stage %d: %uus\n", stageIndex - 1, tDelay);
+    }
+
+    // Stage: Attack (zero -> peak modulation) - always present
+    if (stageIndex < ADSR_STAGES)
+    {
+        // Attack: Ramp from 0 to 1000 (100.0% modulation)
+        pADSR->ADSRLevel[stageIndex] = 1000; // 100.0% in 1/10ths of percent
+        pADSR->ADSRTime[stageIndex] = tAttack;
+        pADSR->ADSRFlags[stageIndex] = ADSR_LINEAR_RAMP;
+        stageIndex++;
+    }
+
+    // Stage: Hold (optional - stay at peak)
+    if (stageIndex < ADSR_STAGES && tcHold > -12000)
+    {
+        pADSR->ADSRLevel[stageIndex] = 1000;
+        pADSR->ADSRTime[stageIndex] = tHold;
+        pADSR->ADSRFlags[stageIndex] = ADSR_LINEAR_RAMP;
+        stageIndex++;
+        BAE_PRINTF("SF2 Debug: ModEnv added hold stage %d: %uus\n", stageIndex - 1, tHold);
+    }
+
+    // Stage: Decay (peak -> sustain level)
+    if (stageIndex < ADSR_STAGES)
+    {
+        pADSR->ADSRLevel[stageIndex] = cBSus; // Sustain level in 1/10ths of percent
+        pADSR->ADSRTime[stageIndex] = tDecay;
+        pADSR->ADSRFlags[stageIndex] = ADSR_LINEAR_RAMP;
+        stageIndex++;
+    }
+
+    // Stage: Sustain (stay at sustain level)
+    if (stageIndex < ADSR_STAGES)
+    {
+        pADSR->ADSRLevel[stageIndex] = cBSus;
+        pADSR->ADSRTime[stageIndex] = 0; // Indefinite time
+        pADSR->ADSRFlags[stageIndex] = ADSR_SUSTAIN;
+        stageIndex++;
+    }
+
+    // Stage: Release (sustain -> zero on note-off)
+    if (stageIndex < ADSR_STAGES)
+    {
+        pADSR->ADSRLevel[stageIndex] = 0;
+        pADSR->ADSRTime[stageIndex] = tRel;
+        pADSR->ADSRFlags[stageIndex] = ADSR_RELEASE;
+        stageIndex++;
+        BAE_PRINTF("SF2 Debug: ModEnv added release stage %d: %uus -> 0\n", stageIndex - 1, tRel);
+    }
+
+    // Terminate remaining stages
+    for (int i = stageIndex; i < ADSR_STAGES; i++)
+    {
+        pADSR->ADSRLevel[i] = 0;
+        pADSR->ADSRTime[i] = 1;
+        pADSR->ADSRFlags[i] = ADSR_TERMINATE;
+    }
+}
+#endif
+
 // Heuristic: decide if a preset likely represents a drum kit
 static XBOOL PV_PresetLooksLikeDrumKit(SF2_Bank *pBank, uint32_t presetIndex)
 {
@@ -1862,6 +1982,18 @@ GM_Instrument *SF2_CreateInstrumentFromPresetWithNote(SF2_Bank *pBank, uint16_t 
     // Now that we know the exact zone (genStart/genEnd), fill the volume ADSR from SF2 generators
     PV_SF2_FillVolumeADSR(pBank, bestInstID, selectedGenStart, selectedGenEnd, &pInstrument->volumeADSRRecord);
 
+#if USE_SF2_SUPPORT == TRUE
+    // Fill modulation envelope from SF2 generators
+    PV_SF2_FillModulationADSR(pBank, bestInstID, selectedGenStart, selectedGenEnd, &pInstrument->modEnvelopeRecord);
+    
+    // Get modulation envelope to pitch/filter amounts
+    pInstrument->modEnvelopeToPitch = PV_FindInstGenMerged(pBank, bestInstID, selectedGenStart, selectedGenEnd, SF2_GEN_MOD_ENV_TO_PITCH, 0) * 4; // cents -> engine units
+    pInstrument->modEnvelopeToFilter = PV_FindInstGenMerged(pBank, bestInstID, selectedGenStart, selectedGenEnd, SF2_GEN_MOD_ENV_TO_FILTER_FC, 0) * 4; // cents -> engine units
+    
+    BAE_PRINTF("SF2 Debug: Note-specific ModEnv amounts - toPitch: %d, toFilter: %d\n", 
+               (int)pInstrument->modEnvelopeToPitch, (int)pInstrument->modEnvelopeToFilter);
+#endif
+
     // Fill LFO records from SF2 generators for this zone
     PV_SF2_FillLFORecords(pBank, bestInstID, selectedGenStart, selectedGenEnd, pInstrument);
     // Percussion: force base pitch to the triggering note so different keys select different samples,
@@ -2528,6 +2660,18 @@ static GM_Instrument *PV_SF2_CreateSimpleInstrument(SF2_Bank *pBank, int32_t *in
                 // Fill ADSR from SF2 generators for this zone
                 PV_SF2_FillVolumeADSR(pBank, instrumentIDs[i], genStart, genEnd, &pInstrument->volumeADSRRecord);
 
+#if USE_SF2_SUPPORT == TRUE
+                // Fill modulation envelope from SF2 generators
+                PV_SF2_FillModulationADSR(pBank, instrumentIDs[i], genStart, genEnd, &pInstrument->modEnvelopeRecord);
+                
+                // Get modulation envelope to pitch/filter amounts
+                pInstrument->modEnvelopeToPitch = PV_FindInstGenMerged(pBank, instrumentIDs[i], genStart, genEnd, SF2_GEN_MOD_ENV_TO_PITCH, 0) * 4; // cents -> engine units
+                pInstrument->modEnvelopeToFilter = PV_FindInstGenMerged(pBank, instrumentIDs[i], genStart, genEnd, SF2_GEN_MOD_ENV_TO_FILTER_FC, 0) * 4; // cents -> engine units
+                
+                BAE_PRINTF("SF2 Debug: ModEnv amounts - toPitch: %d, toFilter: %d\n", 
+                           (int)pInstrument->modEnvelopeToPitch, (int)pInstrument->modEnvelopeToFilter);
+#endif
+
                 // Fill LFO records from SF2 generators for this zone
                 PV_SF2_FillLFORecords(pBank, instrumentIDs[i], genStart, genEnd, pInstrument);
 
@@ -2928,6 +3072,19 @@ static GM_Instrument *PV_SF2_CreateKeymapSplitInstrument(SF2_Bank *pBank, int32_
 
         // Fill ADSR and LFO with effective generators
         PV_SF2_FillVolumeADSR(pBank, zone->instrumentID, zone->genStart, zone->genEnd, &pSubInstrument->volumeADSRRecord);
+
+#if USE_SF2_SUPPORT == TRUE
+        // Fill modulation envelope from SF2 generators
+        PV_SF2_FillModulationADSR(pBank, zone->instrumentID, zone->genStart, zone->genEnd, &pSubInstrument->modEnvelopeRecord);
+        
+        // Get modulation envelope to pitch/filter amounts
+        pSubInstrument->modEnvelopeToPitch = PV_FindInstGenMerged(pBank, zone->instrumentID, zone->genStart, zone->genEnd, SF2_GEN_MOD_ENV_TO_PITCH, 0) * 4; // cents -> engine units
+        pSubInstrument->modEnvelopeToFilter = PV_FindInstGenMerged(pBank, zone->instrumentID, zone->genStart, zone->genEnd, SF2_GEN_MOD_ENV_TO_FILTER_FC, 0) * 4; // cents -> engine units
+        
+        BAE_PRINTF("SF2 Debug: Keymap zone %u ModEnv amounts - toPitch: %d, toFilter: %d\n", 
+                   i, (int)pSubInstrument->modEnvelopeToPitch, (int)pSubInstrument->modEnvelopeToFilter);
+#endif
+        
         PV_SF2_FillLFORecords(pBank, zone->instrumentID, zone->genStart, zone->genEnd, pSubInstrument);
 
         // Create waveform
