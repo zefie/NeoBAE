@@ -3869,6 +3869,7 @@ void PV_StopMIDINote(GM_Song *pSong, XSWORD the_instrument, XSWORD the_channel, 
     if (pSong)
     {
         GM_Instrument *pCheckInst = pSong->instrumentData[pSong->remapArray[the_instrument]];
+#if USE_SF2_SUPPORT == TRUE
         if (pCheckInst && pCheckInst->isSF2Instrument)
         {
             for (count = 0; count < pMixer->MaxNotes; count++)
@@ -3915,6 +3916,7 @@ void PV_StopMIDINote(GM_Song *pSong, XSWORD the_instrument, XSWORD the_channel, 
             }
             return;
         }
+#endif
     }
     pNoteToKill = NULL;
     youngestTime = 0; // min time

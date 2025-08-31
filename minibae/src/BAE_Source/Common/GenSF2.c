@@ -44,7 +44,7 @@
 
 // Internal helper functions
 static GM_Instrument *PV_SF2_CreateSimpleInstrument(SF2_Bank *pBank, int32_t *instrumentIDs, uint32_t instrumentCount, OPErr *pErr);
-static GM_Instrument *PV_SF2_CreateKeymapSplitInstrument(SF2_Bank *pBank, int32_t *instrumentIDs, uint32_t instrumentCount, OPErr *pErr);
+static GM_Instrument *PV_SF2_CreateKeymapSplitInstrument(SF2_Bank *pBank, int32_t *instrumentIDs, uint32_t instrumentCount, int32_t presetID, OPErr *pErr);
 // instrumentID is needed to merge instrument-global generators with local zone values
 static OPErr PV_SF2_CreateWaveformFromSample(SF2_Bank *pBank, int32_t instrumentID, int16_t sampleID, uint32_t genStart, uint32_t genEnd, GM_Waveform *pWaveform);
 // Forward declaration used by helpers below
@@ -86,6 +86,35 @@ static XBOOL PV_StrContainsIgnoreCase(const char *haystack, const char *needle)
             return TRUE; // matched entire needle
     }
     return FALSE;
+}
+
+static int16_t PV_FindEffectiveGenValue(SF2_Bank *pBank, int32_t presetID, int32_t instrumentID,
+                                        uint32_t presetGenStart, uint32_t presetGenEnd,
+                                        uint32_t instGenStart, uint32_t instGenEnd,
+                                        SF2_GeneratorType genType, int16_t defaultValue)
+{
+    // Get instrument-level value (local overrides global)
+    int16_t instValue = PV_FindInstGenMerged(pBank, instrumentID, instGenStart, instGenEnd, genType, defaultValue);
+
+    // Get preset-level value (global + local additive)
+    int16_t presetGlobal = 0; // Additive defaults to 0
+    int16_t presetLocal = 0;
+    XBOOL hasPresetGlobal = FALSE;
+    uint32_t presetGlobalStart, presetGlobalEnd;
+    PV_GetInstGlobalGenRange(pBank, presetID, &presetGlobalStart, &presetGlobalEnd, &hasPresetGlobal);
+
+    if (hasPresetGlobal)
+    {
+        presetGlobal = PV_FindGeneratorValue(pBank->presetGens, pBank->numPresetGens, presetGlobalStart, presetGlobalEnd, genType, 0);
+    }
+    presetLocal = PV_FindGeneratorValue(pBank->presetGens, pBank->numPresetGens, presetGenStart, presetGenEnd, genType, presetGlobal);
+
+    // For most generators, add preset to instrument; ranges override
+    if (genType == SF2_GEN_KEY_RANGE || genType == SF2_GEN_VEL_RANGE || genType == SF2_GEN_INSTRUMENT)
+    {
+        return (presetLocal != 0) ? presetLocal : instValue; // Preset overrides
+    }
+    return instValue + presetLocal; // Additive for tuning, vol, etc.
 }
 
 // Convert SF2 timecents to microseconds (engine ADSR time unit)
@@ -992,96 +1021,57 @@ static void PV_GetInstGlobalGenRange(SF2_Bank *pBank, int32_t instrumentID,
 }
 
 // Find generator in local zone, else fall back to instrument-global zone if present.
-static int16_t PV_FindInstGenMerged(SF2_Bank *pBank, int32_t instrumentID,
-                                    uint32_t localStart, uint32_t localEnd,
+static int16_t PV_FindInstGenMerged(SF2_Bank *pBank, int32_t instrumentID, uint32_t localStart, uint32_t localEnd,
                                     SF2_GeneratorType genType, int16_t defaultValue)
 {
-    // Try local zone first
-    int16_t v = PV_FindGeneratorValue(pBank->instGens, pBank->numInstGens, localStart, localEnd, genType, 0x7FFF);
-    if (v != 0x7FFF)
-        return v;
+    // Check local zone first
+    int16_t localValue = PV_FindGeneratorValue(pBank->instGens, pBank->numInstGens, localStart, localEnd, genType, defaultValue);
+    
+    // For override types, return local if present
+    if (localValue != defaultValue && 
+        (genType == SF2_GEN_KEY_RANGE || genType == SF2_GEN_VEL_RANGE || 
+         genType == SF2_GEN_SAMPLE_ID || genType == SF2_GEN_OVERRIDING_ROOT_KEY || 
+         genType == SF2_GEN_KEYNUM || genType == SF2_GEN_SAMPLE_MODES))
+    {
+        return localValue;
+    }
 
-    // Then instrument-global
-    uint32_t gStart = 0, gEnd = 0;
+    // Get global zone
     XBOOL hasGlobal = FALSE;
-    PV_GetInstGlobalGenRange(pBank, instrumentID, &gStart, &gEnd, &hasGlobal);
+    uint32_t globalStart, globalEnd;
+    PV_GetInstGlobalGenRange(pBank, instrumentID, &globalStart, &globalEnd, &hasGlobal);
+    int16_t globalValue = defaultValue;
     if (hasGlobal)
     {
-        v = PV_FindGeneratorValue(pBank->instGens, pBank->numInstGens, gStart, gEnd, genType, 0x7FFF);
-        if (v != 0x7FFF)
-            return v;
+        globalValue = PV_FindGeneratorValue(pBank->instGens, pBank->numInstGens, globalStart, globalEnd, genType, defaultValue);
     }
-    return defaultValue;
+
+    // Additive for tuning, volume, etc.; otherwise use local or global
+    if (genType == SF2_GEN_COARSE_TUNE || genType == SF2_GEN_FINE_TUNE || 
+        genType == SF2_GEN_INITIAL_ATTENUATION || 
+        genType == SF2_GEN_MOD_LFO_TO_PITCH || genType == SF2_GEN_MOD_LFO_TO_VOLUME || 
+        genType == SF2_GEN_MOD_LFO_TO_FILTER_FC || 
+        genType == SF2_GEN_VIB_LFO_TO_PITCH || 
+        genType == SF2_GEN_MOD_ENV_TO_PITCH || genType == SF2_GEN_MOD_ENV_TO_FILTER_FC)
+    {
+        return localValue + globalValue; // Additive
+    }
+
+    return (localValue != defaultValue) ? localValue : globalValue; // Override
 }
 
 // Simple linear interpolation resampler to convert samples to target rate
+// Resampling support removed:
+// Previously this file implemented an internal linear resampler. To simplify the codebase
+// and avoid duplicate resampling logic, the resampler has been removed. Keep a small
+// compatibility stub so callers that expect the function signature continue to build.
 static SBYTE *PV_ResampleSample(SBYTE *inputData, uint32_t inputFrames, uint32_t inputRate,
                                 uint32_t targetRate, SBYTE bitsPerSample, SBYTE channels, uint32_t *outputFrames)
 {
-    if (inputRate == targetRate)
-    {
-        // No resampling needed
+    // No resampling performed. Return the original buffer and report the same frame count.
+    if (outputFrames)
         *outputFrames = inputFrames;
-        return inputData;
-    }
-
-    uint32_t outputSampleCount = (uint32_t)((uint64_t)inputFrames * targetRate / inputRate);
-    uint32_t bytesPerSample = (bitsPerSample == 8) ? 1 : 2;
-    uint32_t bytesPerFrame = bytesPerSample * channels;
-    uint32_t outputSize = outputSampleCount * bytesPerFrame;
-
-    SBYTE *outputData = (SBYTE *)XNewPtr(outputSize);
-    if (!outputData)
-    {
-        *outputFrames = inputFrames;
-        return inputData;
-    }
-
-    // Linear interpolation resampling
-    float ratio = (float)inputFrames / (float)outputSampleCount;
-
-    if (bitsPerSample == 16)
-    {
-        short *input16 = (short *)inputData;
-        short *output16 = (short *)outputData;
-
-        for (uint32_t i = 0; i < outputSampleCount; i++)
-        {
-            float srcIndex = i * ratio;
-            uint32_t index0 = (uint32_t)srcIndex;
-            uint32_t index1 = (index0 + 1 < inputFrames) ? index0 + 1 : index0;
-            float frac = srcIndex - index0;
-
-            for (int ch = 0; ch < channels; ch++)
-            {
-                int32_t sample0 = input16[index0 * channels + ch];
-                int32_t sample1 = input16[index1 * channels + ch];
-                int32_t interpolated = sample0 + (int32_t)((sample1 - sample0) * frac);
-                output16[i * channels + ch] = (short)interpolated;
-            }
-        }
-    }
-    else // 8-bit
-    {
-        for (uint32_t i = 0; i < outputSampleCount; i++)
-        {
-            float srcIndex = i * ratio;
-            uint32_t index0 = (uint32_t)srcIndex;
-            uint32_t index1 = (index0 + 1 < inputFrames) ? index0 + 1 : index0;
-            float frac = srcIndex - index0;
-
-            for (int ch = 0; ch < channels; ch++)
-            {
-                int32_t sample0 = inputData[index0 * channels + ch];
-                int32_t sample1 = inputData[index1 * channels + ch];
-                int32_t interpolated = sample0 + (int32_t)((sample1 - sample0) * frac);
-                outputData[i * channels + ch] = (SBYTE)interpolated;
-            }
-        }
-    }
-
-    *outputFrames = outputSampleCount;
-    return outputData;
+    return inputData;
 }
 
 // Convert SF2 sample to miniBAE format
@@ -1091,10 +1081,8 @@ static SBYTE *PV_ConvertSF2Sample(SF2_Bank *pBank, SF2_Sample *sample, int16_t i
                                   uint32_t *outSize, uint32_t *outTargetRate, OPErr *pErr)
 {
     SBYTE *convertedSample = NULL;
-    SBYTE *resampledData = NULL;
     uint32_t sampleSize;
     uint32_t originalFrames;
-    uint32_t resampledFrames;
 
     if (!pBank || !sample || !outSize || !outTargetRate || !pErr)
     {
@@ -1166,45 +1154,7 @@ static SBYTE *PV_ConvertSF2Sample(SF2_Bank *pBank, SF2_Sample *sample, int16_t i
     {
         targetRate = 8000; // Upsample very low rates
     }
-    // Apply sample header pitchCorrection (in cents) and any instrument fineTune by slightly adjusting the target rate
-    // pitchCorrection is signed 8-bit in SF2 sample header; instFineTune is signed cents from instrument zone
-    int totalCents = 0;
-    if (sample->pitchCorrection != 0)
-        totalCents += (int)sample->pitchCorrection;
-    if (instFineTune != 0)
-        totalCents += (int)instFineTune;
-    if (totalCents != 0)
-    {
-        float cents = (float)totalCents;
-        float centRatio = powf(2.0f, cents / 1200.0f);
-        float adjustedRate = (float)targetRate * centRatio;
-        if (adjustedRate < 1000.0f)
-            adjustedRate = 1000.0f;
-        if (adjustedRate > 192000.0f)
-            adjustedRate = 192000.0f;
-        targetRate = (uint32_t)adjustedRate;
-        BAE_PRINTF("SF2 Debug: Applied combined pitchCorrection+fineTune %d cents, new targetRate=%u\n",
-                   totalCents, targetRate);
-    }
-
-    // Resample only if sample rate differs from target rate or is out of allowed range
-    resampledData = PV_ResampleSample(convertedSample, originalFrames, sample->sampleRate,
-                                      targetRate, 16, 1, &resampledFrames);
-
-    if (resampledData != convertedSample)
-    {
-        // Resampling created new data, free the original
-        XDisposePtr(convertedSample);
-        convertedSample = resampledData;
-        sampleSize = resampledFrames * 2; // Update size for resampled data
-
-        BAE_PRINTF("SF2 Debug: Resampled from %d to %d frames (rate %d -> %d)\n",
-                   originalFrames, resampledFrames, sample->sampleRate, targetRate);
-    }
-    else
-    {
-        BAE_PRINTF("SF2 Debug: No resampling needed (keeping original rate %d Hz)\n", sample->sampleRate);
-    }
+    sampleSize = originalFrames * 2;
 
     // Quick check if sample has any non-zero data
     int nonZeroCount = 0;
@@ -1215,9 +1165,6 @@ static SBYTE *PV_ConvertSF2Sample(SF2_Bank *pBank, SF2_Sample *sample, int16_t i
         if (finalSamples[i] != 0)
             nonZeroCount++;
     }
-    BAE_PRINTF("SF2 Debug: Sample conversion complete - %d/%d samples have non-zero data\n",
-               nonZeroCount, (finalFrames > 100) ? 100 : finalFrames);
-
     // NOTE: pitchCorrection and instrument fine-tune are already applied before resampling
     // (if provided via the instFineTune parameter). Do not re-apply sample->pitchCorrection here,
     // it would double-count the cents and cause octave-scale shifts.
@@ -1350,7 +1297,7 @@ GM_Instrument *SF2_CreateInstrumentFromPreset(SF2_Bank *pBank, uint16_t bankNum,
     {
         BAE_PRINTF("SF2 Debug: Multiple zones detected (%u), creating keymap split instrument\n", (unsigned)totalZones);
         {
-            GM_Instrument *inst = PV_SF2_CreateKeymapSplitInstrument(pBank, instrumentIDs, instrumentCount, pErr);
+            GM_Instrument *inst = PV_SF2_CreateKeymapSplitInstrument(pBank, instrumentIDs, instrumentCount, presetNum, pErr);
             if (inst)
                 inst->isSF2Instrument = TRUE;
             return inst;
@@ -1850,31 +1797,6 @@ GM_Instrument *SF2_CreateInstrumentFromPresetWithNote(SF2_Bank *pBank, uint16_t 
     // Percussion: force base pitch to the triggering note so different keys select different samples,
     // not different transpositions of one sample.
     pInstrument->u.w.baseMidiPitch = note;
-
-    // Apply pitch corrections (simplified)
-    if (fineTune != 0 || coarseTune != 0)
-    {
-        int newBasePitch = pInstrument->u.w.baseMidiPitch + coarseTune;
-        if (newBasePitch < 0)
-            newBasePitch = 0;
-        if (newBasePitch > 127)
-            newBasePitch = 127;
-        pInstrument->u.w.baseMidiPitch = newBasePitch;
-
-        if (fineTune != 0)
-        {
-            float centRatio = 1.0f + (fineTune * 0.000578f);
-            float adjustedRate = XFIXED_TO_FLOAT(pInstrument->u.w.sampledRate) * centRatio;
-
-            if (adjustedRate < 1000.0f)
-                adjustedRate = 1000.0f;
-            if (adjustedRate > 192000.0f)
-                adjustedRate = 192000.0f;
-
-            // Use unsigned fixed conversion for adjusted floating sample rate
-            pInstrument->u.w.sampledRate = FLOAT_TO_XFIXED(adjustedRate);
-        }
-    }
 
     BAE_PRINTF("SF2 Debug: Created note-specific instrument - note=%d, rootKey=%d, frames=%u\n",
                note, rootKey, (unsigned)pInstrument->u.w.waveFrames);
@@ -2455,17 +2377,6 @@ static OPErr PV_SF2_CreateWaveformFromSample(SF2_Bank *pBank, int32_t instrument
 
     pWaveform->baseMidiPitch = PV_EffectiveRootKey(pBank, sampleID, zoneRootKey, keyLo, keyHi);
 
-    // Apply coarse tuning to base pitch
-    if (coarseTune != 0)
-    {
-        int newBasePitch = pWaveform->baseMidiPitch + coarseTune;
-        if (newBasePitch < 0)
-            newBasePitch = 0;
-        if (newBasePitch > 127)
-            newBasePitch = 127;
-        pWaveform->baseMidiPitch = newBasePitch;
-    }
-
     BAE_PRINTF("SF2 Debug: Created waveform - pBank=%u, sampleID=%d, rootKey=%d, size=%u frames, rate=%u Hz (loop %u-%u)\n",
                pBank, (int)sampleID, (int)pWaveform->baseMidiPitch,
                (unsigned)pWaveform->waveFrames, (unsigned)targetRate,
@@ -2574,92 +2485,151 @@ static GM_Instrument *PV_SF2_CreateSimpleInstrument(SF2_Bank *pBank, int32_t *in
 }
 
 // Helper function to create a keymap split instrument for multi-zone instruments
-static GM_Instrument *PV_SF2_CreateKeymapSplitInstrument(SF2_Bank *pBank, int32_t *instrumentIDs, uint32_t instrumentCount, OPErr *pErr)
+static GM_Instrument *PV_SF2_CreateKeymapSplitInstrument(SF2_Bank *pBank, int32_t *instrumentIDs, uint32_t instrumentCount, int32_t presetID, OPErr *pErr)
 {
-    BAE_PRINTF("SF2 Debug: Creating keymap split instrument from %u instruments\n", (unsigned)instrumentCount);
+    BAE_PRINTF("SF2 Debug: Creating keymap split instrument from %u instruments for preset %d\n", (unsigned)instrumentCount, (int)presetID);
 
-    // Collect all zones with their key ranges
+    // Collect all zones with their key and velocity ranges
     typedef struct
     {
         int16_t sampleID;
         uint8_t lowKey, highKey;
+        uint8_t lowVel, highVel;
         int16_t rootKey;
+        int16_t coarseTune, fineTune;
         uint32_t genStart, genEnd;
         int32_t instrumentID;
+        uint32_t presetGenStart, presetGenEnd; // For preset-level merging
     } ZoneInfo;
 
-#define MAX_SF2_ZONES 32 // Reasonable upper bound for SF2 zones
+#define MAX_SF2_ZONES 32
     ZoneInfo zones[MAX_SF2_ZONES];
     uint32_t zoneCount = 0;
+
+    // Get preset global zone
+    XBOOL hasPresetGlobal = FALSE;
+    uint32_t presetGlobalStart = 0, presetGlobalEnd = 0;
+    PV_GetInstGlobalGenRange(pBank, presetID, &presetGlobalStart, &presetGlobalEnd, &hasPresetGlobal);
 
     // Scan all instruments for zones
     for (uint32_t i = 0; i < instrumentCount && zoneCount < MAX_SF2_ZONES; i++)
     {
-        SF2_Instrument *instrument = &pBank->instruments[instrumentIDs[i]];
+        int32_t instID = instrumentIDs[i];
+        SF2_Instrument *instrument = &pBank->instruments[instID];
         uint32_t instBagStart = instrument->bagIndex;
-        uint32_t instBagEnd = (instrumentIDs[i] + 1 < pBank->numInstruments) ? pBank->instruments[instrumentIDs[i] + 1].bagIndex : pBank->numInstBags;
+        uint32_t instBagEnd = (instID + 1 < pBank->numInstruments) ? pBank->instruments[instID + 1].bagIndex : pBank->numInstBags;
+
+        // Get instrument global zone
+        XBOOL hasGlobal = FALSE;
+        uint32_t globalGenStart = 0, globalGenEnd = 0;
+        PV_GetInstGlobalGenRange(pBank, instID, &globalGenStart, &globalGenEnd, &hasGlobal);
+
+        // Get preset bag range for this instrument (assuming one preset bag per instrument for now)
+        uint32_t presetGenStart = 0, presetGenEnd = 0;
+        if (presetID >= 0 && presetID < pBank->numPresets)
+        {
+            SF2_Preset *preset = &pBank->presets[presetID];
+            uint32_t pbagStart = preset->bagIndex;
+            uint32_t pbagEnd = (presetID + 1 < pBank->numPresets) ? pBank->presets[presetID + 1].bagIndex : pBank->numPresetBags;
+            // Find bag with this instrument
+            for (uint32_t pbagIdx = pbagStart; pbagIdx < pbagEnd; pbagIdx++)
+            {
+                if (pbagIdx >= pBank->numPresetBags) break;
+                SF2_Bag *pbag = &pBank->presetBags[pbagIdx];
+                uint32_t pgenStart = pbag->genIndex;
+                uint32_t pgenEnd = (pbagIdx + 1 < pBank->numPresetBags) ? pBank->presetBags[pbagIdx + 1].genIndex : pBank->numPresetGens;
+                int16_t pInstID = PV_FindGeneratorValue(pBank->presetGens, pBank->numPresetGens, pgenStart, pgenEnd, SF2_GEN_INSTRUMENT, -1);
+                if (pInstID == instID)
+                {
+                    presetGenStart = pgenStart;
+                    presetGenEnd = pgenEnd;
+                    break;
+                }
+            }
+        }
 
         for (uint32_t bagIdx = instBagStart; bagIdx < instBagEnd && zoneCount < MAX_SF2_ZONES; bagIdx++)
         {
-            if (bagIdx >= pBank->numInstBags)
-                break;
+            if (bagIdx >= pBank->numInstBags) break;
 
             SF2_Bag *bag = &pBank->instBags[bagIdx];
             uint32_t genStart = bag->genIndex;
             uint32_t genEnd = (bagIdx + 1 < pBank->numInstBags) ? pBank->instBags[bagIdx + 1].genIndex : pBank->numInstGens;
 
-            // Check if this zone has a sample
-            int16_t sampleID = PV_FindGeneratorValue(pBank->instGens, pBank->numInstGens,
-                                                     genStart, genEnd, SF2_GEN_SAMPLE_ID, -1);
+            // Check if this is a local zone
+            int16_t sampleID = PV_FindGeneratorValue(pBank->instGens, pBank->numInstGens, genStart, genEnd, SF2_GEN_SAMPLE_ID, -1);
+            if (sampleID == -1 || sampleID >= pBank->numSamples) continue;
 
-            if (sampleID != -1 && sampleID < pBank->numSamples)
+            // Get effective key range
+            int16_t keyRange = PV_FindEffectiveGenValue(pBank, presetID, instID, presetGenStart, presetGenEnd, genStart, genEnd, SF2_GEN_KEY_RANGE, 0x007F);
+            uint8_t lowKey = keyRange & 0xFF;
+            uint8_t highKey = (keyRange >> 8) & 0xFF;
+            if (keyRange == 0x007F || highKey == 0)
             {
-                // Get key range or fixed GEN_KEYNUM; GEN_KEYNUM overrides range when present
-                int16_t keyRange = PV_FindGeneratorValue(pBank->instGens, pBank->numInstGens,
-                                                         genStart, genEnd, SF2_GEN_KEY_RANGE, 0x007F);
-                uint8_t lowKey = keyRange & 0xFF;
-                uint8_t highKey = (keyRange >> 8) & 0xFF;
-                if (keyRange == 0x007F || highKey == 0)
-                {
-                    lowKey = 0;
-                    highKey = 127;
-                }
-                int16_t zKeyNum = PV_FindGeneratorValue(pBank->instGens, pBank->numInstGens,
-                                                        genStart, genEnd, SF2_GEN_KEYNUM, -1);
-                if (zKeyNum >= 0 && zKeyNum <= 127)
-                {
-                    lowKey = (uint8_t)zKeyNum;
-                    highKey = (uint8_t)zKeyNum;
-                }
-                if (lowKey > highKey)
-                {
-                    uint8_t t = lowKey;
-                    lowKey = highKey;
-                    highKey = t;
-                }
-                if (highKey > 127)
-                    highKey = 127;
-
-                // Get root key
-                int16_t zoneRootKey = PV_FindGeneratorValue(pBank->instGens, pBank->numInstGens,
-                                                            genStart, genEnd, SF2_GEN_OVERRIDING_ROOT_KEY, -1);
-                int16_t rootKey = PV_EffectiveRootKey(pBank, sampleID, zoneRootKey, lowKey, highKey);
-
-                zones[zoneCount].sampleID = sampleID;
-                zones[zoneCount].lowKey = lowKey;
-                zones[zoneCount].highKey = highKey;
-                zones[zoneCount].rootKey = rootKey;
-                zones[zoneCount].genStart = genStart;
-                zones[zoneCount].genEnd = genEnd;
-                zones[zoneCount].instrumentID = instrumentIDs[i];
-
-                BAE_PRINTF("SF2 Debug: Zone %u: sample=%d, range=%u-%u%s, rootKey=%d\n",
-                           (unsigned)zoneCount, (int)sampleID, (unsigned)lowKey, (unsigned)highKey,
-                           (zKeyNum >= 0 && zKeyNum <= 127) ? " (fixed)" : "",
-                           (int)rootKey);
-
-                zoneCount++;
+                lowKey = 0;
+                highKey = 127;
             }
+            int16_t zKeyNum = PV_FindEffectiveGenValue(pBank, presetID, instID, presetGenStart, presetGenEnd, genStart, genEnd, SF2_GEN_KEYNUM, -1);
+            if (zKeyNum >= 0 && zKeyNum <= 127)
+            {
+                lowKey = (uint8_t)zKeyNum;
+                highKey = (uint8_t)zKeyNum;
+            }
+            if (lowKey > highKey)
+            {
+                uint8_t t = lowKey;
+                lowKey = highKey;
+                highKey = t;
+            }
+            if (highKey > 127) highKey = 127;
+
+            // Get effective velocity range
+            int16_t velRange = PV_FindEffectiveGenValue(pBank, presetID, instID, presetGenStart, presetGenEnd, genStart, genEnd, SF2_GEN_VEL_RANGE, 0x007F);
+            uint8_t lowVel = velRange & 0xFF;
+            uint8_t highVel = (velRange >> 8) & 0xFF;
+            if (velRange == 0x007F)
+            {
+                lowVel = 0;
+                highVel = 127;
+            }
+            if (lowVel > highVel)
+            {
+                uint8_t t = lowVel;
+                lowVel = highVel;
+                highVel = t;
+            }
+            if (highVel > 127) highVel = 127;
+
+            // Get effective root key
+            int16_t zoneRootKey = PV_FindEffectiveGenValue(pBank, presetID, instID, presetGenStart, presetGenEnd, genStart, genEnd, SF2_GEN_OVERRIDING_ROOT_KEY, -1);
+            int16_t rootKey = PV_EffectiveRootKey(pBank, sampleID, zoneRootKey, lowKey, highKey);
+
+            // Get effective tuning
+            int16_t coarseTune = PV_FindEffectiveGenValue(pBank, presetID, instID, presetGenStart, presetGenEnd, genStart, genEnd, SF2_GEN_COARSE_TUNE, 0);
+            int16_t fineTune = PV_FindEffectiveGenValue(pBank, presetID, instID, presetGenStart, presetGenEnd, genStart, genEnd, SF2_GEN_FINE_TUNE, 0);
+
+            // Get scaleTuning (cents per key, default 100)
+            int16_t scaleTuning = PV_FindEffectiveGenValue(pBank, presetID, instID, presetGenStart, presetGenEnd, genStart, genEnd, SF2_GEN_SCALE_TUNING, 100);
+
+            zones[zoneCount].sampleID = sampleID;
+            zones[zoneCount].lowKey = lowKey;
+            zones[zoneCount].highKey = highKey;
+            zones[zoneCount].lowVel = lowVel;
+            zones[zoneCount].highVel = highVel;
+            zones[zoneCount].rootKey = rootKey;
+            zones[zoneCount].coarseTune = coarseTune;
+            zones[zoneCount].fineTune = fineTune;
+            zones[zoneCount].genStart = genStart;
+            zones[zoneCount].genEnd = genEnd;
+            zones[zoneCount].instrumentID = instID;
+            zones[zoneCount].presetGenStart = presetGenStart;
+            zones[zoneCount].presetGenEnd = presetGenEnd;
+
+            BAE_PRINTF("SF2 Debug: Zone %u: sample=%d, key=%u-%u, vel=%u-%u, rootKey=%d, coarse=%d, fine=%d, scaleTune=%d\n",
+                       (unsigned)zoneCount, (int)sampleID, (unsigned)lowKey, (unsigned)highKey,
+                       (unsigned)lowVel, (unsigned)highVel, (int)rootKey, (int)coarseTune, (int)fineTune, (int)scaleTuning);
+
+            zoneCount++;
         }
     }
 
@@ -2674,12 +2644,14 @@ static GM_Instrument *PV_SF2_CreateKeymapSplitInstrument(SF2_Bank *pBank, int32_
         BAE_PRINTF("SF2 Debug: Too many zones (%u), limiting to %d\n", (unsigned)zoneCount, MAX_SF2_ZONES);
         zoneCount = MAX_SF2_ZONES;
     }
-    // Sort zones by lowKey to keep order consistent
+
+    // Sort zones by lowKey, then lowVel
     for (uint32_t a = 0; a + 1 < zoneCount; a++)
     {
         for (uint32_t b = a + 1; b < zoneCount; b++)
         {
-            if (zones[b].lowKey < zones[a].lowKey)
+            if (zones[b].lowKey < zones[a].lowKey ||
+                (zones[b].lowKey == zones[a].lowKey && zones[b].lowVel < zones[a].lowVel))
             {
                 ZoneInfo tmp = zones[a];
                 zones[a] = zones[b];
@@ -2688,11 +2660,9 @@ static GM_Instrument *PV_SF2_CreateKeymapSplitInstrument(SF2_Bank *pBank, int32_
         }
     }
 
-    // Calculate extra bytes needed to store all key splits beyond the first in the flexible array
+    // Allocate instrument
     size_t extraSplits = (zoneCount > 1) ? (zoneCount - 1) : 0;
     size_t extraBytes = extraSplits * sizeof(GM_KeymapSplit);
-
-    // Allocate instrument with embedded larger KeymapSplitInfo in union storage
     size_t totalSize = sizeof(GM_Instrument) + extraBytes;
     GM_Instrument *pMainInstrument = (GM_Instrument *)XNewPtr(totalSize);
     if (!pMainInstrument)
@@ -2703,7 +2673,7 @@ static GM_Instrument *PV_SF2_CreateKeymapSplitInstrument(SF2_Bank *pBank, int32_
     XSetMemory(pMainInstrument, totalSize, 0);
 
     // Initialize as keymap split instrument
-    pMainInstrument->doKeymapSplit = TRUE; // This is the key difference!
+    pMainInstrument->doKeymapSplit = TRUE;
     pMainInstrument->extendedFormat = FALSE;
     pMainInstrument->notPolyphonic = FALSE;
     pMainInstrument->useSampleRate = TRUE;
@@ -2712,27 +2682,23 @@ static GM_Instrument *PV_SF2_CreateKeymapSplitInstrument(SF2_Bank *pBank, int32_
     pMainInstrument->sampleAndHold = FALSE;
     pMainInstrument->usageReferenceCount = 0;
     pMainInstrument->panPlacement = 0;
-    // Keep parent masterRootKey 0 so routing uses the actual notePitch for split selection
     pMainInstrument->masterRootKey = 0;
 
 #if REVERB_USED != REVERB_DISABLED
     pMainInstrument->avoidReverb = FALSE;
 #endif
 
-    // Initialize keymap header
-    pMainInstrument->u.k.defaultInstrumentID = 0; // No default
+    pMainInstrument->u.k.defaultInstrumentID = 0;
     pMainInstrument->u.k.KeymapSplitCount = zoneCount;
 
-    // Create sub-instruments for each zone
+    // Create sub-instruments
     for (uint32_t i = 0; i < zoneCount; i++)
     {
         ZoneInfo *zone = &zones[i];
 
-        // Allocate sub-instrument
         GM_Instrument *pSubInstrument = (GM_Instrument *)XNewPtr(sizeof(GM_Instrument));
         if (!pSubInstrument)
         {
-            // Cleanup previous sub-instruments
             for (uint32_t j = 0; j < i; j++)
             {
                 if (pMainInstrument->u.k.keySplits[j].pSplitInstrument)
@@ -2747,36 +2713,29 @@ static GM_Instrument *PV_SF2_CreateKeymapSplitInstrument(SF2_Bank *pBank, int32_
 
         XSetMemory(pSubInstrument, sizeof(GM_Instrument), 0);
 
-        // Initialize sub-instrument (like simple instrument)
         pSubInstrument->doKeymapSplit = FALSE;
         pSubInstrument->extendedFormat = FALSE;
         pSubInstrument->notPolyphonic = FALSE;
         pSubInstrument->useSampleRate = TRUE;
         pSubInstrument->disableSndLooping = FALSE;
-        // Melodic multi-zone instruments should transpose as needed
         pSubInstrument->playAtSampledFreq = FALSE;
         pSubInstrument->sampleAndHold = FALSE;
         pSubInstrument->usageReferenceCount = 0;
         pSubInstrument->panPlacement = 0;
-        // Important: leave sub-instrument masterRootKey at 0 so playPitch stays as the MIDI note
-        // Pitch offset will be computed using waveform baseMidiPitch (set from SF2 root key)
         pSubInstrument->masterRootKey = 0;
 
 #if REVERB_USED != REVERB_DISABLED
         pSubInstrument->avoidReverb = FALSE;
 #endif
 
-        // Fill ADSR from SF2 generators for this zone
+        // Fill ADSR and LFO with effective generators
         PV_SF2_FillVolumeADSR(pBank, zone->instrumentID, zone->genStart, zone->genEnd, &pSubInstrument->volumeADSRRecord);
-
-        // Fill LFO records from SF2 generators for this zone
         PV_SF2_FillLFORecords(pBank, zone->instrumentID, zone->genStart, zone->genEnd, pSubInstrument);
 
-        // Create waveform for this zone
+        // Create waveform
         OPErr waveErr = PV_SF2_CreateWaveformFromSample(pBank, zone->instrumentID, zone->sampleID, zone->genStart, zone->genEnd, &pSubInstrument->u.w);
         if (waveErr != NO_ERR)
         {
-            // Cleanup
             for (uint32_t j = 0; j < i; j++)
             {
                 if (pMainInstrument->u.k.keySplits[j].pSplitInstrument)
@@ -2790,15 +2749,27 @@ static GM_Instrument *PV_SF2_CreateKeymapSplitInstrument(SF2_Bank *pBank, int32_
             return NULL;
         }
 
-        // Set up keymap split entry
+        // Apply tuning and scaleTuning
+        int16_t scaleTuning = PV_FindEffectiveGenValue(pBank, presetID, zone->instrumentID, zone->presetGenStart, zone->presetGenEnd, zone->genStart, zone->genEnd, SF2_GEN_SCALE_TUNING, 100);
+        float pitchFactor = powf(2.0f, (float)zone->fineTune / 1200.0f);
+        if (scaleTuning != 100)
+        {
+            float scaleFactor = (float)scaleTuning / 100.0f;
+            pitchFactor *= powf(2.0f, (float)(zone->rootKey - 60) * (scaleFactor - 1.0f) / 12.0f); // Adjust relative to C4
+        }
+        pSubInstrument->u.w.baseMidiPitch -= zone->coarseTune;
+        pSubInstrument->u.w.sampledRate = (XFIXED)((double)pSubInstrument->u.w.sampledRate * (double)pitchFactor);
+
+        // Set velocity and key ranges
         pMainInstrument->u.k.keySplits[i].lowMidi = zone->lowKey;
         pMainInstrument->u.k.keySplits[i].highMidi = zone->highKey;
-        pMainInstrument->u.k.keySplits[i].miscParameter1 = 0;   // No modifier
-        pMainInstrument->u.k.keySplits[i].miscParameter2 = 100; // 100% volume
+        pMainInstrument->u.k.keySplits[i].miscParameter1 = ((uint16_t)zone->highVel << 8) | (uint16_t)zone->lowVel;
+        pMainInstrument->u.k.keySplits[i].miscParameter2 = 100; // Use SF2_GEN_INITIAL_ATTENUATION if needed
         pMainInstrument->u.k.keySplits[i].pSplitInstrument = pSubInstrument;
 
-        BAE_PRINTF("SF2 Debug: Created zone %u: keys %u-%u -> rootKey=%d\n",
-                   (unsigned)i, (unsigned)zone->lowKey, (unsigned)zone->highKey, (int)zone->rootKey);
+        BAE_PRINTF("SF2 Debug: Created zone %u: keys=%u-%u, vel=%u-%u, rootKey=%d, scaleTune=%d, baseMidiPitch=%d\n",
+                   (unsigned)i, (unsigned)zone->lowKey, (unsigned)zone->highKey,
+                   (unsigned)zone->lowVel, (unsigned)zone->highVel, (int)zone->rootKey, (int)scaleTuning, (int)pSubInstrument->u.w.baseMidiPitch);
     }
 
     BAE_PRINTF("SF2 Debug: Created keymap split instrument with %u zones\n", (unsigned)zoneCount);
