@@ -347,6 +347,9 @@
 #include "BAE_API.h"
 #include "X_Assert.h"
 #include <stdint.h>
+#if USE_SF2_SUPPORT == TRUE
+#include "GenSF2.h"
+#endif
 
 // the only global. Our current mixer pointer.
 GM_Mixer *MusicGlobals = NULL;
@@ -1030,14 +1033,13 @@ XWORD PV_GetVoiceNumberFromVoice(GM_Voice *pVoice)
 // ------------------------------------------------------------------------------------------------------//
 
 // Generic ADSR Unit
-static void PV_ADSRModule(GM_ADSR *a, XBOOL sustaining)
+static void PV_ADSRModule(GM_ADSR *a, XBOOL sustaining, GM_Voice *pVoice)
 {
     INT32 currentTime = a->currentTime;
     INT32 index = a->currentPosition;
     INT32 scalar, i;
 
-    // Find the release or LAST marker when the note is being turned off.
-
+    // Find release or last marker when note is turned off
     if ((!sustaining) && (a->mode != ADSR_RELEASE) && (a->mode != ADSR_TERMINATE))
     {
         for (i = 0; i < ADSR_STAGES; i++)
@@ -1047,6 +1049,13 @@ static void PV_ADSRModule(GM_ADSR *a, XBOOL sustaining)
             {
                 index = i;
                 a->previousTarget = a->currentLevel;
+#if USE_SF2_SUPPORT == TRUE
+                // Initialize release from current level for SF2
+                if (a->isSF2Envelope) {
+                    a->currentLevelCB = (int16_t)(-200 * log10((double)a->currentLevel / VOLUME_RANGE));  // Approx cB from current amp
+                    if (a->currentLevelCB < 0) a->currentLevelCB = 0;
+                }                
+#endif
                 goto foundRelease;
             }
             if (scalar == ADSR_SUSTAIN)
@@ -1060,98 +1069,139 @@ static void PV_ADSRModule(GM_ADSR *a, XBOOL sustaining)
         currentTime = 0;
         a->mode = ADSR_RELEASE;
     }
+#if USE_SF2_SUPPORT == TRUE
+    if (a && a->isSF2Envelope) {
+        int16_t targetCB = a->ADSRLevelCB[index];
+        int16_t currentCB = a->currentLevelCB;
 
-    switch (a->ADSRFlags[index])
+        // Initialize on first call of a stage
+        if (currentTime == 0) {
+            currentCB = (index > 0) ? a->ADSRLevelCB[index - 1] : a->ADSRLevelCB[0];
+        } 
+
+        if (a->ADSRFlags[index] & ADSR_LINEAR_RAMP) {
+            INT32 delta_us = PV_GetLFOAdjustedTimeInMicroseconds();
+            if (delta_us <= 0) delta_us = 1;  // Prevent divide by zero
+            pVoice->voiceTime += delta_us;
+            currentTime = pVoice->voiceTime;
+            INT32 remaining_us = a->ADSRTime[index] - currentTime;
+            if (remaining_us <= 0) {
+                currentCB = targetCB;
+                a->currentPosition = index + 1;
+                a->currentTime = 0;
+                pVoice->voiceTime = 0;  // Reset for next stage
+            } else {
+                INT32 deltaCB = ((targetCB - currentCB) * delta_us) / (remaining_us > delta_us ? remaining_us : delta_us);
+                if (deltaCB > 1000) deltaCB = 1000;
+                if (deltaCB < -1000) deltaCB = -1000;
+                currentCB += deltaCB;
+                if ((deltaCB > 0 && currentCB >= targetCB) || (deltaCB < 0 && currentCB <= targetCB)) {
+                    currentCB = targetCB;
+                    a->currentPosition = index + 1;
+                    a->currentTime = 0;
+                    pVoice->voiceTime = 0;
+                }
+            }
+        } else if (a->ADSRFlags[index] & ADSR_SUSTAIN) {
+            currentCB = targetCB;  // Constant
+        } else if (a->mode == ADSR_RELEASE) {
+            if (currentCB >= 10000) {
+                a->currentLevel = 0;
+                a->mode = ADSR_TERMINATE;
+            } else {
+                a->currentLevelCB = a->currentLevelCB + 100;
+            }
+        }
+
+        a->currentLevelCB = currentCB;
+        a->currentTime = currentTime;
+
+        a->currentLevel = PV_SF2_LevelFromCentibels(currentCB, VOLUME_RANGE);
+        if (a->currentLevel < 0) a->currentLevel = 0;
+
+/*        BAE_PRINTF("PV_ADSRModule: SF2 - pos=%d, currCB=%d, targetCB=%d, time=%ld, currLevel=%ld\n",
+                   a->currentPosition, a->currentLevelCB, targetCB, a->currentTime, (int32_t)a->currentLevel);
+*/
+    } else
+#endif    
     {
-    case ADSR_SUSTAIN:
-        a->mode = ADSR_SUSTAIN;
-        if (a->ADSRLevel[index] < 0)
+        switch (a->ADSRFlags[index])
         {
-            if (a->sustainingDecayLevel)
+        case ADSR_SUSTAIN:
+            a->mode = ADSR_SUSTAIN;
+            if (a->ADSRLevel[index] < 0)
             {
-                XSDWORD ADSRLevel;
-                XFIXED levelScale;
+                if (a->sustainingDecayLevel)
+                {
+                    XSDWORD ADSRLevel;
+                    XFIXED levelScale;
 
-                ADSRLevel = a->ADSRLevel[index];
-                if (ADSRLevel < -50)
-                {
-                    // level is greater than 50
-                    //  a->sustainingDecayLevel = ( a->sustainingDecayLevel *
-                    //                              (expDecayLookup[-ADSRLevel/50000L] >> 1L)  ) >> 15L;
-                    levelScale = expDecayLookup[-ADSRLevel / 50000L];
-                }
-                else
-                {
-                    // level is in the range of 0 to 50
-                    //  a->sustainingDecayLevel = ( a->sustainingDecayLevel *
-                    //                              (expDecayLookup[PV_GetLogLookupTableEntry(-ADSRLevel)/50000L] >> 1L)  ) >> 15L;
-                    levelScale = expDecayLookup[PV_GetLogLookupTableEntry(-ADSRLevel) / 50000L];
-                }
+                    ADSRLevel = a->ADSRLevel[index];
+                    if (ADSRLevel < -50)
+                    {
+                        levelScale = expDecayLookup[-ADSRLevel / 50000L];
+                    }
+                    else
+                    {
+                        levelScale = expDecayLookup[PV_GetLogLookupTableEntry(-ADSRLevel) / 50000L];
+                    }
 
-                a->sustainingDecayLevel = XFixedMultiply(a->sustainingDecayLevel, levelScale);
-            }
-        }
-        else
-        {
-            if (currentTime)
-            {
-                currentTime += PV_GetLFOAdjustedTimeInMicroseconds(); // microseconds;
-                if (currentTime >= a->ADSRTime[index])
-                {
-                    currentTime = a->ADSRTime[index];
+                    a->sustainingDecayLevel = XFixedMultiply(a->sustainingDecayLevel, levelScale);
                 }
-                if (a->ADSRTime[index] >> 6L)
-                {
-                    scalar = (currentTime << 6) / (a->ADSRTime[index] >> 6); // scalar is 0..4095
-                }
-                else
-                {
-                    scalar = 0;
-                }
-                a->currentLevel = a->previousTarget + (((a->ADSRLevel[index] - a->previousTarget) * scalar) >> 12L);
-            }
-        }
-        break;
-    default:
-        currentTime += PV_GetLFOAdjustedTimeInMicroseconds(); // microseconds;
-        if (currentTime >= a->ADSRTime[index])
-        {
-            a->previousTarget = a->ADSRLevel[index];
-            a->currentLevel = a->ADSRLevel[index];
-            currentTime -= a->ADSRTime[index];
-            if (a->ADSRFlags[index] != ADSR_TERMINATE)
-            {
-                index++;
             }
             else
             {
-                a->mode = ADSR_TERMINATE;
-                currentTime -= (XSDWORD)PV_GetLFOAdjustedTimeInMicroseconds(); // prevent long note times from overflowing if they stay on for more than 32.767 seconds
+                if (currentTime)
+                {
+                    currentTime += PV_GetLFOAdjustedTimeInMicroseconds();
+                    if (currentTime >= a->ADSRTime[index])
+                    {
+                        currentTime = a->ADSRTime[index];
+                    }
+                    if (a->ADSRTime[index] >> 6L)
+                    {
+                        scalar = (currentTime << 6) / (a->ADSRTime[index] >> 6);
+                    }
+                    else
+                    {
+                        scalar = 0;
+                    }
+                    a->currentLevel = a->previousTarget + (((a->ADSRLevel[index] - a->previousTarget) * scalar) >> 12L);
+                }
             }
-        }
-        else
-        {
-            if (currentTime)
+            break;
+        default:
+            currentTime += PV_GetLFOAdjustedTimeInMicroseconds();
+            if (currentTime >= a->ADSRTime[index])
             {
-                scalar = (currentTime << 6) / (a->ADSRTime[index] >> 6);                                            // scalar is 0..4095
-                a->currentLevel = a->previousTarget + (((a->ADSRLevel[index] - a->previousTarget) * scalar) >> 12); // ADSRLevels max out at 64k
+                a->previousTarget = a->ADSRLevel[index];
+                a->currentLevel = a->ADSRLevel[index];
+                currentTime -= a->ADSRTime[index];
+                if (a->ADSRFlags[index] != ADSR_TERMINATE)
+                {
+                    index++;
+                }
+                else
+                {
+                    a->mode = ADSR_TERMINATE;
+                    currentTime -= (XSDWORD)PV_GetLFOAdjustedTimeInMicroseconds();
+                }
             }
+            else
+            {
+                if (currentTime)
+                {
+                    scalar = (currentTime << 6) / (a->ADSRTime[index] >> 6);
+                    a->currentLevel = a->previousTarget + (((a->ADSRLevel[index] - a->previousTarget) * scalar) >> 12);
+                }
+            }
+            break;
         }
-        break;
     }
 
-    // the index may have changed, so check for new cases.
-#if 0
-    switch (a->ADSRFlags[index])
-    {
-        case ADSR_GOTO:
-            index = a->ADSRLevel[index] - 1;
-            break;
-    }
-#endif
-    // BAE_PRINTF("currentLevel = %ld\n", (int32_t)a->currentLevel);
+    // Update state
     a->currentTime = currentTime;
-    a->currentPosition = index & 7; // protect against runaway indexes
+    a->currentPosition = index & 7;  // Protect against runaway
 }
 
 static INLINE INT32 PV_GetWaveShape(INT32 where, INT32 what_kind)
@@ -1576,7 +1626,7 @@ static void PV_ServeThisInstrument(GM_Voice *pVoice)
             rec = &(pVoice->LFORecords[i]);
             PV_ADSRModule(&(rec->a),
                           (XBOOL)((pVoice->voiceMode == VOICE_SUSTAINING) ||
-                                  (pVoice->sustainMode == SUS_ON_NOTE_ON)));
+                                  (pVoice->sustainMode == SUS_ON_NOTE_ON)), pVoice);
             if ((rec->level) || (rec->DC_feed))
             {
                 // scale the current adsr level by the sustainDecayLevel which is fixed point
@@ -1749,7 +1799,7 @@ static void PV_ServeThisInstrument(GM_Voice *pVoice)
     // This is sure easier than the LFO modules!
     PV_ADSRModule(&(pVoice->volumeADSRRecord),
                   (XBOOL)((pVoice->voiceMode == VOICE_SUSTAINING) ||
-                          (pVoice->sustainMode == SUS_ON_NOTE_ON)));
+                          (pVoice->sustainMode == SUS_ON_NOTE_ON)), pVoice);
 
     // now reduce the current volume by the sustainDecayLevel which is fixed point
     pVoice->NoteVolumeEnvelope = (INT16)XFixedMultiply(pVoice->volumeADSRRecord.currentLevel,
@@ -3182,27 +3232,36 @@ void PV_StartMIDINote(GM_Song *pSong, INT16 the_instrument,
             // HSB instruments keep the original behaviour of selecting the first match.
             if (theI->isSF2Instrument)
             {
-                for (count = 0; count < splitCount; count++)
-                {
-                    if ((playPitch >= k->lowMidi) && (playPitch <= k->highMidi))
+                    int started = 0;
+                    for (count = 0; count < splitCount; count++)
                     {
-                        GM_Instrument *splitInst = k->pSplitInstrument;
-                        if (splitInst)
+                        if ((playPitch >= k->lowMidi) && (playPitch <= k->highMidi))
                         {
-                            // Start a voice for this split instrument. Use a small helper
-                            // to avoid duplicating the large voice-setup code.
-                            PV_StartMIDINoteForSplit(pSong, the_instrument, the_channel, the_track, notePitch, Volume, sampleNumber, splitInst);
+                            // Extract velocity limits from velRange: low in low byte, high in high byte
+                            uint8_t lowVel = (uint8_t)(k->velRange & 0xFF);
+                            uint8_t highVel = (uint8_t)((k->velRange >> 8) & 0xFF);
+                            // If velRange was not set, it defaults to 0..127 in GenSF2 creation.
+                            int volume127 = (Volume * 127) / 252;
+                            BAE_PRINTF("lowVel: %i, highVel: %i, Volume: %i, volume127: %i\n", lowVel, highVel, Volume, volume127);
+                            if ((uint8_t)volume127 >= lowVel && (uint8_t)volume127 <= highVel)
+                            {
+                                GM_Instrument *splitInst = k->pSplitInstrument;
+                                if (splitInst)
+                                {
+                                    // Start a voice for this split instrument. Use a small helper
+                                    // to avoid duplicating the large voice-setup code.
+                                    PV_StartMIDINoteForSplit(pSong, the_instrument, the_channel, the_track, notePitch, Volume, sampleNumber, splitInst);
+                                    started++;
+                                }
+                                else
+                                {
+                                    BAE_PRINTF("bad sample in instrument %d split %d\n", the_instrument, (int)count);
+                                }
+                            }
                         }
-                        else
-                        {
-                            BAE_PRINTF("bad sample in instrument %d split %d\n", the_instrument, (int)count);
-                        }
+                        k++;
+                        sampleNumber++;
                     }
-                    k++;
-                    sampleNumber++;
-                }
-                // We've spawned voices for all matching splits; nothing more to do here.
-                return;
             }
             else
 #endif

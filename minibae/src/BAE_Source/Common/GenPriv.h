@@ -602,6 +602,9 @@ struct GM_Voice
     XSDWORD                 zIndex, Z1value, previous_zFrequency;
     XSDWORD                 LPF_lowpassAmount, LPF_frequency, LPF_resonance;
     XSDWORD                 LPF_base_lowpassAmount, LPF_base_frequency, LPF_base_resonance;
+#if USE_SF2_SUPPORT == TRUE
+    uint32_t                voiceTime;
+#endif
 //  XSDWORD                 s1Left, s2Left, s3Left, s4Left, s5Left, s6Left; // for INTERP3 mode only
 };
 typedef struct GM_Voice GM_Voice;

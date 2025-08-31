@@ -543,7 +543,7 @@ extern "C"
     };
     typedef unsigned char VelocityCurveType;
 
-#define MAX_VOICES 64       // max voices at once
+#define MAX_VOICES 256       // max voices at once
 #define MAX_INSTRUMENTS 128 // MIDI number of programs per patch bank
 #define MAX_BANKS 6         // three GM banks; three user banks
 #define MAX_TRACKS 65       // max MIDI file tracks to process (64 + tempo track)
@@ -554,7 +554,7 @@ extern "C"
 #define MAX_CURVES 4              // max curve entries in instruments
 #define MAX_LFOS 6                // max LFO's, make sure to add one extra for MOD wheel support
 #define MAX_MASTER_VOLUME 256     // max volume level for master volume level
-#define MAX_SAMPLES 256           // max number of samples that can be loaded
+#define MAX_SAMPLES 1024           // max number of samples that can be loaded
 #define MAX_SONGS 16              // max number of songs that can play at one time
 #define PERCUSSION_CHANNEL 9      // which channel (zero based) is the default percussion channel
 #define MAX_SAMPLE_FRAMES 1048576 // max number of sample frames that we can play in one voice
@@ -738,7 +738,10 @@ typedef int32_t UNIT_TYPE;
         UNIT_TYPE mode;
         XBYTE currentPosition; //  ranges from 0 to ADSR_STAGES
 #if USE_SF2_SUPPORT == TRUE
-        XBOOL isSF2Envelope; // TRUE if this is an SF2 envelope (don't modify sustainingDecayLevel)
+        // New for SF2 conditional support
+        XBOOL isSF2Envelope;         // TRUE if this is an SF2 envelope (set during filling)
+        int16_t ADSRLevelCB[ADSR_STAGES];  // Centibel attenuation levels (0=full, 14400=silent) for SF2
+        int16_t currentLevelCB;      // Current centibel attenuation (for interpolation)
 #endif
     };
     typedef struct GM_ADSR GM_ADSR;
@@ -953,6 +956,9 @@ typedef int32_t UNIT_TYPE;
                                // enabled, otherwise its a replacement
                                // rootKey for sample
         XSWORD miscParameter2;
+#if USE_SF2_SUPPORT == TRUE
+        XSWORD velRange; // velocity range (low byte: low velocity, high byte: high velocity)
+#endif
         struct GM_Instrument *pSplitInstrument;
     };
     typedef struct GM_KeymapSplit GM_KeymapSplit;

@@ -55,6 +55,9 @@ static int16_t PV_FindGeneratorValue(SF2_Generator *generators, uint32_t genCoun
 // Helpers to resolve instrument-global + local generator values
 static void PV_GetInstGlobalGenRange(SF2_Bank *pBank, int32_t instrumentID,
                                      uint32_t *pGStart, uint32_t *pGEnd, XBOOL *pHasGlobal);
+// Similar helper for preset-level global generators (first preset bag without an INSTRUMENT generator)
+static void PV_GetPresetGlobalGenRange(SF2_Bank *pBank, int32_t presetIndex,
+                                      uint32_t *pGStart, uint32_t *pGEnd, XBOOL *pHasGlobal);
 static int16_t PV_FindInstGenMerged(SF2_Bank *pBank, int32_t instrumentID,
                                     uint32_t localStart, uint32_t localEnd,
                                     SF2_GeneratorType genType, int16_t defaultValue);
@@ -101,7 +104,8 @@ static int16_t PV_FindEffectiveGenValue(SF2_Bank *pBank, int32_t presetID, int32
     int16_t presetLocal = 0;
     XBOOL hasPresetGlobal = FALSE;
     uint32_t presetGlobalStart, presetGlobalEnd;
-    PV_GetInstGlobalGenRange(pBank, presetID, &presetGlobalStart, &presetGlobalEnd, &hasPresetGlobal);
+    // Use preset-level helper to find global generators for the preset
+    PV_GetPresetGlobalGenRange(pBank, presetID, &presetGlobalStart, &presetGlobalEnd, &hasPresetGlobal);
 
     if (hasPresetGlobal)
     {
@@ -109,12 +113,63 @@ static int16_t PV_FindEffectiveGenValue(SF2_Bank *pBank, int32_t presetID, int32
     }
     presetLocal = PV_FindGeneratorValue(pBank->presetGens, pBank->numPresetGens, presetGenStart, presetGenEnd, genType, presetGlobal);
 
-    // For most generators, add preset to instrument; ranges override
+    // For most generators, add preset to instrument; ranges/instrument override when present
     if (genType == SF2_GEN_KEY_RANGE || genType == SF2_GEN_VEL_RANGE || genType == SF2_GEN_INSTRUMENT)
     {
-        return (presetLocal != 0) ? presetLocal : instValue; // Preset overrides
+        // Determine if preset-local generator is actually present (don't treat sentinel defaults like 0x7F00 as "present")
+        XBOOL presetHasLocal = FALSE;
+        if (presetGenStart < presetGenEnd && pBank && pBank->presetGens)
+        {
+            for (uint32_t i = presetGenStart; i < presetGenEnd && i < pBank->numPresetGens; ++i)
+            {
+                if (pBank->presetGens[i].generator == genType)
+                {
+                    presetHasLocal = TRUE;
+                    break;
+                }
+            }
+        }
+
+        return presetHasLocal ? presetLocal : instValue; // Preset overrides only when explicitly present
     }
     return instValue + presetLocal; // Additive for tuning, vol, etc.
+}
+
+// Determine the preset-level global generator range, if present.
+// The first preset bag is considered a global zone when it has no INSTRUMENT generator.
+static void PV_GetPresetGlobalGenRange(SF2_Bank *pBank, int32_t presetIndex,
+                                      uint32_t *pGStart, uint32_t *pGEnd, XBOOL *pHasGlobal)
+{
+    if (pGStart)
+        *pGStart = 0;
+    if (pGEnd)
+        *pGEnd = 0;
+    if (pHasGlobal)
+        *pHasGlobal = FALSE;
+    if (!pBank || presetIndex < 0 || presetIndex >= (int32_t)pBank->numPresets)
+        return;
+
+    SF2_Preset *preset = &pBank->presets[presetIndex];
+    uint32_t bagStart = preset->bagIndex;
+    uint32_t bagEnd = (presetIndex + 1 < pBank->numPresets) ? pBank->presets[presetIndex + 1].bagIndex : pBank->numPresetBags;
+    if (bagStart >= bagEnd || bagStart >= pBank->numPresetBags)
+        return;
+
+    SF2_Bag *firstBag = &pBank->presetBags[bagStart];
+    uint32_t gStart = firstBag->genIndex;
+    uint32_t gEnd = (bagStart + 1 < pBank->numPresetBags) ? pBank->presetBags[bagStart + 1].genIndex : pBank->numPresetGens;
+
+    int16_t instInFirst = PV_FindGeneratorValue(pBank->presetGens, pBank->numPresetGens,
+                                                 gStart, gEnd, SF2_GEN_INSTRUMENT, -1);
+    if (instInFirst < 0)
+    {
+        if (pGStart)
+            *pGStart = gStart;
+        if (pGEnd)
+            *pGEnd = gEnd;
+        if (pHasGlobal)
+            *pHasGlobal = TRUE;
+    }
 }
 
 // Convert SF2 timecents to microseconds (engine ADSR time unit)
@@ -149,20 +204,30 @@ static inline uint32_t PV_SF2_TimecentsToUSec(int16_t timecents)
 }
 
 // Convert attenuation in centibels to a linear level scaled against fullLevel
-// level = fullLevel * 10^(-cB/200)
-static inline XSDWORD PV_SF2_LevelFromCentibels(int16_t centibels, XSDWORD fullLevel)
+// level = fullLevel * 10^(-cB/2000)
+XSDWORD PV_SF2_LevelFromCentibels(int16_t centibels, XSDWORD fullLevel)
 {
+// If fullLevel is 0, return 0 (no volume to adjust)
+    if (fullLevel == 0)
+        return 0;
+
+    // Handle centibels = 0 explicitly to avoid floating-point errors
+    if (centibels == 0)
+        return fullLevel;
+
+    // Calculate gain based on centibels
     float gain = powf(10.0f, -(float)centibels / 2000.0f);
     double lvl = (double)fullLevel * (double)gain;
-    if (lvl < 0.0)
-        lvl = 0.0;
+
+    // Clamp to fullLevel if lvl exceeds it
     if (lvl > (double)fullLevel)
         lvl = (double)fullLevel;
 
-    XSDWORD result = (XSDWORD)lvl;
+    // Prevent lvl from dropping to 0 or below; use a small positive value
+    if (lvl <= 0.0)
+        lvl = 1.0; // Small positive value to avoid muting
 
-    BAE_PRINTF("SF2 Debug: PV_SF2_LevelFromCentibels(%d cB, %ld) = gain=%f, lvl=%f, result=%ld\n",
-               (int)centibels, (long)fullLevel, gain, lvl, (long)result);
+    XSDWORD result = (XSDWORD)lvl;
     return result;
 }
 
@@ -382,6 +447,11 @@ static void PV_SF2_FillVolumeADSR(SF2_Bank *pBank, int32_t instrumentID, uint32_
     uint32_t tHold = PV_SF2_TimecentsToUSec(tcHold);
     uint32_t tDecay = PV_SF2_TimecentsToUSec(tcDecay);
     uint32_t tRel = PV_SF2_TimecentsToUSec(tcRel);
+    uint32_t cBInitAttScaled = XFIXED_1;
+    if (cBInitAtt != 0) {
+        cBInitAttScaled = PV_SF2_LevelFromCentibels(cBInitAtt, XFIXED_1);        
+    }
+    
 
     BAE_PRINTF("SF2 Debug: Raw generators - Delay:%d, Attack:%d, Hold:%d, Decay:%d, Sustain:%d, Release:%d, InitAtt:%d\n",
                (int)tcDelay, (int)tcAttack, (int)tcHold, (int)tcDecay, (int)cBSus, (int)tcRel, (int)cBInitAtt);
@@ -402,27 +472,20 @@ static void PV_SF2_FillVolumeADSR(SF2_Bank *pBank, int32_t instrumentID, uint32_
     BAE_PRINTF("SF2 Debug: Final times - tAttack:%uus, tDecay:%uus, tRel:%uus\n",
                tAttack, tDecay, tRel);
 
-    // Levels per SF2 spec:
-    // - initial attenuation (cBInitAtt) defines the peak level reached at end of attack
-    // - sustain (cBSus) is attenuation below FULL SCALE to hold during sustain
-    // The decay target is the lower (quieter) of peak vs sustain.
-    XSDWORD peakLevel = PV_SF2_LevelFromCentibels(cBInitAtt, VOLUME_RANGE);
-    XSDWORD sustainAbsLevel = PV_SF2_LevelFromCentibels(cBSus, VOLUME_RANGE);
-    XSDWORD sustainLevel = (sustainAbsLevel < peakLevel) ? sustainAbsLevel : peakLevel;
+    BAE_PRINTF("SF2 Debug: cbInitAtt: %d, cbInitAttScaled: %d\n",
+               cBInitAtt, cBInitAttScaled);
 
-    BAE_PRINTF("SF2 Debug: Level calculations - initAtt:%d cB, sustain:%d cB, peakLevel:%d, sustainLevel:%d (decay target)\n",
-               (int)cBInitAtt, (int)cBSus, (int)peakLevel, (int)sustainLevel);
-
+    pADSR->sustainingDecayLevel = cBInitAttScaled; 
     // Initialize ADSR - start from silence and ramp up
     pADSR->currentTime = 0;
     pADSR->currentPosition = 0;
     pADSR->currentLevel = 0; // Start from silence
     pADSR->previousTarget = 0;
     pADSR->mode = 0;
+    // SF2-specific: Set flag and cB levels
+    pADSR->isSF2Envelope = TRUE;
+    pADSR->currentLevelCB = 14400;
 
-    // For SF2, use sustainingDecayLevel only during sustain phase.
-    // Set it to 1.0 initially, and let the ADSR_SUSTAIN handler apply the attenuation.
-    pADSR->sustainingDecayLevel = XFIXED_1;
 
     // Build proper SF2 ADSR: Delay -> Attack -> Hold -> Decay -> Sustain -> Release
     // Skip very short delay/hold stages to avoid engine timing issues
@@ -431,7 +494,7 @@ static void PV_SF2_FillVolumeADSR(SF2_Bank *pBank, int32_t instrumentID, uint32_
     // Stage: Delay (optional - stay at silence) - skip if default
     if (stageIndex < ADSR_STAGES && tcDelay > -12000)
     { // Only if non-default
-        pADSR->ADSRLevel[stageIndex] = 0;
+        pADSR->ADSRLevelCB[stageIndex] = 14400; // Start from silence (14400 cB)
         pADSR->ADSRTime[stageIndex] = tDelay;
         pADSR->ADSRFlags[stageIndex] = ADSR_LINEAR_RAMP;
         stageIndex++;
@@ -441,17 +504,17 @@ static void PV_SF2_FillVolumeADSR(SF2_Bank *pBank, int32_t instrumentID, uint32_
     // Stage: Attack (silence -> peak level) - always present
     if (stageIndex < ADSR_STAGES)
     {
-        pADSR->ADSRLevel[stageIndex] = peakLevel;
+        // Attack: Ramp att from 14400 to 0 cB (linear dB decrease)
+        pADSR->ADSRLevelCB[stageIndex] = 0;
         pADSR->ADSRTime[stageIndex] = tAttack;
         pADSR->ADSRFlags[stageIndex] = ADSR_LINEAR_RAMP;
         stageIndex++;
-        BAE_PRINTF("SF2 Debug: Added attack stage %d: %uus -> %d\n", stageIndex - 1, tAttack, (int)peakLevel);
     }
 
     // Stage: Hold (optional - stay at peak) - skip if default
     if (stageIndex < ADSR_STAGES && tcHold > -12000)
     { // Only if non-default
-        pADSR->ADSRLevel[stageIndex] = peakLevel;
+        pADSR->ADSRLevelCB[stageIndex] = 0;
         pADSR->ADSRTime[stageIndex] = tHold;
         pADSR->ADSRFlags[stageIndex] = ADSR_LINEAR_RAMP;
         stageIndex++;
@@ -459,48 +522,27 @@ static void PV_SF2_FillVolumeADSR(SF2_Bank *pBank, int32_t instrumentID, uint32_
     }
 
     // Stage: Decay (peak -> sustain level, if needed)
-    if (sustainLevel < peakLevel && stageIndex < ADSR_STAGES)
+    if (stageIndex < ADSR_STAGES)
     {
-        pADSR->ADSRLevel[stageIndex] = sustainLevel;
+        pADSR->ADSRLevelCB[stageIndex] = cBSus - cBInitAtt;
         pADSR->ADSRTime[stageIndex] = tDecay;
         pADSR->ADSRFlags[stageIndex] = ADSR_LINEAR_RAMP;
         stageIndex++;
-        BAE_PRINTF("SF2 Debug: Added decay stage %d: %uus -> %d\n", stageIndex - 1, tDecay, (int)sustainLevel);
     }
 
-    // If sustain level is effectively zero, terminate after decay to avoid hanging at silent sustain
-    if (sustainLevel == 0)
+    if (stageIndex < ADSR_STAGES)
     {
-        if (stageIndex < ADSR_STAGES)
-        {
-            pADSR->ADSRLevel[stageIndex] = 0;
-            pADSR->ADSRTime[stageIndex] = 1; // minimal time
-            pADSR->ADSRFlags[stageIndex] = ADSR_TERMINATE;
-            stageIndex++;
-            BAE_PRINTF("SF2 Debug: Sustain level is zero; added TERMINATE stage %d after decay\n", stageIndex - 1);
-        }
-    }
-    else
-    {
-        // Stage: Sustain (use negative level to trigger BAE's sustainingDecayLevel mechanism)
-        if (stageIndex < ADSR_STAGES)
-        {
-            // Convert sustainLevel to a negative attenuation value that BAE expects
-            // HSB format uses negative values to modify sustainingDecayLevel during sustain
-            XSDWORD negativeLevel = -((peakLevel - sustainLevel) * 50000L / peakLevel);
-            pADSR->ADSRLevel[stageIndex] = negativeLevel;
-            pADSR->ADSRTime[stageIndex] = 0; // Indefinite time
-            pADSR->ADSRFlags[stageIndex] = ADSR_SUSTAIN;
-            stageIndex++;
-            BAE_PRINTF("SF2 Debug: Added sustain stage %d: negative level %ld (sustain attenuation)\n",
-                       stageIndex - 1, (long)negativeLevel);
-        }
+        
+        pADSR->ADSRLevelCB[stageIndex] = cBSus - cBInitAtt;
+        pADSR->ADSRTime[stageIndex] = 0; // Indefinite time
+        pADSR->ADSRFlags[stageIndex] = ADSR_SUSTAIN;
+        stageIndex++;
     }
 
     // Stage: Release (peak -> silence on note-off)
     if (stageIndex < ADSR_STAGES)
     {
-        pADSR->ADSRLevel[stageIndex] = 0;
+        pADSR->ADSRLevelCB[stageIndex] = 14400;
         pADSR->ADSRTime[stageIndex] = tRel;
         pADSR->ADSRFlags[stageIndex] = ADSR_RELEASE;
         stageIndex++;
@@ -510,15 +552,10 @@ static void PV_SF2_FillVolumeADSR(SF2_Bank *pBank, int32_t instrumentID, uint32_
     // Terminate remaining stages
     for (int i = stageIndex; i < ADSR_STAGES; i++)
     {
-        pADSR->ADSRLevel[i] = 0;
+        pADSR->ADSRLevelCB[i] = 14400;
         pADSR->ADSRTime[i] = 1;
         pADSR->ADSRFlags[i] = ADSR_TERMINATE;
     }
-
-    BAE_PRINTF("SF2 Debug: Full ADSR - Delay:%uus, Attack:%uus->%d, Hold:%uus, Decay:%uus->%d, Sustain:%d, Release:%uus (%d stages)\n",
-               (unsigned)tDelay, (unsigned)tAttack, (int)peakLevel,
-               (unsigned)tHold, (unsigned)tDecay, (int)sustainLevel,
-               (int)sustainLevel, (unsigned)tRel, stageIndex);
 }
 
 // Heuristic: decide if a preset likely represents a drum kit
@@ -558,10 +595,10 @@ static XBOOL PV_PresetLooksLikeDrumKit(SF2_Bank *pBank, uint32_t presetIndex)
         if (instrumentID >= 0 && instrumentID < (int32_t)pBank->numInstruments)
         {
             instCount++;
-            int16_t keyRange = PV_FindGeneratorValue(pBank->presetGens, pBank->numPresetGens, genStart, genEnd, SF2_GEN_KEY_RANGE, 0x007F);
+            int16_t keyRange = PV_FindGeneratorValue(pBank->presetGens, pBank->numPresetGens, genStart, genEnd, SF2_GEN_KEY_RANGE, 0x7F00);
             uint8_t keyLo = keyRange & 0xFF;
             uint8_t keyHi = (keyRange >> 8) & 0xFF;
-            if (keyRange == 0x007F || keyHi == 0)
+            if (keyRange == 0x7F00 || keyHi == 0)
             {
                 keyLo = 0;
                 keyHi = 127;
@@ -587,10 +624,10 @@ static XBOOL PV_PresetLooksLikeDrumKit(SF2_Bank *pBank, uint32_t presetIndex)
                 if (sID < 0 || sID >= (int16_t)pBank->numSamples)
                     continue;
                 totalInstZones++;
-                int16_t zKeyRange = PV_FindGeneratorValue(pBank->instGens, pBank->numInstGens, igStart, igEnd, SF2_GEN_KEY_RANGE, 0x007F);
+                int16_t zKeyRange = PV_FindGeneratorValue(pBank->instGens, pBank->numInstGens, igStart, igEnd, SF2_GEN_KEY_RANGE, 0x7F00);
                 uint8_t zLo = zKeyRange & 0xFF;
                 uint8_t zHi = (zKeyRange >> 8) & 0xFF;
-                if (zKeyRange == 0x007F || zHi == 0)
+                if (zKeyRange == 0x7F00 || zHi == 0)
                 {
                     zLo = 0;
                     zHi = 127;
@@ -973,14 +1010,45 @@ static int16_t PV_FindGeneratorValue(SF2_Generator *generators, uint32_t genCoun
                                      uint32_t startIndex, uint32_t endIndex,
                                      SF2_GeneratorType genType, int16_t defaultValue)
 {
+    // Debug: trace key/velocity range lookups to diagnose missing generators
+    if (genType == SF2_GEN_KEY_RANGE || genType == SF2_GEN_VEL_RANGE)
+    {
+        BAE_PRINTF("SF2 Debug: Searching for generator type %d in range %u-%u (genCount=%u) with default 0x%04X\n",
+                   genType, (unsigned)startIndex, (unsigned)endIndex, (unsigned)genCount, (unsigned)(uint16_t)defaultValue);
+    }
     for (uint32_t i = startIndex; i < endIndex && i < genCount; i++)
     {
         if (generators[i].generator == genType)
         {
+            if (genType == SF2_GEN_KEY_RANGE || genType == SF2_GEN_VEL_RANGE)
+            {
+                BAE_PRINTF("SF2 Debug: Found generator %d at index %u -> amount=0x%04X\n",
+                           genType, (unsigned)i, (unsigned)generators[i].amount);
+            }
             return (int16_t)generators[i].amount;
         }
     }
+    if (genType == SF2_GEN_KEY_RANGE || genType == SF2_GEN_VEL_RANGE)
+    {
+        BAE_PRINTF("SF2 Debug: Generator %d not found in range %u-%u, returning default 0x%04X\n",
+                   genType, (unsigned)startIndex, (unsigned)endIndex, (unsigned)(uint16_t)defaultValue);
+    }
     return defaultValue;
+}
+
+// Check whether a specific generator type exists in the given generator index range
+static XBOOL PV_HasGeneratorInRange(SF2_Generator *generators, uint32_t genCount,
+                                    uint32_t startIndex, uint32_t endIndex,
+                                    SF2_GeneratorType genType)
+{
+    if (!generators || startIndex >= endIndex || startIndex >= genCount)
+        return FALSE;
+    for (uint32_t i = startIndex; i < endIndex && i < genCount; ++i)
+    {
+        if (generators[i].generator == genType)
+            return TRUE;
+    }
+    return FALSE;
 }
 
 // Determine the instrument-level global generator range, if present.
@@ -1026,14 +1094,16 @@ static int16_t PV_FindInstGenMerged(SF2_Bank *pBank, int32_t instrumentID, uint3
 {
     // Check local zone first
     int16_t localValue = PV_FindGeneratorValue(pBank->instGens, pBank->numInstGens, localStart, localEnd, genType, defaultValue);
-    
-    // For override types, return local if present
-    if (localValue != defaultValue && 
-        (genType == SF2_GEN_KEY_RANGE || genType == SF2_GEN_VEL_RANGE || 
-         genType == SF2_GEN_SAMPLE_ID || genType == SF2_GEN_OVERRIDING_ROOT_KEY || 
-         genType == SF2_GEN_KEYNUM || genType == SF2_GEN_SAMPLE_MODES))
+
+    // For override types, detect presence by scanning the generator entries rather than
+    // relying on numeric equality with a default sentinel. This avoids endianness or
+    // encoding differences causing false positives/negatives.
+    if (genType == SF2_GEN_KEY_RANGE || genType == SF2_GEN_VEL_RANGE ||
+        genType == SF2_GEN_SAMPLE_ID || genType == SF2_GEN_OVERRIDING_ROOT_KEY ||
+        genType == SF2_GEN_KEYNUM || genType == SF2_GEN_SAMPLE_MODES)
     {
-        return localValue;
+        if (PV_HasGeneratorInRange(pBank->instGens, pBank->numInstGens, localStart, localEnd, genType))
+            return localValue;
     }
 
     // Get global zone
@@ -1459,10 +1529,10 @@ GM_Instrument *SF2_CreateInstrumentFromPresetWithNote(SF2_Bank *pBank, uint16_t 
         SF2_Bag *bag = &pBank->presetBags[bagIdx];
         uint32_t genStart = bag->genIndex;
         uint32_t genEnd = (bagIdx + 1 < pBank->numPresetBags) ? pBank->presetBags[bagIdx + 1].genIndex : pBank->numPresetGens;
-        int16_t keyRange = PV_FindGeneratorValue(pBank->presetGens, pBank->numPresetGens, genStart, genEnd, SF2_GEN_KEY_RANGE, 0x007F);
+        int16_t keyRange = PV_FindGeneratorValue(pBank->presetGens, pBank->numPresetGens, genStart, genEnd, SF2_GEN_KEY_RANGE, 0x7F00);
         uint8_t keyLo = keyRange & 0xFF;
         uint8_t keyHi = (keyRange >> 8) & 0xFF;
-        if (keyRange == 0x007F || keyHi == 0)
+        if (keyRange == 0x7F00 || keyHi == 0)
         {
             keyLo = 0;
             keyHi = 127;
@@ -1516,10 +1586,10 @@ GM_Instrument *SF2_CreateInstrumentFromPresetWithNote(SF2_Bank *pBank, uint16_t 
             if (sID < 0 || sID >= (int16_t)pBank->numSamples)
                 continue;
             int16_t zKeyNum = PV_FindGeneratorValue(pBank->instGens, pBank->numInstGens, genStart, genEnd, SF2_GEN_KEYNUM, -1);
-            int16_t keyRange = PV_FindGeneratorValue(pBank->instGens, pBank->numInstGens, genStart, genEnd, SF2_GEN_KEY_RANGE, 0x007F);
+            int16_t keyRange = PV_FindGeneratorValue(pBank->instGens, pBank->numInstGens, genStart, genEnd, SF2_GEN_KEY_RANGE, 0x7F00);
             uint8_t kLo = keyRange & 0xFF;
             uint8_t kHi = (keyRange >> 8) & 0xFF;
-            if (keyRange == 0x007F || kHi == 0)
+            if (keyRange == 0x7F00 || kHi == 0)
             {
                 kLo = 0;
                 kHi = 127;
@@ -1590,11 +1660,11 @@ GM_Instrument *SF2_CreateInstrumentFromPresetWithNote(SF2_Bank *pBank, uint16_t 
 
             // Check key range for this sample zone
             int16_t keyRange = PV_FindGeneratorValue(pBank->instGens, pBank->numInstGens,
-                                                     genStart, genEnd, SF2_GEN_KEY_RANGE, 0x007F); // Default 0-127
+                                                     genStart, genEnd, SF2_GEN_KEY_RANGE, 0x7F00); // Default 0-127
 
             uint8_t keyLo = keyRange & 0xFF;
             uint8_t keyHi = (keyRange >> 8) & 0xFF;
-            if (keyRange == 0x007F || keyHi == 0)
+            if (keyRange == 0x7F00 || keyHi == 0)
             {
                 keyLo = 0;
                 keyHi = 127;
@@ -1645,10 +1715,10 @@ GM_Instrument *SF2_CreateInstrumentFromPresetWithNote(SF2_Bank *pBank, uint16_t 
                         int16_t zoneRootKey = PV_FindGeneratorValue(pBank->instGens, pBank->numInstGens,
                                                                     genStart, genEnd, SF2_GEN_OVERRIDING_ROOT_KEY, -1);
                         int16_t keyRange2 = PV_FindGeneratorValue(pBank->instGens, pBank->numInstGens,
-                                                                  genStart, genEnd, SF2_GEN_KEY_RANGE, 0x007F);
+                                                                  genStart, genEnd, SF2_GEN_KEY_RANGE, 0x7F00);
                         uint8_t kLo = keyRange2 & 0xFF;
                         uint8_t kHi = (keyRange2 >> 8) & 0xFF;
-                        if (keyRange2 == 0x007F || kHi == 0)
+                        if (keyRange2 == 0x7F00 || kHi == 0)
                         {
                             kLo = 0;
                             kHi = 127;
@@ -1685,10 +1755,10 @@ GM_Instrument *SF2_CreateInstrumentFromPresetWithNote(SF2_Bank *pBank, uint16_t 
                 int16_t sID = PV_FindGeneratorValue(pBank->instGens, pBank->numInstGens, genStart, genEnd, SF2_GEN_SAMPLE_ID, -1);
                 if (sID < 0 || sID >= (int16_t)pBank->numSamples)
                     continue;
-                int16_t keyRange = PV_FindGeneratorValue(pBank->instGens, pBank->numInstGens, genStart, genEnd, SF2_GEN_KEY_RANGE, 0x007F);
+                int16_t keyRange = PV_FindGeneratorValue(pBank->instGens, pBank->numInstGens, genStart, genEnd, SF2_GEN_KEY_RANGE, 0x7F00);
                 uint8_t kLo = keyRange & 0xFF;
                 uint8_t kHi = (keyRange >> 8) & 0xFF;
-                if (keyRange == 0x007F || kHi == 0)
+                if (keyRange == 0x7F00 || kHi == 0)
                 {
                     kLo = 0;
                     kHi = 127;
@@ -1754,10 +1824,10 @@ GM_Instrument *SF2_CreateInstrumentFromPresetWithNote(SF2_Bank *pBank, uint16_t 
                     selectedGenStart = genStart;
                     selectedGenEnd = genEnd;
                     int16_t zoneRootKey = PV_FindGeneratorValue(pBank->instGens, pBank->numInstGens, genStart, genEnd, SF2_GEN_OVERRIDING_ROOT_KEY, -1);
-                    int16_t keyRange2 = PV_FindGeneratorValue(pBank->instGens, pBank->numInstGens, genStart, genEnd, SF2_GEN_KEY_RANGE, 0x007F);
+                    int16_t keyRange2 = PV_FindGeneratorValue(pBank->instGens, pBank->numInstGens, genStart, genEnd, SF2_GEN_KEY_RANGE, 0x7F00);
                     uint8_t kLo = keyRange2 & 0xFF;
                     uint8_t kHi = (keyRange2 >> 8) & 0xFF;
-                    if (keyRange2 == 0x007F || kHi == 0)
+                    if (keyRange2 == 0x7F00 || kHi == 0)
                     {
                         kLo = 0;
                         kHi = 127;
@@ -1980,7 +2050,6 @@ GM_Instrument *PV_GetSF2Instrument(GM_Song *pSong, XLongResourceID instrument, O
         // Route to SF2 percussion bank
         midiProgram = 0; // Standard drum kit preset
         midiBank = 128;  // SF2 percussion bank
-        BAE_PRINTF("SF2 Debug: Percussion instrument %d -> SF2 bank=128, preset=0, note=%d\n", instrument, noteNumber);
     }
     else if (isMSB128Perc)
     {
@@ -1990,8 +2059,6 @@ GM_Instrument *PV_GetSF2Instrument(GM_Song *pSong, XLongResourceID instrument, O
         uint16_t noteGuess = midiProgram;  // best-effort note guess from instrument encoding
         midiBank = 128;                    // enforce SF2 percussion bank
         midiProgram = extProgram;          // try requested kit first, fall back later if needed
-        BAE_PRINTF("SF2 Debug: Percussion (MSB 128) instrument %d -> SF2 bank=128, preset=%u, note~=%u\n",
-                   instrument, (unsigned)extProgram, (unsigned)noteGuess);
     }
     else
     {
@@ -2027,14 +2094,11 @@ GM_Instrument *PV_GetSF2Instrument(GM_Song *pSong, XLongResourceID instrument, O
                     if (((instrument / 128) % 2) == 1)
                     {
                         uint16_t noteNumber = (uint16_t)(instrument % 128);
-                        BAE_PRINTF("SF2 Debug: Perc (odd map) using preset '%s' bank=%u prog=%u note=%u\n",
-                                   preset->name, (unsigned)preset->bank, (unsigned)preset->preset, (unsigned)noteNumber);
                         pInstrument = SF2_CreateInstrumentFromPresetWithNote(sf2Bank, midiBank, midiProgram, noteNumber, pErr);
                     }
                     // Case B: direct SF2 drum bank requested (bank 128) but not odd mapping -> build full kit (keymap split)
                     else if (preset->bank == 128)
                     {
-                        BAE_PRINTF("SF2 Debug: Perc (bank 128 kit) building keymap split for preset '%s'\n", preset->name);
                         pInstrument = SF2_CreateInstrumentFromPreset(sf2Bank, midiBank, midiProgram, pErr);
                     }
                     else
@@ -2307,11 +2371,6 @@ static OPErr PV_SF2_CreateWaveformFromSample(SF2_Bank *pBank, int32_t instrument
     // Remember whether the header actually had a loop
     XBOOL headerHadLoop = (sample->endloop > sample->startloop);
 
-    BAE_PRINTF("SF2 Debug Loop: sample=%u, headerHadLoop=%s, header loop %u-%u, eff loop %d-%d, window %d-%d\n",
-               (unsigned)sampleID, headerHadLoop ? "YES" : "NO",
-               (unsigned)sample->startloop, (unsigned)sample->endloop,
-               (int)effStartLoop, (int)effEndLoop, (int)effStart, (int)effEnd);
-
     // Clamp effective loop region to the effective sample window
     if (effStartLoop < effStart)
         effStartLoop = effStart;
@@ -2361,21 +2420,19 @@ static OPErr PV_SF2_CreateWaveformFromSample(SF2_Bank *pBank, int32_t instrument
     pWaveform->endLoop = loopEnd;
     pWaveform->sampledRate = FLOAT_TO_XFIXED((float)targetRate);
 
-    BAE_PRINTF("SF2 Debug: Final loop points set - start=%u, end=%u (frames=%u)\n",
-               (unsigned)loopStart, (unsigned)loopEnd, (unsigned)pWaveform->waveFrames);
-
     // Get the root key using merged generators
     int16_t zoneRootKey = PV_FindInstGenMerged(pBank, instrumentID, genStart, genEnd, SF2_GEN_OVERRIDING_ROOT_KEY, -1);
-    int16_t keyRange = PV_FindInstGenMerged(pBank, instrumentID, genStart, genEnd, SF2_GEN_KEY_RANGE, 0x007F);
+    int16_t keyRange = PV_FindInstGenMerged(pBank, instrumentID, genStart, genEnd, SF2_GEN_KEY_RANGE, 0x7F00);
     uint8_t keyLo = keyRange & 0xFF;
     uint8_t keyHi = (keyRange >> 8) & 0xFF;
-    if (keyRange == 0x007F || keyHi == 0)
+    if (keyRange == 0x7F00 || keyHi == 0)
     {
         keyLo = 0;
         keyHi = 127;
     }
 
     pWaveform->baseMidiPitch = PV_EffectiveRootKey(pBank, sampleID, zoneRootKey, keyLo, keyHi);
+
 
     BAE_PRINTF("SF2 Debug: Created waveform - pBank=%u, sampleID=%d, rootKey=%d, size=%u frames, rate=%u Hz (loop %u-%u)\n",
                pBank, (int)sampleID, (int)pWaveform->baseMidiPitch,
@@ -2444,10 +2501,10 @@ static GM_Instrument *PV_SF2_CreateSimpleInstrument(SF2_Bank *pBank, int32_t *in
                 int16_t zoneRootKey = PV_FindGeneratorValue(pBank->instGens, pBank->numInstGens,
                                                             genStart, genEnd, SF2_GEN_OVERRIDING_ROOT_KEY, -1);
                 int16_t keyRange = PV_FindGeneratorValue(pBank->instGens, pBank->numInstGens,
-                                                         genStart, genEnd, SF2_GEN_KEY_RANGE, 0x007F);
+                                                         genStart, genEnd, SF2_GEN_KEY_RANGE, 0x7F00);
                 uint8_t keyLo = keyRange & 0xFF;
                 uint8_t keyHi = (keyRange >> 8) & 0xFF;
-                if (keyRange == 0x007F || keyHi == 0)
+                if (keyRange == 0x7F00 || keyHi == 0)
                 {
                     keyLo = 0;
                     keyHi = 127;
@@ -2509,7 +2566,7 @@ static GM_Instrument *PV_SF2_CreateKeymapSplitInstrument(SF2_Bank *pBank, int32_
     // Get preset global zone
     XBOOL hasPresetGlobal = FALSE;
     uint32_t presetGlobalStart = 0, presetGlobalEnd = 0;
-    PV_GetInstGlobalGenRange(pBank, presetID, &presetGlobalStart, &presetGlobalEnd, &hasPresetGlobal);
+    PV_GetPresetGlobalGenRange(pBank, presetID, &presetGlobalStart, &presetGlobalEnd, &hasPresetGlobal);
 
     // Scan all instruments for zones
     for (uint32_t i = 0; i < instrumentCount && zoneCount < MAX_SF2_ZONES; i++)
@@ -2525,13 +2582,20 @@ static GM_Instrument *PV_SF2_CreateKeymapSplitInstrument(SF2_Bank *pBank, int32_
         PV_GetInstGlobalGenRange(pBank, instID, &globalGenStart, &globalGenEnd, &hasGlobal);
 
         // Get preset bag range for this instrument (assuming one preset bag per instrument for now)
-        uint32_t presetGenStart = 0, presetGenEnd = 0;
+    uint32_t presetGenStart = 0, presetGenEnd = 0;
+    XBOOL foundPresetRange = FALSE;
         if (presetID >= 0 && presetID < pBank->numPresets)
         {
             SF2_Preset *preset = &pBank->presets[presetID];
             uint32_t pbagStart = preset->bagIndex;
             uint32_t pbagEnd = (presetID + 1 < pBank->numPresets) ? pBank->presets[presetID + 1].bagIndex : pBank->numPresetBags;
             // Find bag with this instrument
+            // Find the full contiguous range of preset bags that map to this instrument.
+            // Some SF2 files place multiple adjacent preset bags for the same instrument
+            // (for velocity splits, etc.). Collect the min/max bag indices that match
+            // so merged preset-level generators (e.g. VEL_RANGE) are considered correctly.
+            int32_t firstMatch = -1;
+            int32_t lastMatch = -1;
             for (uint32_t pbagIdx = pbagStart; pbagIdx < pbagEnd; pbagIdx++)
             {
                 if (pbagIdx >= pBank->numPresetBags) break;
@@ -2541,9 +2605,81 @@ static GM_Instrument *PV_SF2_CreateKeymapSplitInstrument(SF2_Bank *pBank, int32_
                 int16_t pInstID = PV_FindGeneratorValue(pBank->presetGens, pBank->numPresetGens, pgenStart, pgenEnd, SF2_GEN_INSTRUMENT, -1);
                 if (pInstID == instID)
                 {
-                    presetGenStart = pgenStart;
-                    presetGenEnd = pgenEnd;
-                    break;
+                    if (firstMatch == -1)
+                        firstMatch = (int32_t)pbagIdx;
+                    lastMatch = (int32_t)pbagIdx;
+                }
+            }
+            if (firstMatch != -1)
+            {
+                // Compute presetGenStart from first matching bag, and presetGenEnd from the bag after lastMatch
+                SF2_Bag *firstBagMatch = &pBank->presetBags[firstMatch];
+                presetGenStart = firstBagMatch->genIndex;
+                uint32_t afterLastIdx = (uint32_t)lastMatch + 1;
+                if (afterLastIdx < pBank->numPresetBags)
+                {
+                    presetGenEnd = pBank->presetBags[afterLastIdx].genIndex;
+                }
+                else
+                {
+                    presetGenEnd = pBank->numPresetGens;
+                }
+
+                // If the immediately previous bag (within the same preset) has no INSTRUMENT
+                // generator, include it so VEL_RANGE placed there is considered for this instrument.
+                if ((uint32_t)firstMatch > pbagStart)
+                {
+                    uint32_t prevIdx = (uint32_t)firstMatch - 1;
+                    if (prevIdx < pBank->numPresetBags)
+                    {
+                        SF2_Bag *prevBag = &pBank->presetBags[prevIdx];
+                        uint32_t prevGStart = prevBag->genIndex;
+                        uint32_t prevGEnd = (prevIdx + 1 < pBank->numPresetBags) ? pBank->presetBags[prevIdx + 1].genIndex : pBank->numPresetGens;
+                        int16_t prevInst = PV_FindGeneratorValue(pBank->presetGens, pBank->numPresetGens, prevGStart, prevGEnd, SF2_GEN_INSTRUMENT, -1);
+                        if (prevInst == -1)
+                        {
+                            BAE_PRINTF("SF2 Debug: Including previous preset bag %u gen %u-%u into presetGen range for inst %d\n",
+                                       (unsigned)prevIdx, (unsigned)prevGStart, (unsigned)prevGEnd, instID);
+                            presetGenStart = prevGStart;
+                        }
+                    }
+                }
+
+                foundPresetRange = TRUE;
+                BAE_PRINTF("SF2 Debug: Found preset gen range for inst %d: presetGenStart=%u presetGenEnd=%u\n", instID, (unsigned)presetGenStart, (unsigned)presetGenEnd);
+            }
+            if (!foundPresetRange)
+            {
+                BAE_PRINTF("SF2 Debug: No preset bag matched inst %d in preset %d; dumping all preset bags for this preset:\n", instID, (int)presetID);
+                for (uint32_t dbg = pbagStart; dbg < pbagEnd && dbg < pBank->numPresetBags; ++dbg)
+                {
+                    SF2_Bag *dbgBag = &pBank->presetBags[dbg];
+                    uint32_t dbgGStart = dbgBag->genIndex;
+                    uint32_t dbgGEnd = (dbg + 1 < pBank->numPresetBags) ? pBank->presetBags[dbg + 1].genIndex : pBank->numPresetGens;
+                    int16_t dbgInst = PV_FindGeneratorValue(pBank->presetGens, pBank->numPresetGens, dbgGStart, dbgGEnd, SF2_GEN_INSTRUMENT, -1);
+                    BAE_PRINTF(" SF2 Debug: presetBag[%u] gen %u-%u maps to inst=%d; gens:\n", (unsigned)dbg, (unsigned)dbgGStart, (unsigned)dbgGEnd, (int)dbgInst);
+                }
+                // Extra diagnostic: search entire bank for any preset bag mapping to this instrumentID
+                BAE_PRINTF("SF2 Debug: Searching entire bank for preset bags that map to inst %d\n", instID);
+                for (uint32_t pbi = 0; pbi < pBank->numPresetBags; ++pbi)
+                {
+                    SF2_Bag *pb = &pBank->presetBags[pbi];
+                    uint32_t s = pb->genIndex;
+                    uint32_t e = (pbi + 1 < pBank->numPresetBags) ? pBank->presetBags[pbi + 1].genIndex : pBank->numPresetGens;
+                    int16_t mapInst = PV_FindGeneratorValue(pBank->presetGens, pBank->numPresetGens, s, e, SF2_GEN_INSTRUMENT, -1);
+                    if (mapInst == instID)
+                    {
+                        BAE_PRINTF("SF2 Debug: FOUND mapping in presetBag[%u] gen %u-%u -> inst=%d\n", (unsigned)pbi, (unsigned)s, (unsigned)e, (int)mapInst);
+                        // Dump gens in that bag and explicitly check for VEL_RANGE
+                        
+                        int16_t v = PV_FindGeneratorValue(pBank->presetGens, pBank->numPresetGens, s, e, SF2_GEN_VEL_RANGE, 0x7F00);
+                        if (v != 0x7F00)
+                        {
+                            uint8_t lv = v & 0xFF;
+                            uint8_t hv = (v >> 8) & 0xFF;
+                            BAE_PRINTF("SF2 Debug: VEL_RANGE in that bag -> 0x%04X (vel %u-%u)\n", (unsigned)v, (unsigned)lv, (unsigned)hv);
+                        }
+                    }
                 }
             }
         }
@@ -2558,13 +2694,16 @@ static GM_Instrument *PV_SF2_CreateKeymapSplitInstrument(SF2_Bank *pBank, int32_
 
             // Check if this is a local zone
             int16_t sampleID = PV_FindGeneratorValue(pBank->instGens, pBank->numInstGens, genStart, genEnd, SF2_GEN_SAMPLE_ID, -1);
+            // Diagnostic: dump all instrument generators in this zone to help find misplaced VEL_RANGE
             if (sampleID == -1 || sampleID >= pBank->numSamples) continue;
 
             // Get effective key range
-            int16_t keyRange = PV_FindEffectiveGenValue(pBank, presetID, instID, presetGenStart, presetGenEnd, genStart, genEnd, SF2_GEN_KEY_RANGE, 0x007F);
+            BAE_PRINTF("SF2 Debug: Zone merge context - inst=%d presetGen=%u-%u instGen=%u-%u\n",
+                       instID, (unsigned)presetGenStart, (unsigned)presetGenEnd, (unsigned)genStart, (unsigned)genEnd);
+            int16_t keyRange = PV_FindEffectiveGenValue(pBank, presetID, instID, presetGenStart, presetGenEnd, genStart, genEnd, SF2_GEN_KEY_RANGE, 0x7F00);
             uint8_t lowKey = keyRange & 0xFF;
             uint8_t highKey = (keyRange >> 8) & 0xFF;
-            if (keyRange == 0x007F || highKey == 0)
+            if (keyRange == 0x7F00 || highKey == 0)
             {
                 lowKey = 0;
                 highKey = 127;
@@ -2584,13 +2723,72 @@ static GM_Instrument *PV_SF2_CreateKeymapSplitInstrument(SF2_Bank *pBank, int32_
             if (highKey > 127) highKey = 127;
 
             // Get effective velocity range
-            int16_t velRange = PV_FindEffectiveGenValue(pBank, presetID, instID, presetGenStart, presetGenEnd, genStart, genEnd, SF2_GEN_VEL_RANGE, 0x007F);
+            // Diagnostic: show how merging would resolve VEL_RANGE
+            int16_t instVel = PV_FindInstGenMerged(pBank, instID, genStart, genEnd, SF2_GEN_VEL_RANGE, 0x7F00);
+            int16_t presetVelGlobal = 0;
+            if (presetGlobalStart < presetGlobalEnd)
+                presetVelGlobal = PV_FindGeneratorValue(pBank->presetGens, pBank->numPresetGens, presetGlobalStart, presetGlobalEnd, SF2_GEN_VEL_RANGE, 0);
+            int16_t presetVelLocal = PV_FindGeneratorValue(pBank->presetGens, pBank->numPresetGens, presetGenStart, presetGenEnd, SF2_GEN_VEL_RANGE, presetVelGlobal);
+            XBOOL presetHasLocalVel = PV_HasGeneratorInRange(pBank->presetGens, pBank->numPresetGens, presetGenStart, presetGenEnd, SF2_GEN_VEL_RANGE);
+            BAE_PRINTF("SF2 Debug: VEL_RANGE merge check - instVel=0x%04X presetGlobal=0x%04X presetLocal=0x%04X presetHasLocal=%u\n",
+                       (unsigned)(uint16_t)instVel, (unsigned)(uint16_t)presetVelGlobal, (unsigned)(uint16_t)presetVelLocal, (unsigned)presetHasLocalVel);
+            int16_t velRange = PV_FindEffectiveGenValue(pBank, presetID, instID, presetGenStart, presetGenEnd, genStart, genEnd, SF2_GEN_VEL_RANGE, 0x7F00);
             uint8_t lowVel = velRange & 0xFF;
             uint8_t highVel = (velRange >> 8) & 0xFF;
-            if (velRange == 0x007F)
+            // Handle default sentinel robustly: accept either 0x7F00 or a zero high-byte (0x007F) as the "full" range
+            if (velRange == 0x7F00 || highVel == 0)
             {
                 lowVel = 0;
                 highVel = 127;
+            }
+
+            // Fallback: if instrument-level merged lookup returned the default sentinel, try preset bag ranges
+            if (velRange == 0x7F00)
+            {
+                // First try preset global zone (if present)
+                if (hasPresetGlobal)
+                {
+                    int16_t presetVelGlobal = PV_FindGeneratorValue(pBank->presetGens, pBank->numPresetGens, presetGlobalStart, presetGlobalEnd, SF2_GEN_VEL_RANGE, 0x7F00);
+                    if (presetVelGlobal != 0x7F00)
+                    {
+                        velRange = presetVelGlobal;
+                        lowVel = velRange & 0xFF;
+                        highVel = (velRange >> 8) & 0xFF;
+                        BAE_PRINTF("SF2 Debug: VEL_RANGE found in preset GLOBAL range -> 0x%04X (vel %u-%u)\n", (unsigned)velRange, (unsigned)lowVel, (unsigned)highVel);
+                    }
+                }
+
+                if (velRange == 0x7F00 && presetID >= 0 && presetID < (int32_t)pBank->numPresets)
+                {
+                    SF2_Preset *preset = &pBank->presets[presetID];
+                    uint32_t pbagStart = preset->bagIndex;
+                    uint32_t pbagEnd = (presetID + 1 < (int32_t)pBank->numPresets) ? pBank->presets[presetID + 1].bagIndex : pBank->numPresetBags;
+                    BAE_PRINTF("SF2 Debug: VEL_RANGE fallback: scanning preset bags %u-%u for preset %d\n", (unsigned)pbagStart, (unsigned)pbagEnd, (int)presetID);
+                    for (uint32_t pbagIdx = pbagStart; pbagIdx < pbagEnd; ++pbagIdx)
+                    {
+                        if (pbagIdx >= pBank->numPresetBags)
+                            break;
+                        SF2_Bag *pbag = &pBank->presetBags[pbagIdx];
+                        uint32_t pgenStart = pbag->genIndex;
+                        uint32_t pgenEnd = (pbagIdx + 1 < pBank->numPresetBags) ? pBank->presetBags[pbagIdx + 1].genIndex : pBank->numPresetGens;
+                        int16_t presetVel = PV_FindGeneratorValue(pBank->presetGens, pBank->numPresetGens, pgenStart, pgenEnd, SF2_GEN_VEL_RANGE, 0x7F00);
+                        if (presetVel != 0x7F00)
+                        {
+                            velRange = presetVel;
+                            lowVel = velRange & 0xFF;
+                            highVel = (velRange >> 8) & 0xFF;
+                            BAE_PRINTF("SF2 Debug: VEL_RANGE found in preset bag %u -> 0x%04X (vel %u-%u)\n", (unsigned)pbagIdx, (unsigned)velRange, (unsigned)lowVel, (unsigned)highVel);
+                            if (keyRange != 0x7F00)
+                            {
+                                BAE_PRINTF("SF2 Debug: NOTE: keyRange in instrument zone is non-default (0x%04X) while velRange was found in preset bag %u\n", (unsigned)keyRange, (unsigned)pbagIdx);
+                            }
+                            break;
+                        }
+                    }
+                }
+                // NOTE: deliberately avoid scanning unrelated preset bags in the entire bank
+                // for VEL_RANGE. Using a VEL_RANGE from a different preset can produce
+                // incorrect mappings. If velRange is still the sentinel, treat as full 0-127.
             }
             if (lowVel > highVel)
             {
@@ -2623,7 +2821,7 @@ static GM_Instrument *PV_SF2_CreateKeymapSplitInstrument(SF2_Bank *pBank, int32_
             zones[zoneCount].genEnd = genEnd;
             zones[zoneCount].instrumentID = instID;
             zones[zoneCount].presetGenStart = presetGenStart;
-            zones[zoneCount].presetGenEnd = presetGenEnd;
+            zones[zoneCount].presetGenEnd = presetGenEnd;             
 
             BAE_PRINTF("SF2 Debug: Zone %u: sample=%d, key=%u-%u, vel=%u-%u, rootKey=%d, coarse=%d, fine=%d, scaleTune=%d\n",
                        (unsigned)zoneCount, (int)sampleID, (unsigned)lowKey, (unsigned)highKey,
@@ -2763,13 +2961,15 @@ static GM_Instrument *PV_SF2_CreateKeymapSplitInstrument(SF2_Bank *pBank, int32_
         // Set velocity and key ranges
         pMainInstrument->u.k.keySplits[i].lowMidi = zone->lowKey;
         pMainInstrument->u.k.keySplits[i].highMidi = zone->highKey;
-        pMainInstrument->u.k.keySplits[i].miscParameter1 = ((uint16_t)zone->highVel << 8) | (uint16_t)zone->lowVel;
+        pMainInstrument->u.k.keySplits[i].velRange = ((uint16_t)zone->highVel << 8) | (uint16_t)zone->lowVel;
         pMainInstrument->u.k.keySplits[i].miscParameter2 = 100; // Use SF2_GEN_INITIAL_ATTENUATION if needed
         pMainInstrument->u.k.keySplits[i].pSplitInstrument = pSubInstrument;
 
         BAE_PRINTF("SF2 Debug: Created zone %u: keys=%u-%u, vel=%u-%u, rootKey=%d, scaleTune=%d, baseMidiPitch=%d\n",
                    (unsigned)i, (unsigned)zone->lowKey, (unsigned)zone->highKey,
                    (unsigned)zone->lowVel, (unsigned)zone->highVel, (int)zone->rootKey, (int)scaleTuning, (int)pSubInstrument->u.w.baseMidiPitch);
+
+                   
     }
 
     BAE_PRINTF("SF2 Debug: Created keymap split instrument with %u zones\n", (unsigned)zoneCount);

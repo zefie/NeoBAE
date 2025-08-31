@@ -218,6 +218,7 @@ OPErr SF2_AddBankToManager(SF2_Bank *bank, const char *filePath);
 void SF2_RemoveBankFromManager(SF2_Bank *bank);
 SF2_Bank* SF2_FindBankByPath(const char *filePath);
 OPErr SF2_LoadInstrumentFromAnyBank(uint16_t bankNum, uint16_t presetNum, GM_Instrument **ppInstrument);
+XSDWORD PV_SF2_LevelFromCentibels(int16_t centibels, XSDWORD fullLevel);
 
 // Private function for instrument loading integration
 GM_Instrument* PV_GetSF2Instrument(GM_Song *pSong, XLongResourceID instrument, OPErr *pErr);

@@ -343,7 +343,7 @@ extern "C"
     enum
     {
         BAE_MIN_VOICES = 4,
-        BAE_MAX_VOICES = 64,       // total number of voices. This is shared amongst
+        BAE_MAX_VOICES = MAX_VOICES,       // total number of voices. This is shared amongst
                                    // all BAESound's, BAESoundStream's, and BAEMidiSong's
         BAE_MAX_INSTRUMENTS = 768, // 3 banks, pitched and perc
         BAE_MAX_SONGS = 2,
