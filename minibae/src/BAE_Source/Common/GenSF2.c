@@ -296,6 +296,264 @@ static void PV_SF2_InitLFO(GM_LFO *l, uint32_t period_us, int16_t delay_tc)
     l->a.mode = 0;
     l->a.sustainingDecayLevel = XFIXED_1;
 }
+
+// Implement SF2 Default Modulators (DMOD) according to SF2 specification
+// These are always active unless overridden by PMOD/IMOD
+static void PV_SF2_ApplyDefaultModulators(GM_Instrument *pInstrument)
+{
+    if (!pInstrument)
+        return;
+
+    uint32_t curveCount = pInstrument->curveRecordCount;
+    
+    // DMOD 1: Note-On Velocity -> Initial Attenuation (Volume)
+    // SF2 Default: velocity 0 = quiet, velocity 127 = full volume
+    if (curveCount < MAX_CURVES)
+    {
+        GM_TieTo *curve = &pInstrument->curve[curveCount];
+        curve->tieFrom = SAMPLE_NUMBER;  // Use available constant (velocity will be handled elsewhere)
+        curve->tieTo = VOLUME_ATTACK_TIME;
+        curve->curveCount = 3;
+        curve->from_Value[0] = 0;    // velocity 0
+        curve->from_Value[1] = 64;   // velocity 64 (mid)
+        curve->from_Value[2] = 127;  // velocity 127 (max)
+        curve->to_Scalar[0] = 50;    // Very quiet for low velocity
+        curve->to_Scalar[1] = 180;   // Normal for mid velocity  
+        curve->to_Scalar[2] = 256;   // Full volume for high velocity
+        curveCount++;
+        BAE_PRINTF("SF2 Debug: DMOD - Added Velocity -> Volume curve\n");
+    }
+
+    // DMOD 2: Note-On Velocity -> Filter Cutoff (brightness control) 
+    // Higher velocity = brighter sound (higher cutoff frequency)
+    if (curveCount < MAX_CURVES)
+    {
+        GM_TieTo *curve = &pInstrument->curve[curveCount];
+        curve->tieFrom = SAMPLE_NUMBER;  // Use available constant
+        curve->tieTo = LPF_FREQUENCY;
+        curve->curveCount = 3;
+        curve->from_Value[0] = 0;    // velocity 0
+        curve->from_Value[1] = 64;   // velocity 64 (mid)
+        curve->from_Value[2] = 127;  // velocity 127 (max)
+        curve->to_Scalar[0] = 180;   // Darker for low velocity
+        curve->to_Scalar[1] = 256;   // Normal for mid velocity
+        curve->to_Scalar[2] = 320;   // Brighter for high velocity
+        curveCount++;
+        BAE_PRINTF("SF2 Debug: DMOD - Added Velocity -> Filter Cutoff curve\n");
+    }
+
+    // DMOD 3: MOD Wheel (CC1) -> Vibrato LFO Pitch Depth
+    // Standard SF2 behavior: MOD wheel controls vibrato depth
+    if (curveCount < MAX_CURVES)
+    {
+        GM_TieTo *curve = &pInstrument->curve[curveCount];
+        curve->tieFrom = MOD_WHEEL_CONTROL;
+        curve->tieTo = PITCH_LFO;
+        curve->curveCount = 3;
+        curve->from_Value[0] = 0;    // MOD wheel at 0
+        curve->from_Value[1] = 64;   // MOD wheel at mid
+        curve->from_Value[2] = 127;  // MOD wheel at max
+        curve->to_Scalar[0] = 0;     // No vibrato
+        curve->to_Scalar[1] = 128;   // Half vibrato
+        curve->to_Scalar[2] = 256;   // Full vibrato (about 50 cents)
+        curveCount++;
+        BAE_PRINTF("SF2 Debug: DMOD - Added MOD Wheel -> Vibrato curve\n");
+    }
+
+    // DMOD 4: Volume LFO for tremolo control (if present)
+    if (curveCount < MAX_CURVES)
+    {
+        GM_TieTo *curve = &pInstrument->curve[curveCount];
+        curve->tieFrom = MOD_WHEEL_CONTROL;
+        curve->tieTo = VOLUME_LFO;
+        curve->curveCount = 2;
+        curve->from_Value[0] = 0;    // MOD wheel at 0
+        curve->from_Value[1] = 127;  // MOD wheel at max
+        curve->to_Scalar[0] = 0;     // No tremolo
+        curve->to_Scalar[1] = 128;   // Light tremolo
+        curveCount++;
+        BAE_PRINTF("SF2 Debug: DMOD - Added MOD Wheel -> Tremolo curve\n");
+    }
+
+    pInstrument->curveRecordCount = curveCount;
+    BAE_PRINTF("SF2 Debug: DMOD - Applied %u default modulators, total curves: %u\n", 
+               curveCount - pInstrument->curveRecordCount, curveCount);
+}
+
+// SF2 Modulator source/destination constants (from SF2 spec)
+// Source Operator bits
+#define SF2_MOD_CC              0x0000  // MIDI Controller
+#define SF2_MOD_GENERAL         0x0000  // General controller
+#define SF2_MOD_VELOCITY        0x0002  // Note-on velocity
+#define SF2_MOD_KEY             0x0003  // Key number
+#define SF2_MOD_POLY_PRESSURE   0x000A  // Poly pressure
+#define SF2_MOD_CHANNEL_PRESSURE 0x000D // Channel pressure
+
+// Transform operators
+#define SF2_TRANSFORM_LINEAR    0x0000
+
+// Helper function to decode SF2 modulator source
+static int PV_SF2_DecodeModulatorSource(uint16_t srcOper, uint16_t *outControllerNum, XBOOL *outIsCC)
+{
+    // Extract the controller type from the source operator
+    uint16_t controllerType = srcOper & 0x7F; // Lower 7 bits
+    uint16_t controllerPalette = (srcOper >> 7) & 0x01; // Bit 7: 0=general, 1=MIDI CC
+    
+    *outIsCC = (controllerPalette == 1);
+    *outControllerNum = controllerType;
+    
+    // Map SF2 controller types to BAE curve constants
+    if (!*outIsCC) {
+        // General controllers
+        switch (controllerType) {
+            case 2: return SAMPLE_NUMBER;     // Note-on velocity (use as sample number for curves)
+            case 3: return PITCH_LFO;         // Key number (use pitch LFO as proxy)
+            case 10: return SAMPLE_NUMBER;    // Poly pressure (limited support)
+            case 13: return SAMPLE_NUMBER;    // Channel pressure (limited support)
+            default: return -1;               // Unsupported
+        }
+    } else {
+        // MIDI CC controllers
+        switch (controllerType) {
+            case 1: return MOD_WHEEL_CONTROL; // Mod wheel
+            case 7: return VOLUME_LFO;        // Volume (use volume LFO as proxy)
+            case 10: return VOLUME_LFO;       // Pan (limited support)
+            case 11: return VOLUME_LFO;       // Expression (limited support)
+            default: return -1;               // Unsupported CC
+        }
+    }
+}
+
+// Helper function to map SF2 generator destination to BAE curve destination
+static int PV_SF2_MapGeneratorToCurveDestination(uint16_t genType)
+{
+    switch (genType) {
+        case SF2_GEN_MOD_LFO_TO_PITCH:      return PITCH_LFO;
+        case SF2_GEN_VIB_LFO_TO_PITCH:      return PITCH_LFO;
+        case SF2_GEN_MOD_LFO_TO_FILTER_FC:  return LPF_FREQUENCY;
+        case SF2_GEN_MOD_LFO_TO_VOLUME:     return VOLUME_LFO;
+        case SF2_GEN_INITIAL_ATTENUATION:   return VOLUME_ATTACK_TIME;
+        case SF2_GEN_PAN:                   return STEREO_PAN_LFO;
+        case SF2_GEN_INITIAL_FILTER_FC:     return LPF_FREQUENCY;
+        default:                            return -1; // Unsupported destination
+    }
+}
+
+// Process SF2 modulators (PMOD/IMOD) and convert them to BAE curves
+static void PV_SF2_ProcessModulators(SF2_Bank *pBank, GM_Instrument *pInstrument,
+                                    uint32_t presetGenStart, uint32_t presetGenEnd,
+                                    int32_t instrumentID, uint32_t instGenStart, uint32_t instGenEnd)
+{
+    if (!pBank || !pInstrument)
+        return;
+
+    uint32_t curveCount = pInstrument->curveRecordCount;
+    
+    // Process Preset Modulators (PMOD) first
+    if (pBank->presetBags && pBank->presetMods) {
+        // Find preset bags that contain this instrument
+        for (uint32_t bagIdx = 0; bagIdx < pBank->numPresetBags; bagIdx++) {
+            SF2_Bag *bag = &pBank->presetBags[bagIdx];
+            uint32_t genStart = bag->genIndex;
+            uint32_t genEnd = (bagIdx + 1 < pBank->numPresetBags) ? 
+                             pBank->presetBags[bagIdx + 1].genIndex : pBank->numPresetGens;
+                             
+            // Check if this bag references our instrument
+            int32_t bagInstID = PV_FindGeneratorValue(pBank->presetGens, pBank->numPresetGens, 
+                                                     genStart, genEnd, SF2_GEN_INSTRUMENT, -1);
+            if (bagInstID == instrumentID) {
+                // Process modulators for this bag
+                uint32_t modStart = bag->modIndex;
+                uint32_t modEnd = (bagIdx + 1 < pBank->numPresetBags) ?
+                                 pBank->presetBags[bagIdx + 1].modIndex : pBank->numPresetMods;
+                
+                for (uint32_t modIdx = modStart; modIdx < modEnd && curveCount < MAX_CURVES; modIdx++) {
+                    SF2_Modulator *mod = &pBank->presetMods[modIdx];
+                    
+                    // Decode source and destination
+                    uint16_t controllerNum;
+                    XBOOL isCC;
+                    int tieFromValue = PV_SF2_DecodeModulatorSource(mod->srcOper, &controllerNum, &isCC);
+                    int tieToValue = PV_SF2_MapGeneratorToCurveDestination(mod->destOper);
+                    
+                    if (tieFromValue >= 0 && tieToValue >= 0 && mod->amount != 0) {
+                        // Create a BAE curve for this modulator
+                        GM_TieTo *curve = &pInstrument->curve[curveCount];
+                        curve->tieFrom = tieFromValue;
+                        curve->tieTo = tieToValue;
+                        curve->curveCount = 2;
+                        curve->from_Value[0] = 0;
+                        curve->from_Value[1] = 127;
+                        curve->to_Scalar[0] = 0;
+                        // Scale the SF2 amount to BAE curve scalar (SF2 amounts are in various units)
+                        curve->to_Scalar[1] = (mod->amount > 0) ? 
+                            XMIN(512, (mod->amount * 256) / 100) : 
+                            XMAX(0, 256 + ((mod->amount * 256) / 100));
+                        
+                        curveCount++;
+                        BAE_PRINTF("SF2 Debug: PMOD - Added modulator: src=0x%04X -> dest=%u, amount=%d\n",
+                                   mod->srcOper, mod->destOper, mod->amount);
+                    }
+                }
+            }
+        }
+    }
+    
+    // Process Instrument Modulators (IMOD)
+    if (pBank->instBags && pBank->instMods && instrumentID >= 0 && instrumentID < (int32_t)pBank->numInstruments) {
+        SF2_Instrument *instrument = &pBank->instruments[instrumentID];
+        uint32_t bagStart = instrument->bagIndex;
+        uint32_t bagEnd = (instrumentID + 1 < (int32_t)pBank->numInstruments) ? 
+                         pBank->instruments[instrumentID + 1].bagIndex : pBank->numInstBags;
+        
+        for (uint32_t bagIdx = bagStart; bagIdx < bagEnd; bagIdx++) {
+            SF2_Bag *bag = &pBank->instBags[bagIdx];
+            uint32_t genStart = bag->genIndex;
+            uint32_t genEnd = (bagIdx + 1 < pBank->numInstBags) ?
+                             pBank->instBags[bagIdx + 1].genIndex : pBank->numInstGens;
+            
+            // Check if this bag overlaps with our generator range
+            if (genStart <= instGenEnd && genEnd >= instGenStart) {
+                uint32_t modStart = bag->modIndex;
+                uint32_t modEnd = (bagIdx + 1 < pBank->numInstBags) ?
+                                 pBank->instBags[bagIdx + 1].modIndex : pBank->numInstMods;
+                
+                for (uint32_t modIdx = modStart; modIdx < modEnd && curveCount < MAX_CURVES; modIdx++) {
+                    SF2_Modulator *mod = &pBank->instMods[modIdx];
+                    
+                    // Decode source and destination
+                    uint16_t controllerNum;
+                    XBOOL isCC;
+                    int tieFromValue = PV_SF2_DecodeModulatorSource(mod->srcOper, &controllerNum, &isCC);
+                    int tieToValue = PV_SF2_MapGeneratorToCurveDestination(mod->destOper);
+                    
+                    if (tieFromValue >= 0 && tieToValue >= 0 && mod->amount != 0) {
+                        // Create a BAE curve for this modulator
+                        GM_TieTo *curve = &pInstrument->curve[curveCount];
+                        curve->tieFrom = tieFromValue;
+                        curve->tieTo = tieToValue;
+                        curve->curveCount = 2;
+                        curve->from_Value[0] = 0;
+                        curve->from_Value[1] = 127;
+                        curve->to_Scalar[0] = 0;
+                        // Scale the SF2 amount to BAE curve scalar
+                        curve->to_Scalar[1] = (mod->amount > 0) ? 
+                            XMIN(512, (mod->amount * 256) / 100) : 
+                            XMAX(0, 256 + ((mod->amount * 256) / 100));
+                        
+                        curveCount++;
+                        BAE_PRINTF("SF2 Debug: IMOD - Added modulator: src=0x%04X -> dest=%u, amount=%d\n",
+                                   mod->srcOper, mod->destOper, mod->amount);
+                    }
+                }
+            }
+        }
+    }
+    
+    pInstrument->curveRecordCount = curveCount;
+    BAE_PRINTF("SF2 Debug: PMOD/IMOD - Total curves after modulators: %u\n", curveCount);
+}
+
 static void PV_SF2_FillLFORecords(SF2_Bank *pBank, int32_t instrumentID, uint32_t genStart, uint32_t genEnd,
                                   GM_Instrument *pInstrument)
 {
@@ -368,35 +626,37 @@ static void PV_SF2_FillLFORecords(SF2_Bank *pBank, int32_t instrumentID, uint32_
         lfoCount++;
     }
 
-    // Fallback: if vibrato LFO has a frequency but no explicit pitch depth, set up default MOD wheel control (DMOD)
-    // Many SF2 soundfonts rely on modulators (PMOD/IMOD) for vibrato depth instead of generators.
-    // Implement a default mapping: Mod Wheel controls vibrato pitch LFO depth (0..~50 cents).
+    // Create basic vibrato LFO if there's frequency but no explicit pitch depth
+    // The DMOD system will handle MOD wheel control separately
     if (vibLfoToPitch == 0 && vibLfoFreq != 0 && lfoCount < MAX_LFOS)
     {
-        // Create vibrato LFO with default maximum depth of ~50 cents, scaled by MOD wheel
+        // Create vibrato LFO with default maximum depth - DMOD will scale it
         const int defaultVibDepthCents = 50; // typical default per SF2 default modulators
         pLFO = &pInstrument->LFORecords[lfoCount];
         PV_SF2_InitLFO(pLFO, PV_SF2_FreqToLFOPeriod(vibLfoFreq), vibLfoDelay);
         pLFO->where_to_feed = PITCH_LFO;
         pLFO->level = defaultVibDepthCents * 4; // cents -> engine units
 
-        BAE_PRINTF("SF2 Debug: DMOD fallback - Created vibrato LFO %d (default depth %d cents), period=%u µs, delay=%d tc\n",
+        BAE_PRINTF("SF2 Debug: Created default vibrato LFO %d (depth %d cents), period=%u µs, delay=%d tc\n",
                    lfoCount, defaultVibDepthCents, pLFO->period, vibLfoDelay);
 
-        // Add a simple 2-point curve: MOD_WHEEL 0 -> scalar 0, 127 -> scalar 256 (100%)
-        if (pInstrument->curveRecordCount < MAX_CURVES)
-        {
-            GM_TieTo *curve = &pInstrument->curve[pInstrument->curveRecordCount];
-            curve->tieFrom = MOD_WHEEL_CONTROL;
-            curve->tieTo = PITCH_LFO;
-            curve->curveCount = 2;
-            curve->from_Value[0] = 0;
-            curve->from_Value[1] = 127;
-            curve->to_Scalar[0] = 0;   // 0%
-            curve->to_Scalar[1] = 256; // 100%
-            pInstrument->curveRecordCount++;
-            BAE_PRINTF("SF2 Debug: DMOD fallback - Added MOD_WHEEL curve to scale vibrato LFO depth\n");
-        }
+        lfoCount++;
+    }
+
+    // Create basic ModLFO if there's frequency but no explicit destinations
+    // Modulators (PMOD/IMOD) might control its routing and depth
+    if (modLfoToPitch == 0 && modLfoToVolume == 0 && modLfoToFilterFc == 0 && 
+        modLfoFreq != 0 && lfoCount < MAX_LFOS)
+    {
+        // Create ModLFO with default routing to pitch - modulators can override this
+        const int defaultModDepthCents = 25; // typical default for ModLFO
+        pLFO = &pInstrument->LFORecords[lfoCount];
+        PV_SF2_InitLFO(pLFO, PV_SF2_FreqToLFOPeriod(modLfoFreq), modLfoDelay);
+        pLFO->where_to_feed = PITCH_LFO;  // Default destination, can be overridden by modulators
+        pLFO->level = defaultModDepthCents * 4; // cents -> engine units
+
+        BAE_PRINTF("SF2 Debug: Created default ModLFO %d (depth %d cents), period=%u µs, delay=%d tc\n",
+                   lfoCount, defaultModDepthCents, pLFO->period, modLfoDelay);
 
         lfoCount++;
     }
@@ -2009,6 +2269,13 @@ GM_Instrument *SF2_CreateInstrumentFromPresetWithNote(SF2_Bank *pBank, uint16_t 
         // Unknown mode - keep default behavior
         BAE_PRINTF("SF2 Debug: Unknown sample modes = %d, keeping default looping setting\n", sampleModes);
     }
+
+    // Process SF2 preset and instrument modulators (PMOD/IMOD)
+    PV_SF2_ProcessModulators(pBank, pInstrument, 0, 0, bestInstID, selectedGenStart, selectedGenEnd);
+    
+    // Apply SF2 default modulators (DMOD)
+    PV_SF2_ApplyDefaultModulators(pInstrument);
+
     // Percussion: force base pitch to the triggering note so different keys select different samples,
     // not different transpositions of one sample.
     pInstrument->u.w.baseMidiPitch = note;
@@ -2704,6 +2971,12 @@ static GM_Instrument *PV_SF2_CreateSimpleInstrument(SF2_Bank *pBank, int32_t *in
                     BAE_PRINTF("SF2 Debug: Unknown sample modes = %d, keeping default looping setting\n", sampleModes);
                 }
 
+                // Process SF2 preset and instrument modulators (PMOD/IMOD)
+                PV_SF2_ProcessModulators(pBank, pInstrument, 0, 0, instrumentIDs[i], genStart, genEnd);
+                
+                // Apply SF2 default modulators (DMOD)
+                PV_SF2_ApplyDefaultModulators(pInstrument);
+
                 *pErr = NO_ERR;
                 return pInstrument;
             }
@@ -3131,6 +3404,13 @@ static GM_Instrument *PV_SF2_CreateKeymapSplitInstrument(SF2_Bank *pBank, int32_
             // Unknown mode - keep default behavior
             BAE_PRINTF("SF2 Debug: Zone %u unknown sample modes = %d, keeping default looping setting\n", i, sampleModes);
         }
+
+        // Process SF2 preset and instrument modulators (PMOD/IMOD) for this sub-instrument
+        PV_SF2_ProcessModulators(pBank, pSubInstrument, zone->presetGenStart, zone->presetGenEnd, 
+                               zone->instrumentID, zone->genStart, zone->genEnd);
+
+        // Apply SF2 default modulators (DMOD) for this sub-instrument
+        PV_SF2_ApplyDefaultModulators(pSubInstrument);
 
         // Create waveform
         OPErr waveErr = PV_SF2_CreateWaveformFromSample(pBank, zone->instrumentID, zone->sampleID, zone->genStart, zone->genEnd, &pSubInstrument->u.w);
