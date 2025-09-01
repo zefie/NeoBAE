@@ -18,6 +18,8 @@ extern "C" {
 #endif
 
 #if USE_SF2_SUPPORT == TRUE
+// Include TSF headers
+#include "tsf.h"
 
 // TSF integration types
 typedef struct GM_TSFInfo
@@ -74,6 +76,7 @@ int16_t GM_TSF_GetMaxVoices(void);
 // TSF status queries
 int16_t GM_TSF_GetActiveVoiceCount(void);
 XBOOL GM_TSF_IsActive(void);
+tsf* GM_TSF_GetCurrentSoundfont(void);
 void tsf_get_channel_amplitudes(float* channelAmplitudes);
 
 #endif // USE_SF2_SUPPORT

@@ -348,6 +348,21 @@ const char *BAE_GetFeatureString()
         first = FALSE;
     }
 #endif
+
+    // SF2 support
+#if USE_SF2_SUPPORT == TRUE && USE_VORBIS_DECODER == TRUE
+    const char *sf2supp = "SF2/SF3/SFO Support";
+#elif USE_SF2_SUPPORT == TRUE
+    const char *sf2supp = "SF2 Support";
+#else
+    const char *sf2supp = NULL;
+#endif
+    if (sf2supp && sf2supp[0])
+    {
+        snprintf(featBuf + strlen(featBuf), sizeof(featBuf) - strlen(featBuf), "%s%s", first ? "" : ", ", sf2supp);
+        first = FALSE;
+    }
+
 #if _ZEFI_GUI == TRUE
 #if SUPPORT_KARAOKE == TRUE
     const char *karaoke = "Karaoke Support";
@@ -437,18 +452,6 @@ const char *BAE_GetFeatureString()
     if (vorbis && vorbis[0])
     {
         snprintf(featBuf + strlen(featBuf), sizeof(featBuf) - strlen(featBuf), "%s%s", first ? "" : ", ", vorbis);
-        first = FALSE;
-    }
-
-    // SF2 support
-#if USE_SF2_SUPPORT == TRUE && USE_VORBIS_DECODER == TRUE
-    const char *sf2supp = "SF2/SF3/SFO Support";
-#elif USE_SF2_SUPPORT == TRUE
-    const char *sf2supp = "SF2 Support";
-#endif
-    if (sf2supp && sf2supp[0])
-    {
-        snprintf(featBuf + strlen(featBuf), sizeof(featBuf) - strlen(featBuf), "%s%s", first ? "" : ", ", sf2supp);
         first = FALSE;
     }
 
@@ -6970,6 +6973,11 @@ BAEResult BAESong_LoadMidiFromMemory(BAESong song, void const *pMidiData, uint32
                 if (song->pSong)
                 {
                     PV_BAESong_Unload(song);
+#if USE_SF2_SUPPORT == TRUE
+                    if (GM_TSF_IsActive()) {
+                        tsf_reset(GM_TSF_GetCurrentSoundfont());
+                    }
+#endif                     
                     pSong = GM_LoadSong(song->mixer->pMixer,
                                         NULL,
                                         song,
@@ -7073,8 +7081,13 @@ BAEResult BAESong_LoadMidiFromFile(BAESong song, BAEPathName filePath, BAE_BOOL 
             if (pXSong)
             {
                 if (song->pSong)
-                {
+                {                    
                     PV_BAESong_Unload(song);
+#if USE_SF2_SUPPORT == TRUE
+                    if (GM_TSF_IsActive()) {
+                        tsf_reset(GM_TSF_GetCurrentSoundfont());
+                    }
+#endif                    
                     pSong = GM_LoadSong(song->mixer->pMixer,
                                         NULL,
                                         song,
@@ -7160,6 +7173,11 @@ BAEResult BAESong_LoadRmfFromMemory(BAESong song, void *pRMFData, uint32_t rmfSi
                     if (song->pSong)
                     {
                         PV_BAESong_Unload(song);
+#if USE_SF2_SUPPORT == TRUE
+                        if (GM_TSF_IsActive()) {
+                            tsf_reset(GM_TSF_GetCurrentSoundfont());
+                        }
+#endif                         
                         pSong = GM_LoadSong(song->mixer->pMixer,
                                             NULL,
                                             song,
@@ -7295,6 +7313,11 @@ BAEResult BAESong_LoadRmfFromFile(BAESong song, BAEPathName filePath, int16_t so
                 if (song->pSong)
                 {
                     PV_BAESong_Unload(song);
+#if USE_SF2_SUPPORT == TRUE
+                    if (GM_TSF_IsActive()) {
+                        tsf_reset(GM_TSF_GetCurrentSoundfont());
+                    }
+#endif                     
                     pSong = GM_LoadSong(song->mixer->pMixer,
                                         NULL,
                                         song,

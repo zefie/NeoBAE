@@ -7,10 +7,12 @@
  *
  ****************************************************************************/
 
+ 
+
 #include "GenTSF.h"
-
 #if USE_SF2_SUPPORT == TRUE
-
+#define TSF_IMPLEMENTATION
+#include "tsf.h"
 #include "GenSnd.h"
 #include "GenPriv.h"
 #include "X_Assert.h"
@@ -21,10 +23,6 @@
 #if USE_VORBIS_DECODER == TRUE
 #include "stb_vorbis.c"
 #endif
-
-// Include TSF headers
-#define TSF_IMPLEMENTATION
-#include "tsf.h"
 
 #define SAMPLE_BLOCK_SIZE 512
 
@@ -45,6 +43,10 @@ static XBOOL PV_TSF_CheckChannelMuted(GM_Song* pSong, int16_t channel);
 static void PV_TSF_ConvertFloatToInt32(float* input, int32_t* output, int32_t frameCount, float songVolumeScale, const float *channelScales);
 static void PV_TSF_AllocateMixBuffer(int32_t frameCount);
 static void PV_TSF_FreeMixBuffer(void);
+
+tsf* GM_TSF_GetCurrentSoundfont() {
+    return g_tsf_soundfont;
+}
 
 // Initialize TSF support for the mixer
 OPErr GM_InitializeTSF(void)
