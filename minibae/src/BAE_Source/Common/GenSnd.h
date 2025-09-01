@@ -423,10 +423,13 @@
 #include "X_API.h"
 #endif
 
+
 #ifdef __cplusplus
 extern "C"
 {
 #endif
+
+
 
     /* System defines */
 
@@ -543,7 +546,7 @@ extern "C"
     };
     typedef unsigned char VelocityCurveType;
 
-#define MAX_VOICES 512       // max voices at once
+#define MAX_VOICES 256       // max voices at once
 #define MAX_INSTRUMENTS 128 // MIDI number of programs per patch bank
 #define MAX_BANKS 6         // three GM banks; three user banks
 #define MAX_TRACKS 65       // max MIDI file tracks to process (64 + tempo track)
@@ -554,12 +557,12 @@ extern "C"
 #define MAX_CURVES 4              // max curve entries in instruments
 #define MAX_LFOS 6                // max LFO's, make sure to add one extra for MOD wheel support
 #define MAX_MASTER_VOLUME 256     // max volume level for master volume level
-#define MAX_SAMPLES 4096           // max number of samples that can be loaded
+#define MAX_SAMPLES 2048           // max number of samples that can be loaded
 #define MAX_SONGS 16              // max number of songs that can play at one time
 #define PERCUSSION_CHANNEL 9      // which channel (zero based) is the default percussion channel
 #define MAX_SAMPLE_FRAMES 1048576 // max number of sample frames that we can play in one voice
                                   // 1024 * 1024 = 1MB. This limit exisits only in DROP_SAMPLE, TERP1, TERP2 cases
-#define MIN_LOOP_SIZE 2           // min number of loop samples that can be processed
+#define MIN_LOOP_SIZE 2          // min number of loop samples that can be processed
 
 #define MIN_SAMPLE_RATE ((uint32_t)1L) // min sample rate. 1.5258789E-5 kHz
 #define MAX_SAMPLE_RATE rate48khz      // max sample rate  48 kHz
@@ -663,6 +666,11 @@ extern "C"
 #define X_PACK_FAST
 #include "X_PackStructures.h"
 
+#if USE_SF2_SUPPORT == TRUE
+#define CHANNEL_TYPE_MIDI 1
+#define CHANNEL_TYPE_RMF 2
+#endif
+
     struct GM_SampleCallbackEntry
     {
         uint32_t frameOffset;
@@ -697,7 +705,6 @@ typedef int32_t UNIT_TYPE;
     {
         ADSR_OFF_LONG = 0,
         ADSR_LINEAR_RAMP_LONG = FOUR_CHAR('L', 'I', 'N', 'E'),      //  'LINE'
-        ADSR_EXPONENTIAL_RAMP_LONG = FOUR_CHAR('E', 'X', 'P', 'O'), //  'EXPO'
         ADSR_SUSTAIN_LONG = FOUR_CHAR('S', 'U', 'S', 'T'),          //  'SUST'
         ADSR_TERMINATE_LONG = FOUR_CHAR('L', 'A', 'S', 'T'),        //  'LAST'
         ADSR_GOTO_LONG = FOUR_CHAR('G', 'O', 'T', 'O'),             //  'GOTO'
@@ -711,16 +718,14 @@ typedef int32_t UNIT_TYPE;
         // Used as a UNIT_TYPE. See PV_TranslateFromFileToMemoryID in GenPatch.c
         ADSR_OFF = 0,
         ADSR_LINEAR_RAMP = 1,
-        ADSR_EXPONENTIAL_RAMP = 2,
-        ADSR_SUSTAIN = 3,
-        ADSR_TERMINATE = 4,
-        ADSR_GOTO = 5,
-        ADSR_GOTO_CONDITIONAL = 6,
-        ADSR_RELEASE = 7
+        ADSR_SUSTAIN = 2,
+        ADSR_TERMINATE = 3,
+        ADSR_GOTO = 4,
+        ADSR_GOTO_CONDITIONAL = 5,
+        ADSR_RELEASE = 6
 #else
     ADSR_OFF = ADSR_OFF_LONG,
     ADSR_LINEAR_RAMP = ADSR_LINEAR_RAMP_LONG,
-    ADSR_EXPONENTIAL_RAMP = ADSR_EXPONENTIAL_RAMP_LONG,
     ADSR_SUSTAIN = ADSR_SUSTAIN_LONG,
     ADSR_TERMINATE = ADSR_TERMINATE_LONG,
     ADSR_GOTO = ADSR_GOTO_LONG,
@@ -741,10 +746,7 @@ typedef int32_t UNIT_TYPE;
         UNIT_TYPE mode;
         XBYTE currentPosition; //  ranges from 0 to ADSR_STAGES
 #if USE_SF2_SUPPORT == TRUE
-        // New for SF2 conditional support
-        XBOOL isSF2Envelope;         // TRUE if this is an SF2 envelope (set during filling)
-        int16_t ADSRLevelCB[ADSR_STAGES];  // Centibel attenuation levels (0=full, 14400=silent) for SF2
-        int16_t currentLevelCB;      // Current centibel attenuation (for interpolation)
+        XBOOL isSF2Envelope;   // TRUE if this is an SF2 envelope (don't modify sustainingDecayLevel)
 #endif
     };
     typedef struct GM_ADSR GM_ADSR;
@@ -959,9 +961,6 @@ typedef int32_t UNIT_TYPE;
                                // enabled, otherwise its a replacement
                                // rootKey for sample
         XSWORD miscParameter2;
-#if USE_SF2_SUPPORT == TRUE
-        XSWORD velRange; // velocity range (low byte: low velocity, high byte: high velocity)
-#endif
         struct GM_Instrument *pSplitInstrument;
     };
     typedef struct GM_KeymapSplit GM_KeymapSplit;
@@ -1025,12 +1024,7 @@ typedef int32_t UNIT_TYPE;
         XBOOL extendedFormat; // extended format instrument
         XBOOL sampleAndHold;
         XBOOL useSampleRate; // factor in sample rate into pitch calculation
-#if USE_SF2_SUPPORT == TRUE
-        /* If TRUE, this instrument was created from an SF2 preset. When true and
-            doKeymapSplit is also true, the engine may need to start multiple
-            sub-instruments for a single MIDI note (SF2 layered/zoned presets). */
-        XBOOL isSF2Instrument;
-#endif
+
         XBOOL processingSlice;
         XBOOL useSoundModifierAsRootKey;
 #if REVERB_USED != REVERB_DISABLED
@@ -1049,11 +1043,6 @@ typedef int32_t UNIT_TYPE;
 
         GM_LFO LFORecords[MAX_LFOS];
         GM_ADSR volumeADSRRecord;
-#if USE_SF2_SUPPORT == TRUE
-        GM_ADSR modEnvelopeRecord;      // SF2 modulation envelope for pitch/filter
-        XSDWORD modEnvelopeToPitch;     // cents to apply modulation envelope to pitch
-        XSDWORD modEnvelopeToFilter;    // cents to apply modulation envelope to filter cutoff
-#endif
         GM_TieTo curve[MAX_CURVES];
         union
         {
@@ -1077,6 +1066,14 @@ typedef int32_t UNIT_TYPE;
     {
         SEQ_MIDI = 0, // sequenceData is a MIDI formatted stream
     } SequenceType;
+
+#if USE_SF2_SUPPORT == TRUE
+    // Song flags for TSF integration
+    enum
+    {
+        SONG_FLAG_USE_TSF = 0x00000001  // Song should use TSF for SF2 rendering
+    };
+#endif
 
     // Internal Song structure
     // aligned structure to 8 bytes
@@ -1218,6 +1215,9 @@ typedef int32_t UNIT_TYPE;
         XSWORD channelProgram[MAX_CHANNELS];              // current channel program
         XSBYTE channelBank[MAX_CHANNELS];                 // current bank
         XSWORD channelStereoPosition[MAX_CHANNELS];       // current channel stereo position
+#if USE_SF2_SUPPORT == TRUE
+        XBYTE channelType[MAX_CHANNELS];
+#endif
 
         // Realtime note activity tracking for GUI virtual keyboard.
         // Stores current velocity (>0) for active notes per channel; 0 means off.
@@ -1255,6 +1255,14 @@ typedef int32_t UNIT_TYPE;
         XBYTE runningStatus[MAX_TRACKS]; // midi running status
         IFLOAT trackticks[MAX_TRACKS];   // current position of track in ticks. must be signed
         //  XSDWORD             trackcumuticks[MAX_TRACKS];     // current number of beat ticks into track
+
+#if USE_SF2_SUPPORT == TRUE
+        // TSF (TinySoundFont) integration support
+        void *tsfInfo;                   // Pointer to GM_TSFInfo structure when TSF is active
+        XDWORD songFlags;                // Song flags including SONG_FLAG_USE_TSF
+        XBYTE channelBankMSB[MAX_CHANNELS];  // Bank MSB values for TSF program changes
+        XBYTE channelBankLSB[MAX_CHANNELS];  // Bank LSB values for TSF program changes
+#endif
     };
     typedef struct GM_Song GM_Song;
 
@@ -2206,21 +2214,21 @@ typedef int32_t UNIT_TYPE;
     // SF2 SoundFont support functions
     struct SF2_Bank;
     typedef struct SF2_Bank SF2_Bank;
-
+    
     // Load an SF2 bank from file
     OPErr GM_LoadSF2Bank(XFILENAME *file, SF2_Bank **ppBank);
-
+    
     // Unload an SF2 bank
     void GM_UnloadSF2Bank(SF2_Bank *pBank);
-
+    
     // Load an instrument from SF2 bank into a song
-    OPErr GM_LoadSF2Instrument(GM_Song *pSong, SF2_Bank *pBank,
-                               XLongResourceID instrument,
-                               uint16_t sf2Bank, uint16_t sf2Preset);
-
+    OPErr GM_LoadSF2Instrument(GM_Song *pSong, SF2_Bank *pBank, 
+                              XLongResourceID instrument, 
+                              uint16_t sf2Bank, uint16_t sf2Preset);
+    
     // Get preset information from SF2 bank
-    OPErr GM_GetSF2PresetInfo(SF2_Bank *pBank, uint16_t index,
-                              char *name, uint16_t *bank, uint16_t *preset);
+    OPErr GM_GetSF2PresetInfo(SF2_Bank *pBank, uint16_t index, 
+                             char *name, uint16_t *bank, uint16_t *preset);
 #endif
 
     // fill in empty fields in the file header.
@@ -2714,4 +2722,8 @@ typedef int32_t UNIT_TYPE;
 }
 #endif
 
+
+void PV_ProcessController(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTrack, INT16 controler, UINT16 value);
+
+XBOOL PV_IsMuted(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTrack);
 #endif /* GenSnd.h */

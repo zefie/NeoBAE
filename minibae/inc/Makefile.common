@@ -110,6 +110,7 @@ endif
 
 ifeq ($(SF2_SUPPORT),1)
 	BAE_FLAGS += -DUSE_SF2_SUPPORT=1
+	INC_PATH += -Isrc/thirdparty/TinySoundFont
 endif
 
 # default to ANSI
@@ -192,8 +193,10 @@ SRC		+=	src/BAE_Source/Common/DriverTools.c \
 			src/BAE_Source/Common/g72x.c \
 			src/BAE_Source/Common/sha1mini.c
 
+
+# TSF (TinySoundFont) support
 ifeq ($(SF2_SUPPORT),1)
-	SRC += src/BAE_Source/Common/GenSF2.c
+	SRC += src/BAE_Source/Common/GenTSF.c
 endif
 
 ifeq ($(MP3_DEC),1)

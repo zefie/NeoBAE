@@ -348,7 +348,7 @@
 #include "X_Assert.h"
 #include <stdint.h>
 #if USE_SF2_SUPPORT == TRUE
-#include "GenSF2.h"
+#include "GenTSF.h"
 #endif
 
 // the only global. Our current mixer pointer.
@@ -742,54 +742,6 @@ int32_t PV_ModifyVelocityFromCurve(GM_Song *pSong, int32_t volume)
     return volume;
 }
 
-// Helper function to calculate scalar value from curve based on input value
-// This is used for applying controller -> LFO mappings
-static INT32 PV_CalculateCurveValue(const GM_TieTo *curve, INT32 inputValue)
-{
-    if (!curve || curve->curveCount < 1)
-        return 256; // Default full scale
-        
-    // Clamp input value to reasonable range
-    if (inputValue < 0) inputValue = 0;
-    if (inputValue > 127) inputValue = 127;
-    
-    // Single point curve - return its scalar
-    if (curve->curveCount == 1)
-        return curve->to_Scalar[0];
-    
-    // Find the correct curve segment for interpolation
-    INT32 scalar = curve->to_Scalar[0]; // Default to first scalar
-    
-    for (int count = 0; count < curve->curveCount - 1; count++)
-    {
-        if (inputValue <= curve->from_Value[count])
-        {
-            scalar = curve->to_Scalar[count];
-            break;
-        }
-        else if (inputValue < curve->from_Value[count + 1])
-        {
-            // Interpolate between this point and the next
-            scalar = curve->to_Scalar[count];
-            if (curve->from_Value[count] != curve->from_Value[count + 1])
-            {
-                INT32 from_difference = curve->from_Value[count + 1] - curve->from_Value[count];
-                INT32 to_difference = curve->to_Scalar[count + 1] - curve->to_Scalar[count];
-                scalar += ((((inputValue - curve->from_Value[count]) << 8) / from_difference) * to_difference) >> 8;
-            }
-            break;
-        }
-    }
-    
-    // If we're beyond the last point, use the last scalar
-    if (inputValue >= curve->from_Value[curve->curveCount - 1])
-    {
-        scalar = curve->to_Scalar[curve->curveCount - 1];
-    }
-    
-    return scalar;
-}
-
 #if USE_CALLBACKS
 void PV_DoCallBack(GM_Voice *pVoice)
 {
@@ -1081,13 +1033,14 @@ XWORD PV_GetVoiceNumberFromVoice(GM_Voice *pVoice)
 // ------------------------------------------------------------------------------------------------------//
 
 // Generic ADSR Unit
-static void PV_ADSRModule(GM_ADSR *a, XBOOL sustaining, GM_Voice *pVoice)
+static void PV_ADSRModule(GM_ADSR *a, XBOOL sustaining)
 {
     INT32 currentTime = a->currentTime;
     INT32 index = a->currentPosition;
     INT32 scalar, i;
 
-    // Find release or last marker when note is turned off
+    // Find the release or LAST marker when the note is being turned off.
+
     if ((!sustaining) && (a->mode != ADSR_RELEASE) && (a->mode != ADSR_TERMINATE))
     {
         for (i = 0; i < ADSR_STAGES; i++)
@@ -1097,13 +1050,6 @@ static void PV_ADSRModule(GM_ADSR *a, XBOOL sustaining, GM_Voice *pVoice)
             {
                 index = i;
                 a->previousTarget = a->currentLevel;
-#if USE_SF2_SUPPORT == TRUE
-                // Initialize release from current level for SF2
-                if (a->isSF2Envelope) {
-                    a->currentLevelCB = (int16_t)(-200 * log10((double)a->currentLevel / VOLUME_RANGE));  // Approx cB from current amp
-                    if (a->currentLevelCB < 0) a->currentLevelCB = 0;
-                }                
-#endif
                 goto foundRelease;
             }
             if (scalar == ADSR_SUSTAIN)
@@ -1117,273 +1063,98 @@ static void PV_ADSRModule(GM_ADSR *a, XBOOL sustaining, GM_Voice *pVoice)
         currentTime = 0;
         a->mode = ADSR_RELEASE;
     }
-#if USE_SF2_SUPPORT == TRUE
-    if (a && a->isSF2Envelope) {
-        // SF2 envelope processing using centibel levels
-        int16_t targetCB = a->ADSRLevelCB[index];
-        int16_t currentCB = a->currentLevelCB;
 
-        // Initialize on first call of a stage
-        if (currentTime == 0 && index < ADSR_STAGES) {
-            // Set starting level from previous stage or initial level
-            if (index > 0) {
-                currentCB = a->ADSRLevelCB[index - 1];
-            }
-            a->previousTarget = a->currentLevel;
-            a->currentLevelCB = currentCB;
-        }
-
-        // Handle different envelope stage types
-        switch (a->ADSRFlags[index]) {
-            case ADSR_SUSTAIN:
-                // Sustain stage - hold constant level
-                a->mode = ADSR_SUSTAIN;
-                currentCB = targetCB;
-                // No time advancement needed for sustain
-                break;
-                
-            case ADSR_TERMINATE:
-                // Terminate envelope
-                a->mode = ADSR_TERMINATE;
-                a->currentLevel = 0;
-                return;
-                
-            case ADSR_RELEASE:
-                // Release stage - exponential decay to silence
-                currentTime += PV_GetLFOAdjustedTimeInMicroseconds();
-                if (currentTime >= a->ADSRTime[index] || targetCB >= 10000) {
-                    // Release complete
-                    currentCB = 14400; // SF2 silence (-144 dB)
-                    a->currentLevel = 0;
-                    a->mode = ADSR_TERMINATE;
-                } else if (a->ADSRTime[index] > 0) {
-                    // Exponential decay during release
-                    XFIXED progress = XFixedDivide((XFIXED)currentTime << 16, (XFIXED)a->ADSRTime[index] << 16);
-                    if (progress > XFIXED_1) progress = XFIXED_1;
-                    
-                    // Use exponential decay curve for release
-                    INT32 lookupIndex = (progress >> 12) & 0x3FF;
-                    if (lookupIndex >= sizeof(expDecayLookup)/sizeof(XFIXED))
-                        lookupIndex = sizeof(expDecayLookup)/sizeof(XFIXED) - 1;
-                    XFIXED expCurve = expDecayLookup[lookupIndex];
-                    
-                    // Interpolate from current to target using exponential curve
-                    int16_t startCB = (index > 0) ? a->ADSRLevelCB[index - 1] : a->currentLevelCB;
-                    int32_t deltaCB = targetCB - startCB;
-                    currentCB = startCB + (int16_t)XFixedMultiply(deltaCB, expCurve);
-                }
-                break;
-                
-            case ADSR_EXPONENTIAL_RAMP:
-            case ADSR_LINEAR_RAMP:
-            default:
-                // Standard ramp (attack/hold/decay)
-                currentTime += PV_GetLFOAdjustedTimeInMicroseconds();
-                if (currentTime >= a->ADSRTime[index]) {
-                    // Stage complete - move to next
-                    currentCB = targetCB;
-                    a->previousTarget = a->currentLevel;
-                    currentTime -= a->ADSRTime[index];
-                    if (index + 1 < ADSR_STAGES) {
-                        index++;
-                        a->currentPosition = index;
-                        if (a->ADSRFlags[index] == ADSR_TERMINATE) {
-                            a->mode = ADSR_TERMINATE;
-                            a->currentLevel = 0;
-                            return;
-                        }
-                    }
-                } else if (a->ADSRTime[index] > 0) {
-                    // Interpolate within stage
-                    XFIXED progress = XFixedDivide((XFIXED)currentTime << 16, (XFIXED)a->ADSRTime[index] << 16);
-                    if (progress > XFIXED_1) progress = XFIXED_1;
-                    
-                    int16_t startCB = (index > 0) ? a->ADSRLevelCB[index - 1] : a->currentLevelCB;
-                    int32_t deltaCB = targetCB - startCB;
-                    
-                    if (a->ADSRFlags[index] == ADSR_EXPONENTIAL_RAMP && deltaCB != 0) {
-                        // Use exponential curve
-                        XFIXED expCurve;
-                        if (deltaCB < 0) {
-                            // Falling (attack to peak, decay)
-                            INT32 lookupIndex = ((XFIXED_1 - progress) >> 12) & 0x3FF;
-                            if (lookupIndex >= sizeof(expDecayLookup)/sizeof(XFIXED))
-                                lookupIndex = sizeof(expDecayLookup)/sizeof(XFIXED) - 1;
-                            expCurve = XFIXED_1 - expDecayLookup[lookupIndex];
-                        } else {
-                            // Rising (should be rare in SF2 volume envelopes)
-                            INT32 lookupIndex = (progress >> 12) & 0x3FF;
-                            if (lookupIndex >= sizeof(expDecayLookup)/sizeof(XFIXED))
-                                lookupIndex = sizeof(expDecayLookup)/sizeof(XFIXED) - 1;
-                            expCurve = XFIXED_1 - expDecayLookup[lookupIndex];
-                        }
-                        currentCB = startCB + (int16_t)XFixedMultiply(deltaCB, expCurve);
-                    } else {
-                        // Linear interpolation
-                        currentCB = startCB + (int16_t)XFixedMultiply(deltaCB, progress);
-                    }
-                }
-                break;
-        }
-
-        // Update SF2 envelope state
-        a->currentLevelCB = currentCB;
-        a->currentTime = currentTime;
-
-        // Convert centibels to linear level
-        a->currentLevel = PV_SF2_LevelFromCentibels(currentCB, VOLUME_RANGE);
-        if (a->currentLevel < 0) a->currentLevel = 0;
-
-/*        BAE_PRINTF("PV_ADSRModule: SF2 - pos=%d, currCB=%d, targetCB=%d, time=%ld, currLevel=%ld\n",
-                   a->currentPosition, a->currentLevelCB, targetCB, a->currentTime, (int32_t)a->currentLevel);
-*/
-    } else
-#endif    
+    switch (a->ADSRFlags[index])
     {
-        switch (a->ADSRFlags[index])
+    case ADSR_SUSTAIN:
+        a->mode = ADSR_SUSTAIN;
+        if (a->ADSRLevel[index] < 0)
         {
-        case ADSR_SUSTAIN:
-            a->mode = ADSR_SUSTAIN;
-            if (a->ADSRLevel[index] < 0)
+            if (a->sustainingDecayLevel)
             {
-                if (a->sustainingDecayLevel)
-                {
-                    XSDWORD ADSRLevel;
-                    XFIXED levelScale;
+                XSDWORD ADSRLevel;
+                XFIXED levelScale;
 
-                    ADSRLevel = a->ADSRLevel[index];
-                    if (ADSRLevel < -50)
-                    {
-                        levelScale = expDecayLookup[-ADSRLevel / 50000L];
-                    }
-                    else
-                    {
-                        levelScale = expDecayLookup[PV_GetLogLookupTableEntry(-ADSRLevel) / 50000L];
-                    }
+                ADSRLevel = a->ADSRLevel[index];
+                if (ADSRLevel < -50)
+                {
+                    // level is greater than 50
+                    //  a->sustainingDecayLevel = ( a->sustainingDecayLevel *
+                    //                              (expDecayLookup[-ADSRLevel/50000L] >> 1L)  ) >> 15L;
+                    levelScale = expDecayLookup[-ADSRLevel / 50000L];
+                }
+                else
+                {
+                    // level is in the range of 0 to 50
+                    //  a->sustainingDecayLevel = ( a->sustainingDecayLevel *
+                    //                              (expDecayLookup[PV_GetLogLookupTableEntry(-ADSRLevel)/50000L] >> 1L)  ) >> 15L;
+                    levelScale = expDecayLookup[PV_GetLogLookupTableEntry(-ADSRLevel) / 50000L];
+                }
 
-                    a->sustainingDecayLevel = XFixedMultiply(a->sustainingDecayLevel, levelScale);
-                }
+                a->sustainingDecayLevel = XFixedMultiply(a->sustainingDecayLevel, levelScale);
             }
-            else
-            {
-                if (currentTime)
-                {
-                    currentTime += PV_GetLFOAdjustedTimeInMicroseconds();
-                    if (currentTime >= a->ADSRTime[index])
-                    {
-                        currentTime = a->ADSRTime[index];
-                    }
-                    if (a->ADSRTime[index] >> 6L)
-                    {
-                        scalar = (currentTime << 6) / (a->ADSRTime[index] >> 6);
-                    }
-                    else
-                    {
-                        scalar = 0;
-                    }
-                    a->currentLevel = a->previousTarget + (((a->ADSRLevel[index] - a->previousTarget) * scalar) >> 12L);
-                }
-            }
-            break;
-        case ADSR_EXPONENTIAL_RAMP:
-            currentTime += PV_GetLFOAdjustedTimeInMicroseconds();
-            if (currentTime >= a->ADSRTime[index])
-            {
-                a->previousTarget = a->ADSRLevel[index];
-                a->currentLevel = a->ADSRLevel[index];
-                currentTime -= a->ADSRTime[index];
-                if (a->ADSRFlags[index] != ADSR_TERMINATE)
-                {
-                    index++;
-                }
-                else
-                {
-                    a->mode = ADSR_TERMINATE;
-                    currentTime = 0; // Fixed: Don't subtract time again
-                }
-            }
-            else
-            {
-                if (currentTime && a->ADSRTime[index])
-                {
-                    // Exponential interpolation using existing expDecayLookup table
-                    XSDWORD timeDelta = a->ADSRLevel[index] - a->previousTarget;
-                    
-                    if (timeDelta != 0)
-                    {
-                        // Calculate progress through segment (0.0 to 1.0)
-                        XFIXED progress = XFixedDivide((XFIXED)currentTime << 16, (XFIXED)a->ADSRTime[index] << 16);
-                        
-                        // Use exponential curve based on direction of change
-                        XFIXED expCurve;
-                        if (timeDelta > 0)
-                        {
-                            // Rising exponential curve (attack)
-                            // Use (1 - e^(-3*t)) approximation for smooth attack
-                            XFIXED invProgress = XFIXED_1 - progress;
-                            INT32 lookupIndex = (invProgress >> 12) & 0x3FF; // Scale to 0-1023 range
-                            if (lookupIndex >= sizeof(expDecayLookup)/sizeof(XFIXED))
-                                lookupIndex = sizeof(expDecayLookup)/sizeof(XFIXED) - 1;
-                            expCurve = XFIXED_1 - expDecayLookup[lookupIndex];
-                        }
-                        else
-                        {
-                            // Falling exponential curve (decay/release)
-                            // Use e^(-3*t) for natural decay
-                            INT32 lookupIndex = (progress >> 12) & 0x3FF; // Scale to 0-1023 range  
-                            if (lookupIndex >= sizeof(expDecayLookup)/sizeof(XFIXED))
-                                lookupIndex = sizeof(expDecayLookup)/sizeof(XFIXED) - 1;
-                            expCurve = expDecayLookup[lookupIndex];
-                        }
-                        
-                        // Apply exponential curve to the level change
-                        a->currentLevel = a->previousTarget + XFixedMultiply(timeDelta, expCurve);
-                    }
-                    else
-                    {
-                        // No change in level, just use previous target
-                        a->currentLevel = a->previousTarget;
-                    }
-                }
-                else
-                {
-                    // No time or zero duration - set to target immediately
-                    a->currentLevel = a->previousTarget;
-                }
-            }
-            break;
-        default:
-            currentTime += PV_GetLFOAdjustedTimeInMicroseconds();
-            if (currentTime >= a->ADSRTime[index])
-            {
-                a->previousTarget = a->ADSRLevel[index];
-                a->currentLevel = a->ADSRLevel[index];
-                currentTime -= a->ADSRTime[index];
-                if (a->ADSRFlags[index] != ADSR_TERMINATE)
-                {
-                    index++;
-                }
-                else
-                {
-                    a->mode = ADSR_TERMINATE;
-                    currentTime -= (XSDWORD)PV_GetLFOAdjustedTimeInMicroseconds();
-                }
-            }
-            else
-            {
-                if (currentTime)
-                {
-                    scalar = (currentTime << 6) / (a->ADSRTime[index] >> 6);
-                    a->currentLevel = a->previousTarget + (((a->ADSRLevel[index] - a->previousTarget) * scalar) >> 12);
-                }
-            }
-            break;
         }
+        else
+        {
+            if (currentTime)
+            {
+                currentTime += PV_GetLFOAdjustedTimeInMicroseconds(); // microseconds;
+                if (currentTime >= a->ADSRTime[index])
+                {
+                    currentTime = a->ADSRTime[index];
+                }
+                if (a->ADSRTime[index] >> 6L)
+                {
+                    scalar = (currentTime << 6) / (a->ADSRTime[index] >> 6); // scalar is 0..4095
+                }
+                else
+                {
+                    scalar = 0;
+                }
+                a->currentLevel = a->previousTarget + (((a->ADSRLevel[index] - a->previousTarget) * scalar) >> 12L);
+            }
+        }
+        break;
+    default:
+        currentTime += PV_GetLFOAdjustedTimeInMicroseconds(); // microseconds;
+        if (currentTime >= a->ADSRTime[index])
+        {
+            a->previousTarget = a->ADSRLevel[index];
+            a->currentLevel = a->ADSRLevel[index];
+            currentTime -= a->ADSRTime[index];
+            if (a->ADSRFlags[index] != ADSR_TERMINATE)
+            {
+                index++;
+            }
+            else
+            {
+                a->mode = ADSR_TERMINATE;
+                currentTime -= (XSDWORD)PV_GetLFOAdjustedTimeInMicroseconds(); // prevent long note times from overflowing if they stay on for more than 32.767 seconds
+            }
+        }
+        else
+        {
+            if (currentTime)
+            {
+                scalar = (currentTime << 6) / (a->ADSRTime[index] >> 6);                                            // scalar is 0..4095
+                a->currentLevel = a->previousTarget + (((a->ADSRLevel[index] - a->previousTarget) * scalar) >> 12); // ADSRLevels max out at 64k
+            }
+        }
+        break;
     }
 
-    // Update state
+    // the index may have changed, so check for new cases.
+#if 0
+    switch (a->ADSRFlags[index])
+    {
+        case ADSR_GOTO:
+            index = a->ADSRLevel[index] - 1;
+            break;
+    }
+#endif
+    // BAE_PRINTF("currentLevel = %ld\n", (int32_t)a->currentLevel);
     a->currentTime = currentTime;
-    a->currentPosition = index & 7;  // Protect against runaway
+    a->currentPosition = index & 7; // protect against runaway indexes
 }
 
 static INLINE INT32 PV_GetWaveShape(INT32 where, INT32 what_kind)
@@ -1801,43 +1572,6 @@ static void PV_ServeThisInstrument(GM_Voice *pVoice)
     {
         pVoice->LPF_frequency = 0;
     }
-
-#if USE_SF2_SUPPORT == TRUE
-    // Apply modulation envelope to filter frequency for SF2 instruments
-    if (pVoice->modEnvelopeToFilter != 0)
-    {
-        // SF2 spec: modEnvToFilter is in cents (1/100 semitone)
-        // Convert envelope level and scaling to filter frequency offset
-        INT32 modEnvCents = (pVoice->modEnvelopeRecord.currentLevel * pVoice->modEnvelopeToFilter) >> 16;
-        if (modEnvCents != 0 && pVoice->LPF_base_frequency > 0)
-        {
-            // Convert cents to frequency multiplier: 2^(cents/1200)
-            // For filter frequency, apply as additive offset rather than multiplicative
-            INT32 freqOffset = modEnvCents / 10; // Scale down for reasonable filter range
-            pVoice->LPF_frequency = pVoice->LPF_base_frequency + freqOffset;
-            
-            // Clamp to reasonable filter frequency range
-            if (pVoice->LPF_frequency < 0) 
-                pVoice->LPF_frequency = 0;
-            if (pVoice->LPF_frequency > 127) 
-                pVoice->LPF_frequency = 127;
-        }
-        else if (pVoice->LPF_base_frequency > 0)
-        {
-            pVoice->LPF_frequency = pVoice->LPF_base_frequency;
-        }
-    }
-    else if (pVoice->LPF_base_frequency > 0)
-    {
-        pVoice->LPF_frequency = pVoice->LPF_base_frequency;
-    }
-#else
-    if (pVoice->LPF_base_frequency > 0)
-    {
-        pVoice->LPF_frequency = pVoice->LPF_base_frequency;
-    }
-#endif
-
     if (pVoice->LFORecordCount)
     {
         for (i = 0; i < pVoice->LFORecordCount; i++)
@@ -1845,7 +1579,7 @@ static void PV_ServeThisInstrument(GM_Voice *pVoice)
             rec = &(pVoice->LFORecords[i]);
             PV_ADSRModule(&(rec->a),
                           (XBOOL)((pVoice->voiceMode == VOICE_SUSTAINING) ||
-                                  (pVoice->sustainMode == SUS_ON_NOTE_ON)), pVoice);
+                                  (pVoice->sustainMode == SUS_ON_NOTE_ON)));
             if ((rec->level) || (rec->DC_feed))
             {
                 // scale the current adsr level by the sustainDecayLevel which is fixed point
@@ -1925,56 +1659,10 @@ static void PV_ServeThisInstrument(GM_Voice *pVoice)
             resonantFilterLookup[(n + ((pVoice->NoteMIDIPitch - pVoice->LPF_base_frequency) << 8) + 0x80) >> 8] * 256 + pVoice->LPF_frequency;
     }
 
-#if USE_SF2_SUPPORT == TRUE
-    // Force pitch recalculation for SF2 instruments with modulation envelope
-    XBOOL forcePitchRecalc = FALSE;
-    if (pVoice->modEnvelopeToPitch != 0)
+    if (n != pVoice->LastPitchBend)
     {
-        forcePitchRecalc = TRUE; // Always recalculate when mod envelope affects pitch
-    }
-#endif
-
-    if (n != pVoice->LastPitchBend
-#if USE_SF2_SUPPORT == TRUE
-        || forcePitchRecalc
-#endif
-        )
-    {
-#if USE_SF2_SUPPORT == TRUE
-        // Only update LastPitchBend if pitch bend actually changed, not for mod envelope
-        if (n != pVoice->LastPitchBend)
-        {
-#endif
         pVoice->LastPitchBend = (INT16)n;
-#if USE_SF2_SUPPORT == TRUE
-        }
-#endif
         n += pVoice->ProcessedPitch << 8; // ProcessedPitch is based on the sample data and MIDI pitch.
-
-#if USE_SF2_SUPPORT == TRUE
-        // Apply modulation envelope to pitch for SF2 instruments
-        if (pVoice->modEnvelopeToPitch != 0)
-        {
-            // SF2 spec: modEnvToPitch is in cents (1/100 semitone)
-            // Scale for reasonable modulation effect - aim for subtle pitch changes
-            // Normalize envelope level to 0-100 range, then apply moderate scaling
-            INT32 envelopePercent = pVoice->modEnvelopeRecord.currentLevel / (VOLUME_RANGE / 100);
-            // Scale modulation amount - divide by 4 for reasonable effect
-            INT32 modEnvCents = (envelopePercent * pVoice->modEnvelopeToPitch) / 400;
-            // Convert cents to 8.8 fixed point pitch offset
-            INT32 pitchOffset = (modEnvCents << 8) / 100;
-            
-            // Debug output
-            BAE_PRINTF("SF2 ModEnv: currentLevel=%ld, percent=%ld, toPitch=%ld, cents=%ld, offset=%ld\n",
-                       (long)pVoice->modEnvelopeRecord.currentLevel,
-                       (long)envelopePercent,
-                       (long)pVoice->modEnvelopeToPitch,
-                       (long)modEnvCents,
-                       (long)pitchOffset);
-            
-            n += pitchOffset;
-        }
-#endif
 
         // Clip value to within reasonable MIDI pitch range
         if (n < -0x1800)
@@ -2064,26 +1752,7 @@ static void PV_ServeThisInstrument(GM_Voice *pVoice)
     // This is sure easier than the LFO modules!
     PV_ADSRModule(&(pVoice->volumeADSRRecord),
                   (XBOOL)((pVoice->voiceMode == VOICE_SUSTAINING) ||
-                          (pVoice->sustainMode == SUS_ON_NOTE_ON)), pVoice);
-
-#if USE_SF2_SUPPORT == TRUE
-    // Process modulation envelope for SF2 instruments
-    if (pVoice->modEnvelopeToPitch != 0 || pVoice->modEnvelopeToFilter != 0)
-    {
-        // Process the modulation envelope ADSR
-        PV_ADSRModule(&(pVoice->modEnvelopeRecord),
-                      (XBOOL)((pVoice->voiceMode == VOICE_SUSTAINING) ||
-                              (pVoice->sustainMode == SUS_ON_NOTE_ON)), pVoice);
-        
-        // Debug: show modulation envelope state
-        BAE_PRINTF("SF2 ModEnv ADSR: pos=%d, currentLevel=%ld, time=%ld, toPitch=%ld, toFilter=%ld\n",
-                   (int)pVoice->modEnvelopeRecord.currentPosition,
-                   (long)pVoice->modEnvelopeRecord.currentLevel,
-                   (long)pVoice->modEnvelopeRecord.currentTime,
-                   (long)pVoice->modEnvelopeToPitch,
-                   (long)pVoice->modEnvelopeToFilter);
-    }
-#endif
+                          (pVoice->sustainMode == SUS_ON_NOTE_ON)));
 
     // now reduce the current volume by the sustainDecayLevel which is fixed point
     pVoice->NoteVolumeEnvelope = (INT16)XFixedMultiply(pVoice->volumeADSRRecord.currentLevel,
@@ -2492,6 +2161,21 @@ INLINE static void PV_ServeInstruments(void)
             someSoundActive = TRUE;
         }
     }
+
+#if USE_SF2_SUPPORT == TRUE
+    // Reverb disabled: mix TSF output directly into dry buffer (no effects)
+    {
+        int si;
+        for (si = 0; si < MAX_SONGS; ++si)
+        {
+            GM_Song *song = pMixer->pSongsToPlay[si];
+            if (song && GM_IsTSFSong(song))
+            {
+                GM_TSF_RenderAudioSlice(song, (int32_t *)pMixer->songBufferDry, pMixer->One_Loop);
+            }
+        }
+    }
+#endif
 }
 #else
 // Process active sample voices
@@ -2517,6 +2201,20 @@ INLINE static void PV_ServeInstruments(void)
                 someSoundActive = TRUE;
             }
         }
+#if USE_SF2_SUPPORT == TRUE
+        // Mix TSF (SoundFont) voices before chorus/reverb so they get processed by effects
+        {
+            int si;
+            for (si = 0; si < MAX_SONGS; ++si)
+            {
+                GM_Song *song = pMixer->pSongsToPlay[si];
+                if (song && GM_IsTSFSong(song))
+                {
+                    GM_TSF_RenderAudioSlice(song, (int32_t *)pMixer->songBufferDry, pMixer->One_Loop);
+                }
+            }
+        }
+#endif
 #if USE_NEW_EFFECTS
         RunChorus(pMixer->songBufferChorus, pMixer->songBufferDry, pMixer->One_Loop);
 #endif
@@ -2540,6 +2238,20 @@ INLINE static void PV_ServeInstruments(void)
                 }
             }
         }
+#if USE_SF2_SUPPORT == TRUE
+        // Mix TSF output with reverb-enabled voices before reverb stage
+        {
+            int si;
+            for (si = 0; si < MAX_SONGS; ++si)
+            {
+                GM_Song *song = pMixer->pSongsToPlay[si];
+                if (song && GM_IsTSFSong(song))
+                {
+                    GM_TSF_RenderAudioSlice(song, (int32_t *)pMixer->songBufferDry, pMixer->One_Loop);
+                }
+            }
+        }
+#endif
 #if USE_NEW_EFFECTS
         RunChorus(pMixer->songBufferChorus, pMixer->songBufferDry, pMixer->One_Loop);
 #endif
@@ -3435,10 +3147,6 @@ EnterNote:
 // This function also will kill notes if needed to activate this new note.
 //
 // This function is primarly called from the BAE midi sequencer. There's no need to call it directly.
-// Forward-declare helper used for SF2 split instruments
-static void PV_StartMIDINoteForSplit(GM_Song *pSong, INT16 parent_instrument, INT16 the_channel,
-                                     INT16 the_track, INT16 notePitch, INT32 Volume,
-                                     INT32 sampleNumber, GM_Instrument *pInstrument);
 void PV_StartMIDINote(GM_Song *pSong, INT16 the_instrument,
                       INT16 the_channel, INT16 the_track, INT16 notePitch, INT32 Volume)
 {
@@ -3509,86 +3217,43 @@ void PV_StartMIDINote(GM_Song *pSong, INT16 the_instrument,
         { // yes, find an instrument
             splitCount = theI->u.k.KeymapSplitCount;
             k = theI->u.k.keySplits;
-#if USE_SF2_SUPPORT == TRUE
-            // If this is an SF2-created instrument, it may have multiple zones
-            // that should all be triggered for a single MIDI note (layered zones).
-            // In that case, start a voice for every matching split. For legacy
-            // HSB instruments keep the original behaviour of selecting the first match.
-            if (theI->isSF2Instrument)
+            for (count = 0; count < splitCount; count++)
             {
-                    int started = 0;
-                    for (count = 0; count < splitCount; count++)
-                    {
-                        if ((playPitch >= k->lowMidi) && (playPitch <= k->highMidi))
-                        {
-                            // Extract velocity limits from velRange: low in low byte, high in high byte
-                            uint8_t lowVel = (uint8_t)(k->velRange & 0xFF);
-                            uint8_t highVel = (uint8_t)((k->velRange >> 8) & 0xFF);
-                            // If velRange was not set, it defaults to 0..127 in GenSF2 creation.
-                            int volume127 = (Volume * 127) / 252;
-                            BAE_PRINTF("lowVel: %i, highVel: %i, Volume: %i, volume127: %i\n", lowVel, highVel, Volume, volume127);
-                            if ((uint8_t)volume127 >= lowVel && (uint8_t)volume127 <= highVel)
-                            {
-                                GM_Instrument *splitInst = k->pSplitInstrument;
-                                if (splitInst)
-                                {
-                                    // Start a voice for this split instrument. Use a small helper
-                                    // to avoid duplicating the large voice-setup code.
-                                    PV_StartMIDINoteForSplit(pSong, the_instrument, the_channel, the_track, notePitch, Volume, sampleNumber, splitInst);
-                                    started++;
-                                }
-                                else
-                                {
-                                    BAE_PRINTF("bad sample in instrument %d split %d\n", the_instrument, (int)count);
-                                }
-                            }
-                        }
-                        k++;
-                        sampleNumber++;
-                    }
-            }
-            else
-#endif
-            {
-                for (count = 0; count < splitCount; count++)
+                if ((playPitch >= k->lowMidi) && (playPitch <= k->highMidi))
                 {
-                    if ((playPitch >= k->lowMidi) && (playPitch <= k->highMidi))
+                    theI = k->pSplitInstrument;
+                    if (theI)
                     {
-                        theI = k->pSplitInstrument;
-                        if (theI)
+                        pInstrument = theI;
+                        // NOTE!! If useSoundModifierAsRootKey is TRUE, then we are using
+                        // the Sound Modifier data blocks as a root key replacement for samples in
+                        // the particular split
+                        if (theI->useSoundModifierAsRootKey)
                         {
-                            pInstrument = theI;
-                            // NOTE!! If useSoundModifierAsRootKey is TRUE, then we are using
-                            // the Sound Modifier data blocks as a root key replacement for samples in
-                            // the particular split
-                            if (theI->useSoundModifierAsRootKey)
+                            if (theI->masterRootKey)
                             {
-                                if (theI->masterRootKey)
-                                {
-                                    playPitch = notePitch - theI->masterRootKey + 60;
-                                }
-                                playPitch = playPitch + 60 - theI->miscParameter1;
-                                Volume = (Volume * theI->miscParameter2) / 100; // scale volume based upon split
+                                playPitch = notePitch - theI->masterRootKey + 60;
                             }
-                            else
-                            {
-                                if (theI->masterRootKey)
-                                {
-                                    playPitch = notePitch - theI->masterRootKey + 60;
-                                }
-                            }
-                            break;
+                            playPitch = playPitch + 60 - theI->miscParameter1;
+                            Volume = (Volume * theI->miscParameter2) / 100; // scale volume based upon split
                         }
                         else
                         {
-                            BAE_PRINTF("bad sample in instrument %d split %d\n", the_instrument, (int)count);
+                            if (theI->masterRootKey)
+                            {
+                                playPitch = notePitch - theI->masterRootKey + 60;
+                            }
                         }
+                        break;
                     }
-                    k++;
-                    sampleNumber++;
+                    else
+                    {
+                        BAE_PRINTF("bad sample in instrument %d split %d\n", the_instrument, (int)count);
+                    }
                 }
+                k++;
+                sampleNumber++;
             }
-            return;
         }
         else
         {
@@ -3669,18 +3334,6 @@ void PV_StartMIDINote(GM_Song *pSong, INT16 the_instrument,
         // copy the volume ADSR record into the GM_Voice
         the_entry->volumeADSRRecord = pInstrument->volumeADSRRecord;
 
-#if USE_SF2_SUPPORT == TRUE
-        // Copy the modulation envelope record for SF2 instruments
-        the_entry->modEnvelopeRecord = pInstrument->modEnvelopeRecord;
-        the_entry->modEnvelopeToPitch = pInstrument->modEnvelopeToPitch;
-        the_entry->modEnvelopeToFilter = pInstrument->modEnvelopeToFilter;
-        
-        // Reset modulation envelope timing state for each voice
-        the_entry->modEnvelopeRecord.currentTime = 0;
-        the_entry->modEnvelopeRecord.currentPosition = 0;
-        // Keep currentLevel as set by PV_SF2_FillModulationADSR
-#endif
-
         // copy the sample-and-hold flag
         the_entry->sampleAndHold = pInstrument->sampleAndHold;
 
@@ -3693,95 +3346,6 @@ void PV_StartMIDINote(GM_Song *pSong, INT16 the_instrument,
             for (i = 0; i < the_entry->LFORecordCount; i++)
             {
                 the_entry->LFORecords[i] = pInstrument->LFORecords[i];
-                
-                // Factor in global LFO controls for this voice
-                // Apply modulation wheel control to pitch LFOs (vibrato)
-                if (the_entry->LFORecords[i].where_to_feed == PITCH_LFO)
-                {
-                    // Get current modulation wheel value for this channel (0-127)
-                    INT32 modWheelValue = pSong->channelModWheel[the_channel];
-                    if (modWheelValue > 127) modWheelValue = 127;
-                    if (modWheelValue < 0) modWheelValue = 0;
-                    
-                    // Scale LFO level based on mod wheel (0 = no vibrato, 127 = full vibrato)
-                    // Store original level in DC_feed for reference
-                    if (the_entry->LFORecords[i].DC_feed == 0) {
-                        the_entry->LFORecords[i].DC_feed = the_entry->LFORecords[i].level; // Store original level
-                    }
-                    INT32 originalLevel = the_entry->LFORecords[i].DC_feed;
-                    the_entry->LFORecords[i].level = (originalLevel * modWheelValue) >> 7; // Divide by 128
-                    
-                    BAE_PRINTF("SF2 Debug: Applied mod wheel %d to pitch LFO %d: orig=%d, scaled=%d\n",
-                               modWheelValue, i, (int)originalLevel, (int)the_entry->LFORecords[i].level);
-                }
-                
-                // Apply other controller mappings through curve processing
-                // This handles instrument-specific controller -> LFO mappings
-                for (int curveIdx = 0; curveIdx < pInstrument->curveRecordCount; curveIdx++)
-                {
-                    GM_TieTo *curve = &pInstrument->curve[curveIdx];
-                    
-                    // Check if this curve affects the current LFO
-                    XBOOL affectsThisLFO = FALSE;
-                    if ((curve->tieTo == PITCH_LFO && the_entry->LFORecords[i].where_to_feed == PITCH_LFO) ||
-                        (curve->tieTo == VOLUME_LFO && the_entry->LFORecords[i].where_to_feed == VOLUME_LFO) ||
-                        (curve->tieTo == PITCH_LFO_FREQUENCY && the_entry->LFORecords[i].where_to_feed == PITCH_LFO) ||
-                        (curve->tieTo == VOLUME_LFO_FREQUENCY && the_entry->LFORecords[i].where_to_feed == VOLUME_LFO))
-                    {
-                        affectsThisLFO = TRUE;
-                    }
-                    
-                    if (affectsThisLFO && curve->curveCount > 0)
-                    {
-                        INT32 controllerValue = 0;
-                        
-                        // Get the current controller value based on curve source
-                        switch (curve->tieFrom)
-                        {
-                            case MOD_WHEEL_CONTROL:
-                                controllerValue = pSong->channelModWheel[the_channel];
-                                break;
-                            case SAMPLE_NUMBER: // Often used for velocity in SF2
-                                controllerValue = the_entry->NoteVolume; 
-                                break;
-                            default:
-                                // For other controllers, we'd need to extend this
-                                continue; // Skip this curve
-                        }
-                        
-                        // Clamp controller value
-                        if (controllerValue < 0) controllerValue = 0;
-                        if (controllerValue > 127) controllerValue = 127;
-                        
-                        // Apply curve mapping to get scalar value
-                        INT32 scalar = PV_CalculateCurveValue(curve, controllerValue);
-                        
-                        if (curve->tieTo == PITCH_LFO || curve->tieTo == VOLUME_LFO)
-                        {
-                            // Apply scalar to LFO level (scalar is typically 0-256, where 256 = 100%)
-                            if (the_entry->LFORecords[i].DC_feed == 0) {
-                                the_entry->LFORecords[i].DC_feed = the_entry->LFORecords[i].level; // Store original
-                            }
-                            INT32 originalLevel = the_entry->LFORecords[i].DC_feed;
-                            the_entry->LFORecords[i].level = (originalLevel * scalar) >> 8; // Divide by 256
-                            
-                            BAE_PRINTF("SF2 Debug: Applied curve %d to LFO %d: controller=%d, scalar=%d, level=%d->%d\n",
-                                       curveIdx, i, controllerValue, (int)scalar, 
-                                       (int)originalLevel, (int)the_entry->LFORecords[i].level);
-                        }
-                        else if (curve->tieTo == PITCH_LFO_FREQUENCY || curve->tieTo == VOLUME_LFO_FREQUENCY)
-                        {
-                            // Apply scalar to LFO period (frequency)
-                            if (pInstrument->LFORecords[i].period > 0) {
-                                the_entry->LFORecords[i].period = (pInstrument->LFORecords[i].period * scalar) >> 8;
-                                
-                                BAE_PRINTF("SF2 Debug: Applied curve %d to LFO %d period: controller=%d, scalar=%d, period=%u->%u\n",
-                                           curveIdx, i, controllerValue, (int)scalar, 
-                                           pInstrument->LFORecords[i].period, the_entry->LFORecords[i].period);
-                            }
-                        }
-                    }
-                }
             }
         }
 
@@ -4105,198 +3669,6 @@ void PV_StartMIDINote(GM_Song *pSong, INT16 the_instrument,
 #endif
     }
 }
-#if USE_SF2_SUPPORT == TRUE
-// Helper: start a single voice for a split instrument (used by SF2 layered presets)
-// This mirrors the minimal portion of PV_StartMIDINote required to initialize a voice
-// for a given split instrument instance. It intentionally avoids disturbing the
-// outer function's local variables.
-static void PV_StartMIDINoteForSplit(GM_Song *pSong, INT16 parent_instrument, INT16 the_channel,
-                                     INT16 the_track, INT16 notePitch, INT32 Volume,
-                                     INT32 sampleNumber, GM_Instrument *pInstrument)
-{
-    GM_Mixer *pMixer = GM_GetCurrentMixer();
-    GM_Voice *the_entry;
-    INT32 volume32;
-    INT16 playPitch = notePitch;
-    INT16 newPitch;
-
-    if (!pInstrument || Volume == 0)
-        return;
-
-    // apply root key if instrument wants it
-    if (pInstrument->useSoundModifierAsRootKey)
-    {
-        playPitch = playPitch + 60 - pInstrument->miscParameter1;
-        Volume = (Volume * pInstrument->miscParameter2) / 100;
-    }
-
-    // compute initial scaled volume
-    volume32 = (Volume * pMixer->scaleBackAmount) >> 8;
-    volume32 = PV_ScaleVolumeFromChannelAndSong(pSong, the_channel, volume32);
-
-    if (pInstrument->useSoundModifierAsRootKey)
-        newPitch = playPitch;
-    else
-        newPitch = playPitch + 60 - pInstrument->u.w.baseMidiPitch;
-    while (newPitch < -24)
-        newPitch += 12;
-    while (newPitch > 144)
-        newPitch -= 12;
-
-    the_entry = PV_FindFreeVoice(pMixer, pSong, volume32, newPitch, parent_instrument, the_channel);
-    if (!the_entry)
-        return;
-
-    the_entry->voiceMode = VOICE_ALLOCATED;
-    PV_CleanNoteEntry(the_entry);
-    the_entry->pInstrument = pInstrument;
-    the_entry->pSong = pSong;
-    the_entry->NoteVolumeEnvelopeBeforeLFO = VOLUME_PRECISION_SCALAR;
-    the_entry->NotePtr = (UBYTE *)pInstrument->u.w.theWaveform;
-    the_entry->NotePtrEnd = the_entry->NotePtr + pInstrument->u.w.waveFrames;
-    the_entry->NoteChannel = (SBYTE)the_channel;
-    the_entry->NoteTrack = (SBYTE)the_track;
-
-    the_entry->volumeADSRRecord = pInstrument->volumeADSRRecord;
-    the_entry->sampleAndHold = pInstrument->sampleAndHold;
-    
-    // Copy the modulation envelope record for SF2 instruments
-    the_entry->modEnvelopeRecord = pInstrument->modEnvelopeRecord;
-    the_entry->modEnvelopeToPitch = pInstrument->modEnvelopeToPitch;
-    the_entry->modEnvelopeToFilter = pInstrument->modEnvelopeToFilter;
-    
-    // Reset modulation envelope timing state for each voice
-    the_entry->modEnvelopeRecord.currentTime = 0;
-    the_entry->modEnvelopeRecord.currentPosition = 0;
-    // Keep currentLevel as set by PV_SF2_FillModulationADSR
-    
-    the_entry->LFORecordCount = pInstrument->LFORecordCount;
-    if (the_entry->LFORecordCount)
-    {
-        for (int i = 0; i < the_entry->LFORecordCount; ++i)
-            the_entry->LFORecords[i] = pInstrument->LFORecords[i];
-    }
-
-    // Reset LFO timing/state so each voice has independent LFO progress and does not
-    // inherit any running phase from the instrument template or other voices.
-    if (the_entry->LFORecordCount)
-    {
-        for (int i = 0; i < the_entry->LFORecordCount; ++i)
-        {
-            the_entry->LFORecords[i].currentTime = 0;
-            the_entry->LFORecords[i].LFOcurrentTime = 0;
-            the_entry->LFORecords[i].currentWaveValue = 0;
-            // Reset ADSR internal tracking for the LFO envelope to start fresh per voice
-            the_entry->LFORecords[i].a.currentTime = 0;
-            the_entry->LFORecords[i].a.currentPosition = 0;
-            // Keep currentLevel as defined by instrument (PV_SF2_InitLFO sets a.currentLevel)
-            /* Debug: print LFO state to help diagnose slow vibrato issues */
-            BAE_PRINTF("SF2 Debug: StartSplit note=%d inst=%d split=%d LFO[%d] period=%u level=%d a.currentLevel=%ld a.time0=%u\n",
-                       (int)notePitch, (int)parent_instrument, (int)sampleNumber, i,
-                       (unsigned)the_entry->LFORecords[i].period,
-                       (int)the_entry->LFORecords[i].level,
-                       (long)the_entry->LFORecords[i].a.currentLevel,
-                       (unsigned)the_entry->LFORecords[i].a.ADSRTime[0]);
-        }
-    }
-
-    if (pInstrument->playAtSampledFreq == FALSE)
-    {
-        the_entry->ProcessedPitch = newPitch;
-        the_entry->NotePitch = majorPitchTable[newPitch + 24];
-    }
-    else
-    {
-        the_entry->ProcessedPitch = 0;
-        the_entry->NotePitch = 0x10000; // 1.0
-    }
-
-    if (pInstrument->useSampleRate)
-    {
-        the_entry->noteSamplePitchAdjust = XFixedDivide(pInstrument->u.w.sampledRate >> 2, 22050L << 14);
-        the_entry->NotePitch = XFixedMultiply(the_entry->NotePitch, the_entry->noteSamplePitchAdjust);
-    }
-    else
-    {
-        the_entry->noteSamplePitchAdjust = 0x10000;
-    }
-
-    if (pInstrument->u.w.endLoop > pInstrument->u.w.startLoop &&
-        (pInstrument->u.w.endLoop - pInstrument->u.w.startLoop) >= MIN_LOOP_SIZE)
-    {
-        the_entry->NoteLoopPtr = (XBYTE *)the_entry->NotePtr + pInstrument->u.w.startLoop;
-        the_entry->NoteLoopEnd = (XBYTE *)the_entry->NotePtr + pInstrument->u.w.endLoop;
-    }
-    else
-    {
-        the_entry->NoteLoopPtr = NULL;
-        the_entry->NoteLoopEnd = NULL;
-    }
-
-    the_entry->NoteDecay = 8;
-    the_entry->NoteNextSize = 0;
-    the_entry->NoteWave = 0;
-
-    the_entry->NoteProgram = parent_instrument;
-    the_entry->NoteMIDIPitch = (SBYTE)notePitch;
-    the_entry->noteOffsetStart = (SBYTE)pSong->songPitchShift;
-    the_entry->NoteMIDIVolume = (INT16)Volume;
-    the_entry->NoteVolume = volume32;
-
-    the_entry->LPF_base_frequency = pInstrument->LPF_frequency;
-    the_entry->LPF_base_resonance = pInstrument->LPF_resonance;
-    the_entry->LPF_base_lowpassAmount = pInstrument->LPF_lowpassAmount;
-    the_entry->LPF_frequency = pInstrument->LPF_frequency;
-    the_entry->LPF_resonance = pInstrument->LPF_resonance;
-    the_entry->LPF_lowpassAmount = pInstrument->LPF_lowpassAmount;
-
-    the_entry->routeBus = pSong->routeBus;
-
-    // Set initial pan placement and bit/channel format
-    the_entry->stereoPosition = SetChannelStereoPosition(pSong, the_channel, pSong->channelStereoPosition[the_channel]);
-    the_entry->stereoPanBend = pInstrument->panPlacement;
-    the_entry->bitSize = pInstrument->u.w.bitSize;
-    the_entry->channels = pInstrument->u.w.channels;
-
-    if (the_entry->volumeADSRRecord.ADSRTime[0] == 0)
-    {
-        the_entry->volumeADSRRecord.currentLevel = the_entry->volumeADSRRecord.ADSRLevel[0];
-        the_entry->NoteVolumeEnvelope = (INT16)the_entry->volumeADSRRecord.ADSRLevel[0];
-        if (pMixer->generateStereoOutput)
-        {
-            PV_CalculateStereoVolume(the_entry, &the_entry->lastAmplitudeL, &the_entry->lastAmplitudeR);
-        }
-        else
-        {
-            PV_CalculateMonoVolume(the_entry, &the_entry->lastAmplitudeL);
-            the_entry->lastAmplitudeR = 0;
-        }
-    }
-    else
-    {
-        the_entry->lastAmplitudeL = 0;
-        the_entry->lastAmplitudeR = 0;
-    }
-
-    the_entry->voiceStartTimeStamp = XMicroseconds();
-    the_entry->NoteLoopCount = 0;
-    the_entry->NotePitchBend = pSong->channelBend[the_channel];
-    the_entry->LastPitchBend = 0;
-    the_entry->ModWheelValue = pSong->channelModWheel[the_channel];
-    the_entry->LastModWheelValue = 0;
-
-    if (pSong->channelSustain[the_channel])
-    {
-        the_entry->sustainMode = SUS_ON_NOTE_ON;
-    }
-    else
-    {
-        the_entry->sustainMode = SUS_NORMAL;
-    }
-
-    the_entry->voiceMode = VOICE_SUSTAINING;
-}
-#endif
 
 // Given a valid GM_Song, an instrument, track, channel, midi pitch, stop a voice
 // in the mixer
@@ -4319,61 +3691,6 @@ void PV_StopMIDINote(GM_Song *pSong, XSWORD the_instrument, XSWORD the_channel, 
     the_track = the_track;
     the_instrument = the_instrument;
     // BAE_PRINTF("NoteOff i %d c %d p %d\n", the_instrument, the_channel, notePitch);
-    // Special-case for SF2 instruments: they may spawn multiple split/layered voices
-    // per single MIDI note. Handle note-off by releasing all matching SF2 voices and
-    // then return. This keeps the original behavior unchanged for legacy HSB.
-    if (pSong)
-    {
-        GM_Instrument *pCheckInst = pSong->instrumentData[pSong->remapArray[the_instrument]];
-#if USE_SF2_SUPPORT == TRUE
-        if (pCheckInst && pCheckInst->isSF2Instrument)
-        {
-            for (count = 0; count < pMixer->MaxNotes; count++)
-            {
-                pNote = &pMixer->NoteEntry[count];
-                if (pNote->voiceMode != VOICE_UNUSED)
-                {
-                    if (pNote->pSong == pSong && pNote->NoteChannel == the_channel)
-                    {
-                        realNote = pNote->NoteMIDIPitch - pNote->noteOffsetStart;
-                        if (GM_DoesChannelAllowPitchOffset(pSong, (uint16_t)pNote->NoteChannel))
-                        {
-                            compareNote = notePitch - pSong->songPitchShift;
-                        }
-                        else
-                        {
-                            compareNote = notePitch - pNote->noteOffsetStart;
-                        }
-                        if (realNote == compareNote)
-                        {
-                            /* Make sure it's a voice belonging to this SF2 instrument or another SF2 instrument
-                               (cover layer voices started by SF2 presets). Use NoteProgram match or instrument flag. */
-                            if ((pNote->NoteProgram == the_instrument) || (pNote->pInstrument && pNote->pInstrument->isSF2Instrument))
-                            {
-                                pNote->voiceStartTimeStamp = 0;
-                                if (pSong->channelSustain[the_channel])
-                                {
-                                    pNote->sustainMode = SUS_ON_NOTE_OFF;
-                                }
-                                else
-                                {
-                                    pNote->voiceMode = VOICE_RELEASING;
-                                    decay = pNote->NoteDecay;
-                                    if ((decay > 500) || (decay < 0))
-                                    {
-                                        BAE_ASSERT(FALSE);
-                                        pNote->NoteDecay = 1;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            return;
-        }
-#endif
-    }
     pNoteToKill = NULL;
     youngestTime = 0; // min time
     for (count = 0; count < pMixer->MaxNotes; count++)

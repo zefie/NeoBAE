@@ -7,7 +7,7 @@
 #include "gui_karaoke.h" // For karaoke functions
 #include "X_API.h"
 #if USE_SF2_SUPPORT
-#include "GenSF2.h"
+#include "GenTSF.h"
 #endif
 #include <stdio.h>
 #include <stdlib.h>
@@ -467,18 +467,6 @@ bool bae_init(int sampleRateHz, bool stereo)
         return false;
     }
 
-#if USE_SF2_SUPPORT == TRUE
-    // Initialize SF2 bank manager
-    if (SF2_InitBankManager() != NO_ERR)
-    {
-        BAE_PRINTF("SF2 bank manager initialization failed\n");
-        BAEMixer_Close(g_bae.mixer);
-        BAEMixer_Delete(g_bae.mixer);
-        g_bae.mixer = NULL;
-        return false;
-    }
-#endif
-
     BAE_PRINTF("BAE initialized: %d Hz, %s\n",
                sampleRateHz, stereo ? "stereo" : "mono");
 
@@ -509,11 +497,6 @@ void bae_shutdown(void)
         g_live_song = NULL;
     }
 
-#if USE_SF2_SUPPORT
-    // Shutdown SF2 bank manager (cleans up all loaded SF2 banks)
-    SF2_ShutdownBankManager();
-#endif
-
     // Close and delete mixer
     if (g_bae.mixer)
     {
@@ -534,43 +517,20 @@ bool bae_load_bank(const char *bank_path)
 
     const char *ext = strrchr(bank_path, '.');
 #if USE_SF2_SUPPORT == TRUE
+    GM_UnloadTSFSoundfont();
     // Check if this is an SF2 file
     if (ext && strcasecmp(ext, ".sf2") == 0)
     {
+        XBOOL stoppedPlayback = FALSE;
         // Load SF2 bank
         SF2_Bank *sf2Bank = NULL;
-        XFILENAME filename;
-        XConvertPathToXFILENAME((BAEPathName)bank_path, &filename);
+        
 
-        OPErr err = SF2_LoadBank(&filename, &sf2Bank);
-        if (err != NO_ERR || !sf2Bank)
+        OPErr err = GM_LoadTSFSoundfont(bank_path);
+        if (err != NO_ERR)
         {
             BAE_PRINTF("SF2 bank load failed: %d %s\n", err, bank_path);
             return false;
-        }
-
-        // Add to SF2 bank manager
-        err = SF2_AddBankToManager(sf2Bank, bank_path);
-        if (err != NO_ERR)
-        {
-            BAE_PRINTF("SF2 bank manager add failed: %d\n", err);
-            SF2_UnloadBank(sf2Bank);
-            return false;
-        }
-
-        BAE_PRINTF("SF2 bank loaded: %s (presets=%u)\n", bank_path, sf2Bank->numPresets);
-
-        // Debug: List first few presets
-        if (sf2Bank->presets && sf2Bank->numPresets > 0)
-        {
-            BAE_PRINTF("SF2 Debug: First few presets:\n");
-            uint32_t maxShow = sf2Bank->numPresets > 10 ? 10 : sf2Bank->numPresets;
-            for (uint32_t i = 0; i < maxShow; i++)
-            {
-                SF2_Preset *preset = &sf2Bank->presets[i];
-                BAE_PRINTF("  Preset %u: bank=%d, program=%d, name=%.*s\n",
-                           i, preset->bank, preset->preset, 20, preset->name);
-            }
         }
 
         // Mark as loaded

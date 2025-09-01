@@ -2504,7 +2504,7 @@ int main(int argc, char *argv[])
         draw_frame(R, vuBg, g_panel_border);
 
         // Calculate fill level (0-64 voices mapped to 0-1)
-        float voiceFill = (float)voiceCount / MAX_VOICES;
+        float voiceFill = (float)voiceCount / (float)MAX_VOICES;
         if (voiceFill > 1.0f)
             voiceFill = 1.0f;
         if (voiceFill < 0.0f)

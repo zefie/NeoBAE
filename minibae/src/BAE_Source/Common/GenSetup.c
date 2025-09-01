@@ -579,6 +579,7 @@ OPErr GM_InitGeneralSound(void *threadContext, Rate theRate, TerpMode theTerp, A
         pMixer = MusicGlobals;
         if (pMixer)
         {
+            pMixer->isTSF = FALSE;
             // Turn off all notes!
             for (count = 0; count < MAX_VOICES; count++)
             {
@@ -1241,96 +1242,6 @@ void SetChannelModWheel(GM_Song *pSong, INT16 the_channel, UINT16 value)
             if (theNote->NoteChannel == the_channel)
             {
                 theNote->ModWheelValue = value;
-#if USE_SF2_SUPPORT == TRUE
-                if (theNote->pInstrument->isSF2Instrument) {
-                    // Update LFO levels based on new controller value
-                    // This applies global LFO controller changes to active voices
-                    if (theNote->pInstrument && theNote->LFORecordCount > 0)
-                    {
-                        for (int i = 0; i < theNote->LFORecordCount; i++)
-                        {
-                            GM_LFO *lfo = &theNote->LFORecords[i];
-                            
-                            // Apply modulation wheel control to pitch LFOs (vibrato)
-                            if (lfo->where_to_feed == PITCH_LFO)
-                            {
-                                // Get original LFO level (stored in DC_feed during voice setup)
-                                INT32 originalLevel = (lfo->DC_feed != 0) ? lfo->DC_feed : lfo->level;
-                                
-                                // Scale by mod wheel value (0-127 -> 0-1.0)
-                                INT32 modWheelValue = value;
-                                if (modWheelValue > 127) modWheelValue = 127;
-                                if (modWheelValue < 0) modWheelValue = 0;
-                                
-                                lfo->level = (originalLevel * modWheelValue) >> 7; // Divide by 128
-                            }
-                            
-                            // Apply instrument-specific curve mappings
-                            if (theNote->pInstrument->curveRecordCount > 0)
-                            {
-                                for (int curveIdx = 0; curveIdx < theNote->pInstrument->curveRecordCount; curveIdx++)
-                                {
-                                    GM_TieTo *curve = &theNote->pInstrument->curve[curveIdx];
-                                    
-                                    // Only process curves that source from mod wheel
-                                    if (curve->tieFrom == MOD_WHEEL_CONTROL)
-                                    {
-                                        // Check if this curve affects current LFO
-                                        XBOOL affectsLFO = FALSE;
-                                        if ((curve->tieTo == PITCH_LFO && lfo->where_to_feed == PITCH_LFO) ||
-                                            (curve->tieTo == VOLUME_LFO && lfo->where_to_feed == VOLUME_LFO) ||
-                                            (curve->tieTo == PITCH_LFO_FREQUENCY && lfo->where_to_feed == PITCH_LFO) ||
-                                            (curve->tieTo == VOLUME_LFO_FREQUENCY && lfo->where_to_feed == VOLUME_LFO))
-                                        {
-                                            affectsLFO = TRUE;
-                                        }
-                                        
-                                        if (affectsLFO)
-                                        {
-                                            // Calculate scalar from curve
-                                            INT32 scalar = 256; // Default full scale
-                                            INT32 inputValue = value;
-                                            
-                                            // Apply curve logic (simplified from PV_CalculateCurveValue)
-                                            for (int pt = 0; pt < curve->curveCount - 1; pt++)
-                                            {
-                                                if (inputValue <= curve->from_Value[pt])
-                                                {
-                                                    scalar = curve->to_Scalar[pt];
-                                                    break;
-                                                }
-                                                else if (inputValue < curve->from_Value[pt + 1])
-                                                {
-                                                    scalar = curve->to_Scalar[pt];
-                                                    if (curve->from_Value[pt] != curve->from_Value[pt + 1])
-                                                    {
-                                                        INT32 from_diff = curve->from_Value[pt + 1] - curve->from_Value[pt];
-                                                        INT32 to_diff = curve->to_Scalar[pt + 1] - curve->to_Scalar[pt];
-                                                        scalar += ((((inputValue - curve->from_Value[pt]) << 8) / from_diff) * to_diff) >> 8;
-                                                    }
-                                                    break;
-                                                }
-                                            }
-                                            
-                                            // Apply scalar to LFO parameter
-                                            if (curve->tieTo == PITCH_LFO || curve->tieTo == VOLUME_LFO)
-                                            {
-                                                INT32 originalLevel = (lfo->DC_feed != 0) ? lfo->DC_feed : 
-                                                                    theNote->pInstrument->LFORecords[i].level;
-                                                lfo->level = (originalLevel * scalar) >> 8;
-                                            }
-                                            else if (curve->tieTo == PITCH_LFO_FREQUENCY || curve->tieTo == VOLUME_LFO_FREQUENCY)
-                                            {
-                                                lfo->period = (theNote->pInstrument->LFORecords[i].period * scalar) >> 8;
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-#endif                
             }
         }
     }

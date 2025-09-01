@@ -369,6 +369,9 @@
 #include "X_Formats.h"
 #include "BAE_API.h"
 #include "X_Assert.h"
+#if USE_SF2_SUPPORT == TRUE
+#include "GenTSF.h"
+#endif
 
 #if ((defined(QUEUE_DEBUG) || defined(EVENT_DEBUG)) && X_PLATFORM != X_WIN95 && X_PLATFORM != X_WIN_HARDWARE && X_PLATFORM != X_IOS && X_PLATFORM != X_MACINTOSH)
 #error Cannot use MIDI debugging code on non-windows platform!
@@ -773,6 +776,21 @@ void GM_PauseSequencer(XBOOL endVoices)
             // stop all MIDI notes
             GM_EndAllNotes();
         }
+#if USE_SF2_SUPPORT == TRUE
+        // In TSF mode sustained notes can hang indefinitely during a pause; force silence
+        GM_Mixer *pMixer = GM_GetCurrentMixer();
+        if (pMixer)
+        {
+            for (int i = 0; i < MAX_SONGS; ++i)
+            {
+                GM_Song *s = pMixer->pSongsToPlay[i];
+                if (s && GM_IsTSFSong(s))
+                {
+                    GM_TSF_SilenceSong(s);
+                }
+            }
+        }
+#endif
     }
 }
 
@@ -817,6 +835,14 @@ void GM_PauseSong(GM_Song *pSong, XBOOL endVoices)
             {
                 GM_EndSongNotes(pSong); // end just notes from this song
             }
+#if USE_SF2_SUPPORT == TRUE
+            if (GM_IsTSFSong(pSong))
+            {
+                // For TSF songs, aggressively silence and also end legacy voices to ensure engine note-offs
+                GM_TSF_SilenceSong(pSong);
+                GM_EndSongNotes(pSong);
+            }
+#endif
         }
     }
 }
@@ -1031,89 +1057,113 @@ void GM_GetRealtimeChannelLevels(float left[16], float right[16])
         return;
     }
 
-    // If there are no active voices, clear levels so the GUI VU meters go dark when playback stops.
-    // Don't use GM_IsAudioActive() here because it also checks for reverb tail which we don't want.
-    XBOOL anyActiveVoices = FALSE;
-    int maxEntries = pMixer->MaxNotes + pMixer->MaxEffects;
-    for (int e = 0; e < maxEntries; ++e)
-    {
-        GM_Voice *v = &pMixer->NoteEntry[e];
-        if (v->voiceMode != VOICE_UNUSED)
+#if USE_SF2_SUPPORT == TRUE
+    if (pMixer->isTSF) {
+        XBOOL anyActiveVoices = (GM_TSF_GetActiveVoiceCount() > 0) ? TRUE : FALSE;
+        if (anyActiveVoices)
         {
-            anyActiveVoices = TRUE;
-            break;
+            for (int i = 0; i < MAX_CHANNELS; ++i)
+            {
+                float channelAmplitudes[MAX_CHANNELS] = {0};
+                tsf_get_channel_amplitudes(channelAmplitudes);
+                left[i] = channelAmplitudes[i];
+                right[i] = left[i];
+            }
+            return;
+        } else {
+            for (int i = 0; i < MAX_CHANNELS; ++i)
+            {
+                left[i] = 0.0f;
+                right[i] = 0.0f;
+            }
         }
-    }
-    if (!anyActiveVoices)
+    } else    
+#endif
     {
-        for (int i = 0; i < 16; ++i)
+        // If there are no active voices, clear levels so the GUI VU meters go dark when playback stops.
+        // Don't use GM_IsAudioActive() here because it also checks for reverb tail which we don't want.
+        XBOOL anyActiveVoices = FALSE;
+        int maxEntries = pMixer->MaxNotes + pMixer->MaxEffects;
+        for (int e = 0; e < maxEntries; ++e)
         {
-            left[i] = 0.0f;
-            right[i] = 0.0f;
+            GM_Voice *v = &pMixer->NoteEntry[e];
+            if (v->voiceMode != VOICE_UNUSED)
+            {
+                anyActiveVoices = TRUE;
+                break;
+            }
         }
-        return;
-    }
-
-    // Sum squares per channel (use 64-bit accumulator to avoid overflow)
-    double sumL[16] = {0}, sumR[16] = {0};
-    int counts[16] = {0};
-
-    maxEntries = pMixer->MaxNotes + pMixer->MaxEffects;
-    for (int e = 0; e < maxEntries; ++e)
-    {
-        GM_Voice *v = &pMixer->NoteEntry[e];
-        if (v->voiceMode == VOICE_UNUSED)
-            continue;
-        int ch = (int)v->NoteChannel;
-        if (ch < 0 || ch >= 16)
-            continue;
-        // lastAmplitude values are 32-bit scaled ints. Convert to float in 0..1
-        double aL = (double)v->lastAmplitudeL / (double)0x7FFFFFFF;
-        double aR = (double)v->lastAmplitudeR / (double)0x7FFFFFFF;
-        if (aL < 0)
-            aL = -aL;
-        if (aR < 0)
-            aR = -aR;
-        sumL[ch] += aL * aL;
-        sumR[ch] += aR * aR;
-        counts[ch]++;
-    }
-
-    // Convert to RMS-ish values and normalize by maximum across channels so UI is stable
-    double rmsL[16], rmsR[16];
-    double maxVal = 1e-12;
-    for (int ch = 0; ch < 16; ++ch)
-    {
-        if (counts[ch] > 0)
+        if (!anyActiveVoices)
         {
-            rmsL[ch] = sqrt(sumL[ch] / (double)counts[ch]);
-            rmsR[ch] = sqrt(sumR[ch] / (double)counts[ch]);
+            for (int i = 0; i < 16; ++i)
+            {
+                left[i] = 0.0f;
+                right[i] = 0.0f;
+            }
+            return;
         }
-        else
-        {
-            rmsL[ch] = 0.0;
-            rmsR[ch] = 0.0;
-        }
-        if (rmsL[ch] > maxVal)
-            maxVal = rmsL[ch];
-        if (rmsR[ch] > maxVal)
-            maxVal = rmsR[ch];
-    }
 
-    // Normalize to 0..1 by dividing by maxVal (avoid division by zero)
-    for (int ch = 0; ch < 16; ++ch)
-    {
-        left[ch] = (float)(rmsL[ch] / maxVal);
-        right[ch] = (float)(rmsR[ch] / maxVal);
-        // clamp
-        if (left[ch] < 0.f)
-            left[ch] = 0.f;
-        if (left[ch] > 1.f)
-            left[ch] = 1.f;
-        if (right[ch] < 0.f)
-            right[ch] = 0.f;
-        if (right[ch] > 1.f)
-            right[ch] = 1.f;
+        // Sum squares per channel (use 64-bit accumulator to avoid overflow)
+        double sumL[16] = {0}, sumR[16] = {0};
+        int counts[16] = {0};
+
+        maxEntries = pMixer->MaxNotes + pMixer->MaxEffects;
+        for (int e = 0; e < maxEntries; ++e)
+        {
+            GM_Voice *v = &pMixer->NoteEntry[e];
+            if (v->voiceMode == VOICE_UNUSED)
+                continue;
+            int ch = (int)v->NoteChannel;
+            if (ch < 0 || ch >= 16)
+                continue;
+            // lastAmplitude values are 32-bit scaled ints. Convert to float in 0..1
+            double aL = (double)v->lastAmplitudeL / (double)0x7FFFFFFF;
+            double aR = (double)v->lastAmplitudeR / (double)0x7FFFFFFF;
+            if (aL < 0)
+                aL = -aL;
+            if (aR < 0)
+                aR = -aR;
+            sumL[ch] += aL * aL;
+            sumR[ch] += aR * aR;
+            counts[ch]++;
+        }
+
+        // Convert to RMS-ish values and normalize by maximum across channels so UI is stable
+        double rmsL[16], rmsR[16];
+        double maxVal = 1e-12;
+        for (int ch = 0; ch < 16; ++ch)
+        {
+            if (counts[ch] > 0)
+            {
+                rmsL[ch] = sqrt(sumL[ch] / (double)counts[ch]);
+                rmsR[ch] = sqrt(sumR[ch] / (double)counts[ch]);
+            }
+            else
+            {
+                rmsL[ch] = 0.0;
+                rmsR[ch] = 0.0;
+            }
+            if (rmsL[ch] > maxVal)
+                maxVal = rmsL[ch];
+            if (rmsR[ch] > maxVal)
+                maxVal = rmsR[ch];
+        }
+
+        // Normalize to 0..1 by dividing by maxVal (avoid division by zero)
+        for (int ch = 0; ch < 16; ++ch)
+        {
+            left[ch] = (float)(rmsL[ch] / maxVal);
+            right[ch] = (float)(rmsR[ch] / maxVal);
+            // clamp
+            if (left[ch] < 0.f)
+                left[ch] = 0.f;
+            if (left[ch] > 1.f)
+                left[ch] = 1.f;
+            if (right[ch] < 0.f)
+                right[ch] = 0.f;
+            if (right[ch] > 1.f)
+                right[ch] = 1.f;
+        }
     }
 }
 #endif // X_PLATFORM != X_WEBTV
@@ -1512,7 +1562,7 @@ static INLINE XBOOL PV_IsSoloChannelActive(GM_Song *pSong)
 }
 
 // test to see if a channel or track is muted
-static XBOOL PV_IsMuted(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTrack)
+XBOOL PV_IsMuted(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTrack)
 {
     char channel, track;
 
@@ -1689,6 +1739,14 @@ static void PV_ProcessProgramChange(GM_Song *pSong, INT16 MIDIChannel, INT16 cur
                 }
             }
             pSong->channelProgram[MIDIChannel] = program;
+            
+#if USE_SF2_SUPPORT == TRUE
+            // If TSF is active for this song, send program change to TSF
+            if (GM_IsTSFSong(pSong))
+            {
+                GM_TSF_ProcessProgramChange(pSong, MIDIChannel, program);
+            }
+#endif
         }
 
         if (pSong->AnalyzeMode != SCAN_NORMAL)
@@ -1842,6 +1900,21 @@ static INT16 PV_DetermineInstrumentToUse(GM_Song *pSong, INT16 midiNote, INT16 M
     return thePatch;
 }
 
+#if USE_SF2_SUPPORT == TRUE
+static XBOOL GM_IsRMFChannel(GM_Song *pSong, INT16 MIDIChannel)
+{
+    if (pSong && MIDIChannel >= 0 && MIDIChannel < 16)
+    {
+        // Check if the channel is using RMF
+        if (pSong->channelType[MIDIChannel] == CHANNEL_TYPE_RMF)
+        {
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+#endif
+
 // Process note off
 static void PV_ProcessNoteOff(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTrack, INT16 note, INT16 volume)
 {
@@ -1862,8 +1935,19 @@ static void PV_ProcessNoteOff(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTr
             {
                 note += pSong->songPitchShift;
             }
-            thePatch = PV_DetermineInstrumentToUse(pSong, note, MIDIChannel);
-            PV_StopMIDINote(pSong, thePatch, MIDIChannel, currentTrack, note);
+            
+#if USE_SF2_SUPPORT == TRUE
+            // If TSF is active for this song, route to TSF instead of normal synthesis
+            if (GM_IsTSFSong(pSong) && !GM_IsRMFChannel(pSong, MIDIChannel))
+            {
+                GM_TSF_ProcessNoteOff(pSong, MIDIChannel, note, volume);
+            }
+            else
+#endif
+            {
+                thePatch = PV_DetermineInstrumentToUse(pSong, note, MIDIChannel);
+                PV_StopMIDINote(pSong, thePatch, MIDIChannel, currentTrack, note);
+            }
         }
         else
         {
@@ -1894,7 +1978,7 @@ static void PV_ProcessNoteOn(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTra
     {
         if (volume)
         {
-            if (MIDIChannel >= 0 && MIDIChannel < 16 && note >= 0 && note < 128)
+            if (MIDIChannel >= 0 && MIDIChannel < MAX_CHANNELS && note >= 0 && note < 128)
             {
                 pSong->channelActiveNotes[MIDIChannel][note] = (XBYTE)volume; // store velocity
             }
@@ -1904,8 +1988,20 @@ static void PV_ProcessNoteOn(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTra
                 {
                     note += pSong->songPitchShift;
                 }
-                thePatch = PV_DetermineInstrumentToUse(pSong, note, MIDIChannel);
-                PV_StartMIDINote(pSong, thePatch, MIDIChannel, currentTrack, note, volume);
+
+#if USE_SF2_SUPPORT == TRUE
+                // If SF2 is active for this song, route to SF2 instead of normal synthesis
+                if (GM_IsTSFSong(pSong) && !GM_IsRMFChannel(pSong, MIDIChannel))
+                {
+                    INT16 Volume = PV_ModifyVelocityFromCurve(pSong, volume);
+                    GM_TSF_ProcessNoteOn(pSong, MIDIChannel, note, Volume);
+                }
+                else
+#endif
+                {
+                    thePatch = PV_DetermineInstrumentToUse(pSong, note, MIDIChannel);
+                    PV_StartMIDINote(pSong, thePatch, MIDIChannel, currentTrack, note, volume);
+                }
             }
             else
             {
@@ -1956,6 +2052,14 @@ static void PV_ProcessPitchBend(GM_Song *pSong, INT16 MIDIChannel, INT16 current
 {
     if (PV_IsMuted(pSong, MIDIChannel, currentTrack) == FALSE)
     {
+#if USE_SF2_SUPPORT == TRUE
+        // If TSF is active for this song, send pitch bend to TSF
+        if (GM_IsTSFSong(pSong))
+        {
+            GM_TSF_ProcessPitchBend(pSong, MIDIChannel, valueMSB, valueLSB);
+        }
+#endif
+        
         if ((pSong->AnalyzeMode == SCAN_NORMAL) || (pSong->AnalyzeMode == SCAN_DETERMINE_LENGTH))
         {
             // This solves (!) a bug with pitch bend. I don't know what it is right now. You can't pitch percussion at all
@@ -2072,13 +2176,29 @@ static void PV_ProcessRegisteredParameters(GM_Song *pSong, INT16 MIDIChannel, UI
 }
 
 // Process midi controlers
-static void PV_ProcessController(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTrack, INT16 controler, UINT16 value)
+void PV_ProcessController(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTrack, INT16 controler, UINT16 value)
 {
     UBYTE valueLSB, valueMSB;
     INT16 valueB;
 
     if (PV_IsMuted(pSong, MIDIChannel, currentTrack) == FALSE)
     {
+#if USE_SF2_SUPPORT == TRUE
+        // If TSF is active for this song, send controller to TSF, if its not an RMF channel
+        if (controler == 0) {
+            if (value == 2) {
+                pSong->channelType[MIDIChannel] = CHANNEL_TYPE_RMF;
+                BAE_PRINTF("Setting channel %i as RMF Channel (controler: %i (MSB), value: %i)\n", MIDIChannel, controler, value);
+            } else {
+                pSong->channelType[MIDIChannel] = CHANNEL_TYPE_MIDI;
+            }
+        }
+        if (GM_IsTSFSong(pSong) && !GM_IsRMFChannel(pSong, MIDIChannel))
+        {
+            GM_TSF_ProcessController(pSong, MIDIChannel, controler, value);
+        }
+#endif
+        
         switch (controler)
         {
         case B_BANK_LSB: // bank select MSB. This is GS.
@@ -4055,6 +4175,11 @@ void GM_MuteChannel(GM_Song *pSong, short int channel)
     pMixer = GM_GetCurrentMixer();
     if ((channel < MAX_CHANNELS) && (channel >= 0))
     {
+        if (GM_IsTSFSong(pSong))
+        {
+            // For TSF songs, aggressively silence and also end legacy voices to ensure engine note-offs
+            GM_TSF_AllNotesOffChannel(pSong, channel);
+        }
         if (pSong)
         {
             XSetBit(&pSong->channelMuted, channel);
@@ -4073,7 +4198,7 @@ void GM_MuteChannel(GM_Song *pSong, short int channel)
                     }
                 }
             }
-        }
+        }        
     }
 }
 

@@ -241,7 +241,7 @@
 #include <stdint.h>
 
 #if USE_SF2_SUPPORT == TRUE
-#include "GenSF2.h"
+#include "GenTSF.h"
 #endif
 
 #define DEBUG_DISPLAY_PATCHES   1
@@ -345,7 +345,6 @@ static UNIT_TYPE PV_TranslateFromFileToMemoryID(XDWORD fileUnitType)
     {
         {ADSR_OFF,ADSR_OFF_LONG},
         {ADSR_LINEAR_RAMP,ADSR_LINEAR_RAMP_LONG},
-        {ADSR_EXPONENTIAL_RAMP,ADSR_EXPONENTIAL_RAMP_LONG},
         {ADSR_SUSTAIN,ADSR_SUSTAIN_LONG},
         {ADSR_TERMINATE,ADSR_TERMINATE_LONG},
         {ADSR_GOTO,ADSR_GOTO_LONG},
@@ -1022,19 +1021,6 @@ OPErr GM_LoadInstrument(GM_Song *pSong,
             // use cached instrument, if its not there, then load it
             if (theI == NULL)
             {
-#if USE_SF2_SUPPORT == TRUE                
-                if (SF2_LoadedBankCount() > 0)
-                {
-                    // Try loading from SF2 banks first
-                    theI = PV_GetSF2Instrument(pSong, instrument, &theErr);
-                    if (theI != NULL && theErr == NO_ERR)
-                    {
-                        // Store the SF2 instrument in the song's instrument array
-                        pSong->instrumentData[instrument] = theI;
-                        instrumentLoaded = TRUE;
-                    }
-                }
-#endif
                 if (!instrumentLoaded)
                 {
                     // Reset error code for HSB loading attempt

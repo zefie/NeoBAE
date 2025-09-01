@@ -162,7 +162,7 @@
 #include <stdint.h>
 #include "bankinfo.h" // embedded bank metadata (hash -> friendly)
 #if USE_SF2_SUPPORT == TRUE
-#include "GenSF2.h"
+#include "GenTSF.h"
 #endif
 
 
@@ -1928,12 +1928,7 @@ static BAEResult PV_BAEMixer_AddBank(BAEMixer mixer, XFILE newPatchFile)
             mixer->pPatchFiles = newList;
             mixer->numPatchFiles++;
 
-            XFileUseThisResourceFile(newPatchFile);
-            
-#if USE_SF2_SUPPORT == TRUE
-            // Clear any loaded SF2 banks when loading a new HSB bank
-            SF2_ShutdownBankManager();
-#endif
+            XFileUseThisResourceFile(newPatchFile);            
         }
         else
         {
@@ -2157,11 +2152,6 @@ BAEResult BAEMixer_UnloadBanks(BAEMixer mixer)
             if (err)
                 break;
         }
-        
-#if USE_SF2_SUPPORT == TRUE
-        // Also clear any loaded SF2 banks
-        SF2_ShutdownBankManager();
-#endif
     }
     else
     {
@@ -2799,32 +2789,44 @@ BAEResult BAEMixer_GetRealtimeStatus(BAEMixer mixer, BAEAudioInfo *pStatus)
     {
         if (pStatus)
         {
-            GM_GetRealtimeAudioInformation(&status);
-            XSetMemory(pStatus, (int32_t)sizeof(BAEAudioInfo), 0);
-            pStatus->voicesActive = status.voicesActive;
-            for (count = 0; count < status.voicesActive; count++)
+#if USE_SF2_SUPPORT == TRUE            
+            if (mixer->pMixer->isTSF)
             {
-                pStatus->voice[count] = status.voice[count];
+                GM_GetRealtimeAudioInformation(&status);
+                XSetMemory(pStatus, (int32_t)sizeof(BAEAudioInfo), 0);
+                pStatus->voicesActive = GM_TSF_GetActiveVoiceCount();
 
-                voiceType = BAE_UNKNOWN;
-                switch (status.voiceType[count])
+            }
+            else
+#endif            
+            {
+                GM_GetRealtimeAudioInformation(&status);
+                XSetMemory(pStatus, (int32_t)sizeof(BAEAudioInfo), 0);
+                pStatus->voicesActive = status.voicesActive;
+                for (count = 0; count < status.voicesActive; count++)
                 {
-                case MIDI_PCM_VOICE:
-                    voiceType = BAE_MIDI_PCM_VOICE;
-                    break;
-                case SOUND_PCM_VOICE:
-                    voiceType = BAE_SOUND_PCM_VOICE;
-                    break;
-                }
-                pStatus->voiceType[count] = voiceType;
-                pStatus->instrument[count] = status.patch[count];
-                pStatus->scaledVolume[count] = status.scaledVolume[count];
-                pStatus->midiVolume[count] = status.volume[count];
-                pStatus->channel[count] = status.channel[count];
-                pStatus->midiNote[count] = status.midiNote[count];
-                if (status.pSong[count])
-                {
-                    pStatus->userReference[count] = status.pSong[count]->userReference;
+                    pStatus->voice[count] = status.voice[count];
+
+                    voiceType = BAE_UNKNOWN;
+                    switch (status.voiceType[count])
+                    {
+                    case MIDI_PCM_VOICE:
+                        voiceType = BAE_MIDI_PCM_VOICE;
+                        break;
+                    case SOUND_PCM_VOICE:
+                        voiceType = BAE_SOUND_PCM_VOICE;
+                        break;
+                    }
+                    pStatus->voiceType[count] = voiceType;
+                    pStatus->instrument[count] = status.patch[count];
+                    pStatus->scaledVolume[count] = status.scaledVolume[count];
+                    pStatus->midiVolume[count] = status.volume[count];
+                    pStatus->channel[count] = status.channel[count];
+                    pStatus->midiNote[count] = status.midiNote[count];
+                    if (status.pSong[count])
+                    {
+                        pStatus->userReference[count] = status.pSong[count]->userReference;
+                    }
                 }
             }
         }
@@ -6664,6 +6666,9 @@ static BAEResult PV_BAESong_InitLiveSong(BAESong song, BAE_BOOL addToMixer)
             BAEMixer_GetMixLevel(song->mixer, &mixLevel);
             GM_ChangeSongVoices(song->pSong, maxSongVoices, mixLevel, maxEffectVoices);
             GM_SetVelocityCurveType(song->pSong, (VelocityCurveType)g_defaultVelocityCurve);
+#if USE_SF2_SUPPORT == TRUE
+            if (GM_TSF_IsActive()) { GM_EnableTSFForSong(song->pSong, TRUE); }
+#endif
             GM_SetReverbType(g_defaultReverbType);
 
             if (addToMixer)
@@ -6886,6 +6891,9 @@ BAEResult BAESong_LoadGroovoid(BAESong song, char *cName, BAE_BOOL ignoreBadInst
                         GM_SetSongLoopFlag(pSong, FALSE);               // don't loop song
                         song->pSong = pSong;                            // preserve for use later
                         GM_SetVelocityCurveType(song->pSong, (VelocityCurveType)g_defaultVelocityCurve);
+#if USE_SF2_SUPPORT == TRUE
+                        if (GM_TSF_IsActive()) { GM_EnableTSFForSong(song->pSong, TRUE); }
+#endif
                         theErr = NO_ERR;
                     }
                     else
@@ -6969,6 +6977,9 @@ BAEResult BAESong_LoadMidiFromMemory(BAESong song, void const *pMidiData, uint32
                         GM_SetSongLoopFlag(pSong, FALSE);               // don't loop song
                         song->pSong = pSong;                            // preserve for use later
                         GM_SetVelocityCurveType(song->pSong, (VelocityCurveType)g_defaultVelocityCurve);
+#if USE_SF2_SUPPORT == TRUE
+                        if (GM_TSF_IsActive()) { GM_EnableTSFForSong(song->pSong, TRUE); }
+#endif
 
                         if (pSong->titleOffset)
                         {
@@ -7071,6 +7082,9 @@ BAEResult BAESong_LoadMidiFromFile(BAESong song, BAEPathName filePath, BAE_BOOL 
                         GM_SetSongLoopFlag(pSong, FALSE);               // don't loop song
                         song->pSong = pSong;                            // preserve for use later
                         GM_SetVelocityCurveType(song->pSong, (VelocityCurveType)g_defaultVelocityCurve);
+#if USE_SF2_SUPPORT == TRUE
+                        if (GM_TSF_IsActive()) { GM_EnableTSFForSong(song->pSong, TRUE); }
+#endif
                     }
                     else
                     {
@@ -7153,6 +7167,9 @@ BAEResult BAESong_LoadRmfFromMemory(BAESong song, void *pRMFData, uint32_t rmfSi
                             GM_SetSongLoopFlag(pSong, FALSE);               // don't loop song
                             song->pSong = pSong;                            // preserve for use later
                             GM_SetVelocityCurveType(song->pSong, (VelocityCurveType)g_defaultVelocityCurve);
+#if USE_SF2_SUPPORT == TRUE
+                            if (GM_TSF_IsActive()) { GM_EnableTSFForSong(song->pSong, TRUE); }
+#endif
                         }
                         else
                         {
@@ -7197,6 +7214,9 @@ BAEResult BAESong_LoadRmfFromMemory(BAESong song, void *pRMFData, uint32_t rmfSi
                                 GM_SetSongLoopFlag(pSong, FALSE);
                                 song->pSong = pSong;
                                 GM_SetVelocityCurveType(song->pSong, (VelocityCurveType)g_defaultVelocityCurve);
+#if USE_SF2_SUPPORT == TRUE
+                                if (GM_TSF_IsActive()) { GM_EnableTSFForSong(song->pSong, TRUE); }
+#endif
                             }
                             else
                             {
@@ -7282,6 +7302,9 @@ BAEResult BAESong_LoadRmfFromFile(BAESong song, BAEPathName filePath, int16_t so
                         GM_SetSongLoopFlag(pSong, FALSE);               // don't loop song
                         song->pSong = pSong;                            // preserve for use later
                         GM_SetVelocityCurveType(song->pSong, (VelocityCurveType)g_defaultVelocityCurve);
+#if USE_SF2_SUPPORT == TRUE
+                        if (GM_TSF_IsActive()) { GM_EnableTSFForSong(song->pSong, TRUE); }
+#endif
                     }
                     else
                     {

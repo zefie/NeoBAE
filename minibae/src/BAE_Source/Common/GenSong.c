@@ -208,6 +208,9 @@
 #include "GenPriv.h"
 #include "X_Assert.h"
 #include <stdint.h>
+#if USE_SF2_SUPPORT == TRUE
+#include "GenTSF.h" // TSF integration (silence on end)
+#endif
 
 // Functions
 
@@ -1111,7 +1114,18 @@ static void PV_EndSongWithControl(void *threadContext, GM_Song *pSong, XBOOL rem
     {
         if (pSong)
         {
-            GM_EndSongNotes(pSong); // end just notes associated with this song
+            // For TSF-backed songs ensure TinySoundFont is fully silenced (sustain off, all sound off, all notes off)
+            // which also clears engine bookkeeping, otherwise lingering TSF voices can reappear after stop.
+#if USE_SF2_SUPPORT == TRUE
+            if (GM_IsTSFSong(pSong))
+            {
+                GM_TSF_SilenceSong(pSong); // also calls GM_EndSongNotes internally
+            }
+            else
+#endif
+            {
+                GM_EndSongNotes(pSong); // end just notes associated with this song
+            }
             if (removeFromMixer)
             {
                 for (count = 0; count < MAX_SONGS; count++)
