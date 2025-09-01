@@ -4182,7 +4182,7 @@ int main(int argc, char *argv[])
             if (g_bae.is_rmf_file)
             {
                 // RMF Info button position (moved from 440 to 640 to avoid overlap with Record Format button)
-                int rmf_x_pos = 648;
+                int rmf_x_pos = 798;
 
                 if (ui_button(R, (Rect){rmf_x_pos, 215, 80, 22}, "RMF Info", ui_mx, ui_my, ui_mdown) && ui_mclick && !modal_block)
                 {

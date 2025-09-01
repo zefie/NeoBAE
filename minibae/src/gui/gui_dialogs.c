@@ -651,8 +651,10 @@ void render_rmf_info_dialog(SDL_Renderer *R, int mx, int my, bool mclick)
         draw_text(R, dlg.x + 10, y, "(No metadata fields present)", placeholder);
     }
 
-    // Clicking outside dialog (and not on its opener button) closes it
-    Rect rmfOpener = {440, 215, 80, 22};
+    // Clicking outside dialog (and not on its opener button) closes it.
+    // NOTE: The RMF Info button was repositioned in gui_main.c to x=798; keep this in sync.
+    // Ideally this would be passed in, but for now we mirror the hard-coded location.
+    Rect rmfOpener = {798, 215, 80, 22};
     if (mclick && !point_in(mx, my, dlg) && !point_in(mx, my, rmfOpener))
     {
         g_show_rmf_info_dialog = false;
