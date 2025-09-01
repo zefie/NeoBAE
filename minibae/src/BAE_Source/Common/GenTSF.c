@@ -44,10 +44,6 @@ static void PV_TSF_ConvertFloatToInt32(float* input, int32_t* output, int32_t fr
 static void PV_TSF_AllocateMixBuffer(int32_t frameCount);
 static void PV_TSF_FreeMixBuffer(void);
 
-tsf* GM_TSF_GetCurrentSoundfont() {
-    return g_tsf_soundfont;
-}
-
 // Initialize TSF support for the mixer
 OPErr GM_InitializeTSF(void)
 {
@@ -82,6 +78,13 @@ void GM_CleanupTSF(void)
     GM_UnloadTSFSoundfont();
     PV_TSF_FreeMixBuffer();
     g_tsf_initialized = FALSE;
+}
+
+void GM_ResetTSF(void) {
+    // Reset all channels' MODs and stuff
+    tsf_reset(g_tsf_soundfont);
+    // That resets EVERYTHING, so we have to set Ch 10 to percussion by default, again
+    tsf_channel_set_bank_preset(g_tsf_soundfont, 9, 128, 0);
 }
 
 // Load SF2 soundfont for TSF rendering
@@ -267,10 +270,16 @@ void GM_TSF_ProcessNoteOn(GM_Song* pSong, int16_t channel, int16_t note, int16_t
     if (!pMixer)
         return;
 
-    velocity = (velocity * pMixer->scaleBackAmount) >> 8;
-    velocity = PV_ScaleVolumeFromChannelAndSong(pSong, channel, velocity);
-    velocity = ((float)velocity / 252) * 127;
-    BAE_PRINTF("velocity: %i, note: %i, channel %i\n", velocity, note, channel);
+    //velocity = (velocity * pMixer->scaleBackAmount) >> 8;
+    //velocity = PV_ScaleVolumeFromChannelAndSong(pSong, channel, velocity);
+    velocity = ((float)velocity / MAX_SONG_VOLUME) * MAX_NOTE_VOLUME;
+    BAE_PRINTF("pre-clamp velocity: %i, note: %i, channel %i\n", velocity, note, channel);
+    // I hate clamping but here we are
+    if (velocity > 127) {
+        velocity = 127;
+    }
+    float tsfVelocity = velocity / MAX_NOTE_VOLUME;
+    BAE_PRINTF("final velocity: %i, TSF velocity: %f\n", velocity, tsfVelocity);
     if (!GM_IsTSFSong(pSong) || !g_tsf_soundfont)
     {
         return;
@@ -294,7 +303,7 @@ void GM_TSF_ProcessNoteOn(GM_Song* pSong, int16_t channel, int16_t note, int16_t
     // Send to TSF
     if (velocity > 0)
     {
-        tsf_channel_note_on(g_tsf_soundfont, channel, note, velocity / 127.0f);
+        tsf_channel_note_on(g_tsf_soundfont, channel, note, tsfVelocity);
     }
     else
     {

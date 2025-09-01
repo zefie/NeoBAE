@@ -6975,7 +6975,7 @@ BAEResult BAESong_LoadMidiFromMemory(BAESong song, void const *pMidiData, uint32
                     PV_BAESong_Unload(song);
 #if USE_SF2_SUPPORT == TRUE
                     if (GM_TSF_IsActive()) {
-                        tsf_reset(GM_TSF_GetCurrentSoundfont());
+                        GM_ResetTSF();
                     }
 #endif                     
                     pSong = GM_LoadSong(song->mixer->pMixer,
@@ -7085,7 +7085,7 @@ BAEResult BAESong_LoadMidiFromFile(BAESong song, BAEPathName filePath, BAE_BOOL 
                     PV_BAESong_Unload(song);
 #if USE_SF2_SUPPORT == TRUE
                     if (GM_TSF_IsActive()) {
-                        tsf_reset(GM_TSF_GetCurrentSoundfont());
+                       GM_ResetTSF();
                     }
 #endif                    
                     pSong = GM_LoadSong(song->mixer->pMixer,
@@ -7175,7 +7175,7 @@ BAEResult BAESong_LoadRmfFromMemory(BAESong song, void *pRMFData, uint32_t rmfSi
                         PV_BAESong_Unload(song);
 #if USE_SF2_SUPPORT == TRUE
                         if (GM_TSF_IsActive()) {
-                            tsf_reset(GM_TSF_GetCurrentSoundfont());
+                            GM_ResetTSF();
                         }
 #endif                         
                         pSong = GM_LoadSong(song->mixer->pMixer,
@@ -7315,7 +7315,7 @@ BAEResult BAESong_LoadRmfFromFile(BAESong song, BAEPathName filePath, int16_t so
                     PV_BAESong_Unload(song);
 #if USE_SF2_SUPPORT == TRUE
                     if (GM_TSF_IsActive()) {
-                        tsf_reset(GM_TSF_GetCurrentSoundfont());
+                        GM_ResetTSF();
                     }
 #endif                     
                     pSong = GM_LoadSong(song->mixer->pMixer,

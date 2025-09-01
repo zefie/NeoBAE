@@ -893,13 +893,16 @@ UINT32 PV_ScaleVolumeFromChannelAndSong(GM_Song *pSong, INT16 channel, UINT32 vo
                 // for now, let's just scale up the volume level of the channel
                 // Say 127 is 10.2% higher
                 volume = (volume * (UINT32)pSong->channelExpression[channel]) / (MAX_NOTE_VOLUME - 12);
+                BAE_PRINTF("volume: %i", volume);
             }
 
             // scale note velocity via current channel volume
             newVolume = (volume * (UINT32)pSong->channelVolume[channel]) / MAX_NOTE_VOLUME;
+            BAE_PRINTF("newVolume (1): %i", newVolume);
 
             // scale note velocity via current song volume
             newVolume = (newVolume * (UINT32)pSong->songVolume) / MAX_SONG_VOLUME;
+            BAE_PRINTF("newVolume (2): %i", newVolume);
         }
         else
         {
@@ -910,6 +913,7 @@ UINT32 PV_ScaleVolumeFromChannelAndSong(GM_Song *pSong, INT16 channel, UINT32 vo
     {
         // scale note velocity via current master effects volume
         newVolume = (volume * (UINT32)MusicGlobals->effectsVolume) / MAX_MASTER_VOLUME;
+        BAE_PRINTF("volume: %i, newVolume: %i", volume, newVolume);
     }
     return newVolume;
 }

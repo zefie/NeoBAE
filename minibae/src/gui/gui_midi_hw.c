@@ -4,7 +4,7 @@
 #include "gui_midi.h"
 #include "MiniBAE.h"
 
-#ifdef SUPPORT_MIDI_HW
+#if SUPPORT_MIDI_HW == TRUE
 #include "BAE_API.h"
 #include "gui_midi_hw_input.h"
 #include "gui_midi_hw_output.h"

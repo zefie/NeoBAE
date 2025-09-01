@@ -1996,11 +1996,20 @@ static void PV_ProcessNoteOn(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTra
                 }
 
 #if USE_SF2_SUPPORT == TRUE
-                // If SF2 is active for this song, route to SF2 instead of normal synthesis
-                if (GM_IsTSFSong(pSong) && !GM_IsRMFChannel(pSong, MIDIChannel))
+                // If TSF is active for this song, route to TSF instead of normal synthesis
+                if (GM_IsTSFSong(pSong))
                 {
-                    INT16 Volume = PV_ModifyVelocityFromCurve(pSong, volume);
-                    GM_TSF_ProcessNoteOn(pSong, MIDIChannel, note, Volume);
+                    if (!GM_IsRMFChannel(pSong, MIDIChannel))
+                    {
+                        // Standard MIDI
+                        INT16 Volume = PV_ModifyVelocityFromCurve(pSong, volume);
+                        GM_TSF_ProcessNoteOn(pSong, MIDIChannel, note, Volume);
+                    } else {
+                        // RMF
+                        volume = volume / 2; // Half RMF Instrument Volume
+                        thePatch = PV_DetermineInstrumentToUse(pSong, note, MIDIChannel);
+                        PV_StartMIDINote(pSong, thePatch, MIDIChannel, currentTrack, note, volume);
+                    }
                 }
                 else
 #endif
