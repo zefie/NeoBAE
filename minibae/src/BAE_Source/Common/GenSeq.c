@@ -1077,7 +1077,11 @@ void GM_GetRealtimeChannelLevels(float left[16], float right[16])
             left[i] = 0.0f;
             right[i] = 0.0f;
         }
+#if USE_SF2_SUPPORT == TRUE
+        goto TSFPROCESS;
+#else        
         return;
+#endif        
     }
 
     // Sum squares per channel (use 64-bit accumulator to avoid overflow)
@@ -1142,6 +1146,7 @@ void GM_GetRealtimeChannelLevels(float left[16], float right[16])
             right[ch] = 1.f;
     }
 #if USE_SF2_SUPPORT == TRUE
+    TSFPROCESS:
     if (pMixer->isTSF) {
         XBOOL anyActiveVoices = (GM_TSF_GetActiveVoiceCount() > 0) ? TRUE : FALSE;
         if (anyActiveVoices)
