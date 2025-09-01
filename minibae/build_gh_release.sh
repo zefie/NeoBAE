@@ -61,7 +61,7 @@ runcmd make -f Makefile.mingw clean
 
 echo "Building MingW32 SDL2 GUI x64..."
 runcmd make -f Makefile.gui-mingw clean all pack
-install_file "${BDIR}/minibae_gui.exe.gz" "${ODIR}/minibae_gui_sdl2_x64.exe.gz"
+install_file "${BDIR}/zefidi.exe.gz" "${ODIR}/zefidi_sdl2_x64.exe.gz"
 runcmd cd "${RDIR}"
 runcmd make -f Makefile.gui-mingw clean
 
