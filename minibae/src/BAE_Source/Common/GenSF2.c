@@ -1620,9 +1620,8 @@ GM_Instrument *SF2_CreateInstrumentFromPresetWithNote(SF2_Bank *pBank, uint16_t 
     pInstrument->notPolyphonic = FALSE;
     // ENABLE sample rate factoring for proper pitch - SF2 samples can be any rate
     pInstrument->useSampleRate = TRUE;
-    pInstrument->disableSndLooping = (bankNum == 128) ? TRUE : FALSE; // Disable looping for percussion (one-shot drums)
     // For percussion one-shots, play at recorded rate (no musical transposition)
-    pInstrument->playAtSampledFreq = (bankNum == 128) ? TRUE : FALSE;
+    pInstrument->playAtSampledFreq = FALSE;
     pInstrument->sampleAndHold = FALSE;
     pInstrument->usageReferenceCount = 0;
 
@@ -1982,7 +1981,6 @@ GM_Instrument *SF2_CreateInstrumentFromPresetWithNote(SF2_Bank *pBank, uint16_t 
     // Now that we know the exact zone (genStart/genEnd), fill the volume ADSR from SF2 generators
     PV_SF2_FillVolumeADSR(pBank, bestInstID, selectedGenStart, selectedGenEnd, &pInstrument->volumeADSRRecord);
 
-#if USE_SF2_SUPPORT == TRUE
     // Fill modulation envelope from SF2 generators
     PV_SF2_FillModulationADSR(pBank, bestInstID, selectedGenStart, selectedGenEnd, &pInstrument->modEnvelopeRecord);
     
@@ -1992,10 +1990,25 @@ GM_Instrument *SF2_CreateInstrumentFromPresetWithNote(SF2_Bank *pBank, uint16_t 
     
     BAE_PRINTF("SF2 Debug: Note-specific ModEnv amounts - toPitch: %d, toFilter: %d\n", 
                (int)pInstrument->modEnvelopeToPitch, (int)pInstrument->modEnvelopeToFilter);
-#endif
 
     // Fill LFO records from SF2 generators for this zone
     PV_SF2_FillLFORecords(pBank, bestInstID, selectedGenStart, selectedGenEnd, pInstrument);
+
+    // Check SF2 sample modes to determine looping behavior
+    // SF2 Spec: 0 = No looping, 1 = Continuous loop, 2 = Reserved, 3 = Loop + release
+    int16_t sampleModes = PV_FindInstGenMerged(pBank, bestInstID, selectedGenStart, selectedGenEnd, SF2_GEN_SAMPLE_MODES, 0);
+    if (sampleModes == 0 || sampleModes == 2) {
+        // No looping or reserved mode - disable looping
+        pInstrument->disableSndLooping = TRUE;
+        BAE_PRINTF("SF2 Debug: Sample modes = %d, disabling looping\n", sampleModes);
+    } else if (sampleModes == 1 || sampleModes == 3) {
+        // Continuous loop or loop+release - enable looping
+        pInstrument->disableSndLooping = FALSE;
+        BAE_PRINTF("SF2 Debug: Sample modes = %d, enabling looping\n", sampleModes);
+    } else {
+        // Unknown mode - keep default behavior
+        BAE_PRINTF("SF2 Debug: Unknown sample modes = %d, keeping default looping setting\n", sampleModes);
+    }
     // Percussion: force base pitch to the triggering note so different keys select different samples,
     // not different transpositions of one sample.
     pInstrument->u.w.baseMidiPitch = note;
@@ -2675,6 +2688,22 @@ static GM_Instrument *PV_SF2_CreateSimpleInstrument(SF2_Bank *pBank, int32_t *in
                 // Fill LFO records from SF2 generators for this zone
                 PV_SF2_FillLFORecords(pBank, instrumentIDs[i], genStart, genEnd, pInstrument);
 
+                // Check SF2 sample modes to determine looping behavior
+                // SF2 Spec: 0 = No looping, 1 = Continuous loop, 2 = Reserved, 3 = Loop + release
+                int16_t sampleModes = PV_FindInstGenMerged(pBank, instrumentIDs[i], genStart, genEnd, SF2_GEN_SAMPLE_MODES, 0);
+                if (sampleModes == 0 || sampleModes == 2) {
+                    // No looping or reserved mode - disable looping
+                    pInstrument->disableSndLooping = TRUE;
+                    BAE_PRINTF("SF2 Debug: Sample modes = %d, disabling looping\n", sampleModes);
+                } else if (sampleModes == 1 || sampleModes == 3) {
+                    // Continuous loop or loop+release - enable looping
+                    pInstrument->disableSndLooping = FALSE;
+                    BAE_PRINTF("SF2 Debug: Sample modes = %d, enabling looping\n", sampleModes);
+                } else {
+                    // Unknown mode - keep default behavior
+                    BAE_PRINTF("SF2 Debug: Unknown sample modes = %d, keeping default looping setting\n", sampleModes);
+                }
+
                 *pErr = NO_ERR;
                 return pInstrument;
             }
@@ -3086,6 +3115,22 @@ static GM_Instrument *PV_SF2_CreateKeymapSplitInstrument(SF2_Bank *pBank, int32_
 #endif
         
         PV_SF2_FillLFORecords(pBank, zone->instrumentID, zone->genStart, zone->genEnd, pSubInstrument);
+
+        // Check SF2 sample modes to determine looping behavior for this zone
+        // SF2 Spec: 0 = No looping, 1 = Continuous loop, 2 = Reserved, 3 = Loop + release
+        int16_t sampleModes = PV_FindInstGenMerged(pBank, zone->instrumentID, zone->genStart, zone->genEnd, SF2_GEN_SAMPLE_MODES, 0);
+        if (sampleModes == 0 || sampleModes == 2) {
+            // No looping or reserved mode - disable looping
+            pSubInstrument->disableSndLooping = TRUE;
+            BAE_PRINTF("SF2 Debug: Zone %u sample modes = %d, disabling looping\n", i, sampleModes);
+        } else if (sampleModes == 1 || sampleModes == 3) {
+            // Continuous loop or loop+release - enable looping
+            pSubInstrument->disableSndLooping = FALSE;
+            BAE_PRINTF("SF2 Debug: Zone %u sample modes = %d, enabling looping\n", i, sampleModes);
+        } else {
+            // Unknown mode - keep default behavior
+            BAE_PRINTF("SF2 Debug: Zone %u unknown sample modes = %d, keeping default looping setting\n", i, sampleModes);
+        }
 
         // Create waveform
         OPErr waveErr = PV_SF2_CreateWaveformFromSample(pBank, zone->instrumentID, zone->sampleID, zone->genStart, zone->genEnd, &pSubInstrument->u.w);
