@@ -440,6 +440,18 @@ const char *BAE_GetFeatureString()
         first = FALSE;
     }
 
+    // SF2 support
+#if USE_SF2_SUPPORT == TRUE && USE_VORBIS_DECODER == TRUE
+    const char *sf2supp = "SF2/SF3/SFO Support";
+#elif USE_SF2_SUPPORT == TRUE
+    const char *sf2supp = "SF2 Support";
+#endif
+    if (sf2supp && sf2supp[0])
+    {
+        snprintf(featBuf + strlen(featBuf), sizeof(featBuf) - strlen(featBuf), "%s%s", first ? "" : ", ", sf2supp);
+        first = FALSE;
+    }
+
     // If nothing was added, return an empty string
     if (featBuf[0] == '\0')
         featBuf[0] = '\0';
