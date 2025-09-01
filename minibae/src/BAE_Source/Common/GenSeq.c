@@ -2192,7 +2192,21 @@ void PV_ProcessController(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTrack,
 #if USE_SF2_SUPPORT == TRUE
         // If TSF is active for this song, send controller to TSF, if its not an RMF channel
         if (controler == 0) {
-            if (value == 2) {
+            /*
+                0-127: MSB 0 (melodic)
+                128-255: MSB 0 (percussion)
+                256-383: MSB 1 (melodic)
+                384-511: MSB 1 (percussion)
+                512-639: MSB 2 (melodic)
+                640-767: MSB 2 (percussion)
+                If both are true (exists and is called), return true (use BAE)
+                else return false (use TSF).
+                For percussions return true automatically if any instrument
+                [128-256] [384-512] [640-768] exists and the percussion
+                is mapped to these MSBs (0/1/2)
+            */            
+            if (value == 2) {            
+                // TODO: Scan RMF for embedded instruments and handle them here
                 pSong->channelType[MIDIChannel] = CHANNEL_TYPE_RMF;
                 BAE_PRINTF("Setting channel %i as RMF Channel (controler: %i (MSB), value: %i)\n", MIDIChannel, controler, value);
             } else {
@@ -2207,7 +2221,10 @@ void PV_ProcessController(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTrack,
         
         switch (controler)
         {
+        
         case B_BANK_LSB: // bank select MSB. This is GS.
+#if DISABLE_NOKIA_PATCH == TRUE
+            // START "NOKIA PATCH"
             if (value == 6)
             {
                 value = 2;
@@ -2218,6 +2235,8 @@ void PV_ProcessController(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTrack,
                 value = 1;
                 pSong->channelBank[MIDIChannel] = (SBYTE)value;
             }
+            // END "NOKIA PATCH"
+#endif            
             break;
         case B_BANK_MSB: // bank select LSB.
             if (value > (MAX_BANKS / 2))
