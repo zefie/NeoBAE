@@ -33,7 +33,7 @@ static tsf* g_tsf_soundfont = NULL;
 static XBOOL g_tsf_initialized = FALSE;
 static XFIXED g_tsf_master_volume = XFIXED_1;
 static int16_t g_tsf_max_voices = MAX_VOICES;
-static int16_t g_tsf_sample_rate = 44100;
+static uint16_t g_tsf_sample_rate = 44100;
 static char g_tsf_sf2_path[256] = {0};
 
 // Audio mixing buffer for TSF output

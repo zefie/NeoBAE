@@ -3575,7 +3575,11 @@ int main(int argc, char *argv[])
                         measure_text(nb, &tw, &th);
                         draw_text(R, x + 2, kbY + kbH - (th + 2), nb, g_is_dark_mode ? (SDL_Color){20, 20, 25, 255} : (SDL_Color){30, 30, 30, 255});
                     }
-                    if (!g_keyboard_channel_dd_open && !modal_block && !g_reverbDropdownOpen && !g_exportDropdownOpen && !g_midiRecordFormatDropdownOpen && !g_exporting && ui_mx >= x && ui_mx < x + w && ui_my >= kbY && ui_my < kbY + kbH)
+                    if (!g_keyboard_channel_dd_open && !modal_block && !g_reverbDropdownOpen && !g_exportDropdownOpen &&
+#if SUPPORT_MIDI_HW == TRUE
+                         !g_midiRecordFormatDropdownOpen && 
+#endif
+                         !g_exporting && ui_mx >= x && ui_mx < x + w && ui_my >= kbY && ui_my < kbY + kbH)
                     {
                         mouseNoteCandidateWhite = n;
                     }
@@ -3635,7 +3639,11 @@ int main(int argc, char *argv[])
                         keyCol = g_highlight_color;
                     draw_rect(R, (Rect){bx, kbY, bw, bh}, keyCol);
                     draw_frame(R, (Rect){bx, kbY, bw, bh}, g_panel_border);
-                    if (!g_keyboard_channel_dd_open && !modal_block && !g_reverbDropdownOpen && !g_exportDropdownOpen && !g_midiRecordFormatDropdownOpen && !g_exporting && ui_mx >= bx && ui_mx < bx + bw && ui_my >= kbY && ui_my < kbY + bh)
+                    if (!g_keyboard_channel_dd_open && !modal_block && !g_reverbDropdownOpen && !g_exportDropdownOpen && 
+#if SUPPORT_MIDI_HW == TRUE
+                        !g_midiRecordFormatDropdownOpen && 
+#endif                        
+                        !g_exporting && ui_mx >= bx && ui_mx < bx + bw && ui_my >= kbY && ui_my < kbY + bh)
                     {
                         mouseNoteCandidateBlack = n;
                     }
@@ -3644,7 +3652,11 @@ int main(int argc, char *argv[])
             // Determine hovered note (black takes precedence over white)
             int mouseNote = (mouseNoteCandidateBlack != -1) ? mouseNoteCandidateBlack : mouseNoteCandidateWhite;
             // Interaction: monophonic click-n-drag play (velocity varies by vertical position)
-            if (!modal_block && !g_keyboard_channel_dd_open && !g_reverbDropdownOpen && !g_exportDropdownOpen && !g_midiRecordFormatDropdownOpen && !g_exporting)
+            if (!modal_block && !g_keyboard_channel_dd_open && !g_reverbDropdownOpen && !g_exportDropdownOpen && 
+#if SUPPORT_MIDI_HW == TRUE
+                !g_midiRecordFormatDropdownOpen && 
+#endif
+                !g_exporting)
             {
                 if (ui_mdown)
                 {
@@ -4526,14 +4538,6 @@ int main(int argc, char *argv[])
                                     }
                                 }
 #endif
-#else
-        if (g_midiRecordFormatIndex != 1)
-        {
-            set_status_message("MP3 export not supported in this build");
-            free(export_file);
-            export_file = NULL;
-        }
-#endif
 
                                 if (export_file)
                                 {
@@ -4761,8 +4765,8 @@ int main(int argc, char *argv[])
                                                 }
                                             }
 #else
-                    set_status_message("Vorbis export not supported in this build");
-                    free(export_file);
+                                        set_status_message("Vorbis export not supported in this build");
+                                        free(export_file);
 #endif
                                         }
                                         else
@@ -4898,6 +4902,8 @@ int main(int argc, char *argv[])
                 }
             }
         }
+#endif
+
 #ifdef SUPPORT_KARAOKE
         // Karaoke panel rendering (two lines: current + next)
         if (showKaraoke)
@@ -5414,7 +5420,7 @@ int main(int argc, char *argv[])
             "kdialog --getopenfilename . '*.hsb *.sf2' 2>/dev/null",
             "yad --file-selection --title='Load Patch Bank' --file-filter='Bank Files | *.hsb *.sf2' 2>/dev/null",
 #endif
-else
+#else
             "zenity --file-selection --title='Load Patch Bank' --file-filter='Bank Files | *.hsb' 2>/dev/null",
             "kdialog --getopenfilename . '*.hsb' 2>/dev/null",
             "yad --file-selection --title='Load Patch Bank' --file-filter='Bank Files | *.hsb' 2>/dev/null",
@@ -5880,7 +5886,7 @@ else
                 g_exportDropdownOpen = false;
         }
 #endif
-
+#if SUPPORT_MIDI_HW == TRUE
         // Render record format dropdown on top of everything else if open
         if (g_midiRecordFormatDropdownOpen)
         {
@@ -5889,7 +5895,7 @@ else
             Rect recFmtBtn = {recRect.x + recRect.w + 8, 215, 234, 22}; // Same calculation as in button creation
             ui_dropdown_two_column(R, recFmtBtn, &g_midiRecordFormatIndex, g_midiRecordFormatNames, g_midiRecordFormatCount, &g_midiRecordFormatDropdownOpen, mx, my, mdown, mclick);
         }
-
+#endif
         // If exporting, render a slight dim overlay that disables everything except the Stop button.
         if (g_exporting)
         {

@@ -15,7 +15,7 @@ ifneq ($(WASM),1)
 		VORBIS_ENC := 1
 		KARAOKE := 1
 		PLAYLIST :=1
-		#SF2_SUPPORT := 1 # Optional enable, incomplete, disabled by default
+		SF2_SUPPORT := 1
 	endif
 endif
 

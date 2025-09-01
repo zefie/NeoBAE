@@ -1439,8 +1439,8 @@ int main(int argc, char *argv[])
             XBOOL bankLoaded = FALSE;
 #if USE_SF2_SUPPORT == TRUE
             if (ext && strcasecmp(ext, ".sf2") == 0 && !bankLoaded) {
-               err = GM_LoadTSFSoundfont(parmFile);
-               if (err != NO_ERR) {
+               err = (BAEResult)GM_LoadTSFSoundfont(parmFile);
+               if (err != BAE_NO_ERROR) {
                   playbae_printf("Error %d loading SF2 bank %s", err, parmFile);
                   return 1;
                }
