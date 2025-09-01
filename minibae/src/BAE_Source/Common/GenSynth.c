@@ -742,6 +742,54 @@ int32_t PV_ModifyVelocityFromCurve(GM_Song *pSong, int32_t volume)
     return volume;
 }
 
+// Helper function to calculate scalar value from curve based on input value
+// This is used for applying controller -> LFO mappings
+static INT32 PV_CalculateCurveValue(const GM_TieTo *curve, INT32 inputValue)
+{
+    if (!curve || curve->curveCount < 1)
+        return 256; // Default full scale
+        
+    // Clamp input value to reasonable range
+    if (inputValue < 0) inputValue = 0;
+    if (inputValue > 127) inputValue = 127;
+    
+    // Single point curve - return its scalar
+    if (curve->curveCount == 1)
+        return curve->to_Scalar[0];
+    
+    // Find the correct curve segment for interpolation
+    INT32 scalar = curve->to_Scalar[0]; // Default to first scalar
+    
+    for (int count = 0; count < curve->curveCount - 1; count++)
+    {
+        if (inputValue <= curve->from_Value[count])
+        {
+            scalar = curve->to_Scalar[count];
+            break;
+        }
+        else if (inputValue < curve->from_Value[count + 1])
+        {
+            // Interpolate between this point and the next
+            scalar = curve->to_Scalar[count];
+            if (curve->from_Value[count] != curve->from_Value[count + 1])
+            {
+                INT32 from_difference = curve->from_Value[count + 1] - curve->from_Value[count];
+                INT32 to_difference = curve->to_Scalar[count + 1] - curve->to_Scalar[count];
+                scalar += ((((inputValue - curve->from_Value[count]) << 8) / from_difference) * to_difference) >> 8;
+            }
+            break;
+        }
+    }
+    
+    // If we're beyond the last point, use the last scalar
+    if (inputValue >= curve->from_Value[curve->curveCount - 1])
+    {
+        scalar = curve->to_Scalar[curve->curveCount - 1];
+    }
+    
+    return scalar;
+}
+
 #if USE_CALLBACKS
 void PV_DoCallBack(GM_Voice *pVoice)
 {
@@ -1071,51 +1119,118 @@ static void PV_ADSRModule(GM_ADSR *a, XBOOL sustaining, GM_Voice *pVoice)
     }
 #if USE_SF2_SUPPORT == TRUE
     if (a && a->isSF2Envelope) {
+        // SF2 envelope processing using centibel levels
         int16_t targetCB = a->ADSRLevelCB[index];
         int16_t currentCB = a->currentLevelCB;
 
         // Initialize on first call of a stage
-        if (currentTime == 0) {
-            currentCB = (index > 0) ? a->ADSRLevelCB[index - 1] : a->ADSRLevelCB[0];
-        } 
-
-        if (a->ADSRFlags[index] & ADSR_LINEAR_RAMP) {
-            INT32 delta_us = PV_GetLFOAdjustedTimeInMicroseconds();
-            if (delta_us <= 0) delta_us = 1;  // Prevent divide by zero
-            pVoice->voiceTime += delta_us;
-            currentTime = pVoice->voiceTime;
-            INT32 remaining_us = a->ADSRTime[index] - currentTime;
-            if (remaining_us <= 0) {
-                currentCB = targetCB;
-                a->currentPosition = index + 1;
-                a->currentTime = 0;
-                pVoice->voiceTime = 0;  // Reset for next stage
-            } else {
-                INT32 deltaCB = ((targetCB - currentCB) * delta_us) / (remaining_us > delta_us ? remaining_us : delta_us);
-                if (deltaCB > 1000) deltaCB = 1000;
-                if (deltaCB < -1000) deltaCB = -1000;
-                currentCB += deltaCB;
-                if ((deltaCB > 0 && currentCB >= targetCB) || (deltaCB < 0 && currentCB <= targetCB)) {
-                    currentCB = targetCB;
-                    a->currentPosition = index + 1;
-                    a->currentTime = 0;
-                    pVoice->voiceTime = 0;
-                }
+        if (currentTime == 0 && index < ADSR_STAGES) {
+            // Set starting level from previous stage or initial level
+            if (index > 0) {
+                currentCB = a->ADSRLevelCB[index - 1];
             }
-        } else if (a->ADSRFlags[index] & ADSR_SUSTAIN) {
-            currentCB = targetCB;  // Constant
-        } else if (a->mode == ADSR_RELEASE) {
-            if (currentCB >= 10000) {
-                a->currentLevel = 0;
-                a->mode = ADSR_TERMINATE;
-            } else {
-                a->currentLevelCB = a->currentLevelCB + 100;
-            }
+            a->previousTarget = a->currentLevel;
+            a->currentLevelCB = currentCB;
         }
 
+        // Handle different envelope stage types
+        switch (a->ADSRFlags[index]) {
+            case ADSR_SUSTAIN:
+                // Sustain stage - hold constant level
+                a->mode = ADSR_SUSTAIN;
+                currentCB = targetCB;
+                // No time advancement needed for sustain
+                break;
+                
+            case ADSR_TERMINATE:
+                // Terminate envelope
+                a->mode = ADSR_TERMINATE;
+                a->currentLevel = 0;
+                return;
+                
+            case ADSR_RELEASE:
+                // Release stage - exponential decay to silence
+                currentTime += PV_GetLFOAdjustedTimeInMicroseconds();
+                if (currentTime >= a->ADSRTime[index] || targetCB >= 10000) {
+                    // Release complete
+                    currentCB = 14400; // SF2 silence (-144 dB)
+                    a->currentLevel = 0;
+                    a->mode = ADSR_TERMINATE;
+                } else if (a->ADSRTime[index] > 0) {
+                    // Exponential decay during release
+                    XFIXED progress = XFixedDivide((XFIXED)currentTime << 16, (XFIXED)a->ADSRTime[index] << 16);
+                    if (progress > XFIXED_1) progress = XFIXED_1;
+                    
+                    // Use exponential decay curve for release
+                    INT32 lookupIndex = (progress >> 12) & 0x3FF;
+                    if (lookupIndex >= sizeof(expDecayLookup)/sizeof(XFIXED))
+                        lookupIndex = sizeof(expDecayLookup)/sizeof(XFIXED) - 1;
+                    XFIXED expCurve = expDecayLookup[lookupIndex];
+                    
+                    // Interpolate from current to target using exponential curve
+                    int16_t startCB = (index > 0) ? a->ADSRLevelCB[index - 1] : a->currentLevelCB;
+                    int32_t deltaCB = targetCB - startCB;
+                    currentCB = startCB + (int16_t)XFixedMultiply(deltaCB, expCurve);
+                }
+                break;
+                
+            case ADSR_EXPONENTIAL_RAMP:
+            case ADSR_LINEAR_RAMP:
+            default:
+                // Standard ramp (attack/hold/decay)
+                currentTime += PV_GetLFOAdjustedTimeInMicroseconds();
+                if (currentTime >= a->ADSRTime[index]) {
+                    // Stage complete - move to next
+                    currentCB = targetCB;
+                    a->previousTarget = a->currentLevel;
+                    currentTime -= a->ADSRTime[index];
+                    if (index + 1 < ADSR_STAGES) {
+                        index++;
+                        a->currentPosition = index;
+                        if (a->ADSRFlags[index] == ADSR_TERMINATE) {
+                            a->mode = ADSR_TERMINATE;
+                            a->currentLevel = 0;
+                            return;
+                        }
+                    }
+                } else if (a->ADSRTime[index] > 0) {
+                    // Interpolate within stage
+                    XFIXED progress = XFixedDivide((XFIXED)currentTime << 16, (XFIXED)a->ADSRTime[index] << 16);
+                    if (progress > XFIXED_1) progress = XFIXED_1;
+                    
+                    int16_t startCB = (index > 0) ? a->ADSRLevelCB[index - 1] : a->currentLevelCB;
+                    int32_t deltaCB = targetCB - startCB;
+                    
+                    if (a->ADSRFlags[index] == ADSR_EXPONENTIAL_RAMP && deltaCB != 0) {
+                        // Use exponential curve
+                        XFIXED expCurve;
+                        if (deltaCB < 0) {
+                            // Falling (attack to peak, decay)
+                            INT32 lookupIndex = ((XFIXED_1 - progress) >> 12) & 0x3FF;
+                            if (lookupIndex >= sizeof(expDecayLookup)/sizeof(XFIXED))
+                                lookupIndex = sizeof(expDecayLookup)/sizeof(XFIXED) - 1;
+                            expCurve = XFIXED_1 - expDecayLookup[lookupIndex];
+                        } else {
+                            // Rising (should be rare in SF2 volume envelopes)
+                            INT32 lookupIndex = (progress >> 12) & 0x3FF;
+                            if (lookupIndex >= sizeof(expDecayLookup)/sizeof(XFIXED))
+                                lookupIndex = sizeof(expDecayLookup)/sizeof(XFIXED) - 1;
+                            expCurve = XFIXED_1 - expDecayLookup[lookupIndex];
+                        }
+                        currentCB = startCB + (int16_t)XFixedMultiply(deltaCB, expCurve);
+                    } else {
+                        // Linear interpolation
+                        currentCB = startCB + (int16_t)XFixedMultiply(deltaCB, progress);
+                    }
+                }
+                break;
+        }
+
+        // Update SF2 envelope state
         a->currentLevelCB = currentCB;
         a->currentTime = currentTime;
 
+        // Convert centibels to linear level
         a->currentLevel = PV_SF2_LevelFromCentibels(currentCB, VOLUME_RANGE);
         if (a->currentLevel < 0) a->currentLevel = 0;
 
@@ -1167,6 +1282,73 @@ static void PV_ADSRModule(GM_ADSR *a, XBOOL sustaining, GM_Voice *pVoice)
                         scalar = 0;
                     }
                     a->currentLevel = a->previousTarget + (((a->ADSRLevel[index] - a->previousTarget) * scalar) >> 12L);
+                }
+            }
+            break;
+        case ADSR_EXPONENTIAL_RAMP:
+            currentTime += PV_GetLFOAdjustedTimeInMicroseconds();
+            if (currentTime >= a->ADSRTime[index])
+            {
+                a->previousTarget = a->ADSRLevel[index];
+                a->currentLevel = a->ADSRLevel[index];
+                currentTime -= a->ADSRTime[index];
+                if (a->ADSRFlags[index] != ADSR_TERMINATE)
+                {
+                    index++;
+                }
+                else
+                {
+                    a->mode = ADSR_TERMINATE;
+                    currentTime = 0; // Fixed: Don't subtract time again
+                }
+            }
+            else
+            {
+                if (currentTime && a->ADSRTime[index])
+                {
+                    // Exponential interpolation using existing expDecayLookup table
+                    XSDWORD timeDelta = a->ADSRLevel[index] - a->previousTarget;
+                    
+                    if (timeDelta != 0)
+                    {
+                        // Calculate progress through segment (0.0 to 1.0)
+                        XFIXED progress = XFixedDivide((XFIXED)currentTime << 16, (XFIXED)a->ADSRTime[index] << 16);
+                        
+                        // Use exponential curve based on direction of change
+                        XFIXED expCurve;
+                        if (timeDelta > 0)
+                        {
+                            // Rising exponential curve (attack)
+                            // Use (1 - e^(-3*t)) approximation for smooth attack
+                            XFIXED invProgress = XFIXED_1 - progress;
+                            INT32 lookupIndex = (invProgress >> 12) & 0x3FF; // Scale to 0-1023 range
+                            if (lookupIndex >= sizeof(expDecayLookup)/sizeof(XFIXED))
+                                lookupIndex = sizeof(expDecayLookup)/sizeof(XFIXED) - 1;
+                            expCurve = XFIXED_1 - expDecayLookup[lookupIndex];
+                        }
+                        else
+                        {
+                            // Falling exponential curve (decay/release)
+                            // Use e^(-3*t) for natural decay
+                            INT32 lookupIndex = (progress >> 12) & 0x3FF; // Scale to 0-1023 range  
+                            if (lookupIndex >= sizeof(expDecayLookup)/sizeof(XFIXED))
+                                lookupIndex = sizeof(expDecayLookup)/sizeof(XFIXED) - 1;
+                            expCurve = expDecayLookup[lookupIndex];
+                        }
+                        
+                        // Apply exponential curve to the level change
+                        a->currentLevel = a->previousTarget + XFixedMultiply(timeDelta, expCurve);
+                    }
+                    else
+                    {
+                        // No change in level, just use previous target
+                        a->currentLevel = a->previousTarget;
+                    }
+                }
+                else
+                {
+                    // No time or zero duration - set to target immediately
+                    a->currentLevel = a->previousTarget;
                 }
             }
             break;
@@ -3406,6 +3588,7 @@ void PV_StartMIDINote(GM_Song *pSong, INT16 the_instrument,
                     sampleNumber++;
                 }
             }
+            return;
         }
         else
         {
@@ -3510,6 +3693,95 @@ void PV_StartMIDINote(GM_Song *pSong, INT16 the_instrument,
             for (i = 0; i < the_entry->LFORecordCount; i++)
             {
                 the_entry->LFORecords[i] = pInstrument->LFORecords[i];
+                
+                // Factor in global LFO controls for this voice
+                // Apply modulation wheel control to pitch LFOs (vibrato)
+                if (the_entry->LFORecords[i].where_to_feed == PITCH_LFO)
+                {
+                    // Get current modulation wheel value for this channel (0-127)
+                    INT32 modWheelValue = pSong->channelModWheel[the_channel];
+                    if (modWheelValue > 127) modWheelValue = 127;
+                    if (modWheelValue < 0) modWheelValue = 0;
+                    
+                    // Scale LFO level based on mod wheel (0 = no vibrato, 127 = full vibrato)
+                    // Store original level in DC_feed for reference
+                    if (the_entry->LFORecords[i].DC_feed == 0) {
+                        the_entry->LFORecords[i].DC_feed = the_entry->LFORecords[i].level; // Store original level
+                    }
+                    INT32 originalLevel = the_entry->LFORecords[i].DC_feed;
+                    the_entry->LFORecords[i].level = (originalLevel * modWheelValue) >> 7; // Divide by 128
+                    
+                    BAE_PRINTF("SF2 Debug: Applied mod wheel %d to pitch LFO %d: orig=%d, scaled=%d\n",
+                               modWheelValue, i, (int)originalLevel, (int)the_entry->LFORecords[i].level);
+                }
+                
+                // Apply other controller mappings through curve processing
+                // This handles instrument-specific controller -> LFO mappings
+                for (int curveIdx = 0; curveIdx < pInstrument->curveRecordCount; curveIdx++)
+                {
+                    GM_TieTo *curve = &pInstrument->curve[curveIdx];
+                    
+                    // Check if this curve affects the current LFO
+                    XBOOL affectsThisLFO = FALSE;
+                    if ((curve->tieTo == PITCH_LFO && the_entry->LFORecords[i].where_to_feed == PITCH_LFO) ||
+                        (curve->tieTo == VOLUME_LFO && the_entry->LFORecords[i].where_to_feed == VOLUME_LFO) ||
+                        (curve->tieTo == PITCH_LFO_FREQUENCY && the_entry->LFORecords[i].where_to_feed == PITCH_LFO) ||
+                        (curve->tieTo == VOLUME_LFO_FREQUENCY && the_entry->LFORecords[i].where_to_feed == VOLUME_LFO))
+                    {
+                        affectsThisLFO = TRUE;
+                    }
+                    
+                    if (affectsThisLFO && curve->curveCount > 0)
+                    {
+                        INT32 controllerValue = 0;
+                        
+                        // Get the current controller value based on curve source
+                        switch (curve->tieFrom)
+                        {
+                            case MOD_WHEEL_CONTROL:
+                                controllerValue = pSong->channelModWheel[the_channel];
+                                break;
+                            case SAMPLE_NUMBER: // Often used for velocity in SF2
+                                controllerValue = the_entry->NoteVolume; 
+                                break;
+                            default:
+                                // For other controllers, we'd need to extend this
+                                continue; // Skip this curve
+                        }
+                        
+                        // Clamp controller value
+                        if (controllerValue < 0) controllerValue = 0;
+                        if (controllerValue > 127) controllerValue = 127;
+                        
+                        // Apply curve mapping to get scalar value
+                        INT32 scalar = PV_CalculateCurveValue(curve, controllerValue);
+                        
+                        if (curve->tieTo == PITCH_LFO || curve->tieTo == VOLUME_LFO)
+                        {
+                            // Apply scalar to LFO level (scalar is typically 0-256, where 256 = 100%)
+                            if (the_entry->LFORecords[i].DC_feed == 0) {
+                                the_entry->LFORecords[i].DC_feed = the_entry->LFORecords[i].level; // Store original
+                            }
+                            INT32 originalLevel = the_entry->LFORecords[i].DC_feed;
+                            the_entry->LFORecords[i].level = (originalLevel * scalar) >> 8; // Divide by 256
+                            
+                            BAE_PRINTF("SF2 Debug: Applied curve %d to LFO %d: controller=%d, scalar=%d, level=%d->%d\n",
+                                       curveIdx, i, controllerValue, (int)scalar, 
+                                       (int)originalLevel, (int)the_entry->LFORecords[i].level);
+                        }
+                        else if (curve->tieTo == PITCH_LFO_FREQUENCY || curve->tieTo == VOLUME_LFO_FREQUENCY)
+                        {
+                            // Apply scalar to LFO period (frequency)
+                            if (pInstrument->LFORecords[i].period > 0) {
+                                the_entry->LFORecords[i].period = (pInstrument->LFORecords[i].period * scalar) >> 8;
+                                
+                                BAE_PRINTF("SF2 Debug: Applied curve %d to LFO %d period: controller=%d, scalar=%d, period=%u->%u\n",
+                                           curveIdx, i, controllerValue, (int)scalar, 
+                                           pInstrument->LFORecords[i].period, the_entry->LFORecords[i].period);
+                            }
+                        }
+                    }
+                }
             }
         }
 

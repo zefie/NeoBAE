@@ -277,7 +277,7 @@ static void PV_SF2_InitLFO(GM_LFO *l, uint32_t period_us, int16_t delay_tc)
         uint32_t delayTime = PV_SF2_TimecentsToUSec(delay_tc);
         l->a.ADSRLevel[0] = 0;
         l->a.ADSRTime[0] = delayTime;
-        l->a.ADSRFlags[0] = ADSR_LINEAR_RAMP;
+        l->a.ADSRFlags[0] = ADSR_EXPONENTIAL_RAMP;
         l->a.ADSRLevel[1] = 65536;
         l->a.ADSRTime[1] = 0;
         l->a.ADSRFlags[1] = ADSR_TERMINATE;
@@ -756,7 +756,7 @@ static void PV_SF2_FillVolumeADSR(SF2_Bank *pBank, int32_t instrumentID, uint32_
     { // Only if non-default
         pADSR->ADSRLevelCB[stageIndex] = 14400; // Start from silence (14400 cB)
         pADSR->ADSRTime[stageIndex] = tDelay;
-        pADSR->ADSRFlags[stageIndex] = ADSR_LINEAR_RAMP;
+        pADSR->ADSRFlags[stageIndex] = ADSR_EXPONENTIAL_RAMP;
         stageIndex++;
         BAE_PRINTF("SF2 Debug: Added delay stage %d: %uus\n", stageIndex - 1, tDelay);
     }
@@ -767,7 +767,7 @@ static void PV_SF2_FillVolumeADSR(SF2_Bank *pBank, int32_t instrumentID, uint32_
         // Attack: Ramp att from 14400 to 0 cB (linear dB decrease)
         pADSR->ADSRLevelCB[stageIndex] = 0;
         pADSR->ADSRTime[stageIndex] = tAttack;
-        pADSR->ADSRFlags[stageIndex] = ADSR_LINEAR_RAMP;
+        pADSR->ADSRFlags[stageIndex] = ADSR_EXPONENTIAL_RAMP;
         stageIndex++;
     }
 
@@ -776,7 +776,7 @@ static void PV_SF2_FillVolumeADSR(SF2_Bank *pBank, int32_t instrumentID, uint32_
     { // Only if non-default
         pADSR->ADSRLevelCB[stageIndex] = 0;
         pADSR->ADSRTime[stageIndex] = tHold;
-        pADSR->ADSRFlags[stageIndex] = ADSR_LINEAR_RAMP;
+        pADSR->ADSRFlags[stageIndex] = ADSR_EXPONENTIAL_RAMP;
         stageIndex++;
         BAE_PRINTF("SF2 Debug: Added hold stage %d: %uus\n", stageIndex - 1, tHold);
     }
@@ -786,7 +786,7 @@ static void PV_SF2_FillVolumeADSR(SF2_Bank *pBank, int32_t instrumentID, uint32_
     {
         pADSR->ADSRLevelCB[stageIndex] = cBSus - cBInitAtt;
         pADSR->ADSRTime[stageIndex] = tDecay;
-        pADSR->ADSRFlags[stageIndex] = ADSR_LINEAR_RAMP;
+        pADSR->ADSRFlags[stageIndex] = ADSR_EXPONENTIAL_RAMP;
         stageIndex++;
     }
 
@@ -817,8 +817,7 @@ static void PV_SF2_FillVolumeADSR(SF2_Bank *pBank, int32_t instrumentID, uint32_
         pADSR->ADSRFlags[i] = ADSR_TERMINATE;
     }
 }
-
-#if USE_SF2_SUPPORT == TRUE
+\
 // Build a GM_ADSR modulation envelope from SF2 modulation envelope generators
 static void PV_SF2_FillModulationADSR(SF2_Bank *pBank, int32_t instrumentID, uint32_t genStart, uint32_t genEnd, GM_ADSR *pADSR)
 {
@@ -875,7 +874,7 @@ static void PV_SF2_FillModulationADSR(SF2_Bank *pBank, int32_t instrumentID, uin
     {
         pADSR->ADSRLevel[stageIndex] = 0; // Start from zero
         pADSR->ADSRTime[stageIndex] = tDelay;
-        pADSR->ADSRFlags[stageIndex] = ADSR_LINEAR_RAMP;
+        pADSR->ADSRFlags[stageIndex] = ADSR_EXPONENTIAL_RAMP;
         stageIndex++;
         BAE_PRINTF("SF2 Debug: ModEnv added delay stage %d: %uus\n", stageIndex - 1, tDelay);
     }
@@ -886,7 +885,7 @@ static void PV_SF2_FillModulationADSR(SF2_Bank *pBank, int32_t instrumentID, uin
         // Attack: Ramp from 0 to 1000 (100.0% modulation)
         pADSR->ADSRLevel[stageIndex] = 1000; // 100.0% in 1/10ths of percent
         pADSR->ADSRTime[stageIndex] = tAttack;
-        pADSR->ADSRFlags[stageIndex] = ADSR_LINEAR_RAMP;
+        pADSR->ADSRFlags[stageIndex] = ADSR_EXPONENTIAL_RAMP;
         stageIndex++;
     }
 
@@ -895,7 +894,7 @@ static void PV_SF2_FillModulationADSR(SF2_Bank *pBank, int32_t instrumentID, uin
     {
         pADSR->ADSRLevel[stageIndex] = 1000;
         pADSR->ADSRTime[stageIndex] = tHold;
-        pADSR->ADSRFlags[stageIndex] = ADSR_LINEAR_RAMP;
+        pADSR->ADSRFlags[stageIndex] = ADSR_EXPONENTIAL_RAMP;
         stageIndex++;
         BAE_PRINTF("SF2 Debug: ModEnv added hold stage %d: %uus\n", stageIndex - 1, tHold);
     }
@@ -905,7 +904,7 @@ static void PV_SF2_FillModulationADSR(SF2_Bank *pBank, int32_t instrumentID, uin
     {
         pADSR->ADSRLevel[stageIndex] = cBSus; // Sustain level in 1/10ths of percent
         pADSR->ADSRTime[stageIndex] = tDecay;
-        pADSR->ADSRFlags[stageIndex] = ADSR_LINEAR_RAMP;
+        pADSR->ADSRFlags[stageIndex] = ADSR_EXPONENTIAL_RAMP;
         stageIndex++;
     }
 
@@ -936,7 +935,6 @@ static void PV_SF2_FillModulationADSR(SF2_Bank *pBank, int32_t instrumentID, uin
         pADSR->ADSRFlags[i] = ADSR_TERMINATE;
     }
 }
-#endif
 
 // Heuristic: decide if a preset likely represents a drum kit
 static XBOOL PV_PresetLooksLikeDrumKit(SF2_Bank *pBank, uint32_t presetIndex)
@@ -1881,7 +1879,7 @@ GM_Instrument *SF2_CreateInstrumentFromPresetWithNote(SF2_Bank *pBank, uint16_t 
     // ENABLE sample rate factoring for proper pitch - SF2 samples can be any rate
     pInstrument->useSampleRate = TRUE;
     // For percussion one-shots, play at recorded rate (no musical transposition)
-    pInstrument->playAtSampledFreq = FALSE;
+    pInstrument->playAtSampledFreq = (bankNum == 128) ? TRUE : FALSE;
     pInstrument->sampleAndHold = FALSE;
     pInstrument->usageReferenceCount = 0;
 
@@ -3005,7 +3003,7 @@ static GM_Instrument *PV_SF2_CreateKeymapSplitInstrument(SF2_Bank *pBank, int32_
         uint32_t presetGenStart, presetGenEnd; // For preset-level merging
     } ZoneInfo;
 
-#define MAX_SF2_ZONES 32
+
     ZoneInfo zones[MAX_SF2_ZONES];
     uint32_t zoneCount = 0;
 

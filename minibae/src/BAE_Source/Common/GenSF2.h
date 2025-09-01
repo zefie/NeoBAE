@@ -28,6 +28,8 @@ extern "C" {
 // SF2 file format structures
 #pragma pack(push, 1)
 
+#define MAX_SF2_ZONES 512
+
 // RIFF chunk header
 typedef struct
 {

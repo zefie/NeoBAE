@@ -543,7 +543,7 @@ extern "C"
     };
     typedef unsigned char VelocityCurveType;
 
-#define MAX_VOICES 256       // max voices at once
+#define MAX_VOICES 512       // max voices at once
 #define MAX_INSTRUMENTS 128 // MIDI number of programs per patch bank
 #define MAX_BANKS 6         // three GM banks; three user banks
 #define MAX_TRACKS 65       // max MIDI file tracks to process (64 + tempo track)
@@ -554,7 +554,7 @@ extern "C"
 #define MAX_CURVES 4              // max curve entries in instruments
 #define MAX_LFOS 6                // max LFO's, make sure to add one extra for MOD wheel support
 #define MAX_MASTER_VOLUME 256     // max volume level for master volume level
-#define MAX_SAMPLES 1024           // max number of samples that can be loaded
+#define MAX_SAMPLES 4096           // max number of samples that can be loaded
 #define MAX_SONGS 16              // max number of songs that can play at one time
 #define PERCUSSION_CHANNEL 9      // which channel (zero based) is the default percussion channel
 #define MAX_SAMPLE_FRAMES 1048576 // max number of sample frames that we can play in one voice
@@ -697,6 +697,7 @@ typedef int32_t UNIT_TYPE;
     {
         ADSR_OFF_LONG = 0,
         ADSR_LINEAR_RAMP_LONG = FOUR_CHAR('L', 'I', 'N', 'E'),      //  'LINE'
+        ADSR_EXPONENTIAL_RAMP_LONG = FOUR_CHAR('E', 'X', 'P', 'O'), //  'EXPO'
         ADSR_SUSTAIN_LONG = FOUR_CHAR('S', 'U', 'S', 'T'),          //  'SUST'
         ADSR_TERMINATE_LONG = FOUR_CHAR('L', 'A', 'S', 'T'),        //  'LAST'
         ADSR_GOTO_LONG = FOUR_CHAR('G', 'O', 'T', 'O'),             //  'GOTO'
@@ -710,14 +711,16 @@ typedef int32_t UNIT_TYPE;
         // Used as a UNIT_TYPE. See PV_TranslateFromFileToMemoryID in GenPatch.c
         ADSR_OFF = 0,
         ADSR_LINEAR_RAMP = 1,
-        ADSR_SUSTAIN = 2,
-        ADSR_TERMINATE = 3,
-        ADSR_GOTO = 4,
-        ADSR_GOTO_CONDITIONAL = 5,
-        ADSR_RELEASE = 6
+        ADSR_EXPONENTIAL_RAMP = 2,
+        ADSR_SUSTAIN = 3,
+        ADSR_TERMINATE = 4,
+        ADSR_GOTO = 5,
+        ADSR_GOTO_CONDITIONAL = 6,
+        ADSR_RELEASE = 7
 #else
     ADSR_OFF = ADSR_OFF_LONG,
     ADSR_LINEAR_RAMP = ADSR_LINEAR_RAMP_LONG,
+    ADSR_EXPONENTIAL_RAMP = ADSR_EXPONENTIAL_RAMP_LONG,
     ADSR_SUSTAIN = ADSR_SUSTAIN_LONG,
     ADSR_TERMINATE = ADSR_TERMINATE_LONG,
     ADSR_GOTO = ADSR_GOTO_LONG,
