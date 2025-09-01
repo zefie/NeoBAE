@@ -519,7 +519,11 @@ bool bae_load_bank(const char *bank_path)
 #if USE_SF2_SUPPORT == TRUE
     GM_UnloadTSFSoundfont();
     // Check if this is an SF2 file
-    if (ext && strcasecmp(ext, ".sf2") == 0)
+    if (ext && (strcasecmp(ext, ".sf2") == 0
+#if USE_VORBIS_DECODER == TRUE
+    || (strcasecmp(ext, ".sf3") == 0 || strcasecmp(ext, ".sfo") == 0)
+#endif
+    ))
     {
         XBOOL stoppedPlayback = FALSE;
         // Load SF2 bank

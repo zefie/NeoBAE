@@ -18,6 +18,10 @@
 #include <stdlib.h>
 #include "MiniBAE.h"
 
+#if USE_VORBIS_DECODER == TRUE
+#include "stb_vorbis.c"
+#endif
+
 // Include TSF headers
 #define TSF_IMPLEMENTATION
 #include "tsf.h"
