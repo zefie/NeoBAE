@@ -45,7 +45,7 @@
 #include <stdint.h>
 #include "bankinfo.h" // reuse embedded bank metadata for friendly names
 #if USE_SF2_SUPPORT == TRUE
-#include "GenSF2.h"
+#include "GenTSF.h"
 #endif
 #ifdef main
 #undef main
@@ -1439,15 +1439,11 @@ int main(int argc, char *argv[])
             XBOOL bankLoaded = FALSE;
 #if USE_SF2_SUPPORT == TRUE
             if (ext && strcasecmp(ext, ".sf2") == 0 && !bankLoaded) {
-               SF2_Bank *sf2Bank = NULL;
-               XFILENAME filename;
-               XConvertPathToXFILENAME((BAEPathName)parmFile, &filename);
-               err = SF2_LoadBank(&filename, &sf2Bank);
-               if (err != NO_ERR && !sf2Bank) {
+               err = GM_LoadTSFSoundfont(parmFile);
+               if (err != NO_ERR) {
                   playbae_printf("Error %d loading SF2 bank %s", err, parmFile);
                   return 1;
                }
-               err = SF2_AddBankToManager(sf2Bank, parmFile);
                bankLoaded = TRUE;
             }
 #endif

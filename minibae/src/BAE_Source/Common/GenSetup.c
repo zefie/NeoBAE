@@ -579,7 +579,9 @@ OPErr GM_InitGeneralSound(void *threadContext, Rate theRate, TerpMode theTerp, A
         pMixer = MusicGlobals;
         if (pMixer)
         {
+#if USE_SF2_SUPPORT == TRUE
             pMixer->isTSF = FALSE;
+#endif
             // Turn off all notes!
             for (count = 0; count < MAX_VOICES; count++)
             {

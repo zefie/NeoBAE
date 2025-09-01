@@ -1158,6 +1158,8 @@ void GM_GetRealtimeChannelLevels(float left[16], float right[16])
         } else {
             for (int i = 0; i < MAX_CHANNELS; ++i)
             {
+                if (left[i] > 0.01f || right[i] > 0.01f)
+                    continue; // already have a level from BAE
                 left[i] = 0.0f;
                 right[i] = 0.0f;
             }
@@ -4174,11 +4176,13 @@ void GM_MuteChannel(GM_Song *pSong, short int channel)
     pMixer = GM_GetCurrentMixer();
     if ((channel < MAX_CHANNELS) && (channel >= 0))
     {
+#if USE_SF2_SUPPORT == TRUE
         if (GM_IsTSFSong(pSong))
         {
             // For TSF songs, aggressively silence and also end legacy voices to ensure engine note-offs
             GM_TSF_AllNotesOffChannel(pSong, channel);
         }
+#endif
         if (pSong)
         {
             XSetBit(&pSong->channelMuted, channel);

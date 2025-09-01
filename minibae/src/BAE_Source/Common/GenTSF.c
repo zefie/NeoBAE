@@ -109,6 +109,8 @@ OPErr GM_LoadTSFSoundfont(const char* sf2_path)
     strncpy(g_tsf_sf2_path, sf2_path, sizeof(g_tsf_sf2_path) - 1);
     g_tsf_sf2_path[sizeof(g_tsf_sf2_path) - 1] = '\0';
     
+    // Set Ch 10 to percussion by default
+    tsf_channel_set_bank_preset(g_tsf_soundfont, 9, 128, 0);
     return NO_ERR;
 }
 
