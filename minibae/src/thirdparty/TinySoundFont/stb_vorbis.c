@@ -5124,23 +5124,31 @@ stb_vorbis * stb_vorbis_open_memory(const unsigned char *data, int len, int *err
 }
 
 #ifndef STB_VORBIS_NO_INTEGER_CONVERSION
+/* Guard against collisions with platform headers; only define if not already present. */
+#ifndef PLAYBACK_MONO
 #define PLAYBACK_MONO     1
+#endif
+#ifndef PLAYBACK_LEFT
 #define PLAYBACK_LEFT     2
+#endif
+#ifndef PLAYBACK_RIGHT
 #define PLAYBACK_RIGHT    4
+#endif
 
-#define L  (PLAYBACK_LEFT  | PLAYBACK_MONO)
-#define C  (PLAYBACK_LEFT  | PLAYBACK_RIGHT | PLAYBACK_MONO)
-#define R  (PLAYBACK_RIGHT | PLAYBACK_MONO)
+/* Use local-prefixed masks to avoid clashing with single-letter macros like L/C/R */
+#define STB_L  (PLAYBACK_LEFT  | PLAYBACK_MONO)
+#define STB_C  (PLAYBACK_LEFT  | PLAYBACK_RIGHT | PLAYBACK_MONO)
+#define STB_R  (PLAYBACK_RIGHT | PLAYBACK_MONO)
 
 static int8 channel_position[7][6] =
 {
    { 0 },
-   { C },
-   { L, R },
-   { L, C, R },
-   { L, R, L, R },
-   { L, C, R, L, R },
-   { L, C, R, L, R, C },
+   { STB_C },
+   { STB_L, STB_R },
+   { STB_L, STB_C, STB_R },
+   { STB_L, STB_R, STB_L, STB_R },
+   { STB_L, STB_C, STB_R, STB_L, STB_R },
+   { STB_L, STB_C, STB_R, STB_L, STB_R, STB_C },
 };
 
 

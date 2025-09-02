@@ -11,6 +11,10 @@
 
 #include "GenTSF.h"
 #if USE_SF2_SUPPORT == TRUE
+#if USE_VORBIS_DECODER == TRUE
+#include "stb_vorbis.c"
+#endif
+
 #define TSF_IMPLEMENTATION
 #include "tsf.h"
 #include "GenSnd.h"
@@ -19,10 +23,6 @@
 #include <string.h>
 #include <stdlib.h>
 #include "MiniBAE.h"
-
-#if USE_VORBIS_DECODER == TRUE
-#include "stb_vorbis.c"
-#endif
 
 #define SAMPLE_BLOCK_SIZE 512
 
