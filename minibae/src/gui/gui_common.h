@@ -24,6 +24,7 @@ typedef short XSWORD; // 16-bit signed used by engine for track index
 
 // Window state globals
 extern int g_window_h;
+extern bool g_disable_webtv_progress_bar;
 
 // Common types
 typedef struct

@@ -29,7 +29,6 @@ bool g_sampleRateDropdownOpen = false;
 // External globals we need access to
 extern bool g_show_virtual_keyboard;
 extern int g_exportCodecIndex;
-bool g_disable_webtv_progress_bar = false;
 extern int g_window_h;
 
 // External function we need

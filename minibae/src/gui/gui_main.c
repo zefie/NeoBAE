@@ -341,7 +341,7 @@ static int g_last_engine_pos_ms = 0;
 static int g_progress_stripe_offset = 0;
 static const int g_progress_stripe_width = 28;
 // Toggle for WebTV-style progress bar (Settings -> "WebTV Style Bar")
-static bool g_disable_webtv_progress_bar = false; // default: WebTV enabled
+bool g_disable_webtv_progress_bar = false; // default: WebTV enabled
 
 // VU meter state (smoothed levels 0.0 .. 1.0 and peak hold)
 static float g_vu_left_level = 0.0f;
