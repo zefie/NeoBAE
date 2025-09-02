@@ -20,7 +20,7 @@ ifeq ($(BITS),32)
     STRIP      	:= i686-w64-mingw32-strip
     DLLTOOL		:= i686-w64-mingw32-dlltool
     OPTI            := -O2 
-    ifeq ($(LDEBUG),1
+    ifeq ($(LDEBUG),1)
         OPTI := -g -O0 -ggdb3 -fPIC
     endif 
     CFLAGS  	:= $(ARCH) $(OPTI) $(INC_PATH) -D_THREAD_SAFE -Wno-unused-value 
