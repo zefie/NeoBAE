@@ -2005,7 +2005,7 @@ static void PV_ProcessNoteOn(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTra
                 }
 
                 // If TSF is active for this song, route to TSF instead of normal synthesis
-                if (GM_IsTSFSong(pSong) && pSong->channelBankMSB[MIDIChannel] != 2 && GM_IsRMFChannel(pSong, MIDIChannel) == FALSE)
+                if (GM_IsTSFSong(pSong))
                 {
                     if (pSong->songFlags == SONG_FLAG_IS_RMF) {
                         INT16 thePatch = PV_ConvertPatchBank(pSong, note, MIDIChannel);
@@ -2248,9 +2248,21 @@ void PV_ProcessController(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTrack,
     if (PV_IsMuted(pSong, MIDIChannel, currentTrack) == FALSE)
     {
 #if USE_SF2_SUPPORT == TRUE
-        if (GM_IsTSFSong(pSong) && !GM_IsRMFChannel(pSong, MIDIChannel))
+        if (GM_IsTSFSong(pSong))
         {
-            
+            if (pSong->songFlags == SONG_FLAG_IS_RMF) {
+                if (controler == 0 && (value == 1 || value == 2)) {
+                    BAE_PRINTF("ProcessController DBUG: setting RMF mode for channel %d\n", MIDIChannel);
+                    // if we are an RMF file and just set a bank MSB of 1 or 2, we are now in RMF mode for this channel
+                    pSong->channelType[MIDIChannel] = CHANNEL_TYPE_RMF;
+                } else if (pSong->lastThreeControl[MIDIChannel][0].control == 0 &&
+                        (pSong->lastThreeControl[MIDIChannel][0].value == 0 ||
+                            pSong->lastThreeControl[MIDIChannel][0].value == 127)) {
+                    // if we just set a bank MSB of 0/128, we are now in GM mode for this channel
+                    BAE_PRINTF("ProcessController DBUG: setting GM mode for channel %d\n", MIDIChannel);
+                    pSong->channelType[MIDIChannel] = CHANNEL_TYPE_GM;
+                }
+            }
 #if DISABLE_BEATNIK_NRPN != TRUE
             pSong->lastThreeControl[MIDIChannel][2] = pSong->lastThreeControl[MIDIChannel][1];
             pSong->lastThreeControl[MIDIChannel][1] = pSong->lastThreeControl[MIDIChannel][0];
@@ -2287,12 +2299,16 @@ void PV_ProcessController(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTrack,
                      pSong->lastThreeControl[MIDIChannel][0].control != 98 && 
                      pSong->lastThreeControl[MIDIChannel][1].control != 98
                     ) {
+#endif
                     BAE_PRINTF("Processed TSF controller: %i, value: %i, channel: %i\n", controler, value, MIDIChannel);
                     GM_TSF_ProcessController(pSong, MIDIChannel, controler, value);
+#if DISABLE_BEATNIK_NRPN != TRUE
                 }
             }
-            return;
 #endif
+            if (pSong->channelType[MIDIChannel] == CHANNEL_TYPE_GM) {
+                return;
+            }
         }    
 #endif
         

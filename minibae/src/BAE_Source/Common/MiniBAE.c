@@ -7211,7 +7211,7 @@ BAEResult BAESong_LoadRmfFromMemory(BAESong song, void *pRMFData, uint32_t rmfSi
                             for (uint32_t i = 1; i <= totalInst; i++) {
                                 BAE_PRINTF("    %u - INST: %u\n", i, pSong->RMFInstrumentIDs[i]);
                             }
-                                                    pSong->songFlags = SONG_FLAG_IS_RMF;
+                            pSong->songFlags = SONG_FLAG_IS_RMF;
                             if (GM_TSF_IsActive()) { GM_EnableTSFForSong(pSong, TRUE); }
 #endif
                             song->pSong = pSong;                            // preserve for use later
@@ -7400,7 +7400,7 @@ BAEResult BAESong_LoadRmfFromFile(BAESong song, BAEPathName filePath, int16_t so
                         for (uint32_t i = 1; i <= totalInst; i++) {
                             BAE_PRINTF("    %u - INST: %u\n", i, pSong->RMFInstrumentIDs[i]);
                         }
-                        pSong->songFlags = SONG_FLAG_IS_RMF;
+                        pSong->songFlags = SONG_FLAG_IS_RMF;                      
 #endif
                         // things are cool
                         GM_SetDisposeSongDataWhenDoneFlag(pSong, TRUE); // dispose of midi data

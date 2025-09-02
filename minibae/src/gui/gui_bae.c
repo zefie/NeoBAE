@@ -715,6 +715,9 @@ bool bae_load_song(const char *path)
         return false;
     }
 
+    // Restore Reverb after load
+    BAEMixer_SetDefaultReverb(g_bae.mixer, (BAEReverbType)settings.reverb_type);
+
     // Defer preroll until just before first Start so that any user settings
     // (transpose, tempo, channel mutes, reverb, loops) are applied first.
     BAESong_GetMicrosecondLength(g_bae.song, &g_bae.song_length_us);
