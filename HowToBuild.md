@@ -157,10 +157,14 @@ When passed `NOAUTO=1`, the build is under your control, and the automatic enabl
 - `FLAC_ENC=1` - Enable FLAC exporting
 - `VORBIS_DEC=1` - Enable OGG Vorbis playback
 - `VORBIS_ENC=1` - Enables OGG Vorbis exporting
-- `SF2_SUPPORT=1` - Enable SF2 SoundFont 2 support
+- `SF2_SUPPORT=1` - Enable SF2 SoundFont 2 support (use with VORBIS_DEC=1 to get SF3/SFO support as well)
 - `PLAYLIST=1` - Enable playlist support in the GUI
 - `USE_SDL=1` - To enable usage of SDL2 on platforms that support other native audio
 - `OGG_SUPPORT=1` - Enable OGG Support (useless without Vorbis)
+- `DISABLE_NOKIA_PATCH=1` - If you want to disable the harmless Nokia Patch (MSB5 -> MSB1, MSB6 -> MSB2)
+- `DISABLE_BEATNIK_NRPN=1` - Disables SF2 NRPN support for Beatnik extra percussion channel(s).
+- `DEBUG=1` - Enable verbose output (console for playbae, logfile for zefidi)
+- `LDEBUG=1` - For serious debugging, disables compile-time optimizations and leaves debugging symbols
 
 Some flags set other flags, or only work in certain situations:
 - `VORBIS_DEC=1` or `VORBIS_ENC=1` will automatically set `OGG_SUPPORT=1`

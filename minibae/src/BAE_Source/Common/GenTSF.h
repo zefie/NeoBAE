@@ -74,12 +74,14 @@ void GM_TSF_SetMasterVolume(XFIXED volume);
 XFIXED GM_TSF_GetMasterVolume(void);
 void GM_TSF_SetMaxVoices(int16_t maxVoices);
 int16_t GM_TSF_GetMaxVoices(void);
+void PV_TSF_SetBankPreset(GM_Song* pSong, int16_t channel, int16_t bank, int16_t preset);
 
 // TSF status queries
 int16_t GM_TSF_GetActiveVoiceCount(void);
 XBOOL GM_TSF_IsActive(void);
 void GM_ResetTSF(void);
 void tsf_get_channel_amplitudes(float* channelAmplitudes);
+
 
 #endif // USE_SF2_SUPPORT
 

@@ -270,16 +270,12 @@ void GM_TSF_ProcessNoteOn(GM_Song* pSong, int16_t channel, int16_t note, int16_t
     if (!pMixer)
         return;
 
-    //velocity = (velocity * pMixer->scaleBackAmount) >> 8;
-    //velocity = PV_ScaleVolumeFromChannelAndSong(pSong, channel, velocity);
-    BAE_PRINTF("pre-scale velocity: %i, note: %i, channel %i\n", velocity, note, channel);
     velocity = (int)(((float)velocity / (float)MAX_MASTER_VOLUME) * (float)MAX_NOTE_VOLUME);
     // I hate clamping but here we are
     if (velocity > 127) {
         velocity = 127;
     }
     float tsfVelocity = (float)velocity / (float)MAX_NOTE_VOLUME;
-    BAE_PRINTF("final velocity: %i, TSF velocity: %f\n", velocity, tsfVelocity);
     if (!GM_IsTSFSong(pSong) || !g_tsf_soundfont)
     {
         return;
@@ -366,7 +362,7 @@ void GM_TSF_ProcessProgramChange(GM_Song* pSong, int16_t channel, int16_t progra
         // If not odd mapping, treat direct bank 128 as percussion
         // Convert back to MIDI bank first to test the external value
         uint16_t extBank = midiBank / 2; // internal even bank encodes extBank*2
-        if (extBank == 128)
+        if (extBank == 127)
             isMSB128Perc = TRUE;
     }
 
@@ -377,7 +373,7 @@ void GM_TSF_ProcessProgramChange(GM_Song* pSong, int16_t channel, int16_t progra
         midiBank = (midiBank - 1) / 2;     // Convert back to external MIDI bank
         // Route to SF2 percussion bank
         midiProgram = 0; // Standard drum kit preset
-        midiBank = 128;  // SF2 percussion bank
+        midiBank = 127;  // SF2 percussion bank
     }
     else if (isMSB128Perc)
     {
@@ -385,7 +381,7 @@ void GM_TSF_ProcessProgramChange(GM_Song* pSong, int16_t channel, int16_t progra
         // Keep requested kit program if provided; use note from low 7 bits if present
         uint16_t extProgram = midiProgram; // may indicate kit variant
         uint16_t noteGuess = midiProgram;  // best-effort note guess from instrument encoding
-        midiBank = 128;                    // enforce SF2 percussion bank
+        midiBank = 127;                    // enforce SF2 percussion bank
         midiProgram = extProgram;          // try requested kit first, fall back later if needed
     }
     else
@@ -683,6 +679,14 @@ static void PV_TSF_FreeMixBuffer(void)
         g_tsf_mix_buffer = NULL;
         g_tsf_mix_buffer_frames = 0;
     }
+}
+
+void PV_TSF_SetBankPreset(GM_Song* pSong, int16_t channel, int16_t bank, int16_t preset) {
+    if (!GM_IsTSFSong(pSong) || !g_tsf_soundfont)
+    {
+        return;
+    }
+    tsf_channel_set_bank_preset(g_tsf_soundfont, channel, bank, preset);
 }
 
 #endif // USE_SF2_SUPPORT

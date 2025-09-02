@@ -6510,6 +6510,7 @@ BAESong BAESong_New(BAEMixer mixer)
                     if (song->pSong)
                     {
                         memset(song->pSong->channelActiveNotes, 0, sizeof(song->pSong->channelActiveNotes));
+                        memset(song->pSong->lastThreeControl, 0, sizeof(song->pSong->lastThreeControl));
                     }
                 }
 
@@ -7085,7 +7086,7 @@ BAEResult BAESong_LoadMidiFromFile(BAESong song, BAEPathName filePath, BAE_BOOL 
                     PV_BAESong_Unload(song);
 #if USE_SF2_SUPPORT == TRUE
                     if (GM_TSF_IsActive()) {
-                       GM_ResetTSF();
+                        GM_ResetTSF();
                     }
 #endif                    
                     pSong = GM_LoadSong(song->mixer->pMixer,

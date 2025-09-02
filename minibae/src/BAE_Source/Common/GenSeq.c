@@ -2242,8 +2242,50 @@ void PV_ProcessController(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTrack,
 #if USE_SF2_SUPPORT == TRUE
         if (GM_IsTSFSong(pSong) && !GM_IsRMFChannel(pSong, MIDIChannel))
         {
-            GM_TSF_ProcessController(pSong, MIDIChannel, controler, value);
-        }
+            
+#if DISABLE_BEATNIK_NRPN != TRUE
+            pSong->lastThreeControl[MIDIChannel][2] = pSong->lastThreeControl[MIDIChannel][1];
+            pSong->lastThreeControl[MIDIChannel][1] = pSong->lastThreeControl[MIDIChannel][0];
+            pSong->lastThreeControl[MIDIChannel][0].control = controler;
+            pSong->lastThreeControl[MIDIChannel][0].value = (UINT16)value;
+
+            // DEBUG
+            if (pSong->lastThreeControl[MIDIChannel][0].control == 99 ||
+                pSong->lastThreeControl[MIDIChannel][0].control == 98 ||
+                pSong->lastThreeControl[MIDIChannel][0].control == 6)
+            {
+                BAE_PRINTF("Last three controls on channel %i: %i,%i; %i,%i; %i,%i\n", MIDIChannel,
+                           pSong->lastThreeControl[MIDIChannel][2].control,
+                           pSong->lastThreeControl[MIDIChannel][2].value,
+                           pSong->lastThreeControl[MIDIChannel][1].control,
+                           pSong->lastThreeControl[MIDIChannel][1].value,
+                           pSong->lastThreeControl[MIDIChannel][0].control,
+                           pSong->lastThreeControl[MIDIChannel][0].value);
+            }
+
+            // check for Beatnik NRPN 
+            if (pSong->lastThreeControl[MIDIChannel][2].control == 99 &&
+                pSong->lastThreeControl[MIDIChannel][2].value == 5 &&
+                pSong->lastThreeControl[MIDIChannel][1].control == 98 &&
+                pSong->lastThreeControl[MIDIChannel][1].value == 0 &&
+                pSong->lastThreeControl[MIDIChannel][0].control == 6 &&
+                pSong->lastThreeControl[MIDIChannel][0].value == 2)
+            {
+                pSong->channelBankMode[MIDIChannel] = USE_GM_PERC_BANK;
+                PV_TSF_SetBankPreset(pSong, MIDIChannel, 128, 0);
+                BAE_PRINTF("Set channel %i to bank %i via Beatnik NRPN\n", MIDIChannel, 128);
+            } else {
+                if  (pSong->lastThreeControl[MIDIChannel][0].control != 99 &&
+                     pSong->lastThreeControl[MIDIChannel][0].control != 98 && 
+                     pSong->lastThreeControl[MIDIChannel][1].control != 98
+                    ) {
+                    BAE_PRINTF("Processed TSF controller: %i, value: %i, channel: %i\n", controler, value, MIDIChannel);
+                    GM_TSF_ProcessController(pSong, MIDIChannel, controler, value);
+                }
+            }
+            return;
+#endif
+        }    
 #endif
         
         switch (controler)
