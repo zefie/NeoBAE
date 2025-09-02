@@ -18,7 +18,7 @@ AR      	:= ar
 STRIP		:= strip
 
 OPTI		:= -O2 -fPIC
-ifeq ($(DEBUG),1)
+ifeq ($(LDEBUG),1)
     OPTI := -g -O0 -ggdb3 -fPIC
 endif
 
@@ -35,7 +35,7 @@ CFLAGS		+= -D_VERSION=\""$(VERSION)"\"
 CXXFLAGS 	:= $(CFLAGS)
 LDFLAGS		:= $(ARCH) $(OPTI)
 
-ifneq ($(DEBUG),1)
+ifneq ($(LDEBUG),1)
 	LDFLAGS += -s
 endif
 

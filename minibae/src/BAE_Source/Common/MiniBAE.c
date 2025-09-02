@@ -7388,10 +7388,6 @@ BAEResult BAESong_LoadRmfFromFile(BAESong song, BAEPathName filePath, int16_t so
                         BAEUtil_GetRmfInstrumentList(fileRef, fileSize, songIndex, instBuf, MAX_INSTRUMENTS, &totalInst);
                         BAE_PRINTF("pSong = %p\n", pSong);
                         BAE_PRINTF("instBuf[0] = %d\n", instBuf[0]);
-                        if (!pSong->RMFInstrumentIDs) {
-                            return BAE_MEMORY_ERR;
-                        }
-
                         pSong->RMFInstrumentIDs[0] = totalInst; // Store count first
                         for (uint32_t i = 1; i <= totalInst; i++)
                         {

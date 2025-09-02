@@ -18,7 +18,7 @@ AR      	:= ar
 STRIP		:= strip
 
 OPTI            := -O2 -fPIC
-ifeq ($(DEBUG),1)
+ifeq ($(LDEBUG),1)
     OPTI := -g -O0 -ggdb3 -fPIC
 endif
 CFLAGS  	:= $(ARCH) $(OPTI) $(INC_PATH) -D_THREAD_SAFE -Wno-unused-value
@@ -34,7 +34,7 @@ include inc/Makefile.versioning
 CFLAGS		+= -D_VERSION=\""$(VERSION)"\"
 LDFLAGS		:= $(ARCH) $(OPTI)
 
-ifneq ($(DEBUG),1)
+ifneq ($(LDEBUG),1)
 	LDFLAGS += -s
 endif
 

@@ -30,7 +30,7 @@ DLLTOOL		:= $(CROSS)dlltool
 WINDRES		:= $(CROSS)windres
 
 OPTI            := -O2 -fPIC
-ifeq ($(DEBUG),1)
+ifeq ($(LDEBUG),1)
     OPTI := -g -O0 -ggdb3 -fPIC
 endif
 CFLAGS  	:= $(ARCH) $(OPTI) $(INC_PATH) -D_THREAD_SAFE -DEMBED_FONT_TTF -Wno-unused-value
@@ -51,7 +51,7 @@ CFLAGS		+= -D_VERSION=\""$(VERSION)"\"
 
 CXXFLAGS 	:= $(CFLAGS)
 LDFLAGS		:= $(ARCH) $(OPTI)
-ifneq ($(DEBUG),1)
+ifneq ($(LDEBUG),1)
 	LDFLAGS += -s
 endif
 ifeq ($(BITS),32)
