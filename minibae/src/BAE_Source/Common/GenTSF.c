@@ -272,13 +272,13 @@ void GM_TSF_ProcessNoteOn(GM_Song* pSong, int16_t channel, int16_t note, int16_t
 
     //velocity = (velocity * pMixer->scaleBackAmount) >> 8;
     //velocity = PV_ScaleVolumeFromChannelAndSong(pSong, channel, velocity);
-    velocity = ((float)velocity / MAX_SONG_VOLUME) * MAX_NOTE_VOLUME;
-    BAE_PRINTF("pre-clamp velocity: %i, note: %i, channel %i\n", velocity, note, channel);
+    BAE_PRINTF("pre-scale velocity: %i, note: %i, channel %i\n", velocity, note, channel);
+    velocity = (int)(((float)velocity / (float)MAX_MASTER_VOLUME) * (float)MAX_NOTE_VOLUME);
     // I hate clamping but here we are
     if (velocity > 127) {
         velocity = 127;
     }
-    float tsfVelocity = velocity / MAX_NOTE_VOLUME;
+    float tsfVelocity = (float)velocity / (float)MAX_NOTE_VOLUME;
     BAE_PRINTF("final velocity: %i, TSF velocity: %f\n", velocity, tsfVelocity);
     if (!GM_IsTSFSong(pSong) || !g_tsf_soundfont)
     {
