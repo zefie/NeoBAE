@@ -604,6 +604,24 @@ void GM_TSF_SilenceSong(GM_Song* pSong)
     GM_EndSongNotes(pSong);
 }
 
+void GM_TSF_KillChannelNotes(int ch) {
+    if (!g_tsf_soundfont)
+    {
+        return;
+    }
+    tsf_channel_sounds_off_all(g_tsf_soundfont, ch);
+}
+
+void GM_TSF_KillAllNotes() {
+    if (!g_tsf_soundfont)
+    {
+        return;
+    }
+    for (int i=0; i<16; i++) {
+        GM_TSF_KillChannelNotes(i);
+    }
+}
+
 // TSF configuration
 void GM_TSF_SetMasterVolume(XFIXED volume)
 {

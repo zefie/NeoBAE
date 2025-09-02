@@ -1,6 +1,9 @@
 // gui_midi_vkbd.c - Virtual MIDI keyboard
 
 #include "gui_midi_vkbd.h"
+#if USE_SF2_SUPPORT == TRUE
+#include "GenTSF.h"
+#endif
 
 // Virtual keyboard state
 bool g_show_virtual_keyboard = false; // user toggle (default off)
@@ -30,6 +33,9 @@ void gui_panic_all_notes(BAESong s)
     }
     for (int ch = 0; ch < 16; ++ch)
     {
+#if USE_SF2_SUPPORT == TRUE
+        GM_TSF_KillChannelNotes(ch);
+#endif
         for (int n = 0; n < 128; ++n)
         {
             BAESong_NoteOff(s, (unsigned char)ch, (unsigned char)n, 0, 0);
@@ -48,6 +54,9 @@ void gui_panic_channel_notes(BAESong s, int ch)
     BAESong_ControlChange(s, (unsigned char)ch, 120, 0, 0); // All Sound Off
     BAESong_ControlChange(s, (unsigned char)ch, 123, 0, 0); // All Notes Off
     // Explicit NoteOff for any keys we believe are active from MIDI-in
+#if USE_SF2_SUPPORT == TRUE
+    GM_TSF_KillAllNotes();
+#endif
     for (int n = 0; n < 128; ++n)
     {
         if (g_keyboard_active_notes_by_channel[ch][n])

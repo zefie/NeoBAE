@@ -83,7 +83,8 @@ int16_t GM_TSF_GetActiveVoiceCount(void);
 XBOOL GM_TSF_IsActive(void);
 void GM_ResetTSF(void);
 void tsf_get_channel_amplitudes(float* channelAmplitudes);
-
+void GM_TSF_KillChannelNotes(int ch);
+void GM_TSF_KillAllNotes(void);
 
 #endif // USE_SF2_SUPPORT
 
