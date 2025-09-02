@@ -3,6 +3,7 @@
 #include "gui_bae.h"
 #include "bankinfo.h"
 #include "gui_widgets.h"
+#include "gui_settings.h"
 #include "gui_midi.h"    // For gui_midi_event_callback and midi output functions
 #include "gui_karaoke.h" // For karaoke functions
 #include "X_API.h"
@@ -716,8 +717,8 @@ bool bae_load_song(const char *path)
     }
 
     // Restore Reverb after load
+    Settings settings = load_settings();
     BAEMixer_SetDefaultReverb(g_bae.mixer, (BAEReverbType)settings.reverb_type);
-
     // Defer preroll until just before first Start so that any user settings
     // (transpose, tempo, channel mutes, reverb, loops) are applied first.
     BAESong_GetMicrosecondLength(g_bae.song, &g_bae.song_length_us);
