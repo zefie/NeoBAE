@@ -1996,6 +1996,14 @@ static void PV_ProcessNoteOn(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTra
                     note += pSong->songPitchShift;
                 }
 #if USE_SF2_SUPPORT == TRUE
+                // adding this pleases the compiler
+                // warning: writing 1 byte into a region of size 0 [-Wstringop-overflow=]
+                //                   pSong->channelType[MIDIChannel] = CHANNEL_TYPE_RMF;
+                if (MIDIChannel < 0 || MIDIChannel >= MAX_CHANNELS) {
+                    BAE_PRINTF("Invalid MIDIChannel index: %d\n", MIDIChannel);
+                    return;
+                }
+
                 // If TSF is active for this song, route to TSF instead of normal synthesis
                 if (GM_IsTSFSong(pSong) && pSong->channelBankMSB[MIDIChannel] != 2 && GM_IsRMFChannel(pSong, MIDIChannel) == FALSE)
                 {

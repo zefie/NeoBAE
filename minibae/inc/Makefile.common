@@ -16,6 +16,7 @@ ifneq ($(WASM),1)
 		KARAOKE := 1
 		PLAYLIST :=1
 		SF2_SUPPORT := 1
+		DISABLE_BEATNIK_NRPN := 0 # Also relatively harmless, it allows MIDIs to send certain commands in order to activate additional percussion channels
 		DISABLE_NOKIA := 0 # Maps MSB5->MSB1 and MSG6->MSB2, relatively harmless, so patch is enabled by default, but optional in case
 	endif
 endif
@@ -515,5 +516,7 @@ $(OBJ_DIR)$(basename $(notdir $(subst src/thirdparty/flac/src/libFLAC/lpc.c,flac
 	@mkdir -p $(OBJ_DIR)
 	$(SILENT)$(if $(filter %.cpp,$(1)),${CXX} -c ${CXXFLAGS},${CC} -c ${CFLAGS}) $$< -o $$@
 endef
+
+BAE_FLAGS += -Wstringop-overflow
 
 #### End Makefile.common

@@ -6510,7 +6510,9 @@ BAESong BAESong_New(BAEMixer mixer)
                     if (song->pSong)
                     {
                         memset(song->pSong->channelActiveNotes, 0, sizeof(song->pSong->channelActiveNotes));
+#if USE_SF2_SUPPORT == TRUE
                         memset(song->pSong->lastThreeControl, 0, sizeof(song->pSong->lastThreeControl));
+#endif
                     }
                 }
 
