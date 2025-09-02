@@ -1075,7 +1075,7 @@ typedef int32_t UNIT_TYPE;
         SONG_FLAG_IS_RMF  = 0x00000002   // Song is in RMF format
     };
 #endif
-#if DISABLE_BEATNIK_NRPN != TRUE
+#if DISABLE_BEATNIK_SF2_NRPN != TRUE
     typedef struct LastControlEntry {
         INT16 control;
         UINT16 value;
@@ -1269,7 +1269,7 @@ typedef int32_t UNIT_TYPE;
         XDWORD RMFInstrumentIDs[MAX_INSTRUMENTS+1];
         XBYTE channelBankMSB[MAX_CHANNELS];  // Bank MSB values for TSF program changes
         XBYTE channelBankLSB[MAX_CHANNELS];  // Bank LSB values for TSF program changes        
-#if DISABLE_BEATNIK_NRPN != TRUE
+#if DISABLE_BEATNIK_SF2_NRPN != TRUE
         LastControlEntry lastThreeControl[MAX_CHANNELS][4];
 #endif
 #endif

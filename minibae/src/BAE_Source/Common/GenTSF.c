@@ -412,7 +412,18 @@ void GM_TSF_ProcessProgramChange(GM_Song* pSong, int16_t channel, int16_t progra
     // hack for dumb midis
     if (midiBank == 0 && channel == 9) {
         // ch 10, percussions
-        midiBank = 128;
+        midiBank = 127;
+    }
+
+    if (pSong->channelBankMode[channel] == USE_GM_PERC_BANK) {
+        if (midiProgram == 0 && midiBank == 0) {
+            midiBank = 127;
+        } else {
+            // change back to normal channel if the program is not a percussion program
+            pSong->channelBankMode[channel] == USE_GM_DEFAULT;
+            midiBank = midiBank / 2;
+        }
+
     }
 
     BAE_PRINTF("final intepretation: midiBank: %i, midiProgram: %i, channel: %i\n", midiBank, midiProgram, channel);

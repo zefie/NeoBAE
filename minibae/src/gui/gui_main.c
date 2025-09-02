@@ -496,12 +496,13 @@ bool recreate_mixer_and_restore(int sampleRateHz, bool stereo, int reverbType,
     g_bae.is_playing = false;
     g_bae.bank_loaded = false;
     g_bae.bank_token = 0;
-
+#if USE_SF2_SUPPORT == TRUE
     if (GM_TSF_IsActive())
     {
         GM_TSF_SetStereoMode(stereo, FALSE); // Don't apply now because we are going to apply next
         GM_TSF_SetSampleRate(sampleRateHz);
     }
+#endif    
     // Create new mixer
     g_bae.mixer = BAEMixer_New();
     if (!g_bae.mixer)

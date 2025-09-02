@@ -13,6 +13,8 @@ runtest() {
 for f in Makefile.gui-mingw Makefile.mingw Makefile.gui Makefile Makefile.clang; do
     # basic
     runtest make -f ${f}
+    # DISABLE_BEATNIK_SF2_NRPN
+    runtest make -f ${f} DISABLE_BEATNIK_SF2_NRPN=1
     # mp3dec
     runtest make -f ${f} MP3_DEC=1
     # mp3enc
