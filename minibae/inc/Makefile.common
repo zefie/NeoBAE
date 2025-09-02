@@ -517,6 +517,4 @@ $(OBJ_DIR)$(basename $(notdir $(subst src/thirdparty/flac/src/libFLAC/lpc.c,flac
 	$(SILENT)$(if $(filter %.cpp,$(1)),${CXX} -c ${CXXFLAGS},${CC} -c ${CFLAGS}) $$< -o $$@
 endef
 
-BAE_FLAGS += -Wstringop-overflow
-
 #### End Makefile.common
