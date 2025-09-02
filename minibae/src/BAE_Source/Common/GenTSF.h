@@ -75,6 +75,8 @@ XFIXED GM_TSF_GetMasterVolume(void);
 void GM_TSF_SetMaxVoices(int16_t maxVoices);
 int16_t GM_TSF_GetMaxVoices(void);
 void PV_TSF_SetBankPreset(GM_Song* pSong, int16_t channel, int16_t bank, int16_t preset);
+void GM_TSF_SetSampleRate(int32_t sampleRate);
+void GM_TSF_SetStereoMode(XBOOL stereo, XBOOL applyNow);
 
 // TSF status queries
 int16_t GM_TSF_GetActiveVoiceCount(void);

@@ -29,6 +29,8 @@
 // Global TSF state
 static tsf* g_tsf_soundfont = NULL;
 static XBOOL g_tsf_initialized = FALSE;
+static XBOOL g_tsf_mono_mode = FALSE;
+static XBOOL g_tsf_mono_single_channel = FALSE;
 static XFIXED g_tsf_master_volume = XFIXED_1;
 static int16_t g_tsf_max_voices = MAX_VOICES;
 static uint16_t g_tsf_sample_rate = 44100;
@@ -67,6 +69,20 @@ OPErr GM_InitializeTSF(void)
     g_tsf_initialized = TRUE;
     return NO_ERR;
 }
+
+void GM_TSF_SetSampleRate(int32_t sampleRate)
+{
+    if (!g_tsf_initialized)
+    {
+        return;
+    }
+
+    g_tsf_sample_rate = sampleRate;
+    if (g_tsf_soundfont)
+    {
+        tsf_set_output(g_tsf_soundfont, (g_tsf_mono_mode) ? TSF_MONO : TSF_STEREO_INTERLEAVED, g_tsf_sample_rate, 0.0f);
+    }
+}   
 
 void GM_CleanupTSF(void)
 {
@@ -110,7 +126,7 @@ OPErr GM_LoadTSFSoundfont(const char* sf2_path)
     }
     
     // Configure TSF
-    tsf_set_output(g_tsf_soundfont, TSF_STEREO_INTERLEAVED, g_tsf_sample_rate, 0.0f);
+    tsf_set_output(g_tsf_soundfont, g_tsf_mono_mode ? TSF_MONO : TSF_STEREO_INTERLEAVED, g_tsf_sample_rate, 0.0f);
     tsf_set_max_voices(g_tsf_soundfont, g_tsf_max_voices);
     tsf_set_volume(g_tsf_soundfont, XFIXED_TO_FLOAT(g_tsf_master_volume));
     
@@ -205,7 +221,10 @@ void tsf_get_channel_amplitudes(float* channelAmplitudes)
     for (int ch = 0; ch < 16; ++ch)
     {
         if (maxAmplitude > 0.0f)
+        {
+            tsf_set_output(g_tsf_soundfont, g_tsf_mono_mode ? TSF_MONO : TSF_STEREO_INTERLEAVED, g_tsf_sample_rate, 0.0f);
             channelAmplitudes[ch] /= maxAmplitude;
+        }
         else
             channelAmplitudes[ch] = 0.0f;
     }
@@ -468,10 +487,11 @@ void GM_TSF_RenderAudioSlice(GM_Song* pSong, int32_t* mixBuffer, int32_t frameCo
         return;
     }
     
-    // Clear the float buffer
-    XBlockMove(g_tsf_mix_buffer, 0, frameCount * 2 * sizeof(float)); // stereo
+    // Clear the float buffer (mono or stereo)
+    int channels = g_tsf_mono_mode ? 1 : 2;
+    XBlockMove(g_tsf_mix_buffer, 0, frameCount * channels * sizeof(float));
     
-    // Render TSF audio
+    // Render TSF audio (TSF will output mono or stereo depending on tsf_set_output)
     tsf_render_float(g_tsf_soundfont, g_tsf_mix_buffer, frameCount, 0);
     
     // Song volume scaling (0..127 typical). Clamp defensively.
@@ -643,18 +663,47 @@ static XBOOL PV_TSF_CheckChannelMuted(GM_Song* pSong, int16_t channel)
 
 static void PV_TSF_ConvertFloatToInt32(float* input, int32_t* output, int32_t frameCount, float songVolumeScale, const float *channelScales)
 {
+
     // Map float -1..1 to internal mixer scale (~16-bit range << OUTPUT_SCALAR)
     const float kScale = 32767.0f; // internal base 16-bit peak
-    for (int32_t i = 0; i < frameCount * 2; i++)
+    float masterVol = XFIXED_TO_FLOAT(g_tsf_master_volume);
+
+    if (g_tsf_mono_mode)
     {
-    int ch = (i & 1) ? 1 : 0; // stereo interleaved; TSF channel mix not separated; apply average channel scale by summing active voices? Simplify: use song-wide scale only.
-    (void)ch;
-    float sample = input[i] * XFIXED_TO_FLOAT(g_tsf_master_volume) * songVolumeScale;
-        if (sample > 1.0f) sample = 1.0f;
-        else if (sample < -1.0f) sample = -1.0f;
-        int32_t s = (int32_t)(sample * kScale);
-        s <<= OUTPUT_SCALAR; // match engine internal scaling
-        output[i] += s;
+        // Collapse stereo input to mono by averaging L and R and write a true single-channel
+        // PCM stream: one int32 result per frame (output[frame]). Caller/mixer must be
+        // configured to accept mono mixBuffer when g_tsf_mono_mode is enabled.
+        for (int32_t frame = 0; frame < frameCount; ++frame)
+        {
+            // TSF is configured to output mono floats when g_tsf_mono_mode is set,
+            // so the float buffer is [frameCount] long (one sample per frame).
+            float mono = input[frame] * masterVol * songVolumeScale;
+            if (mono > 1.0f) mono = 1.0f;
+            else if (mono < -1.0f) mono = -1.0f;
+            int32_t s = (int32_t)(mono * kScale);
+            s <<= OUTPUT_SCALAR; // match engine internal scaling
+            // Write single-channel PCM (one sample per frame)
+            output[frame] += s;
+        }
+    }
+    else
+    {
+        for (int32_t i = 0; i < frameCount * 2; i++)
+        {
+            float sample = input[i] * masterVol * songVolumeScale;
+            if (sample > 1.0f) sample = 1.0f;
+            else if (sample < -1.0f) sample = -1.0f;
+            int32_t s = (int32_t)(sample * kScale);
+            s <<= OUTPUT_SCALAR; // match engine internal scaling
+            output[i] += s;
+        }
+    }
+}
+
+void GM_TSF_SetStereoMode(XBOOL stereo, XBOOL applyNow) {
+    g_tsf_mono_mode = !stereo;
+    if (applyNow) {
+        tsf_set_output(g_tsf_soundfont, g_tsf_mono_mode ? TSF_MONO : TSF_STEREO_INTERLEAVED, g_tsf_sample_rate, 0.0f);
     }
 }
 
@@ -668,7 +717,8 @@ static void PV_TSF_AllocateMixBuffer(int32_t frameCount)
     PV_TSF_FreeMixBuffer();
     
     g_tsf_mix_buffer_frames = frameCount;
-    g_tsf_mix_buffer = (float*)XNewPtr(frameCount * 2 * sizeof(float)); // stereo
+    int channels = g_tsf_mono_mode ? 1 : 2;
+    g_tsf_mix_buffer = (float*)XNewPtr(frameCount * channels * sizeof(float));
 }
 
 static void PV_TSF_FreeMixBuffer(void)

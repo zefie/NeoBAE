@@ -51,6 +51,10 @@
 #include "gui_playlist.h" // for playlist panel functions
 #include "gui_panels.h"
 
+#if USE_SF2_SUPPORT == TRUE
+#include "GenTSF.h"
+#endif
+
 /* Forward-declare dialog renderer from gui_dialogs.c to avoid including the
     full header (which defines globals that conflict with this file's statics). */
 void render_about_dialog(SDL_Renderer *R, int mx, int my, bool mclick);
@@ -493,6 +497,11 @@ bool recreate_mixer_and_restore(int sampleRateHz, bool stereo, int reverbType,
     g_bae.bank_loaded = false;
     g_bae.bank_token = 0;
 
+    if (GM_TSF_IsActive())
+    {
+        GM_TSF_SetStereoMode(stereo, FALSE); // Don't apply now because we are going to apply next
+        GM_TSF_SetSampleRate(sampleRateHz);
+    }
     // Create new mixer
     g_bae.mixer = BAEMixer_New();
     if (!g_bae.mixer)
