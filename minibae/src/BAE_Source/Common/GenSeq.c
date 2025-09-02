@@ -371,6 +371,7 @@
 #include "X_Assert.h"
 #if USE_SF2_SUPPORT == TRUE
 #include "GenTSF.h"
+#include "MiniBAE.h"
 #endif
 
 #if ((defined(QUEUE_DEBUG) || defined(EVENT_DEBUG)) && X_PLATFORM != X_WIN95 && X_PLATFORM != X_WIN_HARDWARE && X_PLATFORM != X_IOS && X_PLATFORM != X_MACINTOSH)
@@ -1994,11 +1995,51 @@ static void PV_ProcessNoteOn(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTra
                 {
                     note += pSong->songPitchShift;
                 }
-
 #if USE_SF2_SUPPORT == TRUE
                 // If TSF is active for this song, route to TSF instead of normal synthesis
                 if (GM_IsTSFSong(pSong))
                 {
+                    if (pSong->songFlags == SONG_FLAG_IS_RMF) {
+                        INT16 thePatch = PV_ConvertPatchBank(pSong, note, MIDIChannel);
+                        uint32_t bankId = 0, progId = 0, noteId = 0;
+                        TranslateInstrumentToBankProgram(thePatch, &bankId, &progId, &noteId);
+                        /*
+                        XBOOL foundPatch = FALSE;
+                        for (uint32_t i = 1; i < pSong->RMFInstrumentIDs[0]; i++)
+                        {
+                            if (pSong->RMFInstrumentIDs[i] == thePatch)
+                            {
+                                // if the patch is found in the previously stored
+                                // RMF Instrument IDs, we can instantly return TRUE here
+                                foundPatch = TRUE;
+                                break;
+                            }
+                        }
+                        if (!foundPatch && ((thePatch >=  384 && thePatch < 512) || (thePatch >= 640 && thePatch < 768)))
+                        {
+                            // The patch ID matches a known beatnik percussion instrument
+                            // either MSB 1 or 2
+                            foundPatch = TRUE;
+                        }
+
+                        if (foundPatch) {
+                            pSong->channelType[MIDIChannel] = CHANNEL_TYPE_RMF;
+                        } else {
+                            pSong->channelType[MIDIChannel] = CHANNEL_TYPE_GM;
+                        }
+                        */
+                        if (bankId == 1 || bankId == 2) {
+                            // We know we are an RMF file so we don't have to worry
+                            // About GS compatiblity or whatnot, just assume banks
+                            // 1 and 2 are Beatnik Special
+                            pSong->channelType[MIDIChannel] = CHANNEL_TYPE_RMF;
+                        } else {
+                            pSong->channelType[MIDIChannel] = CHANNEL_TYPE_GM;
+                        }
+                        BAE_PRINTF("NoteOn Debug: Translated instrument %ld to bank %ld, program %ld, note %ld, channel %ld, RMF Mode: %s\n", thePatch, bankId, progId, noteId, MIDIChannel, (pSong->channelType[MIDIChannel] == CHANNEL_TYPE_RMF) ? "Yes" : "No");
+                    }
+                    
+
                     if (!GM_IsRMFChannel(pSong, MIDIChannel))
                     {
                         // Standard MIDI
@@ -2199,29 +2240,6 @@ void PV_ProcessController(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTrack,
     if (PV_IsMuted(pSong, MIDIChannel, currentTrack) == FALSE)
     {
 #if USE_SF2_SUPPORT == TRUE
-        // If TSF is active for this song, send controller to TSF, if its not an RMF channel
-        if (controler == 0) {
-            /*
-                0-127: MSB 0 (melodic)
-                128-255: MSB 0 (percussion)
-                256-383: MSB 1 (melodic)
-                384-511: MSB 1 (percussion)
-                512-639: MSB 2 (melodic)
-                640-767: MSB 2 (percussion)
-                If both are true (exists and is called), return true (use BAE)
-                else return false (use TSF).
-                For percussions return true automatically if any instrument
-                [128-256] [384-512] [640-768] exists and the percussion
-                is mapped to these MSBs (0/1/2)
-            */            
-            if (value == 2) {            
-                // TODO: Scan RMF for embedded instruments and handle them here
-                pSong->channelType[MIDIChannel] = CHANNEL_TYPE_RMF;
-                BAE_PRINTF("Setting channel %i as RMF Channel (controler: %i (MSB), value: %i)\n", MIDIChannel, controler, value);
-            } else {
-                pSong->channelType[MIDIChannel] = CHANNEL_TYPE_MIDI;
-            }
-        }
         if (GM_IsTSFSong(pSong) && !GM_IsRMFChannel(pSong, MIDIChannel))
         {
             GM_TSF_ProcessController(pSong, MIDIChannel, controler, value);

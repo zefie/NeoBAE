@@ -1,5 +1,4 @@
 BAE_API			:= SDL2
-DEBUG			:= 0
 
 include inc/Makefile.common
 
@@ -11,6 +10,11 @@ AR      	:= ar
 STRIP		:= strip
 
 OPTI            := -O2 -fPIC
+
+ifeq ($(DEBUG),1)
+    OPTI := -g -O0 -ggdb3 -fPIC
+endif
+
 CFLAGS  	:= $(ARCH) $(OPTI) $(INC_PATH) -D_THREAD_SAFE -Wno-unused-value
 
 ifneq ($(BAE_FLAGS),)
@@ -21,9 +25,13 @@ include inc/Makefile.versioning
 CFLAGS		+= -D_VERSION=\""$(VERSION)"\"
 
 
-LDFLAGS		:= $(ARCH) $(OPTI) -s
+LDFLAGS		:= $(ARCH) $(OPTI)
+ifneq ($(DEBUG),1)
+	LDFLAGS += -s
+endif
 
 LIBS	= 	-lpthread -lm -ldl
+
 
 UNAME_S:=$(shell uname -s 2>/dev/null)
 # System SDL for Linux (dynamic) if pkg-config available

@@ -266,6 +266,16 @@ extern "C"
         INFO_TYPE_COUNT // always count of type InfoType
     } BAEInfoType;
 
+    typedef struct {
+        uint32_t nextOffset;
+        char type[4]; // e.g., 'INST'
+        uint32_t id;
+        uint8_t nameLen;
+        char name[24];
+        uint32_t bodyLen;
+    } IREZResourceHeader;
+
+
     typedef enum
     {
         BAE_INVALID_TYPE = 0,
@@ -2525,6 +2535,28 @@ extern "C"
                                                     uint16_t program,
                                                     uint16_t channel,
                                                     uint16_t note);
+
+
+    // BAEUtil_TranslateBAEInstrumentID()
+    // ---------------------------------------
+    // Attempts to translate a BAE instrument ID into a MSB/LSB or MSB/Note (if percussive)
+    BAEResult TranslateInstrumentToBankProgram(uint32_t rmfInstId, uint32_t *bankId, uint32_t *progId, uint32_t *noteId);
+
+
+
+    // BAEUtil_GetRmfInstrumentList()
+    // --------------------------------------
+    // Enumerate INST resource IDs found in an RMF/IREZ image in memory (pRMFData must be an XFILE opened via
+    // XFileOpenResource or XFileOpenResourceFromMemory). If pOutInstruments is non-NULL, writes up to maxInstruments
+    // IDs into that array. pOutNumInstruments receives the total INST resources discovered (may exceed maxInstruments).
+    // Pass pOutInstruments = NULL and maxInstruments = 0 to only count. songIndex currently ignored (reserved for
+    // possible future filtering based on SONG resource references).
+    BAEResult BAEUtil_GetRmfInstrumentList(void *pRMFData,
+                                           uint32_t rmfSize,
+                                           int16_t songIndex,
+                                           uint32_t *pOutInstruments,
+                                           uint32_t maxInstruments,
+                                           uint32_t *pOutNumInstruments);
 
     // BAEUtil_GetRmfSongInfoFromFile()
     // --------------------------------------

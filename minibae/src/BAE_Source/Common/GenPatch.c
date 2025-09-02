@@ -242,6 +242,7 @@
 
 #if USE_SF2_SUPPORT == TRUE
 #include "GenTSF.h"
+#include "MiniBAE.h"
 #endif
 
 #define DEBUG_DISPLAY_PATCHES   1

@@ -67,6 +67,8 @@ void GM_TSF_AllNotesOffChannel(GM_Song* pSong, int16_t channel);
 // Force immediate silence (drop sustain, end or quick-end all active voices). Used for pause.
 void GM_TSF_SilenceSong(GM_Song* pSong);
 
+void GM_TSF_StoreRMFInstrumentIDs(uint32_t* rmf_instrumentIDs);
+
 // TSF configuration
 void GM_TSF_SetMasterVolume(XFIXED volume);
 XFIXED GM_TSF_GetMasterVolume(void);

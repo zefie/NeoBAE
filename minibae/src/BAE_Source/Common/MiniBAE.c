@@ -209,7 +209,7 @@ static SongResource *PV_FallbackFindSongInRMFMemory(void *data, uint32_t totalLe
     }
     uint32_t nextOffset = 12; // start after map header
     int songFoundCount = 0;
-    for (uint32_t resIndex = 0; resIndex < resourceCount; ++resIndex)
+    for (uint32_t resIndex = 0; resIndex < resourceCount; resIndex++)
     {
         if (nextOffset + 16 > totalLen)
         {
@@ -7195,11 +7195,24 @@ BAEResult BAESong_LoadRmfFromMemory(BAESong song, void *pRMFData, uint32_t rmfSi
                             // things are cool
                             GM_SetDisposeSongDataWhenDoneFlag(pSong, TRUE); // dispose of midi data
                             GM_SetSongLoopFlag(pSong, FALSE);               // don't loop song
+#if USE_SF2_SUPPORT == TRUE
+                            uint32_t instBuf[MAX_INSTRUMENTS];
+                            uint32_t totalInst = 0;
+                            BAEUtil_GetRmfInstrumentList(fileRef, rmfSize, songIndex, instBuf, MAX_INSTRUMENTS, &totalInst);
+                            pSong->RMFInstrumentIDs[0] = totalInst; // Store count first
+                            for (uint32_t i = 1; i <= totalInst; i++)
+                            {
+                                pSong->RMFInstrumentIDs[i] = instBuf[i-1];
+                            }
+                            BAE_PRINTF("Found %u Instruments in RMF (stored=%u)\n", totalInst, (unsigned)XMIN(totalInst, MAX_INSTRUMENTS));
+                            for (uint32_t i = 1; i <= totalInst; i++) {
+                                BAE_PRINTF("    %u - INST: %u\n", i, pSong->RMFInstrumentIDs[i]);
+                            }
+                                                    pSong->songFlags = SONG_FLAG_IS_RMF;
+                            if (GM_TSF_IsActive()) { GM_EnableTSFForSong(pSong, TRUE); }
+#endif
                             song->pSong = pSong;                            // preserve for use later
                             GM_SetVelocityCurveType(song->pSong, (VelocityCurveType)g_defaultVelocityCurve);
-#if USE_SF2_SUPPORT == TRUE
-                            if (GM_TSF_IsActive()) { GM_EnableTSFForSong(song->pSong, TRUE); }
-#endif
                         }
                         else
                         {
@@ -7284,6 +7297,40 @@ BAEResult BAESong_LoadRmfFromMemory(BAESong song, void *pRMFData, uint32_t rmfSi
 #endif // #if USE_FULL_RMF_SUPPORT == TRUE
 }
 
+#if USE_SF2_SUPPORT == TRUE
+// Forward declaration
+// Enumerate INST resource IDs in an RMF/IREZ image. If pOutInstruments is non-NULL, up to maxInstruments
+// IDs are written into that array. pOutNumInstruments always receives the total number of INST resources
+// discovered (may be > maxInstruments causing truncation). Pass pOutInstruments=NULL to just count.
+BAEResult BAEUtil_GetRmfInstrumentList(void *pRMFData, uint32_t rmfSize, int16_t songIndex,
+                                       uint32_t *pOutInstruments, uint32_t maxInstruments,
+                                       uint32_t *pOutNumInstruments);
+
+BAEResult TranslateInstrumentToBankProgram(uint32_t rmfInstId, uint32_t *bankId, uint32_t *progId, uint32_t *noteId)
+{
+    unsigned int multiplier = (rmfInstId / 128);
+    unsigned int bank = (multiplier * 128) / 256;
+    unsigned int program = rmfInstId - (multiplier * 128);
+
+    if (
+        (rmfInstId >= 128 && rmfInstId < 256) ||
+        (rmfInstId >= 384 && rmfInstId < 512) ||
+        (rmfInstId >= 640 && rmfInstId < 768)
+    )
+    {
+        // percussion
+        *bankId = (bank > 0) ? bank : 128;
+        *progId = 0;
+        *noteId = program;
+    } else {
+        *bankId = bank;
+        *progId = program;
+        *noteId = 0;
+    }
+    return BAE_NO_ERROR;
+}
+#endif
+
 // BAESong_LoadRmfFromFile()
 // --------------------------------------
 //
@@ -7297,6 +7344,8 @@ BAEResult BAESong_LoadRmfFromFile(BAESong song, BAEPathName filePath, int16_t so
     GM_Song *pSong;
     OPErr theErr;
     XLongResourceID theID;
+    BAE_INSTRUMENT rmfInstruments;
+    unsigned int rmfInstrumentCount = 0;
     int32_t size;
 
     theErr = NO_ERR;
@@ -7332,6 +7381,28 @@ BAEResult BAESong_LoadRmfFromFile(BAESong song, BAEPathName filePath, int16_t so
                                         &theErr);
                     if (pSong)
                     {
+#if USE_SF2_SUPPORT == TRUE
+                        uint32_t instBuf[MAX_INSTRUMENTS];
+                        uint32_t totalInst = 0;
+                        uint32_t fileSize = (uint32_t)XFileGetLength(fileRef);
+                        BAEUtil_GetRmfInstrumentList(fileRef, fileSize, songIndex, instBuf, MAX_INSTRUMENTS, &totalInst);
+                        BAE_PRINTF("pSong = %p\n", pSong);
+                        BAE_PRINTF("instBuf[0] = %d\n", instBuf[0]);
+                        if (!pSong->RMFInstrumentIDs) {
+                            return BAE_MEMORY_ERR;
+                        }
+
+                        pSong->RMFInstrumentIDs[0] = totalInst; // Store count first
+                        for (uint32_t i = 1; i <= totalInst; i++)
+                        {
+                            pSong->RMFInstrumentIDs[i] = instBuf[i-1];
+                        }
+                        BAE_PRINTF("Found %u Instruments in RMF (stored=%u)\n", totalInst, (unsigned)XMIN(totalInst, MAX_INSTRUMENTS));
+                        for (uint32_t i = 1; i <= totalInst; i++) {
+                            BAE_PRINTF("    %u - INST: %u\n", i, pSong->RMFInstrumentIDs[i]);
+                        }
+                        pSong->songFlags = SONG_FLAG_IS_RMF;
+#endif
                         // things are cool
                         GM_SetDisposeSongDataWhenDoneFlag(pSong, TRUE); // dispose of midi data
                         GM_SetSongLoopFlag(pSong, FALSE);               // don't loop song
@@ -7346,7 +7417,7 @@ BAEResult BAESong_LoadRmfFromFile(BAESong song, BAEPathName filePath, int16_t so
                         // need to re-initialize
                         PV_BAESong_InitLiveSong(song, FALSE);
                         theErr = BAD_FILE;
-                    }
+                    }                    
                 }
                 else
                 {
@@ -9653,6 +9724,64 @@ BAEResult BAEUtil_GetRmfSongInfoFromFile(BAEPathName filePath, int16_t songIndex
     return BAE_NOT_SETUP;
 #endif
 }
+
+#if USE_SF2_SUPPORT == TRUE
+// BAEUtil_GetRmfInstrumentList()
+// --------------------------------------
+//
+// Gets the list of instruments used by the RMF
+BAEResult BAEUtil_GetRmfInstrumentList(void *pRMFData, uint32_t rmfSize, int16_t songIndex,
+                                       uint32_t *pOutInstruments, uint32_t maxInstruments,
+                                       uint32_t *pOutNumInstruments)
+{
+    (void)songIndex; // current implementation ignores song filtering; could refine later
+    if (!pRMFData || rmfSize < 12 || !pOutNumInstruments) return BAE_PARAM_ERR;
+
+    XFILE fileRef = (XFILE)pRMFData; // caller must pass actual XFILE (not &fileRef)
+    char *rmfData = (char *)XNewPtr(rmfSize);
+    if (!rmfData) return BAE_MEMORY_ERR;
+    XFileSetPosition(fileRef, 0);
+
+    if (XFileRead(fileRef, rmfData, (int32_t)rmfSize) != 0) {
+        XDisposePtr(rmfData);
+        return BAE_FILE_IO_ERROR;
+    }
+    if (memcmp(rmfData, "IREZ", 4) != 0) {
+        XDisposePtr(rmfData);
+        return BAE_PARAM_ERR;
+    }
+
+    const uint8_t headerMaxLen = 24;
+    uint32_t numResources = (rmfData[8] << 24) | (rmfData[9] << 16) | (rmfData[10] << 8) | rmfData[11];
+    uint32_t instrumentCount = 0;
+    size_t offset = 12;
+
+    // big-endian 32-bit reader (avoid sign extension)
+#define READ_BE32(p) (((uint32_t)(uint8_t)(p)[0] << 24) | ((uint32_t)(uint8_t)(p)[1] << 16) | ((uint32_t)(uint8_t)(p)[2] << 8) | (uint32_t)(uint8_t)(p)[3])
+    for (uint32_t i = 0; i < numResources && offset + 13 <= rmfSize; i++) {
+        if (offset + 13 > rmfSize) break;
+        uint32_t nextOffset = READ_BE32(&rmfData[offset]);
+        char type[5]; memcpy(type, &rmfData[offset + 4], 4); type[4] = '\0';
+        uint32_t id = READ_BE32(&rmfData[offset + 8]);
+        uint8_t nameLen = (uint8_t)rmfData[offset + 12];
+        size_t bodyLenOffset = offset + 13 + nameLen;
+        if (nameLen >= headerMaxLen || bodyLenOffset + 4 > rmfSize) break;
+        uint32_t bodyLen = READ_BE32(&rmfData[bodyLenOffset]); (void)bodyLen;
+        if (type[0]=='I' && type[1]=='N' && type[2]=='S' && type[3]=='T') {
+            if (pOutInstruments && instrumentCount < maxInstruments) pOutInstruments[instrumentCount] = id;
+            instrumentCount++;
+        }
+        if (nextOffset == 0xFFFFFFFF) break;
+        if (nextOffset <= offset || nextOffset > rmfSize) break;
+        offset = nextOffset;
+    }
+#undef READ_BE32
+
+    *pOutNumInstruments = instrumentCount; // total discovered (may exceed maxInstruments)
+    XDisposePtr(rmfData);
+    return BAE_NO_ERROR;
+}
+#endif
 
 // BAEUtil_GetRmfSongInfo()
 // --------------------------------------

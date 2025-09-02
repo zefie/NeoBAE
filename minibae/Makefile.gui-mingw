@@ -1,6 +1,6 @@
 BAE_BUILT_IN_PATCHES	:= 1
 BAE_API			:= SDL2
-DEBUG			:= 0
+
 BUILD_GUI   	:= 1
 WINDOWS 		:= 1
 ifneq ($(NOAUTO),1)
@@ -30,7 +30,11 @@ DLLTOOL		:= $(CROSS)dlltool
 WINDRES		:= $(CROSS)windres
 
 OPTI            := -O2 -fPIC
+ifeq ($(DEBUG),1)
+    OPTI := -g -O0 -ggdb3 -fPIC
+endif
 CFLAGS  	:= $(ARCH) $(OPTI) $(INC_PATH) -D_THREAD_SAFE -DEMBED_FONT_TTF -Wno-unused-value
+
 
 
 ifneq ($(ENABLE_MIDI_HW),)
@@ -46,7 +50,10 @@ include inc/Makefile.versioning
 CFLAGS		+= -D_VERSION=\""$(VERSION)"\"
 
 CXXFLAGS 	:= $(CFLAGS)
-LDFLAGS		:= $(ARCH) $(OPTI) -s
+LDFLAGS		:= $(ARCH) $(OPTI)
+ifneq ($(DEBUG),1)
+	LDFLAGS += -s
+endif
 ifeq ($(BITS),32)
 CFLAGS  += -I../SDL2-2.32.8/i686-w64-mingw32/include -I../SDL2-2.32.8/i686-w64-mingw32/include/SDL2 -I../SDL2_ttf-2.24.0/i686-w64-mingw32/include
 CXXFLAGS  += -I../SDL2-2.32.8/i686-w64-mingw32/include -I../SDL2-2.32.8/i686-w64-mingw32/include/SDL2 -I../SDL2_ttf-2.24.0/i686-w64-mingw32/include

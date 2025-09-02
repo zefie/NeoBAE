@@ -667,7 +667,7 @@ extern "C"
 #include "X_PackStructures.h"
 
 #if USE_SF2_SUPPORT == TRUE
-#define CHANNEL_TYPE_MIDI 1
+#define CHANNEL_TYPE_GM 1
 #define CHANNEL_TYPE_RMF 2
 #endif
 
@@ -1071,7 +1071,8 @@ typedef int32_t UNIT_TYPE;
     // Song flags for TSF integration
     enum
     {
-        SONG_FLAG_USE_TSF = 0x00000001  // Song should use TSF for SF2 rendering
+        SONG_FLAG_USE_TSF = 0x00000001,  // Song should use TSF for SF2 rendering
+        SONG_FLAG_IS_RMF  = 0x00000002   // Song is in RMF format
     };
 #endif
 
@@ -1260,6 +1261,7 @@ typedef int32_t UNIT_TYPE;
         // TSF (TinySoundFont) integration support
         void *tsfInfo;                   // Pointer to GM_TSFInfo structure when TSF is active
         XDWORD songFlags;                // Song flags including SONG_FLAG_USE_TSF
+        XDWORD RMFInstrumentIDs[MAX_INSTRUMENTS+1];
         XBYTE channelBankMSB[MAX_CHANNELS];  // Bank MSB values for TSF program changes
         XBYTE channelBankLSB[MAX_CHANNELS];  // Bank LSB values for TSF program changes
 #endif
