@@ -1997,7 +1997,7 @@ static void PV_ProcessNoteOn(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTra
                 }
 #if USE_SF2_SUPPORT == TRUE
                 // If TSF is active for this song, route to TSF instead of normal synthesis
-                if (GM_IsTSFSong(pSong))
+                if (GM_IsTSFSong(pSong) && pSong->channelBankMSB[MIDIChannel] != 2 && GM_IsRMFChannel(pSong, MIDIChannel) == FALSE)
                 {
                     if (pSong->songFlags == SONG_FLAG_IS_RMF) {
                         INT16 thePatch = PV_ConvertPatchBank(pSong, note, MIDIChannel);
