@@ -2184,21 +2184,18 @@ INLINE static void PV_ServeInstruments(void)
     register GM_Mixer *pMixer;
     register LOOPCOUNT count;
     register GM_Voice *pVoice;
-    XBOOL someSoundActive;
 
     pMixer = MusicGlobals;
 #if REVERB_USED == VARIABLE_REVERB
     if (GM_IsReverbFixed() == FALSE)
     {
         // Process all active voices in the full-featured variable reverb case.
-        someSoundActive = FALSE;
         for (count = 0; count < (pMixer->MaxNotes + pMixer->MaxEffects); count++)
         {
             pVoice = &pMixer->NoteEntry[count];
             if (pVoice->voiceMode != VOICE_UNUSED)
             {
                 PV_ServeThisInstrument(pVoice);
-                someSoundActive = TRUE;
             }
         }
 #if USE_SF2_SUPPORT == TRUE
@@ -2225,7 +2222,6 @@ INLINE static void PV_ServeInstruments(void)
     {
         // Process active voices for the inexpensive reverb cases:
         // Notes with reverb on are processed first, then the reverb unit, then the dry notes.
-        someSoundActive = FALSE;
         for (count = 0; count < (pMixer->MaxNotes + pMixer->MaxEffects); count++)
         {
             pVoice = &pMixer->NoteEntry[count];
@@ -2234,7 +2230,6 @@ INLINE static void PV_ServeInstruments(void)
                 if (pVoice->avoidReverb == FALSE)
                 {
                     PV_ServeThisInstrument(pVoice);
-                    someSoundActive = TRUE;
                 }
             }
         }
@@ -2265,7 +2260,6 @@ INLINE static void PV_ServeInstruments(void)
                 if (pVoice->avoidReverb != FALSE)
                 {
                     PV_ServeThisInstrument(pVoice);
-                    someSoundActive = TRUE;
                 }
             }
         }
@@ -3163,7 +3157,6 @@ void PV_StartMIDINote(GM_Song *pSong, INT16 the_instrument,
     register INT32 i, j;
     INT32 volume32;
     INT32 sampleNumber;
-    XSWORD priority;
 
     pMixer = GM_GetCurrentMixer();
 
@@ -3173,8 +3166,6 @@ void PV_StartMIDINote(GM_Song *pSong, INT16 the_instrument,
         // is 0, then don't bother starting a note.
         return;
     }
-    // get synth priority to determine note stealing
-    priority = pSong->songPriority;
 
     // scale with default velocity curve
     Volume = PV_ModifyVelocityFromCurve(pSong, Volume);
@@ -4069,19 +4060,19 @@ void GM_DisplayVoiceData(void)
         pVoice = &pMixer->NoteEntry[count];
         if (pVoice->voiceMode != VOICE_UNUSED)
         {
-            BAE_PRINTF("### Voice %ld\n", count);
+            BAE_PRINTF("### Voice %d\n", count);
             BAE_PRINTF("    voiceMode %d\n", pVoice->voiceMode);
-            BAE_PRINTF("    voiceStartTimeStamp %ld\n", pVoice->voiceStartTimeStamp);
+            BAE_PRINTF("    voiceStartTimeStamp %d\n", pVoice->voiceStartTimeStamp);
             BAE_PRINTF("    pSong %p\n", pVoice->pSong);
             BAE_PRINTF("    pInstrument %p\n", pVoice->pInstrument);
             BAE_PRINTF("    NoteChannel %d\n", pVoice->NoteChannel);
             BAE_PRINTF("    NoteMIDIPitch %d\n", pVoice->NoteMIDIPitch);
             BAE_PRINTF("    sustainMode %d\n", pVoice->sustainMode);
             BAE_PRINTF("    NoteVolumeEnvelope %d\n", pVoice->NoteVolumeEnvelope);
-            BAE_PRINTF("    NoteVolume %ld\n", pVoice->NoteVolume);
+            BAE_PRINTF("    NoteVolume %d\n", pVoice->NoteVolume);
             BAE_PRINTF("    NoteMIDIVolume %d\n", pVoice->NoteMIDIVolume);
-            BAE_PRINTF("    NoteProgram %ld\n", pVoice->NoteProgram);
-            BAE_PRINTF("    volumeADSRRecord.sustainingDecayLevel %ld\n", pVoice->volumeADSRRecord.sustainingDecayLevel);
+            BAE_PRINTF("    NoteProgram %d\n", pVoice->NoteProgram);
+            BAE_PRINTF("    volumeADSRRecord.sustainingDecayLevel %i\n", pVoice->volumeADSRRecord.sustainingDecayLevel);
             BAE_PRINTF("###\n");
         }
     }

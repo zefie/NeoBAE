@@ -438,9 +438,7 @@ static void PV_ScaleDivision(GM_Song *pSong, UFLOAT div)
 void PV_ResetControlers(GM_Song *pSong, INT16 channel2Reset, XBOOL completeReset)
 {
     register LOOPCOUNT count, max, start;
-    register XBOOL generateStereoOutput;
 
-    generateStereoOutput = MusicGlobals->generateStereoOutput; // cache this
     if (channel2Reset == -1)
     {
         // do all channels
@@ -837,7 +835,6 @@ void GM_PauseSong(GM_Song *pSong, XBOOL endVoices)
             {
                 for (int i = 0; i < MAX_CHANNELS; i++)
                 {
-                    if (pSong->channelActiveNotes[i])
                     for (int note = 0; note < 128; ++note)
                     {
                         if (pSong->channelActiveNotes[i][note])
@@ -2047,7 +2044,7 @@ static void PV_ProcessNoteOn(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTra
                         } else {
                             pSong->channelType[MIDIChannel] = CHANNEL_TYPE_GM;
                         }
-                        BAE_PRINTF("NoteOn Debug: Translated instrument %ld to bank %ld, program %ld, note %ld, channel %ld, RMF Mode: %s\n", thePatch, bankId, progId, noteId, MIDIChannel, (pSong->channelType[MIDIChannel] == CHANNEL_TYPE_RMF) ? "Yes" : "No");
+                        BAE_PRINTF("NoteOn Debug: Translated instrument %d to bank %d, program %d, note %d, channel %d, RMF Mode: %s\n", thePatch, bankId, progId, noteId, MIDIChannel, (pSong->channelType[MIDIChannel] == CHANNEL_TYPE_RMF) ? "Yes" : "No");
                     }
                     
 

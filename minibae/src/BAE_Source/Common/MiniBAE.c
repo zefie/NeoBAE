@@ -1055,11 +1055,13 @@ BAEResult BAE_GetDefaultVelocityCurve(int *outCurveType)
 BAEMixer BAEMixer_New(void)
 {
     BAEMixer mixer;
+/*
     char c;
 
     // must reference these so they stay linked
     c = mCopyright[0];
     c = mAboutNames[0];
+*/
 
     mixer = (BAEMixer)XNewPtr(sizeof(struct sBAEMixer));
     if (mixer)
@@ -3362,11 +3364,10 @@ BAEResult BAEMixer_StartOutputToFile(BAEMixer theMixer,
 #if USE_CREATION_API == TRUE
     OPErr theErr;
     XFILENAME theFile;
-
+    BAEResult err;
     // begin block added for MiniBAE 11/29/00 tom
     BAEAudioModifiers theModifiers;
     BAERate theRate;
-    BAEResult err;
     // end block added for MiniBAE
 
 #if DUMP_OUTPUTFILE
@@ -3379,10 +3380,18 @@ BAEResult BAEMixer_StartOutputToFile(BAEMixer theMixer,
 
     // begin block added for MiniBAE  11/28/00  tom
     err = BAEMixer_GetModifiers(theMixer, &theModifiers);
+    if (err != BAE_NO_ERROR)
+    {
+        return err;
+    }
     err = BAEMixer_GetRate(theMixer, &theRate);
+    if (err != BAE_NO_ERROR)
+    {
+        return err;
+    }
     // end block added for MiniBAE
 
-    theErr = NO_ERR;
+    theErr = BAE_NO_ERROR;
 
     // close old one first
     if (mWritingToFile)
@@ -3822,7 +3831,6 @@ BAEResult BAEMixer_ServiceAudioOutputToFile(BAEMixer theMixer)
 #if USE_MPEG_ENCODER != FALSE
                 case BAE_MPEG_TYPE:
                 {
-                    static uint32_t g_mpeg_service_calls = 0;
                     XPTR compressedData = NULL;
                     XDWORD compressedLength = 0;
                     XBOOL isDone = FALSE;
@@ -5199,11 +5207,9 @@ BAEResult BAESound_GetSamplePlaybackPosition(BAESound sound, uint32_t *outPos)
 
 void *BAESound_GetSamplePlaybackPointer(BAESound sound, uint32_t *outLength)
 {
-    OPErr err;
     void *sampleData;
 
     sampleData = NULL;
-    err = NO_ERR;
     if ((sound) && (sound->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(sound->mLock);
@@ -5215,16 +5221,19 @@ void *BAESound_GetSamplePlaybackPointer(BAESound sound, uint32_t *outLength)
                 sampleData = sound->pWave->theWaveform;
             }
         }
+/*
         else
         {
             err = PARAM_ERR;
         }
+*/
         BAE_ReleaseMutex(sound->mLock);
     }
-    else
+/*    else
     {
         err = NULL_OBJECT;
     }
+*/  
     // BAE_TranslateOPErr(err);
     return sampleData;
 }
@@ -5786,10 +5795,7 @@ BAEResult BAEStream_SetLoopFlag(BAEStream stream, BAE_BOOL loop)
 
 BAEResult BAEStream_GetLoopFlag(BAEStream stream, BAE_BOOL *outLoop)
 {
-    BAE_BOOL loop;
     OPErr err;
-
-    loop = FALSE;
     err = NO_ERR;
     if (stream)
     {
@@ -7347,8 +7353,6 @@ BAEResult BAESong_LoadRmfFromFile(BAESong song, BAEPathName filePath, int16_t so
     GM_Song *pSong;
     OPErr theErr;
     XLongResourceID theID;
-    BAE_INSTRUMENT rmfInstruments;
-    unsigned int rmfInstrumentCount = 0;
     int32_t size;
 
     theErr = NO_ERR;
@@ -8090,10 +8094,10 @@ BAEResult BAESong_NoteOnWithLoad(BAESong song,
 {
     BAE_INSTRUMENT inst;
     unsigned char program, bank;
-    BAEMixer mixer;
+    BAEMixer mixer = NULL;
     OPErr err;
     BAE_BOOL isLoaded;
-    uint32_t latency;
+    uint32_t latency = 0;
 
     err = NO_ERR;
     if ((song) && (song->mID == OBJECT_ID))
@@ -9636,7 +9640,6 @@ BAEResult BAEUtil_GetInfoSizeFromFile(BAEPathName filePath,
     {
         XFILE fileRef;
         XFILENAME name;
-        OPErr theErr;
         XLongResourceID theID;
 
         theErr = NO_ERR;
@@ -9686,7 +9689,6 @@ BAEResult BAEUtil_GetRmfSongInfoFromFile(BAEPathName filePath, int16_t songIndex
     {
         XFILE fileRef;
         XFILENAME name;
-        OPErr theErr;
         XLongResourceID theID;
 
         theErr = NO_ERR;

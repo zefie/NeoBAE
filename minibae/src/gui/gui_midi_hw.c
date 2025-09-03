@@ -119,7 +119,6 @@ bool g_pcm_wav_disengaged_audio = false;
 
 #if USE_FLAC_ENCODER != FALSE
 // FLAC recording state
-static void *g_pcm_flac_encoder = NULL;
 static void *g_pcm_flac_accumulated_samples = NULL;
 static uint32_t g_pcm_flac_accumulated_frames = 0;
 static uint32_t g_pcm_flac_max_accumulated_frames = 0;

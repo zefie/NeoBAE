@@ -848,7 +848,7 @@ static void *export_thread_proc(void *param)
 
         if (is_done)
         {
-            BAE_PRINTF("Song finished at position %lu\n", current_pos);
+            BAE_PRINTF("Song finished at position %u\n", current_pos);
 
             // Always add a small drain period to ensure all audio is captured
             // This helps prevent cutting off the end of notes

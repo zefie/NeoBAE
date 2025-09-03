@@ -31,9 +31,6 @@ extern bool g_show_virtual_keyboard;
 extern int g_exportCodecIndex;
 extern int g_window_h;
 
-// External function we need
-extern void get_executable_directory(char *dir, size_t size);
-
 Settings load_settings(void)
 {
     Settings settings = {0};
@@ -692,11 +689,11 @@ void render_settings_dialog(SDL_Renderer *R, int mx, int my, bool mclick, bool m
                         {
                             char full[192];
                             snprintf(full, sizeof(full), "%s: %s", apiName, buf);
-                            strncpy(g_midi_device_name_cache[g_midi_device_count], full, sizeof(g_midi_device_name_cache[g_midi_device_count]) - 1);
+                            safe_strncpy(g_midi_device_name_cache[g_midi_device_count], full, sizeof(g_midi_device_name_cache[g_midi_device_count]) - 1);
                         }
                         else
                         {
-                            strncpy(g_midi_device_name_cache[g_midi_device_count], buf, sizeof(g_midi_device_name_cache[g_midi_device_count]) - 1);
+                            safe_strncpy(g_midi_device_name_cache[g_midi_device_count], buf, sizeof(g_midi_device_name_cache[g_midi_device_count]) - 1);
                         }
                         g_midi_device_name_cache[g_midi_device_count][sizeof(g_midi_device_name_cache[g_midi_device_count]) - 1] = '\0';
                         g_midi_device_api[g_midi_device_count] = ai;
@@ -736,11 +733,11 @@ void render_settings_dialog(SDL_Renderer *R, int mx, int my, bool mclick, bool m
                         {
                             char full[192];
                             snprintf(full, sizeof(full), "%s: %s", apiName, buf);
-                            strncpy(g_midi_device_name_cache[g_midi_device_count], full, sizeof(g_midi_device_name_cache[g_midi_device_count]) - 1);
+                            safe_strncpy(g_midi_device_name_cache[g_midi_device_count], full, sizeof(g_midi_device_name_cache[g_midi_device_count]) - 1);
                         }
                         else
                         {
-                            strncpy(g_midi_device_name_cache[g_midi_device_count], buf, sizeof(g_midi_device_name_cache[g_midi_device_count]) - 1);
+                            safe_strncpy(g_midi_device_name_cache[g_midi_device_count], buf, sizeof(g_midi_device_name_cache[g_midi_device_count]) - 1);
                         }
                         g_midi_device_name_cache[g_midi_device_count][sizeof(g_midi_device_name_cache[g_midi_device_count]) - 1] = '\0';
                         g_midi_device_api[g_midi_device_count] = ai;

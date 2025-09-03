@@ -91,6 +91,11 @@ bool recreate_mixer_and_restore(int sampleRateHz, bool stereo, int reverbType,
 bool load_bank(const char *path, bool current_playing_state, int transpose, int tempo, int volume, bool loop_enabled, int reverb_type, bool ch_enable[16], bool save_to_settings);
 bool load_bank_simple(const char *path, bool save_to_settings, int reverb_type, bool loop_enabled);
 
+void safe_strncpy(char *dst, const char *src, size_t size) {
+    strncpy(dst, src, size - 1);
+    dst[size - 1] = '\0';
+}
+
 // Helper function to update MSB/LSB display values based on current channel's bank settings
 void update_msb_lsb_for_channel(void)
 {
@@ -399,14 +404,6 @@ extern bool g_msb_tooltip_visible;
 extern Rect g_msb_tooltip_rect;
 extern char g_msb_tooltip_text[520];
 
-// WAV export state
-
-static const uint32_t EXPORT_MPEG_STABLE_THRESHOLD = 8; // matches playbae heuristic
-// When true the export is using the lightweight live song (driven by MIDI in) instead of a loaded file
-
-// Panic helper: aggressively silence all voices for a given BAESong.
-// Sends Sustain Off (CC64=0), All Sound Off (CC120), All Notes Off (CC123),
-// and explicit NoteOff for every channel/note.
 // Map integer Hz to BAERate enum (subset offered in UI)
 static BAERate map_rate_from_hz(int hz)
 {
@@ -465,7 +462,6 @@ bool recreate_mixer_and_restore(int sampleRateHz, bool stereo, int reverbType,
     char last_song_path[1024];
     last_song_path[0] = '\0';
     bool had_song = g_bae.song_loaded;
-    bool was_audio = g_bae.is_audio_file;
     bool was_playing = g_bae.is_playing;
     int pos_ms = 0;
     if (had_song)
@@ -1017,11 +1013,9 @@ int main(int argc, char *argv[])
     Uint32 lastTick = SDL_GetTicks();
     bool mdown = false;
     bool mclick = false;
-    bool rdown = false;  // right mouse button down
     bool rclick = false; // right mouse button click
     int mx = 0, my = 0;
     int last_drag_progress = -1;      // Track last dragged position to avoid repeated seeks
-    int last_wave_drag_progress = -1; // Track waveform drag seek to avoid repeated seeks while holding
 
     while (running)
     {
@@ -1127,10 +1121,6 @@ int main(int argc, char *argv[])
                 {
                     mdown = true;
                 }
-                else if (e.button.button == SDL_BUTTON_RIGHT)
-                {
-                    rdown = true;
-                }
                 break;
             case SDL_MOUSEBUTTONUP:
                 if (e.button.button == SDL_BUTTON_LEFT)
@@ -1145,7 +1135,6 @@ int main(int argc, char *argv[])
                 }
                 else if (e.button.button == SDL_BUTTON_RIGHT)
                 {
-                    rdown = false;
                     rclick = true;
                 }
                 break;
@@ -1654,7 +1643,6 @@ int main(int argc, char *argv[])
                     {
                         UiLayout L;
                         compute_ui_layout(&L);
-                        Rect transportPanel = L.transportPanel;
                         Rect chanDD = L.chanDD;
                         Rect ddRect = L.ddRect;
                         int reverbCount = get_reverb_count();
@@ -1928,7 +1916,6 @@ int main(int argc, char *argv[])
                     if (midi_sz >= 2)
                     {
                         unsigned char program = midi_buf[1];
-                        unsigned char bank = g_midi_bank_msb[mch];
                         // Program changes are applied even when channel is muted so the instrument
                         // will be correct when unmuted.
                         {
@@ -2206,7 +2193,6 @@ int main(int argc, char *argv[])
         int playlistPanelY = statusY;
         statusY += playlistPanelHeight + 10; // Move status down by playlist height + gap
         Rect playlistPanel = {10, playlistPanelY, 880, playlistPanelHeight};
-        bool showPlaylist = true; // Always show playlist
 #endif
         int neededH = statusY + 115; // status panel + bottom padding
         if (neededH != g_window_h)
@@ -2429,9 +2415,6 @@ int main(int argc, char *argv[])
                 int gw = meterW - (innerPad * 2);
                 for (int yoff = 0; yoff < fillH; yoff++)
                 {
-                    float t = (float)yoff / (float)(innerH > 0 ? innerH : 1); // 0..1 from bottom
-                    // reverse so bottom is t=0
-                    t = (float)yoff / (float)(innerH > 0 ? innerH : 1);
                     // map to gradient from green->yellow->red based on relative height
                     float frac = (float)yoff / (float)(innerH > 0 ? innerH : 1);
                     SDL_Color col;
@@ -2881,7 +2864,6 @@ int main(int argc, char *argv[])
         {
             // Reset when not dragging
             last_drag_progress = -1;
-            last_wave_drag_progress = -1;
         }
 
         // Time display (add milliseconds to current position)
@@ -3243,7 +3225,6 @@ int main(int argc, char *argv[])
                     {
                         waveform_preview_ms = computed_ms;
                         progress = waveform_preview_ms; // show preview position in UI
-                        last_wave_drag_progress = waveform_preview_ms;
                     }
                 }
                 else if (!mdown)
@@ -3278,7 +3259,6 @@ int main(int argc, char *argv[])
                     }
                     // Reset preview state when not dragging
                     waveform_preview_ms = -1;
-                    last_wave_drag_progress = -1;
                 }
 
                 // Draw a playhead indicator for the preview or current position
@@ -3517,11 +3497,8 @@ int main(int argc, char *argv[])
             if (whiteCount < 1)
                 whiteCount = 1;
             float whiteWf = (float)kbW / whiteCount;
-            int whiteW = (int)whiteWf;
-            float accum = 0;
             // First pass draw white keys
             int wIndex = 0;
-            int whiteX = kbX;
             int mouseNoteCandidateWhite = -1;
             int mouseNoteCandidateBlack = -1; // track hover note (black wins)
             for (int n = firstNote; n <= lastNote; n++)
@@ -4387,18 +4364,15 @@ int main(int argc, char *argv[])
 
                                 // Map selected format to BAE types using helper function
                                 BAECompressionType compression = BAE_COMPRESSION_NONE;
-                                int selectedCodecIndex = 0; // for UI state
                                 MidiRecordFormatInfo format_info = get_midi_record_format_info(g_midiRecordFormatIndex);
 
                                 if (format_info.type == MIDI_RECORD_FORMAT_WAV)
                                 {
-                                    selectedCodecIndex = 0; // WAV
                                     compression = BAE_COMPRESSION_NONE;
                                 }
 #if USE_FLAC_ENCODER != FALSE
                                 else if (format_info.type == MIDI_RECORD_FORMAT_FLAC)
                                 {
-                                    selectedCodecIndex = 1; // FLAC
                                     compression = BAE_COMPRESSION_LOSSLESS;
                                 }
 #endif
@@ -5014,14 +4988,9 @@ int main(int argc, char *argv[])
             draw_text(R, 60, lineY2, "<none>", muted);
         }
 
-        // Vertical VU area: supports multiple display modes. Click to cycle modes.
-        // Mode 0 = stacked meters, Mode 1 = oscilloscope traces (two offset lines)
         {
-            int btnW_local = 90;
-            int gap_local = 8;
             int pad_local = 4;
             int btnH_local = 30;
-            int labelWidth = 18;
             int metersW = 300; // leave room for buttons and labels at right
             int vuX = statusPanel.x + statusPanel.w - metersW - 20;
             if (metersW < 40)

@@ -234,12 +234,12 @@ static void PV_ComputeSliceSizeFromEngine(void)
     // align to 64 bytes for SIMD/cache friendliness
     g_audioByteBufferSize = (g_audioByteBufferSize + 63) & ~63;
 
-    BAE_PRINTF("Computed slice (no rescale): %u frames, %ld bytes (channels=%u bits=%u)\n",
+    BAE_PRINTF("Computed slice (no rescale): %u frames, %d bytes (channels=%u bits=%u)\n",
                g_framesPerSlice, g_audioByteBufferSize, g_channels, g_bits);
 
     if (g_sliceStaticSize < (size_t)g_audioByteBufferSize)
     {
-        BAE_PRINTF("Reallocating slice buffer: %zu -> %ld bytes\n", g_sliceStaticSize, g_audioByteBufferSize);
+        BAE_PRINTF("Reallocating slice buffer: %zu -> %d bytes\n", g_sliceStaticSize, g_audioByteBufferSize);
         free(g_sliceStatic);
         g_sliceStatic = (Uint8 *)calloc(1, (size_t)g_audioByteBufferSize);
         if (g_sliceStatic)
@@ -308,7 +308,7 @@ static void audio_callback(void *userdata, Uint8 *stream, int len)
         {
             if (sliceBytes <= 0)
             {
-                BAE_PRINTF("ERROR: Invalid slice size: %ld\n", sliceBytes);
+                BAE_PRINTF("ERROR: Invalid slice size: %d\n", sliceBytes);
             }
             if (!g_sliceStatic)
             {
@@ -322,7 +322,7 @@ static void audio_callback(void *userdata, Uint8 *stream, int len)
         int32_t frames = sliceBytes / sampleBytes;
         if (frames <= 0)
         {
-            BAE_PRINTF("ERROR: Invalid frame count: %ld\n", frames);
+            BAE_PRINTF("ERROR: Invalid frame count: %d\n", frames);
             memset(out, 0, remaining);
             break;
         }
@@ -628,7 +628,6 @@ void BAE_WaitMicroseconds(uint32_t wait) { SDL_Delay((wait + 999) / 1000); }
 
 #define MAX_OPEN_FILES 64
 static FILE *g_file_table[MAX_OPEN_FILES] = {0};
-static int g_next_handle = 1;
 
 static int PV_AllocateFileHandle(FILE *f)
 {
@@ -794,20 +793,6 @@ int BAE_SetFileLength(intptr_t ref, uint32_t newSize)
 int BAE_GetAudioBufferCount(void) { return 1; }
 int32_t BAE_GetAudioByteBufferSize(void) { return g_audioByteBufferSize; }
 
-// ---- Audio card support ----
-static int PV_CalcSliceSize(void)
-{                                // 11ms slice
-    double sliceSeconds = 0.011; // historically ~11ms
-    uint32_t frames = (uint32_t)((double)g_sampleRate * sliceSeconds);
-    if (frames < 64)
-        frames = 64;
-    g_framesPerSlice = frames;
-    int32_t bytes = (int32_t)(frames * g_channels * (g_bits / 8));
-    // align to 64 bytes
-    bytes = (bytes + 63) & ~63;
-    return bytes;
-}
-
 int BAE_AcquireAudioCard(void *threadContext, uint32_t sampleRate, uint32_t channels, uint32_t bits)
 {
     (void)threadContext;
@@ -875,7 +860,7 @@ int BAE_AcquireAudioCard(void *threadContext, uint32_t sampleRate, uint32_t chan
     }
 
     SDL_PauseAudioDevice(g_audioDevice, 0);
-    BAE_PRINTF("SDL2 audio device active: %u Hz, %u ch, dev buf %u frames, slice %u frames (%ld bytes)\n",
+    BAE_PRINTF("SDL2 audio device active: %u Hz, %u ch, dev buf %u frames, slice %u frames (%d bytes)\n",
                g_sampleRate, g_channels, g_have.samples, g_framesPerSlice, g_audioByteBufferSize);
     return 0;
 }
@@ -1059,7 +1044,7 @@ void BAE_PrintHexDump(void *address, int32_t length)
     for (int32_t i = 0; i < length; i++)
     {
         if ((i % 16) == 0)
-            BAE_PRINTF("\n%08lx: ", (uint32_t)i);
+            BAE_PRINTF("\n%08x: ", (uint32_t)i);
         BAE_PRINTF("%02X ", p[i]);
     }
     BAE_PRINTF("\n");

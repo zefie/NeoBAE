@@ -34,11 +34,9 @@ void bitmap_draw(SDL_Renderer *R, int x, int y, const char *text, SDL_Color col)
     for (const char *p = text; *p; ++p)
     {
         unsigned char c = *p;
-        bool handled = false;
         if (c >= '0' && c <= '9')
         {
             const unsigned char *g = kGlyph5x7Digits[c - '0'];
-            handled = true;
             for (int row = 0; row < 7; row++)
             {
                 unsigned char bits = g[row];

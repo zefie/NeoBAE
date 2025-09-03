@@ -1361,7 +1361,7 @@ UINT32 GM_GetSongTickLength(GM_Song *pSong, OPErr *pErr)
 
 // meta event callback that collects track names
 #if USE_CREATION_API == TRUE
-static void PV_TrackNameCallback(void *threadContext, GM_Song *pSong, char markerType, void *pMetaText, int32_t metaTextLength, int16_t currentTrack)
+void PV_TrackNameCallback(void *threadContext, GM_Song *pSong, char markerType, void *pMetaText, int32_t metaTextLength, int16_t currentTrack)
 {
     XBYTE **tnArray, *str;
 

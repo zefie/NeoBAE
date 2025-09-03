@@ -200,7 +200,6 @@ bool ui_adjust_tempo(int mx, int my, int delta, bool playback_controls_enabled_l
         nt = 200;
     if (tempo_ptr && nt != *tempo_ptr)
     {
-        int oldTempo = *tempo_ptr;
         *tempo_ptr = nt;
         bae_set_tempo(*tempo_ptr);
         if (g_bae.song)

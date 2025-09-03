@@ -1222,7 +1222,6 @@ void playlist_render(SDL_Renderer *R, Rect panel_rect, int mx, int my, bool mdow
 
         // Song name (truncated to fit)
         int name_x = item_x + 45; // Increased from 30 to accommodate music note
-        int name_w = item_w - 95; // Adjusted accordingly
         char display_name[256];
         strncpy(display_name, entry->display_name, sizeof(display_name) - 1);
         display_name[sizeof(display_name) - 1] = '\0';

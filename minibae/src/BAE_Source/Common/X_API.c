@@ -458,7 +458,7 @@ static XBOOL PV_IsXFileLocked(XFILE fileRef)
 
 // Copy data within the same file (used when compacting resource files)
 // Returns 0 on success, non–zero on error.
-static XERR PV_CopyWithinFile(XFILE fileRef,
+XERR PV_CopyWithinFile(XFILE fileRef,
                               int32_t srcPos,
                               int32_t dstPos,
                               int32_t size,
@@ -732,14 +732,13 @@ XPTR XNewPtr(int32_t size)
 
 void XDisposePtr(XPTR data)
 {
-    int32_t            size;
     XPTR            osAllocatedData;
     XPI_Memblock    *pBlock;
 
     osAllocatedData = (XPTR)XIsOurMemoryPtr(data);
     if (osAllocatedData)
     {
-        size = XGetPtrSize(data);   // need to get the size before we translate the pointer
+        XGetPtrSize(data);   // need to get the size before we translate the pointer
 
         pBlock = (XPI_Memblock *)osAllocatedData;
         XPutLong(&pBlock->blockID_one, (uint32_t)XPI_DEAD_ID);         // set our ID for this block
@@ -1135,7 +1134,7 @@ uint16_t XSwapShort(uint16_t value)
 
 uint32_t XSwapShortInLong(uint32_t value)
 {
-    uint32_t   newValue;
+    uint32_t   newValue = 0;
     uint16_t  *pOld;
     uint16_t  *pNew;
     uint16_t  temp;
@@ -2731,7 +2730,7 @@ XBOOL XDeleteFileResource(XFILE fileRef, XResourceType resourceType, XLongResour
     XFILERESOURCEMAP    map;
     int32_t                data, next;
     int32_t                count, total;
-    int32_t                whereType, whereID;
+    int32_t                whereType;
     XFILE_CACHED_ITEM   *pCachedItem;
 
     pReference = fileRef;
@@ -2804,8 +2803,6 @@ deleteanyways:
                                 err = XFileRead(fileRef, &data, (int32_t)sizeof(int32_t));        // get type
                                 if ((XResourceType)XGetLong(&data) == resourceType)
                                 {
-                                    whereID = XFileGetPosition(fileRef);    // get current pos
-
                                     err = XFileRead(fileRef, &data, (int32_t)sizeof(int32_t));        // get ID
                                     if ((XLongResourceID)XGetLong(&data) == resourceID)
                                     {
@@ -3656,7 +3653,7 @@ XBOOL XGetResourceName(XResourceType resourceType, XLongResourceID resourceID,
     return FALSE;
 }
 XBOOL XGetFileResourceName(XFILE fileRef, XResourceType resourceType,
-                            XLongResourceID resourceID, char cName[256])
+                            XLongResourceID resourceID, char *cName)
 {
     if (cName)
     {
@@ -3896,7 +3893,7 @@ int32_t XCompressPtr(XPTR* compressedDataTarget,
                     XCompressStatusProc proc, void* procData)
 {
 XPTR            compressedData;
-int32_t            compressedSize;
+int32_t            compressedSize = 0;
 XBYTE           *realData;
 
     if (!compressedDataTarget)

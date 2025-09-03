@@ -613,8 +613,7 @@ OPErr XProcessMPEGEncoder(XMPEGEncodeData *stream)
     MPEGEncoderPrivate  *pPrivate;
     XPTR                encodedBuffer;
     uint32_t       encodedLength;
-    int                 result;
-    char                *resultBuffer;
+    char                *resultBuffer = NULL;
     XBOOL               lastFrame;
 
     theErr = NO_ERR;
@@ -623,7 +622,7 @@ OPErr XProcessMPEGEncoder(XMPEGEncodeData *stream)
         pPrivate = MPEG_ENCODE_PRIVATE(stream);
         if (pPrivate->pCompressedAudio && pPrivate->encoder)
         {
-            result = MPG_EncodeProcess(pPrivate->encoder, &encodedBuffer, &encodedLength, &lastFrame);
+            MPG_EncodeProcess(pPrivate->encoder, &encodedBuffer, &encodedLength, &lastFrame);
             if (lastFrame)
             {
                 theErr = STREAM_STOP_PLAY;  // we're done. compress this last buffer and stop

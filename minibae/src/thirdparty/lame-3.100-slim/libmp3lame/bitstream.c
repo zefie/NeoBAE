@@ -987,10 +987,10 @@ format_bitstream(lame_internal_flags * gfc)
 static int
 do_gain_analysis(lame_internal_flags * gfc, unsigned char* buffer, int minimum)
 {
+#ifdef DECODE_ON_THE_FLY    
     SessionConfig_t const *const cfg = &gfc->cfg;
     RpgStateVar_t const *const rsv = &gfc->sv_rpg;
     RpgResult_t *const rov = &gfc->ov_rpg;
-#ifdef DECODE_ON_THE_FLY
     if (cfg->decode_on_the_fly) { /* decode the frame */
         sample_t pcm_buf[2][1152];
         int     mp3_in = minimum;

@@ -60,7 +60,6 @@ void write_to_log(const char *format, ...)
 
     // Timestamp
     time_t now = time(NULL);
-    struct tm tm_info_storage;
     struct tm *tm_info = localtime(&now);
     if (tm_info == NULL)
     {

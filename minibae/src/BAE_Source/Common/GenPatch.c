@@ -1315,14 +1315,14 @@ OPErr GM_LoadSongInstruments(GM_Song *theSong,
                                 if (realInstrument > MAX_INSTRUMENTS)
                                 {
                                 #if DEBUG_DISPLAY_PATCHES
-                                    BAE_PRINTF("Failed loading extra bank instrument %ld, falling back to GM.\n", realInstrument);
+                                    BAE_PRINTF("Failed loading extra bank instrument %d, falling back to GM.\n", realInstrument);
                                 #endif
                                     fallbackInstrument = (realInstrument % MAX_INSTRUMENTS);
                                     fallbackInstrument += ((realInstrument / MAX_INSTRUMENTS) & 1) * MAX_INSTRUMENTS;
                                     realInstrument = fallbackInstrument;
                                 
                                 #if DEBUG_DISPLAY_PATCHES
-                                    BAE_PRINTF("Trying to load instrument %ld\n", realInstrument);
+                                    BAE_PRINTF("Trying to load instrument %d\n", realInstrument);
                                 #endif
                                     // 2000.05.19 AER   If the instrument had
                                     //                  already been loaded, we
@@ -1396,7 +1396,7 @@ OPErr GM_LoadSongInstruments(GM_Song *theSong,
 OPErr GM_UnloadSongInstruments(GM_Song *pSong)
 {
     int16_t       count;
-    OPErr           err, lastErr;
+    OPErr           err;
     XLongResourceID realInstrument;
 
     err = NO_ERR;
@@ -1409,10 +1409,6 @@ OPErr GM_UnloadSongInstruments(GM_Song *pSong)
                 realInstrument = (XLongResourceID)count;    // failed, no alias, so try to load instrument passed
             }
             err = GM_UnloadInstrument(pSong, realInstrument);
-            if (err)
-            {
-                lastErr = err;
-            }
         }
     }
     return err;
@@ -1627,7 +1623,7 @@ XBOOL GM_IsInstrumentRangeUsed(GM_Song *pSong, XLongResourceID thePatch, INT16 t
     }
 
 #if DEBUG_DISPLAY_PATCHES
-    BAE_PRINTF("---->Testing INST %ld - key range (%ld to %ld) = %s\n", (int32_t)thePatch,
+    BAE_PRINTF("---->Testing INST %d - key range (%d to %d) = %s\n", (int32_t)thePatch,
                                                                             (int32_t)theLowKey,
                                                                             (int32_t)theHighKey,
                                                                             (used) ? "VALID" : "FAILED");

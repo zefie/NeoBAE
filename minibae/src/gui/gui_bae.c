@@ -114,7 +114,7 @@ bool load_bank(const char *path, bool current_playing_state, int transpose, int 
 
     if (had_song && g_bae.song)
     {
-        strncpy(current_song_path, g_bae.loaded_path, sizeof(current_song_path) - 1);
+        safe_strncpy(current_song_path, g_bae.loaded_path, sizeof(current_song_path) - 1);
         // Use the passed playing state
         was_playing = current_playing_state;
         current_position_ms = bae_get_pos_ms();
@@ -535,11 +535,7 @@ bool bae_load_bank(const char *bank_path)
 #endif
     ))
     {
-        XBOOL stoppedPlayback = FALSE;
         // Load SF2 bank
-        SF2_Bank *sf2Bank = NULL;
-        
-
         OPErr err = GM_LoadTSFSoundfont(bank_path);
         if (err != NO_ERR)
         {

@@ -510,6 +510,7 @@ typedef struct
     #pragma mark ## IFF/RIFF read and general scan code ##
 #endif
 
+/*
 static OPErr IFF_Error(X_IFF *pIFF)
 {
     if (pIFF)
@@ -518,6 +519,7 @@ static OPErr IFF_Error(X_IFF *pIFF)
     }
     return NO_ERR;
 }
+*/
 
 static void IFF_SetFormType(X_IFF *pIFF, int32_t formType)
 {
@@ -653,6 +655,7 @@ static int32_t IFF_ScanToBlock(X_IFF *pIFF, int32_t block)
 }
 
 /******************- Return Chunk size -**********************************/
+/*
 static int32_t IFF_ChunkSize(X_IFF *pIFF, int32_t block)
 {
     int32_t size;
@@ -676,9 +679,10 @@ static int32_t IFF_ChunkSize(X_IFF *pIFF, int32_t block)
     }
     return size;
 }
-
+*/
 
 /*- go inside a FORM that has been found -*/
+/*
 static int32_t IFF_NextForm(X_IFF *pIFF)
 {
     XIFFChunk type;
@@ -695,12 +699,15 @@ static int32_t IFF_NextForm(X_IFF *pIFF)
     pIFF->lastError =  BAD_FILE;
     return -1;
 }
+*/
 
+/*
 static int32_t IFF_CurrentForm(X_IFF *pIFF)
 {
     pIFF->formPosition = XFileGetPosition(pIFF->fileReference);
     return IFF_NextForm(pIFF);
 }
+*/
 
 static int32_t IFF_ReadBlock(X_IFF *pIFF, XPTR pData, int32_t Length)
 {
@@ -747,13 +754,14 @@ static int32_t IFF_GetChunk(X_IFF *pIFF, int32_t block, int32_t size, XPTR p)
 }
 
 
+/*
 static int32_t IFF_NextChunk(X_IFF *pIFF, int32_t block, int32_t size, XPTR p)
 {
     if (IFF_NextBlock(pIFF, block) == -1)
     {
-         return(-1); /* bad */
+         return(-1); // bad
     }
-    if (size == -1L)    /* size not known? */
+    if (size == -1L)    // size not known?
     {
         XFileSetPositionRelative(pIFF->fileReference, -4L);     // back-up and get size
         if (XFileRead(pIFF->fileReference, &size, (int32_t)sizeof(int32_t)) == -1)
@@ -771,13 +779,14 @@ static int32_t IFF_NextChunk(X_IFF *pIFF, int32_t block, int32_t size, XPTR p)
             size = XGetLong(&size);
         }
     }
-    IFF_ReadBlock(pIFF, p, size);   /* read block */
-    if (size&1) /* odd? */
+    IFF_ReadBlock(pIFF, p, size);   // read block
+    if (size&1) // odd? 
     {
         XFileSetPositionRelative(pIFF->fileReference, 1L);      // skip one byte
     }
     return pIFF->lastError;
 }
+*/
 
 #if 0
     #pragma mark ## IFF/RIFF write code ##
@@ -908,7 +917,6 @@ static OPErr PV_ReadSunAUFile(  int32_t encoding,
     int                 (*dec_routine)(int i, int out_coding, struct g72x_state *state_ptr);
     int                 dec_bits;
     int16_t           *pSample16;
-    unsigned char       *pSample8;
     unsigned char       codeBlock[MAX_AU_DECODE_BLOCK_SIZE];
     uint32_t       writeLength;
     SunDecodeState      state;
@@ -916,7 +924,6 @@ static OPErr PV_ReadSunAUFile(  int32_t encoding,
     writeLength = 0;
     err = NO_ERR;
     dec_bits = 0;
-    pSample8 = (unsigned char *)pSample;
     pSample16 = (int16_t *)pSample;
     switch (encoding)
     {
@@ -1027,19 +1034,21 @@ decode_adpcm:
     #pragma mark ## WAVE read functions ##
 #endif
 
+/*
 static int32_t IFF_GetWAVFormatTag(X_IFF *pIFF)
 {
-    int32_t        theErr;
     XWaveHeader header;
 
-    theErr = IFF_GetChunk(pIFF, X_FMT, (int32_t)sizeof(XWaveHeader), (void *)&header);
+    IFF_GetChunk(pIFF, X_FMT, (int32_t)sizeof(XWaveHeader), (void *)&header);
 
     #if X_WORD_ORDER == FALSE   // motorola?
         header.wFormatTag = XSwapShort(header.wFormatTag);
     #endif
     return (int32_t)header.wFormatTag;
 }
+*/
 
+/*
 static int32_t IFF_GetWAVHeader(X_IFF *pIFF, XWaveHeader * pHeaderInfo)
 {
     int32_t    theErr;
@@ -1057,6 +1066,7 @@ static int32_t IFF_GetWAVHeader(X_IFF *pIFF, XWaveHeader * pHeaderInfo)
     #endif
     return theErr;
 }
+*/
 
 static int32_t IFF_GetWAVIMAHeader(X_IFF *pIFF, XWaveHeaderIMA * pHeaderInfo)
 {
@@ -1368,7 +1378,7 @@ static GM_Waveform* PV_ReadIntoMemoryWaveFile(XFILE file, XBOOL decodeData,
         if (wave)
         {
         XWaveHeaderIMA      waveHeader;
-        uint32_t       size, sourceLength;
+        uint32_t       size, sourceLength = 0;
 
             if ((IFF_FileType(pIFF) == X_WAVE) &&
                 (IFF_GetWAVIMAHeader(pIFF, &waveHeader) == 0))
@@ -2895,31 +2905,34 @@ typedef struct {
 } FLACDecodeState;
 
 /* xorshift32 PRNG used for dithering. Kept simple and fast. */
+/*
 static uint32_t flac_prng(FLACDecodeState *s)
 {
     uint32_t x = s->dither_state;
-    if (x == 0) x = 0x12345678u; /* seed if not set */
+    if (x == 0) x = 0x12345678u; // seed if not set
     x ^= x << 13;
     x ^= x >> 17;
     x ^= x << 5;
     s->dither_state = x;
     return x;
 }
+*/
 
 /* Produce a small TPDF-like dither value centered at 0 using sum of two
  * uniform integers in [0, 2^useBits-1], returned offset by -(2^useBits-1).
  */
+/*
 static int32_t flac_tpdf_dither(FLACDecodeState *s, int useBits)
 {
     if (useBits <= 0) return 0;
-    if (useBits > 24) useBits = 24; /* cap to avoid shifts >32 */
+    if (useBits > 24) useBits = 24; // cap to avoid shifts >32
     uint32_t mask = (useBits >= 32) ? 0xFFFFFFFFu : ((1u << useBits) - 1u);
     uint32_t a = flac_prng(s) & mask;
     uint32_t b = flac_prng(s) & mask;
-    /* center around zero: sum - mask */
+    // center around zero: sum - mask
     return (int32_t)a + (int32_t)b - (int32_t)mask;
 }
-
+*/
 // FLAC callback functions for memory-based reading
 static FLAC__StreamDecoderReadStatus flac_read_callback(const FLAC__StreamDecoder *decoder, FLAC__byte buffer[], size_t *bytes, void *client_data)
 {
@@ -4135,7 +4148,6 @@ OPErr GM_ReadAndDecodeFileStream(XFILE fileReference,
 OPErr PV_WriteFromMemoryFLACFile(XFILENAME *file, GM_Waveform const* pAudioData, XWORD formatTag)
 {
     FLAC__StreamEncoder *encoder = NULL;
-    XFILE theFile = NULL;
     OPErr err = NO_ERR;
     XBOOL ok = TRUE;
     
@@ -4420,7 +4432,7 @@ OPErr GM_FinalizeFileHeader(XFILE file, AudioFileType fileType)
                         // Update fmt chunk if we found it and have valid data
                         if (fmtChunkPos > 0 && dataSize > 0 && err == NO_ERR)
                         {
-                            uint32_t bytesPerSample, samplesPerSec, blockAlign;
+                            uint32_t samplesPerSec, blockAlign;
                             
                             // Extract format info (convert from file byte order)
 #if X_WORD_ORDER == FALSE // motorola

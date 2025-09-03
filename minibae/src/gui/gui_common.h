@@ -41,5 +41,5 @@ typedef struct
 bool point_in(int mx, int my, Rect r);
 char *get_absolute_path(const char *path);
 void set_status_message(const char *msg);
-
+void safe_strncpy(char *dst, const char *src, size_t size);
 #endif // GUI_COMMON_H

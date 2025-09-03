@@ -177,8 +177,7 @@ void rmf_info_load_if_needed(void)
             // Only store if non-empty and printable
             if (buf[0] != '\0')
             {
-                strncpy(g_rmf_info_values[i], buf, sizeof(g_rmf_info_values[i]) - 1);
-                g_rmf_info_values[i][sizeof(g_rmf_info_values[i]) - 1] = '\0';
+                safe_strncpy(g_rmf_info_values[i], buf, sizeof(g_rmf_info_values[i]));
             }
         }
     }

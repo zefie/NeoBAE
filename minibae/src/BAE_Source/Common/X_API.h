@@ -1086,6 +1086,8 @@ char    XTranslateWinToMac(char ansiChar);
 // XTranslateMacToWin() provides the Windows-equivalent of a Macintosh character code.
 char    XTranslateMacToWin(char macChar);
 
+XERR PV_CopyWithinFile(XFILE fileRef, int32_t srcPos, int32_t dstPos, int32_t size, void *tempBuffer, int32_t tempBufferSize);
+
 #ifdef __cplusplus
     }
 #endif

@@ -159,7 +159,7 @@ endif
 
 # Debug
 ifeq ($(DEBUG),1)
-	BAE_FLAGS +=    -D_DEBUG=1
+	BAE_FLAGS +=    -D_DEBUG=1 -Wall -Wno-unused-function
 endif
 
 

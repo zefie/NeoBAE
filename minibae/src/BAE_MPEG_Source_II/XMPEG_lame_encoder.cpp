@@ -68,7 +68,12 @@ extern "C" void * MPG_EncodeNewStream(uint32_t encodeRate /* bits/sec total */, 
     if(providedTotalBits < 8000) providedTotalBits = 8000; /* clamp sensible lower bound */
     /* convert to nearest kbps (round) */
     uint32_t totalKbps = (providedTotalBits + 500) / 1000;
-    if(totalKbps < 8) totalKbps = 8; if(totalKbps > 320) totalKbps = 320;
+    if(totalKbps < 8) {
+        totalKbps = 8;
+    }
+    if(totalKbps > 320) {
+        totalKbps = 320;
+    }
     s->encodeRateKbpsTotal = totalKbps;
 
     /* Create and configure LAME global flags */

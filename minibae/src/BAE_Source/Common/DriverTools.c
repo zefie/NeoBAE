@@ -693,7 +693,6 @@ static SongResource_RMF * PV_DeleteRMFSongResource(SongResource *theSong, SongRe
 SongResource * XChangeSongResource(SongResource *theSong, int32_t songSize, SongResourceType resourceType, void *pResource, int32_t resourceLength)
 {
     SongResource_SMS    *songSMS;
-    SongResource_RMF    *songRMF;
     SongResource        *newSong;
     char                name1[256];
     char                name2[256];
@@ -760,7 +759,6 @@ SongResource * XChangeSongResource(SongResource *theSong, int32_t songSize, Song
                     }
                     break;
                 case SONG_TYPE_RMF:
-                    songRMF = (SongResource_RMF *)theSong;
                     newSong = PV_DeleteRMFSongResource(theSong, resourceType);
                     if (newSong)
                     {

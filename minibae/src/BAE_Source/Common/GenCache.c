@@ -398,7 +398,7 @@ OPErr GMCache_IncrCacheEntryRef(const GM_Mixer * pMixer,
 OPErr GMCache_DecrCacheEntryRef(GM_Mixer * pMixer,
                                 GM_SampleCacheEntry * pCache)
 {
-    OPErr               pErr;
+    OPErr               pErr = NO_ERR;
 
     if (pMixer && pCache)
     {
@@ -407,7 +407,7 @@ OPErr GMCache_DecrCacheEntryRef(GM_Mixer * pMixer,
         {
             pErr = PV_FreeCacheEntry(pMixer, pCache);
         }
-        return NO_ERR;
+        return pErr;
     }
     return PARAM_ERR;
 }

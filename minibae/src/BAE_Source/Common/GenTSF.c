@@ -30,7 +30,6 @@
 static tsf* g_tsf_soundfont = NULL;
 static XBOOL g_tsf_initialized = FALSE;
 static XBOOL g_tsf_mono_mode = FALSE;
-static XBOOL g_tsf_mono_single_channel = FALSE;
 static XFIXED g_tsf_master_volume = XFIXED_1;
 static int16_t g_tsf_max_voices = MAX_VOICES;
 static uint16_t g_tsf_sample_rate = 44100;
@@ -388,7 +387,6 @@ void GM_TSF_ProcessProgramChange(GM_Song* pSong, int16_t channel, int16_t progra
     if (isOddBankPerc)
     {
         // Odd banks are percussion in miniBAE mapping
-        uint16_t noteNumber = midiProgram; // In percussion mapping, program field carries the note
         midiBank = (midiBank - 1) / 2;     // Convert back to external MIDI bank
         // Route to SF2 percussion bank
         midiProgram = 0; // Standard drum kit preset
@@ -399,7 +397,6 @@ void GM_TSF_ProcessProgramChange(GM_Song* pSong, int16_t channel, int16_t progra
         // Treat explicit MIDI bank 128 as percussion
         // Keep requested kit program if provided; use note from low 7 bits if present
         uint16_t extProgram = midiProgram; // may indicate kit variant
-        uint16_t noteGuess = midiProgram;  // best-effort note guess from instrument encoding
         midiBank = 127;                    // enforce SF2 percussion bank
         midiProgram = extProgram;          // try requested kit first, fall back later if needed
     }
@@ -510,14 +507,24 @@ void GM_TSF_RenderAudioSlice(GM_Song* pSong, int32_t* mixBuffer, int32_t frameCo
     if (pSong)
     {
         int sv = pSong->songVolume;
-        if (sv < 0) sv = 0; if (sv > 127) sv = 127;
+        if (sv < 0) {
+            sv = 0; 
+        }
+        if (sv > 127) {
+            sv = 127;
+        }
         songScale = (float)sv / 127.0f;
         // Apply fade if active (songFixedVolume holds current volume during fades)
         if (pSong->songFadeRate != 0)
         {
             // songFixedVolume appears to be raw volume; normalize similarly
             int fv = pSong->songFixedVolume >> 16; // songFixedVolume is XFIXED? (defensive)
-            if (fv < 0) fv = 0; if (fv > 127) fv = 127;
+            if (fv < 0) {
+                fv = 0;
+            }
+            if (fv > 127) {
+                fv = 127;
+            }
             songScale *= (float)fv / 127.0f;
         }
     }

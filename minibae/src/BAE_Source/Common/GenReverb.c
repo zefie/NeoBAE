@@ -116,16 +116,15 @@
 static void PV_RunMonoFixedReverb(ReverbMode which)
 {
     register INT32      b, c, bz, cz;
-    register INT32      *sourceLR, *sourceReverb;
+    register INT32      *sourceLR;
     register INT32      *reverbBuf;
-    register LOOPCOUNT  a;
+    register LOOPCOUNT  a = 0;
     register int32_t       reverbPtr1, reverbPtr2, reverbPtr3, reverbPtr4;
 
     reverbBuf = &MusicGlobals->reverbBuffer[0];
     if (reverbBuf)
     {
-        sourceLR = &MusicGlobals->songBufferDry[0];
-        sourceReverb = &MusicGlobals->songBufferReverb[0];
+        sourceLR = &MusicGlobals->songBufferDry[0];        
 
         b = MusicGlobals->LPfilterL;
         c = MusicGlobals->LPfilterR;
@@ -407,7 +406,7 @@ static void PV_RunStereoFixedReverb(ReverbMode which)
     register INT32      b, c, bz, cz;
     register INT32      *sourceLR;
     register INT32      *reverbBuf;
-    register LOOPCOUNT  a;
+    register LOOPCOUNT  a = 0;
     register int32_t       reverbPtr1, reverbPtr2, reverbPtr3, reverbPtr4;
 
     reverbBuf = &MusicGlobals->reverbBuffer[0];
@@ -958,19 +957,19 @@ void GM_ProcessReverb(void)
         }
         if (type != REVERB_TYPE_1)
         {
-            if (verbTypes[type].globalReverbUsageSize <= MusicGlobals->reverbBufferSize)
+            if (verbTypes[(unsigned char)type].globalReverbUsageSize <= MusicGlobals->reverbBufferSize)
             {
                 if (MusicGlobals->generateStereoOutput)
                 {
-                    pVerbProc = verbTypes[type].pStereoRuntimeProc;
+                    pVerbProc = verbTypes[(unsigned char)type].pStereoRuntimeProc;
                 }
                 else
                 {
-                    pVerbProc = verbTypes[type].pMonoRuntimeProc;
+                    pVerbProc = verbTypes[(unsigned char)type].pMonoRuntimeProc;
                 }
                 if (pVerbProc)
                 {
-                    (*pVerbProc)(verbTypes[type].type);
+                    (*pVerbProc)(verbTypes[(unsigned char)type].type);
                 }
             }
         }
@@ -1035,7 +1034,7 @@ UBYTE GM_GetReverbEnableThreshold(void)
     {
         if (MusicGlobals->reverbBuffer)
         {
-            thres = verbTypes[MusicGlobals->reverbUnitType].thresholdEnableValue;
+            thres = verbTypes[(unsigned char)MusicGlobals->reverbUnitType].thresholdEnableValue;
         }
     }
     return thres;
@@ -1051,7 +1050,7 @@ XBOOL GM_IsReverbFixed(void)
     {
         if (MusicGlobals->reverbBuffer)
         {
-            fixed = verbTypes[MusicGlobals->reverbUnitType].isFixed;
+            fixed = verbTypes[(unsigned char)MusicGlobals->reverbUnitType].isFixed;
         }
     }
     return fixed;
@@ -1114,14 +1113,14 @@ void GM_SetReverbType(ReverbMode reverbMode)
                         {
                             pVoice->avoidReverb = FALSE;
                         }
-                        pVoice->reverbLevel = pVoice->pSong->channelReverb[pVoice->NoteChannel];    // set current verb level
-                        pVoice->chorusLevel = (INT16)PV_ModifyVelocityFromCurve(pVoice->pSong, pVoice->pSong->channelChorus[pVoice->NoteChannel]);
+                        pVoice->reverbLevel = pVoice->pSong->channelReverb[(unsigned char)pVoice->NoteChannel];    // set current verb level
+                        pVoice->chorusLevel = (INT16)PV_ModifyVelocityFromCurve(pVoice->pSong, pVoice->pSong->channelChorus[(unsigned char)pVoice->NoteChannel]);
                                                                             // wants no verb enabled
                         if (GM_IsReverbFixed())
                         {
                             // if the instrument defines reverb on or the channel has reverb on, then enable it.
                             // if the channel is off, but the instrument defines reverb then enable it
-                            if (pVoice->pSong->channelReverb[pVoice->NoteChannel] < GM_GetReverbEnableThreshold())
+                            if (pVoice->pSong->channelReverb[(unsigned char)pVoice->NoteChannel] < GM_GetReverbEnableThreshold())
                             {
                                 pVoice->avoidReverb = TRUE;     // force off
                             }

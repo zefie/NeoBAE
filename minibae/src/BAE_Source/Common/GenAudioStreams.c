@@ -1810,7 +1810,7 @@ static OPErr PV_AudioStreamStopAndFreeNow(void *threadContext, STREAM_REFERENCE 
 {
     GM_AudioStream      *pStream;
     GM_StreamData       ssData;
-    int16_t           theErr;
+    int16_t           theErr = NO_ERR;
     GM_StreamObjectProc pProc;
 
     pStream = PV_AudioStreamGetFromReference(reference);
@@ -1846,7 +1846,7 @@ static OPErr PV_AudioStreamStopAndFreeNow(void *threadContext, STREAM_REFERENCE 
         }
         PV_FreeStream(pStream);
     }
-    return NO_ERR;
+    return theErr;
 }
 
 // This will stop a streaming audio object, during the next GM_AudioServiceStream

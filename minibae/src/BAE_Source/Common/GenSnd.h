@@ -2726,6 +2726,8 @@ typedef int32_t UNIT_TYPE;
     // given a voice, kill a voice on the DSP.
     OPErr GM_KillVoiceOnDSP(GM_Voice *pVoice);
 
+    void PV_TrackNameCallback(void *threadContext, GM_Song *pSong, char markerType, void *pMetaText, int32_t metaTextLength, int16_t currentTrack);
+
 #endif
 
 #ifdef __cplusplus

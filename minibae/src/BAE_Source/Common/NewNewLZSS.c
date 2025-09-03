@@ -363,7 +363,6 @@ static int16_t findLongestMatch(unsigned char * theData, uint32_t dataLen,
                                     uint32_t patternStart, uint16_t* codeWord)
 {
 unsigned char           *pointer;               // scanning source pointer
-register unsigned char *lookback;               // scanning compare pointer
 register unsigned char *tPointer;               // scanning source pointer
 register unsigned char *tLookback;              // scanning compare pointer
 register int32_t           counter;                // number of bytes to scan
@@ -402,7 +401,6 @@ uint32_t           forward;                // bytes to scan ahead
     
 // initialize
     pointer = theData + patternStart;
-    lookback = pointer - counter;
     bestLen = 0;
     bestOff = 0;
     

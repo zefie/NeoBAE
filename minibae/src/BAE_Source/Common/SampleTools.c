@@ -824,7 +824,7 @@ XERR XGetSampleInfoFromSnd(XPTR pResource, SampleDataInfo *pOutInfo)
                         break;
             #endif
                     default:
-                        BAE_PRINTF("Unsupported codec %ld\n", pOutInfo->compressionType);
+                        BAE_PRINTF("Unsupported codec %d\n", pOutInfo->compressionType);
                         BAE_ASSERT(FALSE);
                         err = -3;
                         break;
@@ -1059,7 +1059,7 @@ XBYTE               order = X_WORD_ORDER;
             break;
 #endif
         default:
-            BAE_PRINTF("Unsupported codec %ld\n", info->compressionType);
+            BAE_PRINTF("Unsupported codec %d\n", info->compressionType);
             BAE_ASSERT(FALSE);
             return NULL;
         }
@@ -1506,7 +1506,7 @@ char                        *pLeft, *pRight;
 #if USE_CREATION_API == TRUE
 // Given a sample ID, this will search through sample types and return a 'C' string
 // of the resource name of the currently open resource files
-XBOOL XGetSampleNameFromID(XLongResourceID sampleSoundID, char cName[256])
+XBOOL XGetSampleNameFromID(XLongResourceID sampleSoundID, char *cName)
 {
     static XResourceType    sampleType[] = {ID_CSND, ID_ESND, ID_SND};
     int16_t                count;
@@ -1980,6 +1980,7 @@ XSoundFormat1*      header;
 // SampleDataInfo structure, and if pPCMData is NULL.
 // pSampleInfo->pMasterPtr is ignored, pPCMData points to the PCM data formated
 // the way pSampleInfo describes
+/*
 static AudioResource *XCreateAudioObjectFromData(XPTR pPCMData, SampleDataInfo *pSampleInfo)
 {
     AudioResource   *pNewSampleObject;
@@ -2012,7 +2013,9 @@ static AudioResource *XCreateAudioObjectFromData(XPTR pPCMData, SampleDataInfo *
     }
     return pNewSampleObject;
 }
+*/
 
+/*
 static XPTR XGetAudioObjectFromMemory(AudioResource *pAudioObject, SampleDataInfo *pInfo)
 {
     XPTR                pSampleData;
@@ -2054,6 +2057,7 @@ static XPTR XGetAudioObjectFromMemory(AudioResource *pAudioObject, SampleDataInf
     }
     return (XPTR)pSampleData;
 }
+*/
 #endif  // USE_CREATION_API
 
 // Translate a GM_Waveform structure into a SampleDataInfo structure
