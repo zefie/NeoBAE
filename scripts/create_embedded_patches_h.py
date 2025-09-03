@@ -44,7 +44,6 @@ def main():
         # expects an exported unsigned long symbol.
         f.write(f"#define BAE_PATCHES_SIZE {len(data)}UL\n\n")
         f.write(f"static const unsigned long {sym}_size = BAE_PATCHES_SIZE;\n")
-        f.write(f"static const unsigned char* {sym}_end = {sym} + BAE_PATCHES_SIZE;\n\n")
         # Provide compatibility macros for older code expecting names without trailing _data
         f.write("#define BAE_PATCHES_ARRAY " + f"{sym}\n\n")
         f.write("#endif // BAE_PATCHES_EMBED_H\n")

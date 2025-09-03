@@ -21,6 +21,14 @@ ifneq ($(WASM),1)
 	endif
 endif
 
+ifeq ($(USE_SDL3),1)
+	USE_SDL2 := 0
+endif
+
+ifeq ($(USE_SDL2),1)
+	USE_SDL3 := 0
+endif
+
 # Force OGG support if VORBIS is chosen
 ifneq ($(OGG_SUPPORT),1)
 	ifneq ($(filter 1,$(VORBIS_ENC) $(VORBIS_DEC)),) 
@@ -142,6 +150,10 @@ endif
 
 
 # zefie has not tested these APIs
+ifeq ($(BAE_API),SDL3)
+	BAE_FLAGS += 	-DX_PLATFORM=X_SDL3
+	SRC       :=	src/BAE_Source/Platform/BAE_API_$(BAE_API).c
+endif
 ifeq ($(BAE_API),MacOSX)
 	BAE_FLAGS += 	-DX_PLATFORM=X_MACINTOSH
 	SRC       :=	src/BAE_Source/Platform/BAE_API_$(BAE_API).c
@@ -521,4 +533,7 @@ $(OBJ_DIR)$(basename $(notdir $(subst src/thirdparty/flac/src/libFLAC/lpc.c,flac
 	$(SILENT)$(if $(filter %.cpp,$(1)),${CXX} -c ${CXXFLAGS},${CC} -c ${CFLAGS}) $$< -o $$@
 endef
 
+ifeq ($(USE_SDL3),1)
+	BAE_FLAGS += -D_USING_SDL3=1
+endif
 #### End Makefile.common

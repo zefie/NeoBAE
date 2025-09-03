@@ -14,7 +14,8 @@ miniBAE is a cross-platform audio engine with these core components:
 
 ### Key Make Variables
 - `USE_SDL=1`: Enable SDL2 audio output
-- `DEBUG=1`: Enable debug builds
+- `DEBUG=1`: Enable debug output in builds (playbae: stderr, zefidi: zefidi.log)
+- `LDEBUG=1`: Disable optimizations and don't strip for proper gdb debugging
 - `NOAUTO=1`: Manual control of features (disable auto-enabling)
 - `MP3_DEC=1/MP3_ENC=1`: MP3 support
 - `FLAC_DEC=1/FLAC_ENC=1`: FLAC support  
@@ -43,17 +44,14 @@ make -f Makefile.emcc -j$(nproc)
 # When debugging
 make DEBUG=1 -j$(nproc)
 
+# When debugging crashes
+make DEBUG=1 LDEBUG=1 -j$(nproc)
+
 # When debugging DLS
 make DEBUG=1 DLS_SUPPORT=1 -j$(nproc)
 
-# When debugging SF2
-make DEBUG=1 SF2_SUPPORT=1 -j$(nproc)
-
 # Debugging with playbae (DLS)
 bin/playbae -f /mnt/d/Music/MIDI/Mario/kart-credits.mid -p /home/zefie/Downloads/gm.dls -t 3 2>&1
-
-# Debugging with playbae (SF2)
-bin/playbae -f /mnt/d/Music/MIDI/Mario/kart-credits.mid -p /mnt/d/Music/MIDI/_Soundfonts/CT8MGM.sf2 -t 3 2>&1
 ```
 
 ### Platform Support
@@ -163,6 +161,10 @@ See [HSB.md](HSB.md) for detailed information on the HSB file format and its str
 2. Check debug output in `playbae` with verbose flags
 3. Use `GM_GetRealtimeAudioInformation()` for voice status
 4. Verify sample cache usage with memory tools
+
+### Debugging crashes
+1. Enable debug builds: `make DEBUG=1 LDEBUG=1`
+2. Run playbae with gdb: `gdb --args bin/playbae -f /mnt/d/Music/MIDI/Mario/kart-credits.mid -t 3`
 
 ### Testing
 - Test with various audio formats and sample rates
