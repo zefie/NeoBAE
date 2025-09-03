@@ -55,13 +55,13 @@ ifneq ($(LDEBUG),1)
 	LDFLAGS += -s
 endif
 ifeq ($(BITS),32)
-CFLAGS  += -I../SDL2-2.32.8/i686-w64-mingw32/include -I../SDL2-2.32.8/i686-w64-mingw32/include/SDL2 -I../SDL2_ttf-2.24.0/i686-w64-mingw32/include
-CXXFLAGS  += -I../SDL2-2.32.8/i686-w64-mingw32/include -I../SDL2-2.32.8/i686-w64-mingw32/include/SDL2 -I../SDL2_ttf-2.24.0/i686-w64-mingw32/include
-LDFLAGS += -L../SDL2-2.32.8/i686-w64-mingw32/lib -L../SDL2_ttf-2.24.0/i686-w64-mingw32/lib
+CFLAGS  += -I../windeps/SDL2-2.32.8/i686-w64-mingw32/include -I../windeps/SDL2-2.32.8/i686-w64-mingw32/include/SDL2 -I../windeps/SDL2_ttf-2.24.0/i686-w64-mingw32/include
+CXXFLAGS  += -I../windeps/SDL2-2.32.8/i686-w64-mingw32/include -I../windeps/SDL2-2.32.8/i686-w64-mingw32/include/SDL2 -I../windeps/SDL2_ttf-2.24.0/i686-w64-mingw32/include
+LDFLAGS += -L../windeps/SDL2-2.32.8/i686-w64-mingw32/lib -L../windeps/SDL2_ttf-2.24.0/i686-w64-mingw32/lib
 else
-CFLAGS  += -I../SDL2-2.32.8/x86_64-w64-mingw32/include -I../SDL2-2.32.8/x86_64-w64-mingw32/include/SDL2 -I../SDL2_ttf-2.24.0/x86_64-w64-mingw32/include
-CXXFLAGS  += -I../SDL2-2.32.8/x86_64-w64-mingw32/include -I../SDL2-2.32.8/x86_64-w64-mingw32/include/SDL2 -I../SDL2_ttf-2.24.0/x86_64-w64-mingw32/include
-LDFLAGS += -L../SDL2-2.32.8/x86_64-w64-mingw32/lib -L../SDL2_ttf-2.24.0/x86_64-w64-mingw32/lib
+CFLAGS  += -I../windeps/SDL2-2.32.8/x86_64-w64-mingw32/include -I../windeps/SDL2-2.32.8/x86_64-w64-mingw32/include/SDL2 -I../windeps/SDL2_ttf-2.24.0/x86_64-w64-mingw32/include
+CXXFLAGS  += -I../windeps/SDL2-2.32.8/x86_64-w64-mingw32/include -I../windeps/SDL2-2.32.8/x86_64-w64-mingw32/include/SDL2 -I../windeps/SDL2_ttf-2.24.0/x86_64-w64-mingw32/include
+LDFLAGS += -L../windeps/SDL2-2.32.8/x86_64-w64-mingw32/lib -L../windeps/SDL2_ttf-2.24.0/x86_64-w64-mingw32/lib
 endif
 
 LIBS = \

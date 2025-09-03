@@ -3393,7 +3393,7 @@ BAEResult BAEMixer_StartOutputToFile(BAEMixer theMixer,
     }
     // end block added for MiniBAE
 
-    theErr = BAE_NO_ERROR;
+    theErr = (OPErr)BAE_NO_ERROR;
 
     // close old one first
     if (mWritingToFile)
@@ -9644,7 +9644,7 @@ BAEResult BAEUtil_GetInfoSizeFromFile(BAEPathName filePath,
         XFILENAME name;
         XLongResourceID theID;
 
-        theErr = NO_ERR;
+        theErr = BAE_NO_ERROR;
         *pOutResourceSize = 0;
         XConvertPathToXFILENAME(filePath, &name);
         fileRef = XFileOpenResource(&name, TRUE);
@@ -9693,7 +9693,7 @@ BAEResult BAEUtil_GetRmfSongInfoFromFile(BAEPathName filePath, int16_t songIndex
         XFILENAME name;
         XLongResourceID theID;
 
-        theErr = NO_ERR;
+        theErr = BAE_NO_ERROR;
         XConvertPathToXFILENAME(filePath, &name);
         fileRef = XFileOpenResource(&name, TRUE);
         if (fileRef)

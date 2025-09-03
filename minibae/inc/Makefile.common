@@ -16,8 +16,8 @@ ifneq ($(WASM),1)
 		KARAOKE := 1
 		PLAYLIST :=1
 		SF2_SUPPORT := 1
-		DISABLE_BEATNIK_SF2_NRPN := 0 # Also relatively harmless, it allows MIDIs to send certain commands in order to activate additional percussion channels while in SF2 mode
-		DISABLE_NOKIA := 0 # Maps MSB5->MSB1 and MSG6->MSB2, relatively harmless, so patch is enabled by default, but optional in case
+		DISABLE_NOKIA := 0			    # Maps MSB5->MSB1 and MSG6->MSB2, relatively harmless, so patch is enabled by default, but optional in case
+		DISABLE_BEATNIK_SF2_NRPN := 0   # Also relatively harmless, it allows MIDIs to send certain commands in order to activate additional percussion channels while in SF2 mode
 	endif
 endif
 
@@ -134,6 +134,7 @@ endif
 ## Begin Easy API -> X_PLATFORM
 # Supported APIs
 ifeq ($(BAE_API),Ansi)
+	# No audio output
 	BAE_FLAGS += 	-DX_PLATFORM=X_ANSI
 	SRC       :=	src/BAE_Source/Platform/BAE_API_$(BAE_API).c
 endif
@@ -147,13 +148,13 @@ ifeq ($(BAE_API),SDL2)
 	BAE_FLAGS += 	-DX_PLATFORM=X_SDL2
 	SRC       :=	src/BAE_Source/Platform/BAE_API_$(BAE_API).c
 endif
-
-
-# zefie has not tested these APIs
 ifeq ($(BAE_API),SDL3)
 	BAE_FLAGS += 	-DX_PLATFORM=X_SDL3
 	SRC       :=	src/BAE_Source/Platform/BAE_API_$(BAE_API).c
 endif
+
+
+# zefie has not tested these APIs
 ifeq ($(BAE_API),MacOSX)
 	BAE_FLAGS += 	-DX_PLATFORM=X_MACINTOSH
 	SRC       :=	src/BAE_Source/Platform/BAE_API_$(BAE_API).c
@@ -313,13 +314,8 @@ ifeq ($(FLAC_ENC),1)
 	BAE_FLAGS += -DUSE_FLAC_ENCODER=1
 	# stream_encoder.c is the main encoding engine, and it depends on decoder for verification
 	SRC += src/thirdparty/flac/src/libFLAC/stream_encoder.c
-	# Add OGG support files for FLAC if OGG is enabled
 	ifeq ($(OGG_SUPPORT),1)
 		SRC += src/thirdparty/flac/src/libFLAC/ogg_encoder_aspect.c
-		# Only add common OGG files if not already added by decoder
-		ifneq ($(FLAC_DEC),1)
-			SRC += src/thirdparty/flac/src/libFLAC/ogg_helper.c src/thirdparty/flac/src/libFLAC/ogg_mapping.c
-		endif
 	endif
 	ifneq ($(FLAC_DEC),1)
 		# Add required FLAC files for encoding, including decoder support for verification

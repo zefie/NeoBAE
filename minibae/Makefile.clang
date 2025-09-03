@@ -1,6 +1,9 @@
 BAE_BUILT_IN_PATCHES	:= 1
-BAE_API			:= SDL2
-
+ifeq ($(USE_SDL3),1)
+	BAE_API			:= SDL3
+else
+	BAE_API			:= SDL2
+endif
 
 include inc/Makefile.common
 
@@ -57,33 +60,61 @@ LIBS	= 	-lpthread -lm -ldl
 # ------------------------------------------------------------
 UNAME_S:=$(shell uname -s 2>/dev/null)
 
-ifneq (,$(findstring Linux,$(UNAME_S)))
-	SDL2_CFLAGS := $(shell pkg-config --cflags sdl2 2>/dev/null)
-	SDL2_LIBS   := $(shell pkg-config --libs sdl2 2>/dev/null)
-	ifneq ($(SDL2_LIBS),)
-		CFLAGS += $(SDL2_CFLAGS)
-		LIBS   := $(SDL2_LIBS) $(filter-out -lSDL2,$(LIBS))
-		# Drop -static if present to allow dynamic SDL
-		ifneq (,$(findstring -static,$(ARCH)))
-			ARCH := $(filter-out -static,$(ARCH))
-			LDFLAGS := $(filter-out -static,$(LDFLAGS))
+ifeq ($(USE_SDL3),1)
+	ifneq (,$(findstring Linux,$(UNAME_S)))
+		SDL3_CFLAGS := $(shell pkg-config --cflags sdl3 2>/dev/null)
+		SDL3_LIBS   := $(shell pkg-config --libs sdl3 2>/dev/null)
+		ifneq ($(SDL3_LIBS),)
+			CFLAGS += $(SDL3_CFLAGS)
+			LIBS   := $(SDL3_LIBS) $(filter-out -lSDL3,$(LIBS))
+			# Drop -static if present to allow dynamic SDL
+			ifneq (,$(findstring -static,$(ARCH)))
+				ARCH := $(filter-out -static,$(ARCH))
+				LDFLAGS := $(filter-out -static,$(LDFLAGS))
+			endif
+		else
+			CFLAGS += -I/usr/include/SDL3
+			LIBS := -lSDL3 $(LIBS)
 		endif
 	else
-		CFLAGS += -I/usr/include/SDL2
-		LIBS := -lSDL2 $(LIBS)
+		SDL3_CFLAGS := $(shell pkg-config --cflags sdl3 2>/dev/null)
+		SDL3_LIBS   := $(shell pkg-config --libs sdl3 2>/dev/null)
+		ifneq ($(SDL3_LIBS),)
+			CFLAGS += $(SDL3_CFLAGS)
+			LIBS := $(SDL3_LIBS) $(LIBS)
+		else
+			CFLAGS += -I/usr/include/SDL3
+			LIBS := -lSDL3 $(LIBS)
+		endif
 	endif
 else
-	SDL2_CFLAGS := $(shell pkg-config --cflags sdl2 2>/dev/null)
-	SDL2_LIBS   := $(shell pkg-config --libs sdl2 2>/dev/null)
-	ifneq ($(SDL2_LIBS),)
-		CFLAGS += $(SDL2_CFLAGS)
-		LIBS := $(SDL2_LIBS) $(LIBS)
+	ifneq (,$(findstring Linux,$(UNAME_S)))
+		SDL2_CFLAGS := $(shell pkg-config --cflags sdl2 2>/dev/null)
+		SDL2_LIBS   := $(shell pkg-config --libs sdl2 2>/dev/null)
+		ifneq ($(SDL2_LIBS),)
+			CFLAGS += $(SDL2_CFLAGS)
+			LIBS   := $(SDL2_LIBS) $(filter-out -lSDL2,$(LIBS))
+			# Drop -static if present to allow dynamic SDL
+			ifneq (,$(findstring -static,$(ARCH)))
+				ARCH := $(filter-out -static,$(ARCH))
+				LDFLAGS := $(filter-out -static,$(LDFLAGS))
+			endif
+		else
+			CFLAGS += -I/usr/include/SDL2
+			LIBS := -lSDL2 $(LIBS)
+		endif
 	else
-		CFLAGS += -I/usr/include/SDL2
-		LIBS := -lSDL2 $(LIBS)
+		SDL2_CFLAGS := $(shell pkg-config --cflags sdl2 2>/dev/null)
+		SDL2_LIBS   := $(shell pkg-config --libs sdl2 2>/dev/null)
+		ifneq ($(SDL2_LIBS),)
+			CFLAGS += $(SDL2_CFLAGS)
+			LIBS := $(SDL2_LIBS) $(LIBS)
+		else
+			CFLAGS += -I/usr/include/SDL2
+			LIBS := -lSDL2 $(LIBS)
+		endif
 	endif
 endif
-
 all: $(TARGET_LIB).a ${TARGET_LIB}.so $(TARGET_BIN)
 
 $(TARGET_LIB).a: $(OBJ)

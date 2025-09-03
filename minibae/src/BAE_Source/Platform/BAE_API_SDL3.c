@@ -21,10 +21,6 @@
 #include <sys/types.h>
 #endif
 
-#ifndef BAE_PRINTF
-#define BAE_PRINTF printf
-#endif
-
 // SDL3 objects
 static SDL_AudioStream *g_audioStream = NULL;          // primary playback stream
 static SDL_AudioDeviceID g_playbackDevice = 0;         // bound device id
@@ -59,8 +55,10 @@ static uint32_t g_pcm_rec_sample_rate = 0;
 static uint32_t g_pcm_rec_bits = 0;
 
 // FLAC recorder callback
+#if USE_FLAC_ENCODER == TRUE
 typedef void (*FlacRecorderCallback)(int16_t *left, int16_t *right, int frames);
 static FlacRecorderCallback g_flac_recorder_callback = NULL;
+#endif
 
 #if USE_VORBIS_ENCODER == TRUE
 typedef void (*VorbisRecorderCallback)(int16_t *left, int16_t *right, int frames);
@@ -178,14 +176,18 @@ static void SDLCALL audio_stream_callback(void *userdata, SDL_AudioStream *strea
             BAE_BuildMixerSlice(userdata, g_sliceStatic, sliceBytes, frames);
             if (g_pcm_rec_fp)
             { size_t wrote = fwrite(g_sliceStatic,1,(size_t)sliceBytes,g_pcm_rec_fp); if (wrote == (size_t)sliceBytes) g_pcm_rec_data_bytes += (uint64_t)wrote; }
+#if USE_FLAC_ENCODER == TRUE
             if (g_flac_recorder_callback && g_bits == 16)
             { uint32_t framesCB=(uint32_t)frames; int16_t *samples=(int16_t*)g_sliceStatic; if (g_channels==1){ g_flac_recorder_callback(samples,samples,framesCB);} else if (g_channels==2){ static int16_t *l=NULL,*r=NULL; static uint32_t tf=0; if(framesCB>tf){ int16_t *nl=(int16_t*)malloc(framesCB*sizeof(int16_t)); int16_t *nr=(int16_t*)malloc(framesCB*sizeof(int16_t)); if(nl&&nr){ free(l); free(r); l=nl; r=nr; tf=framesCB;} else { free(nl); free(nr);} } if(l&&r){ for(uint32_t i=0;i<framesCB;i++){ l[i]=samples[i*2]; r[i]=samples[i*2+1]; } g_flac_recorder_callback(l,r,framesCB);} } }
+#endif
 #if USE_VORBIS_ENCODER == TRUE
             if (g_vorbis_recorder_callback && g_bits == 16)
             { uint32_t framesCB=(uint32_t)frames; int16_t *samples=(int16_t*)g_sliceStatic; if (g_channels==1){ g_vorbis_recorder_callback(samples,samples,framesCB);} else if (g_channels==2){ static int16_t *l2=NULL,*r2=NULL; static uint32_t tf2=0; if(framesCB>tf2){ int16_t *nl2=(int16_t*)malloc(framesCB*sizeof(int16_t)); int16_t *nr2=(int16_t*)malloc(framesCB*sizeof(int16_t)); if(nl2&&nr2){ free(l2); free(r2); l2=nl2; r2=nr2; tf2=framesCB;} else { free(nl2); free(nr2);} } if(l2&&r2){ for(uint32_t i=0;i<framesCB;i++){ l2[i]=samples[i*2]; r2[i]=samples[i*2+1]; } g_vorbis_recorder_callback(l2,r2,framesCB);} } }
 #endif
+#if USE_MPEG_ENCODER == TRUE
             if (g_mp3enc && g_mp3enc->accepting)
             { MP3EncState *s=g_mp3enc; uint32_t framesCB=(uint32_t)frames; if(framesCB){ static int16_t *scratch=NULL; static uint32_t scratchFrames=0; int16_t *temp=NULL; if(g_bits==16) temp=(int16_t*)g_sliceStatic; else { if(scratchFrames<framesCB){ free(scratch); scratch=(int16_t*)malloc(framesCB*s->channels*sizeof(int16_t)); scratchFrames=scratch?framesCB:0; } if(!scratch){ s->droppedFrames+=framesCB; goto mp3_done; } const uint8_t *src8=(const uint8_t*)g_sliceStatic; for(uint32_t i=0;i<framesCB*s->channels;i++) scratch[i]=((int)src8[i]-128)<<8; temp=scratch; } SDL_LockMutex(s->mtx); uint32_t space=s->ringFrames - s->usedFrames; uint32_t toWrite=(framesCB<=space)?framesCB:space; if(toWrite>0){ uint32_t first=toWrite; uint32_t cont=s->ringFrames - s->writePos; if(first>cont) first=cont; memcpy(s->ring + s->writePos * s->channels, temp, first * s->channels * sizeof(int16_t)); s->writePos = (s->writePos + first) % s->ringFrames; s->usedFrames += first; uint32_t remain=toWrite-first; if(remain){ memcpy(s->ring + s->writePos * s->channels, temp + first * s->channels, remain * s->channels * sizeof(int16_t)); s->writePos = (s->writePos + remain) % s->ringFrames; s->usedFrames += remain; } SDL_SignalCondition(s->cond); } else { s->droppedFrames += framesCB; } SDL_UnlockMutex(s->mtx); } mp3_done: ; }
+#endif
             sliceValidBytes = sliceBytes; sliceConsumedBytes = 0; g_lastCallbackFrames = (uint32_t)frames;
         }
         int avail = sliceValidBytes - sliceConsumedBytes; if (avail <= 0) break; int toCopy = (avail < bytesNeeded)? avail : bytesNeeded; SDL_PutAudioStreamData(stream, g_sliceStatic + sliceConsumedBytes, toCopy); sliceConsumedBytes += toCopy; bytesNeeded -= toCopy; g_totalSamplesPlayed += (uint64_t)(toCopy / sampleBytes);
@@ -211,8 +213,10 @@ void BAE_Platform_PCMRecorder_Stop(void)
     fflush(g_pcm_rec_fp); fclose(g_pcm_rec_fp); g_pcm_rec_fp = NULL; g_pcm_rec_data_bytes = 0; g_pcm_rec_channels = g_pcm_rec_sample_rate = g_pcm_rec_bits = 0;
     BAE_PRINTF("SDL3 PCM recorder stopped\n");
 }
+#if USE_FLAC_ENCODER == TRUE
 void BAE_Platform_SetFlacRecorderCallback(void (*callback)(int16_t *left, int16_t *right, int frames)) { g_flac_recorder_callback = (FlacRecorderCallback)callback; }
 void BAE_Platform_ClearFlacRecorderCallback(void){ g_flac_recorder_callback = NULL; }
+#endif
 #if USE_VORBIS_ENCODER == TRUE
 void BAE_Platform_SetVorbisRecorderCallback(void (*callback)(int16_t *left, int16_t *right, int frames)) { g_vorbis_recorder_callback = (VorbisRecorderCallback)callback; }
 void BAE_Platform_ClearVorbisRecorderCallback(void){ g_vorbis_recorder_callback = NULL; }
@@ -408,6 +412,7 @@ static int MP3EncoderThread(void *userdata)
 { MP3EncState *s = (MP3EncState*)userdata; if(!s) return 0; s->encPcmBuf = (int16_t*)XNewPtr(s->framesPerCall * s->channels * sizeof(int16_t)); if(!s->encPcmBuf) return 0; s->enc = MPG_EncodeNewStream(s->bitrate, s->sample_rate, s->channels, (XPTR)s->encPcmBuf, s->framesPerCall); if(!s->enc){ XDisposePtr((XPTR)s->encPcmBuf); s->encPcmBuf=NULL; return 0; } MPG_EncodeSetRefillCallback(s->enc, MP3Refill_FromRing, s); for(;;){ XPTR bitbuf=NULL; uint32_t bitsz=0; XBOOL last=FALSE; (void)MPG_EncodeProcess(s->enc, &bitbuf, &bitsz, &last); if(bitsz>0 && bitbuf){ XFileWrite(s->out, bitbuf, (int32_t)bitsz); } if(last && bitsz==0) break; SDL_Delay(1); } MPG_EncodeFreeStream(s->enc); s->enc=NULL; if(s->encPcmBuf){ XDisposePtr((XPTR)s->encPcmBuf); s->encPcmBuf=NULL; } return 0; }
 #endif
 
+#if USE_MPEG_ENCODER == TRUE
 int BAE_Platform_MP3Recorder_Start(const char *path, uint32_t channels, uint32_t sample_rate, uint32_t bits, uint32_t bitrate)
 {
     if(!path || g_mp3enc) return -1;
@@ -429,5 +434,5 @@ void BAE_Platform_MP3Recorder_Stop(void)
     MP3EncState *s = g_mp3enc; if(!s) return; s->accepting = 0; SDL_LockMutex(s->mtx); s->running = 0; SDL_BroadcastCondition(s->cond); SDL_UnlockMutex(s->mtx); if(s->thread){ SDL_WaitThread(s->thread, NULL); s->thread=NULL; }
     unsigned long long dropped = (unsigned long long)s->droppedFrames; if(s->out){ XFileClose(s->out); s->out=NULL; } if(s->cond){ SDL_DestroyCondition(s->cond); s->cond=NULL; } if(s->mtx){ SDL_DestroyMutex(s->mtx); s->mtx=NULL; } if(s->ring){ free(s->ring); s->ring=NULL; } free(s); g_mp3enc=NULL; g_mp3rec_mp3_path[0]='\0'; g_mp3rec_channels=g_mp3rec_sample_rate=g_mp3rec_bits=g_mp3rec_bitrate=0; BAE_PRINTF("SDL3 MP3 recorder stopped. Dropped frames: %llu\n", dropped);
 }
-
+#endif
 // (End of SDL3 backend)

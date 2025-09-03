@@ -2,11 +2,14 @@ TARGET_BIN		:= playbae.exe
 TEST_BIN_PREFIX 	:= "wine "
 BAE_BUILT_IN_PATCHES	:= 1
 WINDOWS		:= 1
+BAE_API := WinOS
 
-ifneq ($(USE_SDL),)
-BAE_API			:= SDL2
+ifeq ($(USE_SDL2),1)
+    BAE_API			:= SDL2
 else
-BAE_API			:= WinOS
+    ifeq ($(USE_SDL3),1)
+        BAE_API			:= SDL3
+    endif
 endif
 
 include inc/Makefile.common
@@ -69,20 +72,56 @@ LIBS   = \
     -lodbc32 \
     -lodbccp32
 
-ifneq ($(USE_SDL),)
+ifeq ($(USE_SDL2),1)
     ifeq ($(BITS),32)
-        CFLAGS   += -I../SDL2-2.32.8/i686-w64-mingw32/include
-        LDFLAGS  += -L../SDL2-2.32.8/i686-w64-mingw32/lib
+        CFLAGS   += -I../windeps/SDL2-2.32.8/i686-w64-mingw32/include
+        LDFLAGS  += -L../windeps/SDL2-2.32.8/i686-w64-mingw32/lib
         TARGET_NAME := playbae_sdl2_x32.exe
     else
-        CFLAGS    += -I../SDL2-2.32.8/x86_64-w64-mingw32/include
-        LDFLAGS   += -L../SDL2-2.32.8/x86_64-w64-mingw32/lib
+        CFLAGS    += -I../windeps/SDL2-2.32.8/x86_64-w64-mingw32/include
+        LDFLAGS   += -L../windeps/SDL2-2.32.8/x86_64-w64-mingw32/lib
         TARGET_NAME := playbae_sdl2_x64.exe
     endif
     # Override LIBS completely for SDL build to enforce correct ordering
     LIBS = \
         -lSDL2main \
         -lSDL2 \
+        -lsetupapi \
+        -lcfgmgr32 \
+        -lversion \
+        -limm32 \
+        -lwinmm \
+        -lole32 \
+        -loleaut32 \
+        -ladvapi32 \
+        -luser32 \
+        -lgdi32 \
+        -lshell32 \
+        -lshlwapi \
+        -ldxguid \
+        -ldsound \
+        -luuid \
+        -lkernel32 \
+        -lcomdlg32 \
+        -lwinspool \
+        -lwinpthread \
+        -lodbc32 \
+        -lodbccp32
+endif
+
+ifeq ($(USE_SDL3),1)
+    ifeq ($(BITS),32)
+        CFLAGS   += -I../windeps/SDL3-3.2.22/i686-w64-mingw32/include
+        LDFLAGS  += -L../windeps/SDL3-3.2.22/i686-w64-mingw32/lib
+        TARGET_NAME := playbae_sdl2_x32.exe
+    else
+        CFLAGS    += -I../windeps/SDL3-3.2.22/x86_64-w64-mingw32/include
+        LDFLAGS   += -L../windeps/SDL3-3.2.22/x86_64-w64-mingw32/lib
+        TARGET_NAME := playbae_sdl2_x64.exe
+    endif
+    # Override LIBS completely for SDL build to enforce correct ordering
+    LIBS = \
+        -lSDL3.dll \
         -lsetupapi \
         -lcfgmgr32 \
         -lversion \
@@ -129,6 +168,9 @@ $(TARGET_LIB).dll: ${OBJ}
 	@rm -f $(OBJ_DIR)$(TARGET_LIB).def2 $(OBJ_DIR)exports.o
 	@$(DLLTOOL) -e $(OBJ_DIR)exports.o -d $(OBJ_DIR)$(TARGET_LIB).def -l $(TARGET_OUT)$(TARGET_LIB).lib $(OBJ)
 	${CC} -shared $(LDFLAGS) ${OBJ} $(OBJ_DIR)exports.o -o $(TARGET_OUT)${TARGET_LIB}.dll ${LIBS}
+ifeq ($(USE_SDL3),1)
+	@cp ../windeps/SDL3-3.2.22/x86_64-w64-mingw32/bin/SDL3.dll $(TARGET_OUT)
+endif
 
 $(TARGET_BIN): ${OBJ_BIN}
 	@mkdir -p $(TARGET_OUT)

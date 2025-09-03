@@ -49,6 +49,16 @@ for f in Makefile.gui-mingw Makefile.mingw Makefile.gui Makefile Makefile.clang;
     else
         # full build (cli)
         runtest make -f ${f} MP3_ENC=1 MP3_DEC=1 FLAC_ENC=1 FLAC_DEC=1 KARAOKE=1 VORBIS_ENC=1 VORBIS_DEC=1 SF2_SUPPORT=1
+        # SDL3
+        runtest make -f ${f} USE_SDL3=1
+        # SDL3 MP3_ENC=1
+        runtest make -f ${f} USE_SDL3=1 MP3_ENC=1
+        # SDL3 FLAC_ENC=1
+        runtest make -f ${f} USE_SDL3=1 FLAC_ENC=1
+        # SDL3 VORBIS_ENC=1
+        runtest make -f ${f} USE_SDL3=1 VORBIS_ENC=1
+        # SDL3 ALL
+        runtest make -f ${f} USE_SDL3=1 MP3_ENC=1 FLAC_ENC=1 VORBIS_ENC=1
     fi
     if [ "${f}" == "Makefile.gui" ]; then
         # Linux HW Midi Drivers
