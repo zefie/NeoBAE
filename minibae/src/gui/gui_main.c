@@ -3820,6 +3820,28 @@ int main(int argc, char *argv[])
                 if (ui_toggle(R, loopR, &loopPlay, "BAE Loop", mx, my, mclick))
                     clicked = true;
             }
+            else
+            {
+                // When modal is open, render disabled checkbox (same as MIDI input disabled style)
+                SDL_Color disabledBg = g_panel_bg;
+                SDL_Color disabledTxt = g_panel_border;
+                // Draw checkbox background and border
+                draw_rect(R, loopR, disabledBg);
+                draw_frame(R, loopR, g_panel_border);
+                Rect inner = {loopR.x + 3, loopR.y + 3, loopR.w - 6, loopR.h - 6};
+                if (loopPlay)
+                {
+                    draw_rect(R, inner, g_accent_color);
+                    draw_frame(R, inner, g_button_text);
+                }
+                else
+                {
+                    draw_rect(R, inner, g_panel_bg);
+                    draw_frame(R, inner, g_panel_border);
+                }
+                // Label
+                draw_text(R, loopR.x + loopR.w + 6, loopR.y + 2, "BAE Loop", disabledTxt);
+            }
 
             // Handle tooltip for BAE Loop
             if (point_in(ui_mx, ui_my, loopTooltipArea) && !modal_block)
@@ -3965,7 +3987,7 @@ int main(int argc, char *argv[])
 #endif
                 if (export_allowed)
                 {
-                    if (ui_button(R, (Rect){348, 215, 80, 22}, "Export", ui_mx, ui_my, ui_mdown) && ui_mclick) // Moved from 320 to 348
+                    if (ui_button(R, (Rect){340, 215, 80, 22}, "Export", ui_mx, ui_my, ui_mdown) && ui_mclick)
                     {
 #ifdef SUPPORT_MIDI_HW
                         /* export_allowed already ensures g_midi_output_enabled == false */

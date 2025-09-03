@@ -793,9 +793,8 @@ void render_settings_dialog(SDL_Renderer *R, int mx, int my, bool mclick, bool m
         // Draw disabled (dimmed) checkbox and label but do not allow toggling
         bool over = point_in(mx, my, midiOutEnRect);
         draw_custom_checkbox(R, midiOutEnRect, g_midi_output_enabled, over);
-        SDL_Color txt = g_text_color;
-        txt.a = 160;
-        draw_text(R, midiOutEnRect.x + midiOutEnRect.w + 6, midiOutEnRect.y + 2, "MIDI Output", txt);
+        // Keep text normal color even when disabled - only the checkbox is dimmed
+        draw_text(R, midiOutEnRect.x + midiOutEnRect.w + 6, midiOutEnRect.y + 2, "MIDI Output", g_text_color);
     }
     else
     {
@@ -891,30 +890,18 @@ void render_settings_dialog(SDL_Renderer *R, int mx, int my, bool mclick, bool m
     Rect cbRect = {rightX, dlg.y + 36, 18, 18};
     if (ui_toggle(R, cbRect, &g_stereo_output, "Stereo Output", mx, my, mclick))
     {
-        int prePosMs = bae_get_pos_ms();
-        bool wasPlayingBefore = g_bae.is_playing;
+        bool wasPlayingBefore = g_bae.is_playing;     
         if (recreate_mixer_and_restore(g_sample_rate_hz, g_stereo_output, *reverbType, *transpose, *tempo, *volume, *loopPlay, ch_enable))
         {
-            if (wasPlayingBefore)
+
+            if (wasPlayingBefore && progress > 0)
             {
-                *progress = bae_get_pos_ms();
-                *duration = bae_get_len_ms();
-            }
-            else
-            {
-                if (prePosMs > 0)
-                {
-                    bae_seek_ms(prePosMs);
-                    *progress = prePosMs;
-                    *duration = bae_get_len_ms();
-                }
-                else
-                {
-                    *progress = 0;
-                    *duration = bae_get_len_ms();
-                }
+                bae_seek_ms(*progress);
+            } 
+            else {
                 *playing = false;
             }
+
 #if SUPPORT_MIDI_HW == TRUE
             // If MIDI input was active, reinitialize it so hardware stays in a consistent state
             if (g_midi_input_enabled)
@@ -999,26 +986,14 @@ void render_settings_dialog(SDL_Renderer *R, int mx, int my, bool mclick, bool m
                 g_sampleRateDropdownOpen = false;
                 if (changed)
                 {
-                    int prePosMs = bae_get_pos_ms();
                     bool wasPlayingBefore = g_bae.is_playing;
                     if (recreate_mixer_and_restore(g_sample_rate_hz, g_stereo_output, *reverbType, *transpose, *tempo, *volume, *loopPlay, ch_enable))
                     {
-                        if (wasPlayingBefore)
+                        if (wasPlayingBefore && progress > 0)
                         {
-                            *progress = bae_get_pos_ms();
-                            *duration = bae_get_len_ms();
-                        }
-                        else if (prePosMs > 0)
-                        {
-                            bae_seek_ms(prePosMs);
-                            *progress = prePosMs;
-                            *duration = bae_get_len_ms();
-                            *playing = false;
-                        }
-                        else
-                        {
-                            *progress = 0;
-                            *duration = bae_get_len_ms();
+                            bae_seek_ms(*progress);
+                        } 
+                        else {
                             *playing = false;
                         }
 #if SUPPORT_MIDI_HW == TRUE
