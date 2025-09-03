@@ -602,7 +602,7 @@ bool recreate_mixer_and_restore(int sampleRateHz, bool stereo, int reverbType,
 
 void setWindowTitle(SDL_Window *window)
 {
-    const char *libMiniBAECPUArch = BAE_GetCurrentCPUArchitecture(TRUE);
+    const char *libMiniBAECPUArch = BAE_GetCurrentCPUArchitecture();
     const char *libMiniBAEVersion = BAE_GetVersion();
     char windowTitle[128];
     snprintf(windowTitle, sizeof(windowTitle), "zefidi Media Player - %s - %s", libMiniBAECPUArch, libMiniBAEVersion);
