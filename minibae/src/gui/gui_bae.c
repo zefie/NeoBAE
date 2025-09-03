@@ -121,6 +121,11 @@ bool load_bank(const char *path, bool current_playing_state, int transpose, int 
         uint32_t tmpUs = 0;
         BAESong_GetMicrosecondPosition(g_bae.song, &tmpUs);
         current_position_us = tmpUs; // capture precise position
+        BAESong_Stop(g_bae.song, FALSE);
+        BAESong_Delete(g_bae.song);
+        g_bae.song = NULL;
+        g_bae.song_loaded = false;
+        g_bae.is_playing = false;
     }
 
     // Unload existing banks (single active bank paradigm like original patch switcher)
@@ -260,8 +265,6 @@ bool load_bank(const char *path, bool current_playing_state, int transpose, int 
         // Ensure we fully stop and clean up before reloading to avoid engine state conflicts
         if (g_bae.song)
         {
-            BAESong_Stop(g_bae.song, FALSE);
-            BAESong_Delete(g_bae.song);
             g_bae.song = NULL;
             g_bae.song_loaded = false;
             g_bae.is_playing = false;
