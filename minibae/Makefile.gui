@@ -118,7 +118,7 @@ endif # ENABLE_MIDI_HW
 CXXFLAGS 	:= $(CFLAGS)
 ifneq ($(MP3_ENC),)
     LD := $(CXX)
-    LIBS += -lstdc++ -lsupc++
+    LIBS += -lstdc++
 endif
 
 all: $(TARGET_LIB).a ${TARGET_LIB}.so $(TARGET_BIN)
