@@ -159,7 +159,8 @@ When passed `NOAUTO=1`, the build is under your control, and the automatic enabl
 - `VORBIS_ENC=1` - Enables OGG Vorbis exporting
 - `SF2_SUPPORT=1` - Enable SF2 SoundFont 2 support (use with VORBIS_DEC=1 to get SF3/SFO support as well)
 - `PLAYLIST=1` - Enable playlist support in the GUI
-- `USE_SDL=1` - To enable usage of SDL2 on platforms that support other native audio
+- `USE_SDL2=1` - To enable usage of SDL2 on platforms that support other native audio
+- `USE_SDL3=1` - To enable usage of SDL3 on platforms that support other native audio
 - `OGG_SUPPORT=1` - Enable OGG Support (useless without Vorbis)
 - `DISABLE_NOKIA_PATCH=1` - If you want to disable the harmless Nokia Patch (MSB5 -> MSB1, MSB6 -> MSB2)
 - `DISABLE_BEATNIK_NRPN=1` - Disables SF2 NRPN support for Beatnik extra percussion channel(s).

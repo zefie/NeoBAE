@@ -18,10 +18,6 @@
 #include <sys/types.h>
 #endif
 
-#ifndef BAE_PRINTF
-#define BAE_PRINTF printf
-#endif
-
 static SDL_AudioDeviceID g_audioDevice = 0;
 static SDL_AudioSpec g_have;
 static int g_initialized = 0;
