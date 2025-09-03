@@ -832,18 +832,27 @@ void GM_PauseSong(GM_Song *pSong, XBOOL endVoices)
         if (GM_IsSongPaused(pSong) == FALSE)
         {
             pSong->songPaused = TRUE;
+#if USE_SF2_SUPPORT == TRUE
+            if (GM_IsTSFSong(pSong))
+            {
+                for (int i = 0; i < MAX_CHANNELS; i++)
+                {
+                    if (pSong->channelActiveNotes[i])
+                    for (int note = 0; note < 128; ++note)
+                    {
+                        if (pSong->channelActiveNotes[i][note])
+                        {
+                            GM_TSF_ProcessNoteOff(pSong, i, note, pSong->channelActiveNotes[i][note]);
+                        }
+                    }
+                }
+                GM_EndSongNotes(pSong);
+            }
+#endif
             if (endVoices)
             {
                 GM_EndSongNotes(pSong); // end just notes from this song
             }
-#if USE_SF2_SUPPORT == TRUE
-            if (GM_IsTSFSong(pSong))
-            {
-                // For TSF songs, aggressively silence and also end legacy voices to ensure engine note-offs
-                GM_TSF_SilenceSong(pSong);
-                GM_EndSongNotes(pSong);
-            }
-#endif
         }
     }
 }

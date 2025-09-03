@@ -1252,7 +1252,9 @@ bool bae_play(bool *playing)
                 {
                     for (int n = 0; n < 128; n++)
                     {
-                        BAESong_NoteOff(target, (unsigned char)g_keyboard_channel, (unsigned char)n, 0, 0);
+                        if (g_keyboard_active_notes[n]) {
+                            BAESong_NoteOff(target, (unsigned char)g_keyboard_channel, (unsigned char)n, 0, 0);
+                        }
                     }
                 }
                 g_keyboard_mouse_note = -1;
