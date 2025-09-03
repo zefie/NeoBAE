@@ -137,6 +137,12 @@ bool load_bank(const char *path, bool current_playing_state, int transpose, int 
 #ifdef _BUILT_IN_PATCHES
     if (strcmp(path, "__builtin__") == 0)
     {
+#if USE_SF2_SUPPORT == TRUE
+        GM_UnloadTSFSoundfont();
+#endif
+        if (g_bae.bank_loaded) {
+            BAEMixer_UnloadBank(g_bae.mixer, g_bae.bank_token);
+        }
         BAEBankToken t;
         BAEResult br = BAEMixer_LoadBuiltinBank(g_bae.mixer, &t);
         if (br == BAE_NO_ERROR)
