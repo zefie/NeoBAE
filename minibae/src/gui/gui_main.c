@@ -208,7 +208,9 @@ void gui_audio_task(void *reference)
 {
     if (reference)
     {
-        BAEMixer_ServiceStreams(reference);
+        if (!g_exporting) {
+            BAEMixer_ServiceStreams(reference);
+        }
     }
 }
 
@@ -1747,10 +1749,6 @@ int main(int argc, char *argv[])
         }
 #endif
 
-        // If this is an audio file (WAV/FLAC/MP3) and the GUI loop checkbox is enabled,
-        // Note: With the new loop count feature, BAESound objects handle looping internally
-        // so we no longer need manual loop detection and restart
-
         // timing update
         Uint32 now = SDL_GetTicks();
         (void)now;
@@ -1761,8 +1759,10 @@ int main(int argc, char *argv[])
             progress = bae_get_pos_ms();
             duration = bae_get_len_ms();
         }
-        BAEMixer_Idle(g_bae.mixer); // ensure processing if needed
-        bae_update_channel_mutes(ch_enable);
+        if (!g_exporting) {
+            BAEMixer_Idle(g_bae.mixer); // ensure processing if needed
+            bae_update_channel_mutes(ch_enable);
+        }
 #ifdef SUPPORT_MIDI_HW
         // Publish current channel enables to the MIDI thread (plain byte store is fine)
         for (int _ci = 0; _ci < 16; ++_ci)
@@ -2098,35 +2098,6 @@ int main(int argc, char *argv[])
                 }
 #endif
             }
-        }
-
-        // Detect potential playback stall (song started but position stays at 0 for a while)
-        static int stallCounter = 0;
-        if (playing && !g_bae.is_audio_file && g_bae.song)
-        {
-            int curMs = bae_get_pos_ms();
-            if (curMs == 0)
-            {
-                if (++stallCounter == 120)
-                { // ~2s grace for first buffer fill
-                    BAE_BOOL engaged = FALSE, active = FALSE, paused = FALSE, done = FALSE;
-                    BAEMixer_IsAudioEngaged(g_bae.mixer, &engaged);
-                    BAEMixer_IsAudioActive(g_bae.mixer, &active);
-                    BAESong_IsPaused(g_bae.song, &paused);
-                    BAESong_IsDone(g_bae.song, &done);
-                    uint32_t devSamples = BAE_GetDeviceSamplesPlayedPosition();
-                    BAE_PRINTF("Warn: still 0ms after preroll start (engaged=%d active=%d paused=%d done=%d devSamples=%u)\n", engaged, active, paused, done, devSamples);
-                }
-            }
-            else if (stallCounter)
-            {
-                BAE_PRINTF("Playback advanced after initial stall frames=%d (pos=%d ms)\n", stallCounter, curMs);
-                stallCounter = 0;
-            }
-        }
-        else
-        {
-            stallCounter = 0;
         }
 
         // Service WAV export if active
@@ -2521,96 +2492,98 @@ int main(int argc, char *argv[])
                 ch_enable[i] = true;
         }
 
-        // Voice count VU meter - vertical meter aligned with channel VUs
-        BAEAudioInfo audioInfo;
-        int voiceCount = 0;
-        if (g_bae.mixer && BAEMixer_GetRealtimeStatus(g_bae.mixer, &audioInfo) == BAE_NO_ERROR)
-        {
-            voiceCount = audioInfo.voicesActive;
-        }
-
-        // Calculate VU position and dimensions to align with channel VUs
-        int vuX = 375;      // positioned to the right of "Unmute All" button
-        int vuY = chStartY; // align with top of channel grid
-        int vuW = 8;        // slightly wider than channel VUs for visibility
-        int vuH = 71;       // span both rows: row height + checkbox + gap + text + row spacing adjustment
-
-        // Draw VU background/frame
-        Rect vuBg = {vuX, vuY, vuW, vuH};
-        draw_rect(R, vuBg, g_panel_bg);
-        draw_frame(R, vuBg, g_panel_border);
-
-        // Calculate fill level (0-64 voices mapped to 0-1)
-        float voiceFill = (float)voiceCount / (float)MAX_VOICES;
-        if (voiceFill > 1.0f)
-            voiceFill = 1.0f;
-        if (voiceFill < 0.0f)
-            voiceFill = 0.0f;
-
-        int innerPad = 2;
-        int innerH = vuH - (innerPad * 2);
-        int fillH = (int)(voiceFill * innerH);
-
-        if (fillH > 0)
-        {
-            // Draw voice VU with gradient similar to channel VUs
-            int gx = vuX + innerPad;
-            int gw = vuW - (innerPad * 2);
-            for (int yoff = 0; yoff < fillH; yoff++)
+        if (!g_exporting) {
+            // Voice count VU meter - vertical meter aligned with channel VUs
+            BAEAudioInfo audioInfo;
+            int voiceCount = 0;
+            if (g_bae.mixer && BAEMixer_GetRealtimeStatus(g_bae.mixer, &audioInfo) == BAE_NO_ERROR)
             {
-                float frac = (float)yoff / (float)(innerH > 0 ? innerH : 1);
-                SDL_Color col;
-                if (frac < 0.5f)
-                { // green to yellow
-                    float p = frac / 0.5f;
-                    col.r = (Uint8)(g_highlight_color.r * p + 20 * (1.0f - p));
-                    col.g = (Uint8)(200 * (1.0f - (1.0f - p) * 0.2f));
-                    col.b = (Uint8)(20);
+                voiceCount = audioInfo.voicesActive;
+            }
+
+            // Calculate VU position and dimensions to align with channel VUs
+            int vuX = 375;      // positioned to the right of "Unmute All" button
+            int vuY = chStartY; // align with top of channel grid
+            int vuW = 8;        // slightly wider than channel VUs for visibility
+            int vuH = 71;       // span both rows: row height + checkbox + gap + text + row spacing adjustment
+
+            // Draw VU background/frame
+            Rect vuBg = {vuX, vuY, vuW, vuH};
+            draw_rect(R, vuBg, g_panel_bg);
+            draw_frame(R, vuBg, g_panel_border);
+
+            // Calculate fill level (0-64 voices mapped to 0-1)
+            float voiceFill = (float)voiceCount / (float)MAX_VOICES;
+            if (voiceFill > 1.0f)
+                voiceFill = 1.0f;
+            if (voiceFill < 0.0f)
+                voiceFill = 0.0f;
+
+            int innerPad = 2;
+            int innerH = vuH - (innerPad * 2);
+            int fillH = (int)(voiceFill * innerH);
+
+            if (fillH > 0)
+            {
+                // Draw voice VU with gradient similar to channel VUs
+                int gx = vuX + innerPad;
+                int gw = vuW - (innerPad * 2);
+                for (int yoff = 0; yoff < fillH; yoff++)
+                {
+                    float frac = (float)yoff / (float)(innerH > 0 ? innerH : 1);
+                    SDL_Color col;
+                    if (frac < 0.5f)
+                    { // green to yellow
+                        float p = frac / 0.5f;
+                        col.r = (Uint8)(g_highlight_color.r * p + 20 * (1.0f - p));
+                        col.g = (Uint8)(200 * (1.0f - (1.0f - p) * 0.2f));
+                        col.b = (Uint8)(20);
+                    }
+                    else
+                    { // yellow to red
+                        float p = (frac - 0.5f) / 0.5f;
+                        col.r = (Uint8)(200 + (55 * p));
+                        col.g = (Uint8)(200 * (1.0f - p));
+                        col.b = 20;
+                    }
+                    // Draw from bottom upwards
+                    SDL_SetRenderDrawColor(R, col.r, col.g, col.b, 255);
+                    SDL_RenderDrawLine(R, gx, vuY + vuH - innerPad - 1 - yoff, gx + gw - 1, vuY + vuH - innerPad - 1 - yoff);
                 }
-                else
-                { // yellow to red
-                    float p = (frac - 0.5f) / 0.5f;
-                    col.r = (Uint8)(200 + (55 * p));
-                    col.g = (Uint8)(200 * (1.0f - p));
-                    col.b = 20;
-                }
-                // Draw from bottom upwards
-                SDL_SetRenderDrawColor(R, col.r, col.g, col.b, 255);
-                SDL_RenderDrawLine(R, gx, vuY + vuH - innerPad - 1 - yoff, gx + gw - 1, vuY + vuH - innerPad - 1 - yoff);
+            }
+
+            // Handle tooltip for Voice VU meter
+            if (point_in(ui_mx, ui_my, vuBg) && !modal_block)
+            {
+                char tooltip_text[64];
+                snprintf(tooltip_text, sizeof(tooltip_text), "Active Voices: %d", voiceCount);
+
+                // Measure actual text width and height
+                int text_w, text_h;
+                measure_text(tooltip_text, &text_w, &text_h);
+
+                int tooltip_w = text_w + 8; // 4px padding on each side
+                int tooltip_h = text_h + 8; // 4px padding top and bottom
+                if (tooltip_w > 500)
+                    tooltip_w = 500; // Maximum width constraint
+
+                int tooltip_x = ui_mx + 10;
+                int tooltip_y = ui_my - 30;
+
+                // Keep tooltip on screen
+                if (tooltip_x + tooltip_w > WINDOW_W - 4)
+                    tooltip_x = WINDOW_W - tooltip_w - 4;
+                if (tooltip_y < 4)
+                    tooltip_y = ui_my + 25; // Show below cursor if no room above
+
+                ui_set_tooltip((Rect){tooltip_x, tooltip_y, tooltip_w, tooltip_h}, tooltip_text, &g_voice_tooltip_visible, &g_voice_tooltip_rect, g_voice_tooltip_text, sizeof(g_voice_tooltip_text));
+            }
+            else
+            {
+                ui_clear_tooltip(&g_voice_tooltip_visible);
             }
         }
-
-        // Handle tooltip for Voice VU meter
-        if (point_in(ui_mx, ui_my, vuBg) && !modal_block)
-        {
-            char tooltip_text[64];
-            snprintf(tooltip_text, sizeof(tooltip_text), "Active Voices: %d", voiceCount);
-
-            // Measure actual text width and height
-            int text_w, text_h;
-            measure_text(tooltip_text, &text_w, &text_h);
-
-            int tooltip_w = text_w + 8; // 4px padding on each side
-            int tooltip_h = text_h + 8; // 4px padding top and bottom
-            if (tooltip_w > 500)
-                tooltip_w = 500; // Maximum width constraint
-
-            int tooltip_x = ui_mx + 10;
-            int tooltip_y = ui_my - 30;
-
-            // Keep tooltip on screen
-            if (tooltip_x + tooltip_w > WINDOW_W - 4)
-                tooltip_x = WINDOW_W - tooltip_w - 4;
-            if (tooltip_y < 4)
-                tooltip_y = ui_my + 25; // Show below cursor if no room above
-
-            ui_set_tooltip((Rect){tooltip_x, tooltip_y, tooltip_w, tooltip_h}, tooltip_text, &g_voice_tooltip_visible, &g_voice_tooltip_rect, g_voice_tooltip_text, sizeof(g_voice_tooltip_text));
-        }
-        else
-        {
-            ui_clear_tooltip(&g_voice_tooltip_visible);
-        }
-
+        
         // If playing an audio file (sound, not song), dim the MIDI channels panel
         if (playing && g_bae.is_audio_file && g_bae.sound)
         {

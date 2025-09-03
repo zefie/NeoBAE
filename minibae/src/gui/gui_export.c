@@ -4,6 +4,7 @@
 #include "gui_common.h"
 #include "gui_theme.h"
 #include "MiniBAE.h"
+#include "GenPriv.h"
 #include "BAE_API.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -707,11 +708,7 @@ void bae_service_wav_export()
     // Aggressive export processing for maximum speed
     // Process service calls per frame - but check completion more frequently to avoid overrun
 
-    // The lower this is, the higher the chance of a note ending prematurely?? - zef
-    // But setting it too high can also slow it down and do the same?? - zef
-    // 9999 is too fast though, the GUI can freeze in BAE Loop mode, making it hard to recover.
-    // can't thread it, still drops notes... 
-    short max_iterations = 9999; // no touchy
+    short max_iterations = 5120;
 
     for (int i = 0; i < max_iterations && g_exporting; ++i)
     {
