@@ -106,7 +106,7 @@ CXXFLAGS 	:= $(CFLAGS)
 # Use C++ linker if we have any C++ sources
 ifneq ($(filter %.cpp,$(SRC) $(SRC_BIN)),)
     LD := $(CXX)
-    LIBS += -lstdc++ -lsupc++
+    LIBS += -lstdc++
 endif
 
 all: $(TARGET_LIB).a ${TARGET_LIB}.so $(TARGET_BIN)
