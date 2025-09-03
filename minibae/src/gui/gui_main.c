@@ -4045,7 +4045,6 @@ int main(int argc, char *argv[])
                                 compression = g_exportCompressionMap[g_exportCodecIndex];
                             }
 #endif
-                            // Use BAEMixer_StartOutputToFile directly like bae_start_wav_export but with compression choice
                             if (!g_bae.song_loaded || g_bae.is_audio_file)
                             {
                                 set_status_message("Cannot export: No MIDI/RMF loaded");
@@ -4053,17 +4052,6 @@ int main(int argc, char *argv[])
                             else
                             {
                                 // Save current state
-                                uint32_t curPosUs = 0;
-                                BAESong_GetMicrosecondPosition(g_bae.song, &curPosUs);
-                                g_bae.position_us_before_export = curPosUs;
-                                g_bae.was_playing_before_export = g_bae.is_playing;
-                                g_bae.loop_was_enabled_before_export = g_bae.loop_enabled_gui;
-                                if (g_bae.is_playing)
-                                {
-                                    BAESong_Stop(g_bae.song, FALSE);
-                                    g_bae.is_playing = false;
-                                }
-                                BAESong_SetMicrosecondPosition(g_bae.song, 0);
                                 BAEFileType export_file_type = BAE_WAVE_TYPE;
 
                                 // Determine file type based on compression type
@@ -4090,86 +4078,9 @@ int main(int argc, char *argv[])
                                 }
 #endif
 
-                                BAEResult result = BAEMixer_StartOutputToFile(g_bae.mixer, (BAEPathName)export_file,
-                                                                              export_file_type,
-                                                                              (BAECompressionType)compression);
-                                if (result != BAE_NO_ERROR)
-                                {
-                                    char msg[128];
-                                    snprintf(msg, sizeof(msg), "Export failed to start (%d)", result);
-                                    set_status_message(msg);
-                                }
-                                else
-                                {
-                                    // Determine export file type so service loop can apply MPEG heuristics
-                                    g_export_file_type = export_file_type;
-
-                                    // Reset virtual keyboard so no keys remain active during export
-                                    if (g_show_virtual_keyboard)
-                                    {
-                                        BAESong target = g_bae.song ? g_bae.song : g_live_song;
-                                        if (g_keyboard_mouse_note != -1)
-                                        {
-                                            if (target)
-                                                BAESong_NoteOff(target, (unsigned char)g_keyboard_channel, (unsigned char)g_keyboard_mouse_note, 0, 0);
-                                            g_keyboard_mouse_note = -1;
-                                        }
-                                        memset(g_keyboard_active_notes, 0, sizeof(g_keyboard_active_notes));
-                                    }
-
-                                    // Start song to drive export
-                                    BAESong_Stop(g_bae.song, FALSE);
-                                    BAESong_SetMicrosecondPosition(g_bae.song, 0);
-                                    BAESong_Preroll(g_bae.song);
-                                    result = BAESong_Start(g_bae.song, 0);
-                                    if (result != BAE_NO_ERROR)
-                                    {
-                                        BAE_PRINTF("Export: BAESong_Start failed (%d)\n", result);
-                                    }
-                                    else
-                                    {
-                                        g_bae.is_playing = true;
-
-                                        // If MPEG export, prime encoder by servicing several slices so sequencer events schedule
-                                        if (g_export_file_type == BAE_MPEG_TYPE)
-                                        {
-                                            for (int prime = 0; prime < 8; ++prime)
-                                            {
-                                                BAEResult serr = BAEMixer_ServiceAudioOutputToFile(g_bae.mixer);
-                                                if (serr != BAE_NO_ERROR)
-                                                {
-                                                    char msg[128];
-                                                    snprintf(msg, sizeof(msg), "MP3 export initialization failed (%d)", serr);
-                                                    set_status_message(msg);
-                                                    BAEMixer_StopOutputToFile();
-                                                    break;
-                                                }
-                                            }
-                                            // If song still reports done, keep priming briefly until active or safety limit
-                                            {
-                                                BAE_BOOL preDone = TRUE;
-                                                int safety = 0;
-                                                while (preDone && safety < 32)
-                                                {
-                                                    if (BAESong_IsDone(g_bae.song, &preDone) != BAE_NO_ERROR)
-                                                        break;
-                                                    if (!preDone)
-                                                        break;
-                                                    BAEResult serr = BAEMixer_ServiceAudioOutputToFile(g_bae.mixer);
-                                                    if (serr != BAE_NO_ERROR)
-                                                        break;
-                                                    BAE_WaitMicroseconds(2000);
-                                                    safety++;
-                                                }
-                                            }
-                                        }
-                                    }
-                                    g_exporting = true;
-                                    g_export_path[0] = 0;
-                                    strncpy(g_export_path, export_file, sizeof(g_export_path) - 1);
-                                    g_export_path[sizeof(g_export_path) - 1] = '\0';
-                                    set_status_message("Export started");
-                                }
+                                // Determine export file type so service loop can apply MPEG heuristics
+                                g_export_file_type = export_file_type;
+                                bae_start_export(export_file, export_file_type, compression);
                             }
                             free(export_file);
                         }

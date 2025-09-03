@@ -54,7 +54,7 @@ extern const int g_exportCompressionCount;
 // Function declarations
 void export_init(void);
 void export_cleanup(void);
-bool bae_start_wav_export(const char *output_file);
+bool bae_start_export(const char *output_file, int export_type, int compression);
 #if USE_MPEG_ENCODER != FALSE
 bool bae_start_mpeg_export(const char *output_file, int codec_index);
 #endif

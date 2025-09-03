@@ -16,8 +16,11 @@
 #include <windows.h>
 #include <commdlg.h>
 #include <sys/stat.h>
+#include <process.h>
 #else
 #include <sys/stat.h>
+#include <pthread.h>
+#include <unistd.h>
 #endif
 
 // Forward declare the BAEGUI structure (defined in gui_main.old.c)
@@ -57,6 +60,26 @@ int g_export_progress = 0;      // retained for potential legacy UI, not shown n
 uint32_t g_export_last_pos = 0; // track advancement
 int g_export_stall_iters = 0;   // stall detection
 char g_export_path[1024] = {0}; // path of current export file
+
+// Threading support for export
+#ifdef _WIN32
+static HANDLE g_export_thread = NULL;
+static unsigned int g_export_thread_id = 0;
+#else
+static pthread_t g_export_thread = 0;
+static bool g_export_thread_active = false;
+#endif
+
+// Export thread synchronization
+static volatile bool g_export_thread_should_stop = false;
+static volatile bool g_export_thread_finished = false;
+
+// Forward declaration of export thread function
+#ifdef _WIN32
+static unsigned __stdcall export_thread_proc(void *param);
+#else
+static void *export_thread_proc(void *param);
+#endif
 
 // Export file tracking
 int g_export_file_type = BAE_WAVE_TYPE; // BAE_WAVE_TYPE or BAE_MPEG_TYPE
@@ -231,7 +254,7 @@ extern void pcm_wav_finalize(void);
 extern void karaoke_suspend(bool suspend);
 #endif
 
-bool bae_start_wav_export(const char *output_file)
+bool bae_start_export(const char *output_file, int export_type, int compression)
 {
     if (!g_bae.song_loaded || g_bae.is_audio_file)
     {
@@ -266,8 +289,8 @@ bool bae_start_wav_export(const char *output_file)
     // This is the correct order based on working MBAnsi test code
     BAEResult result = BAEMixer_StartOutputToFile(g_bae.mixer,
                                                   (BAEPathName)output_file,
-                                                  BAE_WAVE_TYPE,
-                                                  BAE_COMPRESSION_NONE);
+                                                  (BAEFileType)export_type,
+                                                  (BAECompressionType)compression);
 
     if (result != BAE_NO_ERROR)
     {
@@ -391,6 +414,35 @@ bool bae_start_wav_export(const char *output_file)
     strncpy(g_export_path, output_file ? output_file : "", sizeof(g_export_path) - 1);
     g_export_path[sizeof(g_export_path) - 1] = '\0';
 
+    // Initialize thread synchronization variables
+    g_export_thread_should_stop = false;
+    g_export_thread_finished = false;
+
+    // Create export thread
+#ifdef _WIN32
+    g_export_thread = (HANDLE)_beginthreadex(NULL, 0, export_thread_proc, NULL, 0, &g_export_thread_id);
+    if (g_export_thread == NULL)
+    {
+        BAE_PRINTF("Failed to create export thread\n");
+        set_status_message("Failed to create export thread");
+        BAEMixer_StopOutputToFile();
+        g_exporting = false;
+        return false;
+    }
+#else
+    g_export_thread_active = true;
+    if (pthread_create(&g_export_thread, NULL, export_thread_proc, NULL) != 0)
+    {
+        BAE_PRINTF("Failed to create export thread\n");
+        set_status_message("Failed to create export thread");
+        BAEMixer_StopOutputToFile();
+        g_exporting = false;
+        g_export_thread_active = false;
+        return false;
+    }
+#endif
+
+    set_status_message("WAV export started");
     return true;
 }
 
@@ -569,6 +621,34 @@ bool bae_start_mpeg_export(const char *output_file, int codec_index)
     strncpy(g_export_path, output_file ? output_file : "", sizeof(g_export_path) - 1);
     g_export_path[sizeof(g_export_path) - 1] = '\0';
 
+    // Initialize thread synchronization variables
+    g_export_thread_should_stop = false;
+    g_export_thread_finished = false;
+
+    // Create export thread
+#ifdef _WIN32
+    g_export_thread = (HANDLE)_beginthreadex(NULL, 0, export_thread_proc, NULL, 0, &g_export_thread_id);
+    if (g_export_thread == NULL)
+    {
+        BAE_PRINTF("Failed to create MPEG export thread\n");
+        set_status_message("Failed to create MPEG export thread");
+        BAEMixer_StopOutputToFile();
+        g_exporting = false;
+        return false;
+    }
+#else
+    g_export_thread_active = true;
+    if (pthread_create(&g_export_thread, NULL, export_thread_proc, NULL) != 0)
+    {
+        BAE_PRINTF("Failed to create MPEG export thread\n");
+        set_status_message("Failed to create MPEG export thread");
+        BAEMixer_StopOutputToFile();
+        g_exporting = false;
+        g_export_thread_active = false;
+        return false;
+    }
+#endif
+
     set_status_message("MP3 export started");
     return true;
 }
@@ -578,6 +658,28 @@ void bae_stop_wav_export()
 {
     if (g_exporting)
     {
+        // Signal the export thread to stop
+        g_export_thread_should_stop = true;
+        
+        // Wait for the export thread to finish
+#ifdef _WIN32
+        if (g_export_thread != NULL)
+        {
+            WaitForSingleObject(g_export_thread, 5000); // Wait up to 5 seconds
+            CloseHandle(g_export_thread);
+            g_export_thread = NULL;
+            g_export_thread_id = 0;
+        }
+#else
+        if (g_export_thread_active)
+        {
+            // Simple join - if the thread is stuck, the user can always force-quit the app
+            pthread_join(g_export_thread, NULL);
+            g_export_thread_active = false;
+            g_export_thread = 0;
+        }
+#endif
+
         BAEMixer_StopOutputToFile();
 
         // Stop the song first
@@ -646,13 +748,18 @@ void bae_stop_wav_export()
         // We'll sync just after frame logic by checking mismatch
 
         g_exporting = false;
+        g_export_thread_should_stop = false;
+        g_export_thread_finished = false;
+        
 #ifdef SUPPORT_KARAOKE
         karaoke_suspend(false); // re-enable karaoke after export
 #endif
         g_export_realtime_mode = false;
         g_export_progress = 0;
         g_export_path[0] = '\0';
-        set_status_message("WAV export completed");
+        
+        const char *msg = g_export_thread_should_stop ? "Export cancelled" : "Export completed";
+        set_status_message(msg);
     }
 }
 
@@ -690,33 +797,41 @@ void bae_service_wav_export()
         return;
     }
 #endif
-    if (!g_exporting)
+    
+    // If we're using threaded export, just check if the thread is done
+    if (g_exporting && g_export_thread_finished)
+    {
+        bae_stop_wav_export();
         return;
+    }
+    
+    // Non-threaded export is no longer used - all export is now threaded
+    return;
+}
 
-    // Aggressive export processing for maximum speed
-    // Process service calls per frame - but check completion more frequently to avoid overrun
-    // The lower this is, the more CPU time the GUI gets.
-    // The more CPU time the GUI gets, the more likely a note is dropped prematurely (in some cases)
-    // This has been a painful bug to try to squash, and its not fixed yet
-    // Something within the GUI iteration is upsetting BAE, but only on certain sustains.
-
-    short max_iterations = 12;
-
-    for (int i = 0; i < max_iterations && g_exporting; ++i)
+// Export thread function - this runs the actual export loop
+#ifdef _WIN32
+static unsigned __stdcall export_thread_proc(void *param)
+#else
+static void *export_thread_proc(void *param)
+#endif
+{
+    BAE_PRINTF("Export thread started\n");
+      
+    while (!g_export_thread_should_stop && g_exporting)
     {
         // First service call (matching main loop service in playbae)
         BAEResult r = BAEMixer_ServiceAudioOutputToFile(g_bae.mixer);
         if (r != BAE_NO_ERROR)
         {
-            char msg[128];
-            snprintf(msg, sizeof(msg), "Export error (%d)", r);
             BAE_PRINTF("ServiceAudioOutputToFile error: %d\n", r);
-            set_status_message(msg);
-            bae_stop_wav_export();
-            return;
+            g_export_thread_should_stop = true;
+            break;
         }
 
         BAE_BOOL is_done = FALSE;
+        uint32_t current_pos = 0;
+        BAESong_GetMicrosecondPosition(g_bae.song, &current_pos);
         BAESong_IsDone(g_bae.song, &is_done);
 
         if (!is_done)
@@ -725,34 +840,30 @@ void bae_service_wav_export()
             r = BAEMixer_ServiceAudioOutputToFile(g_bae.mixer);
             if (r != BAE_NO_ERROR)
             {
-                char msg[128];
-                snprintf(msg, sizeof(msg), "Export error (%d)", r);
                 BAE_PRINTF("ServiceAudioOutputToFile error: %d\n", r);
-                set_status_message(msg);
-                bae_stop_wav_export();
-                return;
+                g_export_thread_should_stop = true;
+                break;
             }
         }
 
         if (is_done)
         {
-            uint32_t current_pos = 0;        
-            BAESong_GetMicrosecondPosition(g_bae.song, &current_pos);
             BAE_PRINTF("Song finished at position %lu\n", current_pos);
+
             // Always add a small drain period to ensure all audio is captured
             // This helps prevent cutting off the end of notes
-            for (int drain = 0; drain < 20; drain++)
+            for (int drain = 0; drain < 20 && !g_export_thread_should_stop; drain++)
             {
                 BAEMixer_ServiceAudioOutputToFile(g_bae.mixer);
-                BAE_WaitMicroseconds(5000); // 5ms between drain calls
+                BAE_WaitMicroseconds(5000);
             }
 
             // If exporting MPEG, wait for device-samples to stabilize before stopping (encoder drain)
-            if (g_exporting && g_export_file_type == BAE_MPEG_TYPE)
+            if (g_exporting && g_export_file_type == BAE_MPEG_TYPE && !g_export_thread_should_stop)
             {
                 uint32_t lastSamples = 0;
                 int stableLoops = 0;
-                while (stableLoops < (int)EXPORT_MPEG_STABLE_THRESHOLD)
+                while (stableLoops < (int)EXPORT_MPEG_STABLE_THRESHOLD && !g_export_thread_should_stop)
                 {
                     BAEMixer_ServiceAudioOutputToFile(g_bae.mixer);
                     BAE_WaitMicroseconds(11000);
@@ -766,15 +877,28 @@ void bae_service_wav_export()
                         stableLoops = 0;
                         lastSamples = curSamples;
                     }
-                    if (!g_exporting)
-                        break; // allow external abort
                 }
             }
 
-            bae_stop_wav_export();
-            return;
+            // Export completed successfully
+            g_export_thread_finished = true;
+            BAE_PRINTF("Export thread completed normally\n");
+#ifdef _WIN32
+            return 0;
+#else
+            return NULL;
+#endif
         }
     }
+
+    // If we get here, export was cancelled or failed
+    BAE_PRINTF("Export thread stopped (cancelled or failed)\n");
+    g_export_thread_finished = true;
+#ifdef _WIN32
+    return 0;
+#else
+    return NULL;
+#endif
 }
 
 // File dialog for save export
@@ -904,6 +1028,17 @@ void export_init(void)
     g_export_realtime_mode = false;
     g_export_using_live_song = false;
     g_exportDropdownOpen = false;
+    
+    // Initialize threading variables
+#ifdef _WIN32
+    g_export_thread = NULL;
+    g_export_thread_id = 0;
+#else
+    g_export_thread = 0;
+    g_export_thread_active = false;
+#endif
+    g_export_thread_should_stop = false;
+    g_export_thread_finished = false;
 }
 
 // Cleanup export subsystem
