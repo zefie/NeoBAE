@@ -328,6 +328,8 @@ const char *BAE_GetFeatureString()
     // Audio backend
 #if (X_PLATFORM == X_SDL2)
     const char *audio = "SDL2";
+#elif (X_PLATFORM == X_SDL3)
+    const char *audio = "SDL3";
 #elif (X_PLATFORM == X_WIN95)
     const char *audio = "DirectSound";
 #else
