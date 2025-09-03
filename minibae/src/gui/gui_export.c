@@ -51,7 +51,6 @@ typedef struct
 // External globals
 extern BAEGUI g_bae;
 extern void set_status_message(const char *msg);
-
 // Export state globals
 bool g_exporting = false;
 int g_export_progress = 0;      // retained for potential legacy UI, not shown now
@@ -694,21 +693,14 @@ void bae_service_wav_export()
     if (!g_exporting)
         return;
 
-    for (int prime = 0; prime < 8; ++prime)
-    {
-        BAEResult serr = BAEMixer_ServiceAudioOutputToFile(g_bae.mixer);
-        if (serr != BAE_NO_ERROR)
-        {
-            BAESong_Stop(g_bae.song, FALSE);
-            BAESong_Delete(g_bae.song);
-            BAEMixer_Delete(g_bae.mixer);
-            return;
-        }
-    }
     // Aggressive export processing for maximum speed
     // Process service calls per frame - but check completion more frequently to avoid overrun
+    // The lower this is, the more CPU time the GUI gets.
+    // The more CPU time the GUI gets, the more likely a note is dropped prematurely (in some cases)
+    // This has been a painful bug to try to squash, and its not fixed yet
+    // Something within the GUI iteration is upsetting BAE, but only on certain sustains.
 
-    short max_iterations = 5120;
+    short max_iterations = 12;
 
     for (int i = 0; i < max_iterations && g_exporting; ++i)
     {
@@ -725,8 +717,6 @@ void bae_service_wav_export()
         }
 
         BAE_BOOL is_done = FALSE;
-        uint32_t current_pos = 0;
-        BAESong_GetMicrosecondPosition(g_bae.song, &current_pos);
         BAESong_IsDone(g_bae.song, &is_done);
 
         if (!is_done)
@@ -746,8 +736,9 @@ void bae_service_wav_export()
 
         if (is_done)
         {
+            uint32_t current_pos = 0;        
+            BAESong_GetMicrosecondPosition(g_bae.song, &current_pos);
             BAE_PRINTF("Song finished at position %lu\n", current_pos);
-
             // Always add a small drain period to ensure all audio is captured
             // This helps prevent cutting off the end of notes
             for (int drain = 0; drain < 20; drain++)

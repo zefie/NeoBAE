@@ -865,8 +865,7 @@ int main(int argc, char *argv[])
     SDL_Renderer *R = SDL_CreateRenderer(win, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
     if (!R)
         R = SDL_CreateRenderer(win, -1, 0);
-    // Load gear SVG from embedded string into texture once (no filesystem dependency)
-
+    
     bool running = true;
     duration = bae_get_len_ms();
     g_bae.loop_enabled_gui = loopPlay;
@@ -875,8 +874,6 @@ int main(int argc, char *argv[])
     bae_set_transpose(transpose);
     bae_set_loop(loopPlay);
     bae_set_reverb(reverbType);
-
-    // (moved earlier) already applied
 
     // Load bank (use saved bank if available, otherwise fallback)
     if (settings.has_bank && strlen(settings.bank_path) > 0)
@@ -1516,7 +1513,7 @@ int main(int argc, char *argv[])
                     }
                 }
 
-                // Map requested qwerty-friendly sequence to MIDI notes starting at C4.
+                // Map qwerty-friendly sequence to MIDI notes starting at C4.
                 // Sequence (chromatic including black keys):
                 // a w s e d f t g y h u j k o
                 // Mapping: a=C, w=C#, s=D, e=D#, d=E, f=F, t=F#, g=G, y=G#, h=A, u=A#, j=B,
@@ -2101,7 +2098,9 @@ int main(int argc, char *argv[])
         }
 
         // Service WAV export if active
-        bae_service_wav_export();
+        if (g_exporting) {
+            bae_service_wav_export();
+        }
 
 #if SUPPORT_PLAYLIST == TRUE
         // Handle pending playlist loads
@@ -2179,7 +2178,7 @@ int main(int argc, char *argv[])
         // fragments were being accumulated (no committed lines yet). Include
         // the transient current/previous buffers so the panel appears as soon
         // as any lyric text exists.
-        bool showKaraoke = g_karaoke_enabled && !g_karaoke_suspended &&
+        bool showKaraoke = g_karaoke_enabled && !g_karaoke_suspended && !g_exporting &&
                            (g_lyric_count > 0 || g_karaoke_line_current[0] || g_karaoke_line_previous[0]) &&
                            g_bae.song_loaded && !g_bae.is_audio_file;
 #endif
@@ -3345,86 +3344,83 @@ int main(int argc, char *argv[])
                 }
 
                 // LSB/MSB number pickers - compact layout below channel dropdown
-                if (!(g_bae.is_audio_file && g_bae.sound))
+                int picker_y = keyboardPanel.y + 56; // below channel dropdown
+                int picker_w = 35;                   // compact width for 3-digit numbers
+                int picker_h = 18;
+                int spacing = 5;
+
+                // MSB picker (now first)
+                Rect msbRect = {keyboardPanel.x + 10, picker_y, picker_w, picker_h};
+                bool msbHover = !g_keyboard_channel_dd_open && point_in(ui_mx, ui_my, msbRect);
+                SDL_Color msbBg = msbHover ? g_button_hover : g_button_base;
+                if (g_keyboard_channel_dd_open)
+                    msbBg.a = 180; // Make it appear disabled when channel dropdown is open
+                draw_rect(R, msbRect, msbBg);
+                draw_frame(R, msbRect, g_button_border);
+
+                char msbText[8];
+                snprintf(msbText, sizeof(msbText), "%d", g_keyboard_msb);
+                int msb_tw = 0, msb_th = 0;
+                measure_text(msbText, &msb_tw, &msb_th);
+                SDL_Color msbTextColor = g_button_text;
+                if (g_keyboard_channel_dd_open)
+                    msbTextColor.a = 180; // Dim text when disabled
+                draw_text(R, msbRect.x + (msbRect.w - msb_tw) / 2, msbRect.y + (msbRect.h - msb_th) / 2, msbText, msbTextColor);
+
+                // LSB picker (now second)
+                Rect lsbRect = {msbRect.x + picker_w + spacing, picker_y, picker_w, picker_h};
+                bool lsbHover = !g_keyboard_channel_dd_open && point_in(ui_mx, ui_my, lsbRect);
+                SDL_Color lsbBg = lsbHover ? g_button_hover : g_button_base;
+                if (g_keyboard_channel_dd_open)
+                    lsbBg.a = 180; // Make it appear disabled when channel dropdown is open
+                draw_rect(R, lsbRect, lsbBg);
+                draw_frame(R, lsbRect, g_button_border);
+
+                char lsbText[8];
+                snprintf(lsbText, sizeof(lsbText), "%d", g_keyboard_lsb);
+                int lsb_tw = 0, lsb_th = 0;
+                measure_text(lsbText, &lsb_tw, &lsb_th);
+                SDL_Color lsbTextColor = g_button_text;
+                if (g_keyboard_channel_dd_open)
+                    lsbTextColor.a = 180; // Dim text when disabled
+                draw_text(R, lsbRect.x + (lsbRect.w - lsb_tw) / 2, lsbRect.y + (lsbRect.h - lsb_th) / 2, lsbText, lsbTextColor);
+
+                // Handle tooltips (disabled when channel dropdown is open)
+                if (!g_keyboard_channel_dd_open)
                 {
-                    int picker_y = keyboardPanel.y + 56; // below channel dropdown
-                    int picker_w = 35;                   // compact width for 3-digit numbers
-                    int picker_h = 18;
-                    int spacing = 5;
-
-                    // MSB picker (now first)
-                    Rect msbRect = {keyboardPanel.x + 10, picker_y, picker_w, picker_h};
-                    bool msbHover = !g_keyboard_channel_dd_open && point_in(ui_mx, ui_my, msbRect);
-                    SDL_Color msbBg = msbHover ? g_button_hover : g_button_base;
-                    if (g_keyboard_channel_dd_open)
-                        msbBg.a = 180; // Make it appear disabled when channel dropdown is open
-                    draw_rect(R, msbRect, msbBg);
-                    draw_frame(R, msbRect, g_button_border);
-
-                    char msbText[8];
-                    snprintf(msbText, sizeof(msbText), "%d", g_keyboard_msb);
-                    int msb_tw = 0, msb_th = 0;
-                    measure_text(msbText, &msb_tw, &msb_th);
-                    SDL_Color msbTextColor = g_button_text;
-                    if (g_keyboard_channel_dd_open)
-                        msbTextColor.a = 180; // Dim text when disabled
-                    draw_text(R, msbRect.x + (msbRect.w - msb_tw) / 2, msbRect.y + (msbRect.h - msb_th) / 2, msbText, msbTextColor);
-
-                    // LSB picker (now second)
-                    Rect lsbRect = {msbRect.x + picker_w + spacing, picker_y, picker_w, picker_h};
-                    bool lsbHover = !g_keyboard_channel_dd_open && point_in(ui_mx, ui_my, lsbRect);
-                    SDL_Color lsbBg = lsbHover ? g_button_hover : g_button_base;
-                    if (g_keyboard_channel_dd_open)
-                        lsbBg.a = 180; // Make it appear disabled when channel dropdown is open
-                    draw_rect(R, lsbRect, lsbBg);
-                    draw_frame(R, lsbRect, g_button_border);
-
-                    char lsbText[8];
-                    snprintf(lsbText, sizeof(lsbText), "%d", g_keyboard_lsb);
-                    int lsb_tw = 0, lsb_th = 0;
-                    measure_text(lsbText, &lsb_tw, &lsb_th);
-                    SDL_Color lsbTextColor = g_button_text;
-                    if (g_keyboard_channel_dd_open)
-                        lsbTextColor.a = 180; // Dim text when disabled
-                    draw_text(R, lsbRect.x + (lsbRect.w - lsb_tw) / 2, lsbRect.y + (lsbRect.h - lsb_th) / 2, lsbText, lsbTextColor);
-
-                    // Handle tooltips (disabled when channel dropdown is open)
-                    if (!g_keyboard_channel_dd_open)
+                    if (lsbHover)
                     {
-                        if (lsbHover)
+                        ui_set_tooltip((Rect){ui_mx + 10, ui_my - 25, 0, 0}, "LSB", &g_lsb_tooltip_visible, &g_lsb_tooltip_rect, g_lsb_tooltip_text, sizeof(g_lsb_tooltip_text));
+                    }
+                    else if (msbHover)
+                    {
+                        ui_set_tooltip((Rect){ui_mx + 10, ui_my - 25, 0, 0}, "MSB", &g_msb_tooltip_visible, &g_msb_tooltip_rect, g_msb_tooltip_text, sizeof(g_msb_tooltip_text));
+                    }
+                }
+
+                // Handle clicks (disabled when channel dropdown is open)
+                if (!modal_block && !g_keyboard_channel_dd_open)
+                {
+                    if (msbHover)
+                    {
+                        if (ui_mclick) // Left click increments
                         {
-                            ui_set_tooltip((Rect){ui_mx + 10, ui_my - 25, 0, 0}, "LSB", &g_lsb_tooltip_visible, &g_lsb_tooltip_rect, g_lsb_tooltip_text, sizeof(g_lsb_tooltip_text));
+                            change_bank_value_for_current_channel(true, +1);
                         }
-                        else if (msbHover)
+                        else if (ui_rclick) // Right click decrements
                         {
-                            ui_set_tooltip((Rect){ui_mx + 10, ui_my - 25, 0, 0}, "MSB", &g_msb_tooltip_visible, &g_msb_tooltip_rect, g_msb_tooltip_text, sizeof(g_msb_tooltip_text));
+                            change_bank_value_for_current_channel(true, -1);
                         }
                     }
-
-                    // Handle clicks (disabled when channel dropdown is open)
-                    if (!modal_block && !g_keyboard_channel_dd_open)
+                    else if (lsbHover)
                     {
-                        if (msbHover)
+                        if (ui_mclick) // Left click increments
                         {
-                            if (ui_mclick) // Left click increments
-                            {
-                                change_bank_value_for_current_channel(true, +1);
-                            }
-                            else if (ui_rclick) // Right click decrements
-                            {
-                                change_bank_value_for_current_channel(true, -1);
-                            }
+                            change_bank_value_for_current_channel(false, +1);
                         }
-                        else if (lsbHover)
+                        else if (ui_rclick) // Right click decrements
                         {
-                            if (ui_mclick) // Left click increments
-                            {
-                                change_bank_value_for_current_channel(false, +1);
-                            }
-                            else if (ui_rclick) // Right click decrements
-                            {
-                                change_bank_value_for_current_channel(false, -1);
-                            }
+                            change_bank_value_for_current_channel(false, -1);
                         }
                     }
                 }
@@ -5907,7 +5903,9 @@ int main(int argc, char *argv[])
                 {
                     for (int n = 0; n < 128; n++)
                     {
-                        BAESong_NoteOff(target, (unsigned char)g_keyboard_channel, (unsigned char)n, 0, 0);
+                        if (g_keyboard_active_notes[n]) {
+                            BAESong_NoteOff(target, (unsigned char)g_keyboard_channel, (unsigned char)n, 0, 0);
+                        }
                     }
                 }
                 g_keyboard_mouse_note = -1;
