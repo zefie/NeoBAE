@@ -1,4 +1,0 @@
-- figure out why BAE drops only certain notes \(ADSR?\) when exporting.
-- Only occurs in the GUI and when the GUI gets CPU time.
-- Implement fix that doesn't freeze GUI.
-- Test above with Sky-Chase-Zone-XG-abridged.mid export.

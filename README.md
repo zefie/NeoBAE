@@ -10,7 +10,8 @@ When Beatnik ended business in December 2009, the source code was released under
 
 ## Features
 
-- **Multi-format audio support**: MIDI, RMF (Rich Music Format), WAV, AIFF, AU, FLAC, OGG Vorbis, MP3
+- **Multi-format audio support**: MIDI, RMF (Rich Music Format), WAV, AIFF, AU, FLAC, OGG Vorbis, MP2, MP3
+- **Multiple Soundbanks**: Experience your favorite MIDIs with several Beatnik HSB (HeadSpace Bank), and additional SoundFont 2/3 support
 - **Real-time synthesis**: Built-in software synthesizer with General MIDI support
 - **Cross-platform**: Runs on Linux, Windows, macOS, and can be compiled to WebAssembly
 - **Command-line player**: `playbae` - a versatile audio file player
@@ -19,8 +20,8 @@ When Beatnik ended business in December 2009, the source code was released under
 - **Audio export**: Convert MIDI files to audio formats like WAV, MP3, FLAC, and Vorbis
 - **Low latency**: Designed for real-time audio applications
 - **Embeddable**: Can be integrated into other applications
-- **Modular Build System**: Can be slimmed down to its core, to restore the original minimal footprint.
-- **Portable Design**: Easily add new and unique platform support.
+- **Modular Build System**: Can be slimmed down to its core, to restore the original minimal footprint
+- **Portable Design**: Easily add new and unique platform support
 
 ## Building
 
@@ -121,7 +122,7 @@ The GUI provides an intuitive interface for:
 | MIDI | `.mid`, `.midi` | Standard MIDI files |
 | RMF | `.rmf` | Rich Music Format (Beatnik's proprietary format) |
 | Audio | `.wav`, `.aiff`, `.au` | Uncompressed audio |
-| Compressed | `.mp3`, `.flac`, `.ogg` | Various compressed formats |
+| Compressed | `.mp2`, `.mp3`, `.flac`, `.ogg` | Various compressed formats |
 
 ## Architecture
 
