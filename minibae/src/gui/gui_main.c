@@ -502,12 +502,18 @@ bool recreate_mixer_and_restore(int sampleRateHz, bool stereo, int reverbType,
     }
 #endif    
     // Create new mixer
+#if USE_SF2_SUPPORT == TRUE
+    XBOOL wasTSF = GM_GetMixerTSFMode();
+#endif
     g_bae.mixer = BAEMixer_New();
     if (!g_bae.mixer)
     {
         set_status_message("Mixer recreate failed");
         return false;
     }
+#if USE_SF2_SUPPORT == TRUE
+    GM_SetMixerTSFMode(wasTSF);
+#endif
     BAERate rate = map_rate_from_hz(sampleRateHz);
     BAEAudioModifiers mods = BAE_USE_16 | (stereo ? BAE_USE_STEREO : 0);
     BAEResult mr = BAEMixer_Open(g_bae.mixer, rate, BAE_LINEAR_INTERPOLATION, mods, 32, 8, 32, TRUE);

@@ -87,7 +87,8 @@ void GM_ResetTSF(void);
 void tsf_get_channel_amplitudes(float channelAmplitudes[16][2]);
 void GM_TSF_KillChannelNotes(int ch);
 void GM_TSF_KillAllNotes(void);
-
+void GM_SetMixerTSFMode(XBOOL isTSF);
+XBOOL GM_GetMixerTSFMode(void);
 #endif // USE_SF2_SUPPORT
 
 #ifdef __cplusplus

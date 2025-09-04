@@ -70,6 +70,21 @@ OPErr GM_InitializeTSF(void)
     return NO_ERR;
 }
 
+void GM_SetMixerTSFMode(XBOOL isTSF) {
+    GM_Mixer* pMixer = GM_GetCurrentMixer();
+    if (pMixer) {
+        pMixer->isTSF = isTSF;
+    }
+}
+
+XBOOL GM_GetMixerTSFMode() {
+    GM_Mixer* pMixer = GM_GetCurrentMixer();
+    if (pMixer) {
+        return pMixer->isTSF;
+    }
+    return FALSE;
+}
+
 void GM_TSF_SetSampleRate(int32_t sampleRate)
 {
     if (!g_tsf_initialized)
