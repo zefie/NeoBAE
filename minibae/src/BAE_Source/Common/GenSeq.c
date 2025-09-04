@@ -1063,115 +1063,76 @@ void GM_GetRealtimeChannelLevels(float left[16], float right[16])
         }
         return;
     }
-
-    // If there are no active voices, clear levels so the GUI VU meters go dark when playback stops.
-    // Don't use GM_IsAudioActive() here because it also checks for reverb tail which we don't want.
-    XBOOL anyActiveVoices = FALSE;
+    
+    // Initialize all channels to zero
+    for (int i = 0; i < 16; ++i) {
+        left[i] = 0.0f;
+        right[i] = 0.0f;
+    }
+    
+    // Process legacy voices first
+    double legacySumL[16] = {0}, legacySumR[16] = {0};
+    int legacyCounts[16] = {0};
+    
     int maxEntries = pMixer->MaxNotes + pMixer->MaxEffects;
-    for (int e = 0; e < maxEntries; ++e)
-    {
+    for (int e = 0; e < maxEntries; ++e) {
         GM_Voice *v = &pMixer->NoteEntry[e];
-        if (v->voiceMode != VOICE_UNUSED)
-        {
-            anyActiveVoices = TRUE;
-            break;
-        }
-    }
-    if (!anyActiveVoices)
-    {
-        for (int i = 0; i < 16; ++i)
-        {
-            left[i] = 0.0f;
-            right[i] = 0.0f;
-        }       
-    }
-
-    // Sum squares per channel (use 64-bit accumulator to avoid overflow)
-    double sumL[16] = {0}, sumR[16] = {0};
-    int counts[16] = {0};
-
-    maxEntries = pMixer->MaxNotes + pMixer->MaxEffects;
-    for (int e = 0; e < maxEntries; ++e)
-    {
-        GM_Voice *v = &pMixer->NoteEntry[e];
-        if (v->voiceMode == VOICE_UNUSED)
-            continue;
-        int ch = (int)v->NoteChannel;
-        if (ch < 0 || ch >= 16)
-            continue;
-        // lastAmplitude values are 32-bit scaled ints. Convert to float in 0..1
+        if (v->voiceMode == VOICE_UNUSED) continue;
+        int ch = (int)v->NoteChannel; if (ch < 0 || ch >= 16) continue;
         double aL = (double)v->lastAmplitudeL / (double)0x7FFFFFFF;
         double aR = (double)v->lastAmplitudeR / (double)0x7FFFFFFF;
-        if (aL < 0)
-            aL = -aL;
-        if (aR < 0)
-            aR = -aR;
-        sumL[ch] += aL * aL;
-        sumR[ch] += aR * aR;
-        counts[ch]++;
+        if (aL < 0) aL = -aL; if (aR < 0) aR = -aR;
+        legacySumL[ch] += aL * aL; legacySumR[ch] += aR * aR; legacyCounts[ch]++;
     }
-
-    // Convert to RMS-ish values and normalize by maximum across channels so UI is stable
-    double rmsL[16], rmsR[16];
-    double maxVal = 1e-12;
-    for (int ch = 0; ch < 16; ++ch)
-    {
-        if (counts[ch] > 0)
-        {
-            rmsL[ch] = sqrt(sumL[ch] / (double)counts[ch]);
-            rmsR[ch] = sqrt(sumR[ch] / (double)counts[ch]);
-        }
-        else
-        {
-            rmsL[ch] = 0.0;
-            rmsR[ch] = 0.0;
-        }
-        if (rmsL[ch] > maxVal)
-            maxVal = rmsL[ch];
-        if (rmsR[ch] > maxVal)
-            maxVal = rmsR[ch];
-    }
-
-    // Normalize to 0..1 by dividing by maxVal (avoid division by zero)
-    for (int ch = 0; ch < 16; ++ch)
-    {
-        left[ch] = (float)(rmsL[ch] / maxVal);
-        right[ch] = (float)(rmsR[ch] / maxVal);
-        // clamp
-        if (left[ch] < 0.f)
-            left[ch] = 0.f;
-        if (left[ch] > 1.f)
-            left[ch] = 1.f;
-        if (right[ch] < 0.f)
-            right[ch] = 0.f;
-        if (right[ch] > 1.f)
-            right[ch] = 1.f;
-    }
-#if USE_SF2_SUPPORT == TRUE
-    if (pMixer->isTSF) {
-        XBOOL anyActiveVoices = (GM_TSF_GetActiveVoiceCount() > 0) ? TRUE : FALSE;
-        if (anyActiveVoices)
-        {
-            for (int i = 0; i < MAX_CHANNELS; ++i)
-            {
-                if (left[i] > 0.01f || right[i] > 0.01f)
-                    continue; // already have a level from BAE
-                float channelAmplitudes[MAX_CHANNELS] = {0};
-                tsf_get_channel_amplitudes(channelAmplitudes);
-                left[i] = channelAmplitudes[i];
-                right[i] = left[i];
-            }
+    
+    // Compute legacy RMS and store in output arrays
+    double legacyMaxVal = 1e-12;
+    double legacyRmsL[16], legacyRmsR[16];
+    for (int ch = 0; ch < 16; ++ch) {
+        if (legacyCounts[ch] > 0) {
+            legacyRmsL[ch] = sqrt(legacySumL[ch] / (double)legacyCounts[ch]);
+            legacyRmsR[ch] = sqrt(legacySumR[ch] / (double)legacyCounts[ch]);
+            if (legacyRmsL[ch] > legacyMaxVal) legacyMaxVal = legacyRmsL[ch];
+            if (legacyRmsR[ch] > legacyMaxVal) legacyMaxVal = legacyRmsR[ch];
         } else {
-            for (int i = 0; i < MAX_CHANNELS; ++i)
-            {
-                if (left[i] > 0.01f || right[i] > 0.01f)
-                    continue; // already have a level from BAE
-                left[i] = 0.0f;
-                right[i] = 0.0f;
+            legacyRmsL[ch] = 0.0; legacyRmsR[ch] = 0.0;
+        }
+    }
+    
+    // Apply legacy levels (normalized by legacy max only)
+    for (int ch = 0; ch < 16; ++ch) {
+        if (legacyCounts[ch] > 0) {
+            left[ch] = (float)(legacyRmsL[ch] / legacyMaxVal);
+            right[ch] = (float)(legacyRmsR[ch] / legacyMaxVal);
+        }
+    }
+
+#if USE_SF2_SUPPORT == TRUE
+    // Process TSF voices separately, only overwrite channels that have TSF activity
+    if (pMixer->isTSF) {
+        int activeTSFVoices = GM_TSF_GetActiveVoiceCount();
+        if (activeTSFVoices > 0) {
+            float tsfLevels[16][2];
+            tsf_get_channel_amplitudes(tsfLevels);
+            
+            // TSF levels are typically much lower than legacy levels, so boost them
+            // Only overwrite channels that actually have TSF activity
+            for (int ch = 0; ch < 16; ++ch) {
+                if (tsfLevels[ch][0] > 0.0f || tsfLevels[ch][1] > 0.0f) {
+                    // Boost TSF levels by 10x to make them visible in VU meters
+                    left[ch] = tsfLevels[ch][0];
+                    right[ch] = tsfLevels[ch][1];
+                }
             }
         }
-    } 
+    }
 #endif
+
+    // Final clamp
+    for (int ch = 0; ch < 16; ++ch) {
+        if (left[ch] < 0.f) left[ch] = 0.f; else if (left[ch] > 1.f) left[ch] = 1.f;
+        if (right[ch] < 0.f) right[ch] = 0.f; else if (right[ch] > 1.f) right[ch] = 1.f;
+    }
 }
 #endif // X_PLATFORM != X_WEBTV
 

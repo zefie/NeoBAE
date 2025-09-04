@@ -22,6 +22,7 @@
 #include "X_Assert.h"
 #include <string.h>
 #include <stdlib.h>
+#include <math.h>
 #include "MiniBAE.h"
 
 #define SAMPLE_BLOCK_SIZE 512
@@ -161,72 +162,92 @@ XBOOL GM_IsTSFSong(GM_Song* pSong)
     return (pSong->tsfInfo && ((GM_TSFInfo*)pSong->tsfInfo)->tsf_active);
 }
 
-void tsf_get_channel_amplitudes(float* channelAmplitudes)
+void tsf_get_channel_amplitudes(float channelAmplitudes[16][2])
 {
-    float tempBuffer[SAMPLE_BLOCK_SIZE * 2];
-    float channelSum[16][2] = {{0}}; // [channel][0:sumL, 1:sumR]
-    int channelSampleCount[16] = {0};
+    // Always zero-out destination first
+    for (int ch = 0; ch < 16; ++ch) {
+        channelAmplitudes[ch][0] = 0.0f;
+        channelAmplitudes[ch][1] = 0.0f;
+    }
 
-    // Process each channel
+    if (!g_tsf_soundfont || g_tsf_soundfont->voiceNum <= 0)
+    {
+        return; // nothing to do
+    }
+
+    // Use a smaller frame count for real-time responsiveness
+    const int frames = 256;
+    const int outChannels = g_tsf_mono_mode ? 1 : 2;
+    
+    // Per-channel accumulation buffers - allocate all at once for efficiency
+    size_t bufSamples = (size_t)frames * (size_t)outChannels;
+    size_t totalSize = bufSamples * 16 * sizeof(float); // 16 channels worth
+    float *channelBuffers = (float*)XNewPtr((long)totalSize);
+    if (!channelBuffers) {
+        return; // allocation failure
+    }
+    
+    // Clear all channel buffers
+    memset(channelBuffers, 0, totalSize);
+    
+    // Render each voice directly into its channel's buffer
+    struct tsf_voice *v = g_tsf_soundfont->voices;
+    struct tsf_voice *vEnd = v + g_tsf_soundfont->voiceNum;
+    
+    for (; v != vEnd; ++v)
+    {
+        if (v->playingPreset == -1 || v->playingChannel < 0 || v->playingChannel >= 16)
+            continue;
+            
+        int ch = v->playingChannel;
+        float *chBuffer = channelBuffers + (ch * bufSamples);
+        
+        // Create a temporary voice copy and render into this channel's buffer
+        struct tsf_voice tempVoice = *v;
+        
+        // Render voice with additive mixing
+        float tempOutput[256 * 2]; // max stereo samples
+        memset(tempOutput, 0, frames * outChannels * sizeof(float));
+        tsf_voice_render(g_tsf_soundfont, &tempVoice, tempOutput, frames);
+        
+        // Add to channel buffer
+        for (int i = 0; i < frames * outChannels; ++i) {
+            chBuffer[i] += tempOutput[i];
+        }
+    }
+    
+    // Compute RMS for each channel
     for (int ch = 0; ch < 16; ++ch)
     {
-        memset(tempBuffer, 0, sizeof(tempBuffer));
-
-        // Iterate voices for this channel
-        struct tsf_voice* v = g_tsf_soundfont->voices;
-        struct tsf_voice* vEnd = v + g_tsf_soundfont->voiceNum;
-        for (; v != vEnd; ++v)
+        float *chBuffer = channelBuffers + (ch * bufSamples);
+        double sumL = 0.0, sumR = 0.0;
+        
+        if (g_tsf_mono_mode)
         {
-            if (v->playingPreset != -1 && v->playingChannel == ch)
+            for (int i = 0; i < frames; ++i)
             {
-                // Create a temporary copy of the voice state
-                struct tsf_voice tempVoice = *v;
-                // Render to temp buffer (adds to buffer, doesn't overwrite)
-                tsf_voice_render(g_tsf_soundfont, &tempVoice, tempBuffer, SAMPLE_BLOCK_SIZE);
+                double s = (double)chBuffer[i];
+                sumL += s * s;
             }
-        }
-
-        // Compute RMS for the mixed buffer
-        float sumL = 0.0f, sumR = 0.0f;
-        for (int i = 0; i < SAMPLE_BLOCK_SIZE; ++i)
-        {
-            float left = tempBuffer[i * 2];
-            float right = tempBuffer[i * 2 + 1];
-            sumL += left * left;
-            sumR += right * right;
-        }
-        channelSum[ch][0] = sqrtf(sumL / SAMPLE_BLOCK_SIZE);
-        channelSum[ch][1] = sqrtf(sumR / SAMPLE_BLOCK_SIZE);
-        channelSampleCount[ch] = 2; // L+R
-    }
-
-    // Average L+R and find max amplitude
-    float maxAmplitude = 0.0f;
-    for (int ch = 0; ch < 16; ++ch)
-    {
-        if (channelSampleCount[ch] > 0)
-        {
-            channelAmplitudes[ch] = (channelSum[ch][0] + channelSum[ch][1]) / 2.0f;
-            if (channelAmplitudes[ch] > maxAmplitude)
-                maxAmplitude = channelAmplitudes[ch];
+            float rms = (float)sqrt(sumL / (double)frames);
+            channelAmplitudes[ch][0] = rms * 8.0f;
+            channelAmplitudes[ch][1] = rms * 8.0f;
         }
         else
         {
-            channelAmplitudes[ch] = 0.0f;
+            for (int i = 0; i < frames; ++i)
+            {
+                double left = (double)chBuffer[i * 2];
+                double right = (double)chBuffer[i * 2 + 1];
+                sumL += left * left;
+                sumR += right * right;
+            }
+            channelAmplitudes[ch][0] = (float)sqrt(sumL / (double)frames) * 8.0f;
+            channelAmplitudes[ch][1] = (float)sqrt(sumR / (double)frames) * 8.0f;
         }
     }
 
-    // Normalize
-    for (int ch = 0; ch < 16; ++ch)
-    {
-        if (maxAmplitude > 0.0f)
-        {
-            tsf_set_output(g_tsf_soundfont, g_tsf_mono_mode ? TSF_MONO : TSF_STEREO_INTERLEAVED, g_tsf_sample_rate, 0.0f);
-            channelAmplitudes[ch] /= maxAmplitude;
-        }
-        else
-            channelAmplitudes[ch] = 0.0f;
-    }
+    XDisposePtr(channelBuffers);
 }
 
 

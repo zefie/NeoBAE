@@ -82,7 +82,9 @@ void GM_TSF_SetStereoMode(XBOOL stereo, XBOOL applyNow);
 int16_t GM_TSF_GetActiveVoiceCount(void);
 XBOOL GM_TSF_IsActive(void);
 void GM_ResetTSF(void);
-void tsf_get_channel_amplitudes(float* channelAmplitudes);
+// Fills channelAmplitudes[16][2] with per-MIDI-channel RMS (L/R) in raw 0..~1.0 float space.
+// If mono mode is active, left and right will be identical.
+void tsf_get_channel_amplitudes(float channelAmplitudes[16][2]);
 void GM_TSF_KillChannelNotes(int ch);
 void GM_TSF_KillAllNotes(void);
 
