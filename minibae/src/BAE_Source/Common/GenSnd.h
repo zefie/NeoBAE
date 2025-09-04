@@ -546,7 +546,7 @@ extern "C"
     };
     typedef unsigned char VelocityCurveType;
 
-#define MAX_VOICES 384       // max voices at once
+#define MAX_VOICES 768       // max voices at once
 #define MAX_INSTRUMENTS 128 // MIDI number of programs per patch bank
 #define MAX_BANKS 6         // three GM banks; three user banks
 #define MAX_TRACKS 65       // max MIDI file tracks to process (64 + tempo track)
