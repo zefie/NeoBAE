@@ -2158,6 +2158,9 @@ int main(int argc, char *argv[])
         // Keyboard panel comes after transport
         int keyboardPanelY = transportPanel.y + transportPanel.h + 10;
         Rect keyboardPanel = {10, keyboardPanelY, 880, 110};
+        
+        // Declare statusPanel here so it's accessible throughout the function
+        Rect statusPanel;
 #ifdef SUPPORT_MIDI_HW
         bool showKeyboard = g_show_virtual_keyboard && (g_midi_input_enabled || (g_bae.song_loaded && !g_bae.is_audio_file));
 #else
@@ -2206,7 +2209,7 @@ int main(int argc, char *argv[])
             g_window_h = neededH;
             SDL_SetWindowSize(win, WINDOW_W, g_window_h);
         }
-        Rect statusPanel = {10, statusY, 880, 100};
+        statusPanel = (Rect){10, statusY, 880, 100}; // Now assign to pre-declared variable
         // Channel panel
         draw_rect(R, channelPanel, panelBg);
         draw_frame(R, channelPanel, panelBorder);
