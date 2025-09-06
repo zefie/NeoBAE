@@ -1969,17 +1969,18 @@ static void PV_ProcessNoteOn(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTra
                     note += pSong->songPitchShift;
                 }
 #if USE_SF2_SUPPORT == TRUE
-                // adding this pleases the compiler
-                // warning: writing 1 byte into a region of size 0 [-Wstringop-overflow=]
-                //                   pSong->channelType[MIDIChannel] = CHANNEL_TYPE_RMF;
-                if (MIDIChannel < 0 || MIDIChannel >= MAX_CHANNELS) {
-                    BAE_PRINTF("Invalid MIDIChannel index: %d\n", MIDIChannel);
-                    return;
-                }
+
 
                 // If TSF is active for this song, route to TSF instead of normal synthesis
                 if (GM_IsSF2Song(pSong))
                 {
+                    // adding this pleases the compiler
+                    // warning: writing 1 byte into a region of size 0 [-Wstringop-overflow=]
+                    //                   pSong->channelType[MIDIChannel] = CHANNEL_TYPE_RMF;
+                    if (MIDIChannel < 0 || MIDIChannel >= MAX_CHANNELS) {
+                        BAE_PRINTF("Invalid MIDIChannel index: %d\n", MIDIChannel);
+                        return;
+                    }
                     if (pSong->songFlags == SONG_FLAG_IS_RMF) {
                         INT16 thePatch = PV_ConvertPatchBank(pSong, note, MIDIChannel);
                         uint32_t bankId = 0, progId = 0, noteId = 0;
@@ -2020,16 +2021,14 @@ static void PV_ProcessNoteOn(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTra
                         BAE_PRINTF("NoteOn Debug: Translated instrument %d to bank %d, program %d, note %d, channel %d, RMF Mode: %s\n", thePatch, bankId, progId, noteId, MIDIChannel, (pSong->channelType[MIDIChannel] == CHANNEL_TYPE_RMF) ? "Yes" : "No");
                     }
                     
-                    INT16 Volume = PV_ModifyVelocityFromCurve(pSong, volume);
                     if (!GM_IsRMFChannel(pSong, MIDIChannel))
                     {
                         // Standard MIDI
                         GM_SF2_ProcessNoteOn(pSong, MIDIChannel, note, volume);
                     } else {
                         // RMF
-                        //Volume = Volume / 2; // Half RMF Instrument Volume
                         thePatch = PV_DetermineInstrumentToUse(pSong, note, MIDIChannel);
-                        PV_StartMIDINote(pSong, thePatch, MIDIChannel, currentTrack, note, Volume);
+                        PV_StartMIDINote(pSong, thePatch, MIDIChannel, currentTrack, note, volume);
                     }
                 }
                 else
@@ -2282,9 +2281,10 @@ void PV_ProcessController(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTrack,
                       }
 #endif                      
             }
-            if (pSong->channelType[MIDIChannel] != CHANNEL_TYPE_RMF) {
-                return;
-            }
+            // returning here breaks rolled MIDI in SF2 mode!!!
+            //if (pSong->channelType[MIDIChannel] != CHANNEL_TYPE_RMF) {
+            //    return;
+            //}
         }    
 #endif
         switch (controler)

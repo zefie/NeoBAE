@@ -297,8 +297,12 @@ OPErr GM_EnableSF2ForSong(GM_Song* pSong, XBOOL enable)
         sf2Info->sf2_master_volume = g_tsf_master_volume;
         sf2Info->sf2_sample_rate = g_tsf_sample_rate;
         sf2Info->sf2_max_voices = g_tsf_max_voices;
-    // Init per-channel volume/expression defaults (GM defaults: volume 100? we'll use 127, expression 127)
-    for (int i=0;i<16;i++) { sf2Info->channelVolume[i]=127; sf2Info->channelExpression[i]=127; }
+        
+        // Init per-channel volume/expression defaults (GM defaults: volume 100? we'll use 127, expression 127)
+        for (int i=0;i<16;i++) { 
+            sf2Info->channelVolume[i]=127;
+            sf2Info->channelExpression[i]=127; 
+        }
         
         if (enable)
         {
@@ -312,6 +316,7 @@ OPErr GM_EnableSF2ForSong(GM_Song* pSong, XBOOL enable)
             GM_SF2_AllNotesOff(pSong);
         }
     }
+    pSong->isSF2Song = enable;
     
     return NO_ERR;
 }

@@ -2168,15 +2168,15 @@ INLINE static void PV_ServeInstruments(void)
     }
 
 #if USE_SF2_SUPPORT == TRUE
-    // Reverb disabled: mix TSF output directly into dry buffer (no effects)
+    // Reverb disabled: mix SF2 output directly into dry buffer (no effects)
     {
         int si;
         for (si = 0; si < MAX_SONGS; ++si)
         {
             GM_Song *song = pMixer->pSongsToPlay[si];
-            if (song && GM_IsBassMidiSong(song))
+            if (song && GM_IsSF2Song(song))
             {
-                GM_BassMidi_RenderAudioSlice(song, (int32_t *)pMixer->songBufferDry, pMixer->One_Loop);
+                GM_SF2_RenderAudioSlice(song, (int32_t *)pMixer->songBufferDry, pMixer->One_Loop);
             }
         }
     }

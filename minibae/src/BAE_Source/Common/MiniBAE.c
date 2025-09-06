@@ -330,6 +330,20 @@ const char *BAE_GetFeatureString()
     featBuf[0] = '\0';
     XBOOL first = TRUE;
 
+    // Debugging
+#ifdef _DEBUG
+    const char *build = "Debug Build (Stripped)";
+#elif (_FULL_DEBUG == TRUE)
+    const char *build = "Debug Build (w/ Symbols)";
+#else
+    const char *build = "Release Build";
+#endif
+    if (build && build[0])
+    {
+        snprintf(featBuf + strlen(featBuf), sizeof(featBuf) - strlen(featBuf), "%s%s", first ? "" : ", ", build);
+        first = FALSE;
+    }
+    
     // Audio backend
 #if (X_PLATFORM == X_SDL2)
     const char *audio = "SDL2";
@@ -6626,8 +6640,8 @@ void BAESong_DisplayInfo(BAESong song)
             BAE_STDERR("    songFinished %s\n", pSong->songFinished ? "TRUE" : "FALSE");
             BAE_STDERR("    songLoopCount %d\n", pSong->songLoopCount);
             BAE_STDERR("    songMaxLoopCount %d\n", pSong->songMaxLoopCount);
-            BAE_STDERR("    songMidiTickLength %u\n", pSong->songMidiTickLength);
-            BAE_STDERR("    songMicrosecondLength %u\n", pSong->songMicrosecondLength);
+            BAE_STDERR("    songMidiTickLength %f\n", pSong->songMidiTickLength);
+            BAE_STDERR("    songMicrosecondLength %f\n", pSong->songMicrosecondLength);
 
             for (count = 0; count < 16; count++)
             {

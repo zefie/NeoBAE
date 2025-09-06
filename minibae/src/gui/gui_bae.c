@@ -138,7 +138,9 @@ bool load_bank(const char *path, bool current_playing_state, int transpose, int 
     if (strcmp(path, "__builtin__") == 0)
     {
 #if USE_SF2_SUPPORT == TRUE
-        GM_UnloadSF2Soundfont();
+        if (GM_SF2_IsActive()) {
+            GM_UnloadSF2Soundfont();
+        }
 #endif
         if (g_bae.bank_loaded) {
             BAEMixer_UnloadBank(g_bae.mixer, g_bae.bank_token);

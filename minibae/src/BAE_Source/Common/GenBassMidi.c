@@ -336,7 +336,7 @@ OPErr GM_LoadSF2Soundfont(const char* sf2_path)
         // Channel 9 (percussion) already set above
     }
     
-    BASS_MIDI_FontSetVolume(g_bassmidi_soundfont, 1.0f);  // Reduce soundfont volume to 30%
+    BASS_MIDI_FontSetVolume(g_bassmidi_soundfont, 0.35f);
     return NO_ERR;
 }
 
