@@ -18,6 +18,16 @@ if [ ! -z "$1" ]; then
 	fi
 fi
 
+function signit() {
+  osslsigncode sign \
+    -certs /opt/signkey/signcert.pem \
+    -key /opt/signkey/signkey.pem \
+    -n "zefie's miniBAE" \
+    -i "https://www.soundmusicsys.com" \
+    -t "http://timestamp.digicert.com" \
+    -in "${1}" "${2}"
+}
+
 function runcmd() {
 	if [ ${SILENT} -eq 1 ]; then
 		${@} 2>/dev/null > /dev/null;
@@ -50,7 +60,9 @@ if [ -z "${SKIPTO}" ] || [ "${SKIPTO}" -le 1 ]; then
 	export BITS=32
 	echo "Building MingW32 DirectSound x32..."
 	runcmd make clean
-	runcmd make -f Makefile.mingw -j$(nproc) all
+	runcmd make -f Makefile.mingw -j$(nproc) all	
+    signit "${BDIR}/playbae.exe" "${BDIR}/playbae_signed.exe"
+    mv "${BDIR}/playbae_signed.exe" "${BDIR}/playbae.exe"
 	runcmd make -f Makefile.mingw pack
 	install_file "${BDIR}/playbae_dsound_x32.zip" "${ODIR}/playbae_dsound_x32.zip"
 	runcmd cd "${BDIR}" && runcmd zip -u "${ODIR}/libMiniBAE_win_dsound_x32.zip" *.dll *.lib *.a
@@ -63,6 +75,8 @@ if [ -z "${SKIPTO}" ] || [ "${SKIPTO}" -le 2 ]; then
 	echo "Building MingW32 SDL2 x32..."
 	runcmd make clean
 	runcmd make -f Makefile.mingw -j$(nproc) all
+    signit "${BDIR}/playbae.exe" "${BDIR}/playbae_signed.exe"
+    mv "${BDIR}/playbae_signed.exe" "${BDIR}/playbae.exe"
 	runcmd make -f Makefile.mingw pack
 	install_file "${BDIR}/playbae_sdl2_x32.zip" "${ODIR}/playbae_sdl2_x32.zip"
 	runcmd cd "${BDIR}" && runcmd zip -u "${ODIR}/libMiniBAE_win_sdl2_x32.zip" *.dll *.lib *.a
@@ -76,6 +90,8 @@ if [ -z "${SKIPTO}" ] || [ "${SKIPTO}" -le 3 ]; then
 	echo "Building MingW32 DirectSound x64..."
 	runcmd make clean
 	runcmd make -f Makefile.mingw -j$(nproc) all 
+    signit "${BDIR}/playbae.exe" "${BDIR}/playbae_signed.exe"
+    mv "${BDIR}/playbae_signed.exe" "${BDIR}/playbae.exe"
 	runcmd make -f Makefile.mingw pack
 	install_file "${BDIR}/playbae_dsound_x64.zip" "${ODIR}/playbae_dsound_x64.zip"
 	runcmd cd "${BDIR}" && runcmd zip -u "${ODIR}/libMiniBAE_win_dsound_x64.zip" *.dll *.lib *.a
@@ -88,6 +104,8 @@ if [ -z "${SKIPTO}" ] || [ "${SKIPTO}" -le 4 ]; then
 	echo "Building MingW32 SDL2 x64..."
 	runcmd make clean
 	runcmd make -f Makefile.mingw -j$(nproc) all
+    signit "${BDIR}/playbae.exe" "${BDIR}/playbae_signed.exe"
+    mv "${BDIR}/playbae_signed.exe" "${BDIR}/playbae.exe"
 	runcmd make -f Makefile.mingw pack
 	install_file "${BDIR}/playbae_sdl2_x64.zip" "${ODIR}/playbae_sdl2_x64.zip"
 	runcmd cd "${BDIR}" && runcmd zip -u "${ODIR}/libMiniBAE_win_sdl2_x64.zip" *.dll *.lib *.a
@@ -99,6 +117,8 @@ if [ -z "${SKIPTO}" ] || [ "${SKIPTO}" -le 5 ]; then
 	echo "Building MingW32 SDL2 GUI x64..."
 	runcmd make clean
 	runcmd make -f Makefile.gui-mingw -j$(nproc) all
+    signit "${BDIR}/zefidi.exe" "${BDIR}/zefidi_signed.exe"
+    mv "${BDIR}/zefidi_signed.exe" "${BDIR}/zefidi.exe"
 	runcmd make -f Makefile.gui-mingw pack
 	install_file "${BDIR}/zefidi.zip" "${ODIR}/zefidi_sdl2_x64.zip"
 	runcmd cd "${RDIR}"
