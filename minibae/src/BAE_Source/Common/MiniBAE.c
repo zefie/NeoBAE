@@ -2847,7 +2847,6 @@ BAEResult BAEMixer_GetRealtimeStatus(BAEMixer mixer, BAEAudioInfo *pStatus)
                 GM_GetRealtimeAudioInformation(&status);
                 XSetMemory(pStatus, (int32_t)sizeof(BAEAudioInfo), 0);
                 pStatus->voicesActive = GM_SF2_GetActiveVoiceCount();
-
             }
             else
 #endif            

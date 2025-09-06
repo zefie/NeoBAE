@@ -19,3 +19,4 @@ local.properties
 minibae/.vscode/
 minibae/.vs/
 minibae/src/miniBAEDroid/.gradle/
+minibae/src/thirdparty/bassmidi/

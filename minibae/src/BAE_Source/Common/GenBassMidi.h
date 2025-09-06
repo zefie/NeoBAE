@@ -84,7 +84,7 @@ void GM_SF2_SetSampleRate(int32_t sampleRate);
 void GM_SF2_SetStereoMode(XBOOL stereo, XBOOL applyNow);
 
 // BassMidi status queries
-int16_t GM_SF2_GetActiveVoiceCount(void);
+uint16_t GM_SF2_GetActiveVoiceCount(void);
 XBOOL GM_SF2_IsActive(void);
 void GM_ResetSF2(void);
 // Fills channelAmplitudes[16][2] with per-MIDI-channel RMS (L/R) in raw 0..~1.0 float space.

@@ -933,11 +933,17 @@ void render_about_dialog(SDL_Renderer *R, int mx, int my, bool mclick)
             "Copyright (C) 2011-2025  Xiph.Org Foundation",
             "https://www.xiph.org/flac/",
 #endif
-#if USE_SF2_SUPPORT == TRUE
+#if _USING_TSF == TRUE
             "",
             "TSF (TinySoundFont)",
             "Copyright (C) 2017-2023 Bernhard Schelling",
             "https://github.com/schellingb/TinySoundFont",
+#endif
+#if _USING_BASSMIDI == TRUE
+            "",
+            "BASSMIDI",
+            "Copyright (c) 2006-2024 Un4seen Developments Ltd. All rights reserved.",
+            "https://www.un4seen.com/",
 #endif
             "",
             NULL};

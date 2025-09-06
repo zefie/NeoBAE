@@ -1086,8 +1086,15 @@ void GM_GetRealtimeChannelLevels(float left[16], float right[16])
         int ch = (int)v->NoteChannel; if (ch < 0 || ch >= 16) continue;
         double aL = (double)v->lastAmplitudeL / (double)0x7FFFFFFF;
         double aR = (double)v->lastAmplitudeR / (double)0x7FFFFFFF;
-        if (aL < 0) aL = -aL; if (aR < 0) aR = -aR;
-        legacySumL[ch] += aL * aL; legacySumR[ch] += aR * aR; legacyCounts[ch]++;
+        if (aL < 0) {
+            aL = -aL;
+        }
+        if (aR < 0) {
+            aR = -aR;
+        }
+        legacySumL[ch] += aL * aL;
+        legacySumR[ch] += aR * aR;
+        legacyCounts[ch]++;
     }
     
     // Compute legacy RMS and store in output arrays
@@ -2215,7 +2222,6 @@ void PV_ProcessController(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTrack,
 #if USE_SF2_SUPPORT == TRUE
         if (GM_IsSF2Song(pSong))
         {
-            BAE_PRINTF("SF2 Controller: Channel %d, Controller %d, Value %d\n", MIDIChannel, controler, value);
             if (pSong->songFlags == SONG_FLAG_IS_RMF) {
                 if (controler == 0 && (value == 1 || value == 2)) {
                     // if we are an RMF file and just set a bank MSB of 1 or 2, we are now in RMF mode for this channel
@@ -2281,7 +2287,6 @@ void PV_ProcessController(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTrack,
             }
         }    
 #endif
-        BAE_PRINTF("BAE Controller: Channel %d, Controller %d, Value %d\n", MIDIChannel, controler, value);
         switch (controler)
         {
         

@@ -31,6 +31,11 @@ static XFIXED g_bassmidi_master_volume = XFIXED_1;
 static int16_t g_bassmidi_max_voices = MAX_VOICES;
 static uint16_t g_bassmidi_sample_rate = 44100;
 static char g_bassmidi_sf2_path[256] = {0};
+typedef struct {
+    float left, right;
+} ChannelLevel;
+
+ChannelLevel g_midiLevels[MAX_CHANNELS];
 
 // Audio mixing buffer for BassMidi output
 static float* g_bassmidi_mix_buffer = NULL;
@@ -41,6 +46,25 @@ static XBOOL PV_SF2_CheckChannelMuted(GM_Song* pSong, int16_t channel);
 static void PV_SF2_ConvertFloatToInt32(float* input, int32_t* output, int32_t frameCount, float songVolumeScale, const float *channelScales);
 static void PV_SF2_AllocateMixBuffer(int32_t frameCount);
 static void PV_SF2_FreeMixBuffer(void);
+
+// this function is for getting and storing the levels for sf2_get_channel_amplitudes()
+void CALLBACK LevelDSP(HDSP handle, DWORD channel, void *buffer, DWORD length, void *user) {
+    ChannelLevel *lvl = (ChannelLevel *)user;
+    float *samples = (float *)buffer;
+    DWORD count = length / sizeof(float);
+
+    float sumL = 0.0f, sumR = 0.0f;
+    DWORD frames = count / 2;
+
+    for (DWORD i = 0; i < count; i += 2) {
+        sumL += samples[i] * samples[i];       // Left channel
+        sumR += samples[i + 1] * samples[i + 1]; // Right channel
+    }
+
+    lvl->left = sqrtf(sumL / frames) * 10;
+    lvl->right = sqrtf(sumR / frames) * 10;
+}
+
 
 // Initialize BassMidi support for the mixer
 OPErr GM_InitializeSF2(void)
@@ -77,7 +101,13 @@ OPErr GM_InitializeSF2(void)
         BASS_Free();
         return GENERAL_BAD;
     }
-    
+
+    // set up the channel level DSP logger
+    for (int ch = 0; ch < (MAX_CHANNELS - 1); ++ch) {
+        HSTREAM chanHandle = BASS_MIDI_StreamGetChannel(g_bassmidi_stream, ch);
+        BASS_ChannelSetDSP(chanHandle, LevelDSP, &g_midiLevels[ch], 0);
+    }
+
     g_bassmidi_initialized = TRUE;
     return NO_ERR;
 }
@@ -97,16 +127,124 @@ XBOOL GM_GetMixerSF2Mode() {
     return FALSE;
 }
 
+void GM_SF2_SetDefaultControllers(int16_t channel)
+{
+    if (!g_bassmidi_initialized || !g_bassmidi_stream)
+    {
+        return;
+    }    
+    // Set default controllers with lower volumes
+    BASS_MIDI_StreamEvent(g_bassmidi_stream, channel, MIDI_EVENT_VOLUME, 127); // Volume
+    BASS_MIDI_StreamEvent(g_bassmidi_stream, channel, MIDI_EVENT_EXPRESSION, 127); // Expression
+    BASS_MIDI_StreamEvent(g_bassmidi_stream, channel, MIDI_EVENT_PAN, 64); // Pan center
+    BASS_MIDI_StreamEvent(g_bassmidi_stream, channel, MIDI_EVENT_MODULATION, 0); // Modulation wheel
+    BASS_MIDI_StreamEvent(g_bassmidi_stream, channel, MIDI_EVENT_SUSTAIN, 0); // Sustain pedal off
+    BASS_MIDI_StreamEvent(g_bassmidi_stream, channel, MIDI_EVENT_REVERB, 0); // Reverb off
+    BASS_MIDI_StreamEvent(g_bassmidi_stream, channel, MIDI_EVENT_CHORUS, 0); // Chorus off
+    BASS_MIDI_StreamEvent(g_bassmidi_stream, channel, MIDI_EVENT_PORTAMENTO, 0);    // Portamento off
+    BASS_MIDI_StreamEvent(g_bassmidi_stream, channel, MIDI_EVENT_SOSTENUTO, 0);    // Sostenuto off
+    BASS_MIDI_StreamEvent(g_bassmidi_stream, channel, MIDI_EVENT_SOFT,  0);    // Soft pedal off
+    BASS_MIDI_StreamEvent(g_bassmidi_stream, channel, MIDI_EVENT_REVERB, 20);   // Reverb send (reduced)
+    BASS_MIDI_StreamEvent(g_bassmidi_stream, channel, MIDI_EVENT_CHORUS, 0);    // Chorus send
+    BASS_MIDI_StreamEvent(g_bassmidi_stream, channel, MIDI_EVENT_PITCH, 8192); // Center pitch bend
+}
+
 void GM_SF2_SetSampleRate(int32_t sampleRate)
 {
     if (!g_bassmidi_initialized)
     {
+        // Store for later initialization
+        g_bassmidi_sample_rate = (uint16_t)sampleRate;
         return;
     }
 
-    g_bassmidi_sample_rate = sampleRate;
-    // BassMidi sample rate is set during stream creation, would need to recreate stream
-    // For now, we'll just store the value for future stream creation
+    // Don't recreate if rate hasn't changed
+    if (g_bassmidi_sample_rate == sampleRate)
+    {
+        return;
+    }
+
+    g_bassmidi_sample_rate = (uint16_t)sampleRate;
+    
+    // Need to recreate the BASSMIDI stream with new sample rate
+    // Save current soundfont handle and path
+    HSOUNDFONT oldSoundfont = g_bassmidi_soundfont;
+    char oldPath[256];
+    strcpy(oldPath, g_bassmidi_sf2_path);
+    
+    // Clean up old stream but keep soundfont
+    if (g_bassmidi_stream)
+    {
+        BASS_StreamFree(g_bassmidi_stream);
+        g_bassmidi_stream = 0;
+    }
+    
+    // Recreate BASS with new sample rate
+    BASS_Free();
+    if (!BASS_Init(-1, g_bassmidi_sample_rate, 0, 0, NULL))
+    {
+        // Failed to reinitialize BASS - try to restore old state
+        g_bassmidi_initialized = FALSE;
+        return;
+    }
+    
+    // Create new BassMidi stream with new sample rate
+    g_bassmidi_stream = BASS_MIDI_StreamCreate(16, BASS_SAMPLE_FLOAT | BASS_STREAM_DECODE, g_bassmidi_sample_rate);
+    BASS_SetConfig(BASS_CONFIG_MIDI_VOICES, g_bassmidi_max_voices);
+    BASS_SetConfig(BASS_CONFIG_BUFFER, 100);
+    
+    if (!g_bassmidi_stream)
+    {
+        // Failed to create stream - cleanup
+        BASS_Free();
+        g_bassmidi_initialized = FALSE;
+        g_bassmidi_soundfont = 0;
+        return;
+    }
+    
+    // Restore soundfont if we had one
+    if (oldSoundfont && oldPath[0] != '\0')
+    {
+        // Need to reload the soundfont since we freed BASS
+        g_bassmidi_soundfont = BASS_MIDI_FontInit(oldPath, 0);
+        if (g_bassmidi_soundfont)
+        {
+            // Set the soundfont for the new stream
+            BASS_MIDI_FONT font;
+            font.font = g_bassmidi_soundfont;
+            font.preset = -1;  // All presets
+            font.bank = 0;
+            
+            if (BASS_MIDI_StreamSetFonts(g_bassmidi_stream, &font, 1))
+            {
+                // Reinitialize channels with defaults
+                // Set Ch 10 to percussion by default
+                BASS_MIDI_StreamEvent(g_bassmidi_stream, 9, MIDI_EVENT_BANK, 128);
+                BASS_MIDI_StreamEvent(g_bassmidi_stream, 9, MIDI_EVENT_PROGRAM, 0);
+                
+                // Initialize all channels with reduced volumes
+                for (int channel = 0; channel < 16; channel++)
+                {
+                    // Set default controllers with lower volumes
+                    GM_SF2_SetDefaultControllers(channel);
+                    // Set default programs
+                    if (channel != 9) // Non-percussion channels
+                    {
+                        BASS_MIDI_StreamEvent(g_bassmidi_stream, channel, MIDI_EVENT_BANK, 0);
+                        BASS_MIDI_StreamEvent(g_bassmidi_stream, channel, MIDI_EVENT_PROGRAM, 0);
+                    }
+                }
+                
+                BASS_MIDI_FontSetVolume(g_bassmidi_soundfont, 1.0f);
+            }
+            else
+            {
+                // Failed to set soundfont - cleanup
+                BASS_MIDI_FontFree(g_bassmidi_soundfont);
+                g_bassmidi_soundfont = 0;
+            }
+        }
+    }
 }
 
 void GM_CleanupSF2(void)
@@ -434,12 +572,10 @@ void GM_SF2_ProcessController(GM_Song* pSong, int16_t channel, int16_t controlle
                 {
                     ((GM_SF2Info*)pSong->sf2Info)->channelVolume[channel] = (uint8_t)value;
                 }
-                BAE_PRINTF("volume: channel %i, value %i\n", channel, value);
                 BASS_MIDI_StreamEvent(g_bassmidi_stream, channel, MIDI_EVENT_VOLUME, value);
                 break;
                 
             case 10:  // Pan position (0-128, 0=left, 64=middle, 127=right, 128=random).
-                BAE_PRINTF("pan: channel %i, value %i\n", channel, value);
                 BASS_MIDI_StreamEvent(g_bassmidi_stream, channel, MIDI_EVENT_PAN, value);
                 break;
                 
@@ -450,7 +586,6 @@ void GM_SF2_ProcessController(GM_Song* pSong, int16_t channel, int16_t controlle
                 {
                     ((GM_SF2Info*)pSong->sf2Info)->channelExpression[channel] = (uint8_t)value;
                 }
-                BAE_PRINTF("expression: channel %i, value %i\n", channel, value);
                 BASS_MIDI_StreamEvent(g_bassmidi_stream, channel, MIDI_EVENT_EXPRESSION, value);
                 break;
                 
@@ -717,7 +852,7 @@ void GM_SF2_AllNotesOff(GM_Song* pSong)
     // Send all notes off to all channels
     for (int channel = 0; channel < 16; channel++)
     {
-        BASS_MIDI_StreamEvent(g_bassmidi_stream, channel, MIDI_EVENT_CONTROL, MAKEWORD(123, 0)); // All notes off
+        BASS_MIDI_StreamEvent(g_bassmidi_stream, channel, MIDI_EVENT_NOTESOFF, 0); // All notes off
     }
 }
 
@@ -729,7 +864,7 @@ void GM_SF2_AllNotesOffChannel(GM_Song* pSong, int16_t channel)
     }
     
     // Send all notes off to specific channel
-    BASS_MIDI_StreamEvent(g_bassmidi_stream, channel, MIDI_EVENT_CONTROL, MAKEWORD(123, 0)); // All notes off
+    BASS_MIDI_StreamEvent(g_bassmidi_stream, channel, MIDI_EVENT_NOTESOFF, 0); // All notes off
 }
 
 void GM_SF2_SilenceSong(GM_Song* pSong)
@@ -739,7 +874,7 @@ void GM_SF2_SilenceSong(GM_Song* pSong)
     // Also send sustain pedal off to all channels
     for (int channel = 0; channel < 16; channel++)
     {
-        BASS_MIDI_StreamEvent(g_bassmidi_stream, channel, MIDI_EVENT_CONTROL, MAKEWORD(64, 0)); // Sustain off
+        BASS_MIDI_StreamEvent(g_bassmidi_stream, channel, MIDI_EVENT_SUSTAIN, 0); // Sustain off
     }
 }
 
@@ -791,8 +926,8 @@ void PV_SF2_SetBankPreset(GM_Song* pSong, int16_t channel, int16_t bank, int16_t
     // Send bank select MSB and LSB if needed
     if (bank >= 0)
     {
-        BASS_MIDI_StreamEvent(g_bassmidi_stream, channel, MIDI_EVENT_CONTROL, MAKEWORD(0, (bank >> 7) & 0x7F));   // Bank MSB
-        BASS_MIDI_StreamEvent(g_bassmidi_stream, channel, MIDI_EVENT_CONTROL, MAKEWORD(32, bank & 0x7F));         // Bank LSB
+        BASS_MIDI_StreamEvent(g_bassmidi_stream, channel, MIDI_EVENT_BANK, (bank >> 7) & 0x7F);   // Bank MSB
+        BASS_MIDI_StreamEvent(g_bassmidi_stream, channel, MIDI_EVENT_BANK_LSB, bank & 0x7F);         // Bank LSB
     }
     
     // Send program change
@@ -811,16 +946,20 @@ void GM_SF2_SetStereoMode(XBOOL stereo, XBOOL applyNow)
 }
 
 // BassMidi status queries
-int16_t GM_SF2_GetActiveVoiceCount(void)
+uint16_t GM_SF2_GetActiveVoiceCount(void)
 {
     if (!g_bassmidi_initialized || !g_bassmidi_stream)
     {
         return 0;
     }
-    
-    // BassMidi doesn't provide direct voice count, return estimate
-    // This could be implemented by tracking note on/off events
-    return 0;
+    float totalVoices = 0;
+    BASS_ChannelGetAttribute(
+        g_bassmidi_stream,
+        BASS_ATTRIB_MIDI_VOICES_ACTIVE,
+        &totalVoices
+    );
+
+    return (uint16_t)totalVoices;
 }
 
 XBOOL GM_SF2_IsActive(void)
@@ -839,25 +978,13 @@ void GM_ResetSF2(void)
     for (int channel = 0; channel < 16; channel++)
     {
         // All notes off first
-        BASS_MIDI_StreamEvent(g_bassmidi_stream, channel, MIDI_EVENT_CONTROL, MAKEWORD(123, 0)); // All notes off
-        
+        BASS_MIDI_StreamEvent(g_bassmidi_stream, channel, MIDI_EVENT_NOTESOFF, 0); // All notes off
+
         // Reset all controllers
         BASS_MIDI_StreamEvent(g_bassmidi_stream, channel, MIDI_EVENT_CONTROL, MAKEWORD(121, 0)); // Reset all controllers
         
         // Explicitly reset important controllers to reduced defaults
-        BASS_MIDI_StreamEvent(g_bassmidi_stream, channel, MIDI_EVENT_CONTROL, MAKEWORD(7, 80));    // Volume (reduced)
-        BASS_MIDI_StreamEvent(g_bassmidi_stream, channel, MIDI_EVENT_CONTROL, MAKEWORD(11, 100));  // Expression (reduced)
-        BASS_MIDI_StreamEvent(g_bassmidi_stream, channel, MIDI_EVENT_CONTROL, MAKEWORD(10, 64));   // Pan (center)
-        BASS_MIDI_StreamEvent(g_bassmidi_stream, channel, MIDI_EVENT_CONTROL, MAKEWORD(1, 0));     // Modulation wheel
-        BASS_MIDI_StreamEvent(g_bassmidi_stream, channel, MIDI_EVENT_CONTROL, MAKEWORD(64, 0));    // Sustain pedal off
-        BASS_MIDI_StreamEvent(g_bassmidi_stream, channel, MIDI_EVENT_CONTROL, MAKEWORD(65, 0));    // Portamento off
-        BASS_MIDI_StreamEvent(g_bassmidi_stream, channel, MIDI_EVENT_CONTROL, MAKEWORD(66, 0));    // Sostenuto off
-        BASS_MIDI_StreamEvent(g_bassmidi_stream, channel, MIDI_EVENT_CONTROL, MAKEWORD(67, 0));    // Soft pedal off
-        BASS_MIDI_StreamEvent(g_bassmidi_stream, channel, MIDI_EVENT_CONTROL, MAKEWORD(91, 20));   // Reverb send (reduced)
-        BASS_MIDI_StreamEvent(g_bassmidi_stream, channel, MIDI_EVENT_CONTROL, MAKEWORD(93, 0));    // Chorus send
-        
-        // Reset pitch bend to center
-        BASS_MIDI_StreamEvent(g_bassmidi_stream, channel, MIDI_EVENT_PITCH, 8192); // Center pitch bend
+        GM_SF2_SetDefaultControllers(channel);
         
         // Reset program to 0 (Acoustic Grand Piano) for non-percussion channels
         if (channel != 9) // Channel 10 is percussion
@@ -876,12 +1003,16 @@ void GM_ResetSF2(void)
 
 void sf2_get_channel_amplitudes(float channelAmplitudes[16][2])
 {
-    // This would require analyzing the audio output from BassMidi
-    // For now, we'll zero out the amplitudes
+    if (!g_bassmidi_initialized || !g_bassmidi_stream)
+    {
+        return;
+    }
+    
+    // Initialize all channels to zero
     for (int i = 0; i < 16; i++)
     {
-        channelAmplitudes[i][0] = 0.0f; // Left
-        channelAmplitudes[i][1] = 0.0f; // Right
+        channelAmplitudes[i][0] = g_midiLevels[i].left;
+        channelAmplitudes[i][1] = g_midiLevels[i].right;
     }
 }
 

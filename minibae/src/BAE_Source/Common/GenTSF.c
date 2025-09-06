@@ -705,13 +705,13 @@ int16_t GM_SF2_GetMaxVoices(void)
 }
 
 // TSF status queries
-int16_t GM_SF2_GetActiveVoiceCount(void)
+uint16_t GM_SF2_GetActiveVoiceCount(void)
 {
     if (!g_tsf_soundfont)
     {
         return 0;
     }
-    return (int16_t)tsf_active_voice_count(g_tsf_soundfont);
+    return (uint16_t)tsf_active_voice_count(g_tsf_soundfont);
 }
 
 XBOOL GM_SF2_IsActive(void)
