@@ -7,7 +7,15 @@ export USE_BASSMIDI=1
 SILENT=1
 
 if [ ! -z "$1" ]; then
-	SILENT=0
+	if [[ "$1" =~ ^[0-9]+$ ]]; then
+		SKIPTO=$1
+		echo "Skipping to build ${1}"
+		if [ ! -z "${2}" ]; then
+			SILENT=0
+		fi
+	else
+		SILENT=0
+	fi
 fi
 
 function runcmd() {
@@ -38,66 +46,78 @@ if [ "${USE_BASSMIDI}" -eq 1 ]; then
 	fi
 fi
 
-export BITS=32
-echo "Building MingW32 DirectSound x32..."
-runcmd make clean
-runcmd make -f Makefile.mingw -j$(nproc) all
-runcmd make -f Makefile.mingw pack
-install_file "${BDIR}/playbae_dsound_x32.exe.zip" "${ODIR}/playbae_dsound_x32.zip"
-runcmd cd "${BDIR}" && runcmd zip -u "${ODIR}/libMiniBAE_win_dsound_x32.zip" *.dll *.lib *.a
-runcmd cd "${RDIR}"
-runcmd make -f Makefile.mingw clean
+if [ -z "${SKIPTO}" ] || [ "${SKIPTO}" -le 1 ]; then
+	export BITS=32
+	echo "Building MingW32 DirectSound x32..."
+	runcmd make clean
+	runcmd make -f Makefile.mingw -j$(nproc) all
+	runcmd make -f Makefile.mingw pack
+	install_file "${BDIR}/playbae_dsound_x32.zip" "${ODIR}/playbae_dsound_x32.zip"
+	runcmd cd "${BDIR}" && runcmd zip -u "${ODIR}/libMiniBAE_win_dsound_x32.zip" *.dll *.lib *.a
+	runcmd cd "${RDIR}"
+	runcmd make -f Makefile.mingw clean
+fi
 
-export USE_SDL2=1
-echo "Building MingW32 SDL2 x32..."
-runcmd make clean
-runcmd make -f Makefile.mingw -j$(nproc) all
-runcmd make -f Makefile.mingw pack
-install_file "${BDIR}/playbae_sdl2_x32.exe.zip" "${ODIR}/playbae_sdl2_x32.zip"
-runcmd cd "${BDIR}" && runcmd zip -u "${ODIR}/libMiniBAE_win_sdl2_x32.zip" *.dll *.lib *.a
-runcmd cd "${RDIR}"
-runcmd make -f Makefile.mingw clean
+if [ -z "${SKIPTO}" ] || [ "${SKIPTO}" -le 2 ]; then
+	export USE_SDL2=1
+	echo "Building MingW32 SDL2 x32..."
+	runcmd make clean
+	runcmd make -f Makefile.mingw -j$(nproc) all
+	runcmd make -f Makefile.mingw pack
+	install_file "${BDIR}/playbae_sdl2_x32.zip" "${ODIR}/playbae_sdl2_x32.zip"
+	runcmd cd "${BDIR}" && runcmd zip -u "${ODIR}/libMiniBAE_win_sdl2_x32.zip" *.dll *.lib *.a
+	runcmd cd "${RDIR}"
+	runcmd make -f Makefile.mingw clean
+fi
 
-export BITS=64
-export USE_SDL2=
-echo "Building MingW32 DirectSound x64..."
-runcmd make clean
-runcmd make -f Makefile.mingw -j$(nproc) all 
-runcmd make -f Makefile.mingw pack
-install_file "${BDIR}/playbae_dsound_x64.exe.zip" "${ODIR}/playbae_dsound_x64.zip"
-runcmd cd "${BDIR}" && runcmd zip -u "${ODIR}/libMiniBAE_win_dsound_x64.zip" *.dll *.lib *.a
-runcmd cd "${RDIR}"
-runcmd make -f Makefile.mingw clean
+if [ -z "${SKIPTO}" ] || [ "${SKIPTO}" -le 3 ]; then
+	export BITS=64
+	export USE_SDL2=
+	echo "Building MingW32 DirectSound x64..."
+	runcmd make clean
+	runcmd make -f Makefile.mingw -j$(nproc) all 
+	runcmd make -f Makefile.mingw pack
+	install_file "${BDIR}/playbae_dsound_x64.zip" "${ODIR}/playbae_dsound_x64.zip"
+	runcmd cd "${BDIR}" && runcmd zip -u "${ODIR}/libMiniBAE_win_dsound_x64.zip" *.dll *.lib *.a
+	runcmd cd "${RDIR}"
+	runcmd make -f Makefile.mingw clean
+fi
 
-export USE_SDL2=1
-echo "Building MingW32 SDL2 x64..."
-runcmd make clean
-runcmd make -f Makefile.mingw -j$(nproc) all
-runcmd make -f Makefile.mingw pack
-install_file "${BDIR}/playbae_sdl2_x64.exe.zip" "${ODIR}/playbae_sdl2_x64.zip"
-runcmd cd "${BDIR}" && runcmd zip -u "${ODIR}/libMiniBAE_win_sdl2_x64.zip" *.dll *.lib *.a
-runcmd cd "${RDIR}"
-runcmd make -f Makefile.mingw clean
+if [ -z "${SKIPTO}" ] || [ "${SKIPTO}" -le 4 ]; then
+	export USE_SDL2=1
+	echo "Building MingW32 SDL2 x64..."
+	runcmd make clean
+	runcmd make -f Makefile.mingw -j$(nproc) all
+	runcmd make -f Makefile.mingw pack
+	install_file "${BDIR}/playbae_sdl2_x64.zip" "${ODIR}/playbae_sdl2_x64.zip"
+	runcmd cd "${BDIR}" && runcmd zip -u "${ODIR}/libMiniBAE_win_sdl2_x64.zip" *.dll *.lib *.a
+	runcmd cd "${RDIR}"
+	runcmd make -f Makefile.mingw clean
+fi
 
-echo "Building MingW32 SDL2 GUI x64..."
-runcmd make clean
-runcmd make -f Makefile.gui-mingw -j$(nproc) all
-runcmd make -f Makefile.gui-mingw pack
-install_file "${BDIR}/zefidi.zip" "${ODIR}/zefidi_sdl2_x64.zip"
-runcmd cd "${RDIR}"
-runcmd make -f Makefile.gui-mingw clean
+if [ -z "${SKIPTO}" ] || [ "${SKIPTO}" -le 5 ]; then
+	echo "Building MingW32 SDL2 GUI x64..."
+	runcmd make clean
+	runcmd make -f Makefile.gui-mingw -j$(nproc) all
+	runcmd make -f Makefile.gui-mingw pack
+	install_file "${BDIR}/zefidi.zip" "${ODIR}/zefidi_sdl2_x64.zip"
+	runcmd cd "${RDIR}"
+	runcmd make -f Makefile.gui-mingw clean
+fi
 
-export USE_SDL=0
-export NOAUTO=1
-export SF2_SUPPORT=0
-export MP3_DEC=1
-export WASM=1
-echo "Building Enscripten WASM..."
-runcmd make clean
-runcmd make -f Makefile.emcc -j$(nproc) all
-runcmd make -f Makefile.emcc pack
-install_file "${BDIR}/playbae_wasm.tar.gz" "${ODIR}/playbae_wasm.tar.gz"
-runcmd make -f Makefile.emcc clean
+if [ -z "${SKIPTO}" ] || [ "${SKIPTO}" -le 6 ]; then
+	export USE_SDL=0
+	export NOAUTO=1
+	export SF2_SUPPORT=0
+	export MP3_DEC=1
+	export WASM=1
+	echo "Building Enscripten WASM..."
+	runcmd make clean
+	runcmd make -f Makefile.emcc -j$(nproc) all
+	runcmd make -f Makefile.emcc pack
+	install_file "${BDIR}/playbae_wasm.tar.gz" "${ODIR}/playbae_wasm.tar.gz"
+	runcmd make -f Makefile.emcc clean
+fi
 
 cd "${RDIR}"
 ls -l "${ODIR}"

@@ -1,4 +1,3 @@
-TARGET_BIN		:= playbae.exe
 TEST_BIN_PREFIX 	:= "wine "
 BAE_BUILT_IN_PATCHES	:= 1
 WINDOWS		:= 1
@@ -13,6 +12,7 @@ else
 endif
 
 include inc/Makefile.common
+TARGET_BIN		:= $(TARGET_NAME).exe
 
 ifeq ($(BITS),32)
     ARCH		:= -m32 -static
@@ -27,7 +27,7 @@ ifeq ($(BITS),32)
         OPTI := -g -O0 -ggdb3 -fPIC
     endif 
     CFLAGS  	:= $(ARCH) $(OPTI) $(INC_PATH) -D_THREAD_SAFE -Wno-unused-value 
-    TARGET_NAME := playbae_dsound_x32.exe
+    TARGET_NAME := playbae_dsound_x32
 else
     ARCH		:= -m64 -static
     CC		:= x86_64-w64-mingw32-gcc-win32
@@ -41,7 +41,7 @@ else
         OPTI := -g -O0 -ggdb3 -fPIC
     endif 
     CFLAGS  	:= $(ARCH) $(OPTI) $(INC_PATH) -D_THREAD_SAFE -Wno-unused-value 
-    TARGET_NAME := playbae_dsound_x64.exe
+    TARGET_NAME := playbae_dsound_x64
 endif
 
 
@@ -76,11 +76,11 @@ ifeq ($(USE_SDL2),1)
     ifeq ($(BITS),32)
         CFLAGS   += -I../windeps/SDL2-2.32.8/i686-w64-mingw32/include
         LDFLAGS  += -L../windeps/SDL2-2.32.8/i686-w64-mingw32/lib
-        TARGET_NAME := playbae_sdl2_x32.exe
+        TARGET_NAME := playbae_sdl2_x32
     else
         CFLAGS    += -I../windeps/SDL2-2.32.8/x86_64-w64-mingw32/include
         LDFLAGS   += -L../windeps/SDL2-2.32.8/x86_64-w64-mingw32/lib
-        TARGET_NAME := playbae_sdl2_x64.exe
+        TARGET_NAME := playbae_sdl2_x64
     endif
     # Override LIBS completely for SDL build to enforce correct ordering
     LIBS = \
@@ -113,11 +113,11 @@ ifeq ($(USE_SDL3),1)
     ifeq ($(BITS),32)
         CFLAGS   += -I../windeps/SDL3-3.2.22/i686-w64-mingw32/include
         LDFLAGS  += -L../windeps/SDL3-3.2.22/i686-w64-mingw32/lib
-        TARGET_NAME := playbae_sdl2_x32.exe
+        TARGET_NAME := playbae_sdl2_x32
     else
         CFLAGS    += -I../windeps/SDL3-3.2.22/x86_64-w64-mingw32/include
         LDFLAGS   += -L../windeps/SDL3-3.2.22/x86_64-w64-mingw32/lib
-        TARGET_NAME := playbae_sdl2_x64.exe
+        TARGET_NAME := playbae_sdl2_x64
     endif
     # Override LIBS completely for SDL build to enforce correct ordering
     LIBS = \

@@ -67,9 +67,13 @@ endif
 ifeq ($(TARGET_BIN),)
 	ifneq ($(BUILD_GUI),) 
 		TARGET_BIN	:= zefidi
+		TARGET_NAME := $(TARGET_BIN)
 	else
 		TARGET_BIN	:= playbae
+		TARGET_NAME := $(TARGET_BIN)
 	endif
+else
+	TARGET_NAME := $(TARGET_BIN)	
 endif
 
 ifeq ($(TEST_BIN_PREFIX),)
