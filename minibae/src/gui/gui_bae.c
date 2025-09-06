@@ -741,7 +741,7 @@ bool bae_load_song(const char *path)
     {
         double stored = g_last_requested_master_volume; /* 0..1 engine space */
         if (g_bae.song)
-            BAESong_SetVolume(g_bae.song, FLOAT_TO_UNSIGNED_FIXED(stored));
+            BAESong_SetVolume(g_bae.song, FLOAT_TO_UNSIGNED_FIXED(stored));            
 
 #ifdef SUPPORT_MIDI_HW
         if (g_bae.mixer && !g_master_muted_for_midi_out)
@@ -1150,6 +1150,8 @@ bool bae_play(bool *playing)
                     g_midi_output_suppressed_during_seek = false;
 #endif
                     BAESong_Preroll(g_bae.song);
+                    Settings settings = load_settings();
+                    BAESong_SetVelocityCurve(g_bae.song, settings.volume_curve);
                 }
                 else
                 {
@@ -1159,6 +1161,8 @@ bool bae_play(bool *playing)
 #endif
                     BAESong_SetMicrosecondPosition(g_bae.song, 0);
                     BAESong_Preroll(g_bae.song);
+                    Settings settings = load_settings();
+                    BAESong_SetVelocityCurve(g_bae.song, settings.volume_curve);
                     BAESong_SetMicrosecondPosition(g_bae.song, startPosUs);
 #ifdef SUPPORT_MIDI_HW
                     g_midi_output_suppressed_during_seek = false;

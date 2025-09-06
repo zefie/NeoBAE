@@ -2008,17 +2008,16 @@ static void PV_ProcessNoteOn(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTra
                         BAE_PRINTF("NoteOn Debug: Translated instrument %d to bank %d, program %d, note %d, channel %d, RMF Mode: %s\n", thePatch, bankId, progId, noteId, MIDIChannel, (pSong->channelType[MIDIChannel] == CHANNEL_TYPE_RMF) ? "Yes" : "No");
                     }
                     
-
+                    INT16 Volume = PV_ModifyVelocityFromCurve(pSong, volume);
                     if (!GM_IsRMFChannel(pSong, MIDIChannel))
                     {
-                        // Standard MIDI
-                        INT16 Volume = PV_ModifyVelocityFromCurve(pSong, volume);
+                        // Standard MIDI                        
                         GM_TSF_ProcessNoteOn(pSong, MIDIChannel, note, Volume);
                     } else {
                         // RMF
-                        volume = volume / 2; // Half RMF Instrument Volume
+                        Volume = Volume / 2; // Half RMF Instrument Volume
                         thePatch = PV_DetermineInstrumentToUse(pSong, note, MIDIChannel);
-                        PV_StartMIDINote(pSong, thePatch, MIDIChannel, currentTrack, note, volume);
+                        PV_StartMIDINote(pSong, thePatch, MIDIChannel, currentTrack, note, Volume);
                     }
                 }
                 else

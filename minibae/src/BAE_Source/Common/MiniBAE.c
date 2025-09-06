@@ -6915,8 +6915,8 @@ BAEResult BAESong_LoadGroovoid(BAESong song, char *cName, BAE_BOOL ignoreBadInst
                         // things are cool
                         GM_SetDisposeSongDataWhenDoneFlag(pSong, TRUE); // dispose of midi data
                         GM_SetSongLoopFlag(pSong, FALSE);               // don't loop song
+                        GM_SetVelocityCurveType(pSong, (VelocityCurveType)g_defaultVelocityCurve);
                         song->pSong = pSong;                            // preserve for use later
-                        GM_SetVelocityCurveType(song->pSong, (VelocityCurveType)g_defaultVelocityCurve);
 #if USE_SF2_SUPPORT == TRUE
                         if (GM_TSF_IsActive()) { GM_EnableTSFForSong(song->pSong, TRUE); }
 #endif
@@ -7006,8 +7006,8 @@ BAEResult BAESong_LoadMidiFromMemory(BAESong song, void const *pMidiData, uint32
                         // things are cool
                         GM_SetDisposeSongDataWhenDoneFlag(pSong, TRUE); // dispose of midi data
                         GM_SetSongLoopFlag(pSong, FALSE);               // don't loop song
+                        GM_SetVelocityCurveType(pSong, (VelocityCurveType)g_defaultVelocityCurve);
                         song->pSong = pSong;                            // preserve for use later
-                        GM_SetVelocityCurveType(song->pSong, (VelocityCurveType)g_defaultVelocityCurve);
 #if USE_SF2_SUPPORT == TRUE
                         if (GM_TSF_IsActive()) { GM_EnableTSFForSong(song->pSong, TRUE); }
 #endif
@@ -7116,8 +7116,8 @@ BAEResult BAESong_LoadMidiFromFile(BAESong song, BAEPathName filePath, BAE_BOOL 
                         // things are cool
                         GM_SetDisposeSongDataWhenDoneFlag(pSong, TRUE); // dispose of midi data
                         GM_SetSongLoopFlag(pSong, FALSE);               // don't loop song
+                        GM_SetVelocityCurveType(pSong, (VelocityCurveType)g_defaultVelocityCurve);
                         song->pSong = pSong;                            // preserve for use later
-                        GM_SetVelocityCurveType(song->pSong, (VelocityCurveType)g_defaultVelocityCurve);
 #if USE_SF2_SUPPORT == TRUE
                         if (GM_TSF_IsActive()) { GM_EnableTSFForSong(song->pSong, TRUE); }
 #endif
@@ -7222,8 +7222,8 @@ BAEResult BAESong_LoadRmfFromMemory(BAESong song, void *pRMFData, uint32_t rmfSi
                             pSong->songFlags = SONG_FLAG_IS_RMF;
                             if (GM_TSF_IsActive()) { GM_EnableTSFForSong(pSong, TRUE); }
 #endif
+                            GM_SetVelocityCurveType(pSong, (VelocityCurveType)g_defaultVelocityCurve);
                             song->pSong = pSong;                            // preserve for use later
-                            GM_SetVelocityCurveType(song->pSong, (VelocityCurveType)g_defaultVelocityCurve);
                         }
                         else
                         {
@@ -7266,8 +7266,8 @@ BAEResult BAESong_LoadRmfFromMemory(BAESong song, void *pRMFData, uint32_t rmfSi
                             {
                                 GM_SetDisposeSongDataWhenDoneFlag(pSong, TRUE);
                                 GM_SetSongLoopFlag(pSong, FALSE);
+                                GM_SetVelocityCurveType(pSong, (VelocityCurveType)g_defaultVelocityCurve);
                                 song->pSong = pSong;
-                                GM_SetVelocityCurveType(song->pSong, (VelocityCurveType)g_defaultVelocityCurve);
 #if USE_SF2_SUPPORT == TRUE
                                 if (GM_TSF_IsActive()) { GM_EnableTSFForSong(song->pSong, TRUE); }
 #endif
@@ -7411,8 +7411,9 @@ BAEResult BAESong_LoadRmfFromFile(BAESong song, BAEPathName filePath, int16_t so
                         // things are cool
                         GM_SetDisposeSongDataWhenDoneFlag(pSong, TRUE); // dispose of midi data
                         GM_SetSongLoopFlag(pSong, FALSE);               // don't loop song
+                        GM_SetVelocityCurveType(pSong, (VelocityCurveType)g_defaultVelocityCurve);
                         song->pSong = pSong;                            // preserve for use later
-                        GM_SetVelocityCurveType(song->pSong, (VelocityCurveType)g_defaultVelocityCurve);
+                        
 #if USE_SF2_SUPPORT == TRUE
                         if (GM_TSF_IsActive()) { GM_EnableTSFForSong(song->pSong, TRUE); }
 #endif
