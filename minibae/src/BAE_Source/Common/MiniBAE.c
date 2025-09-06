@@ -6626,8 +6626,8 @@ void BAESong_DisplayInfo(BAESong song)
             BAE_STDERR("    songFinished %s\n", pSong->songFinished ? "TRUE" : "FALSE");
             BAE_STDERR("    songLoopCount %d\n", pSong->songLoopCount);
             BAE_STDERR("    songMaxLoopCount %d\n", pSong->songMaxLoopCount);
-            BAE_STDERR("    songMidiTickLength %f\n", pSong->songMidiTickLength);
-            BAE_STDERR("    songMicrosecondLength %f\n", pSong->songMicrosecondLength);
+            BAE_STDERR("    songMidiTickLength %u\n", pSong->songMidiTickLength);
+            BAE_STDERR("    songMicrosecondLength %u\n", pSong->songMicrosecondLength);
 
             for (count = 0; count < 16; count++)
             {

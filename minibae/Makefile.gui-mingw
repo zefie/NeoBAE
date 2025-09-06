@@ -137,7 +137,7 @@ $(TARGET_BIN): ${OBJ_BIN}
 	fi
 
 pack: ${TARGET_BIN}
-	cat $(TARGET_OUT)${TARGET_BIN}.exe | gzip -9 > $(TARGET_OUT)zefidi.exe.gz
+	cd $(TARGET_OUT) && zip -9 $(TARGET_BIN).zip ${TARGET_BIN}.exe
 
 # Rules for compiling source files to object files
 $(OBJ_DIR)%.o : %.cpp

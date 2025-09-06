@@ -279,31 +279,31 @@ OPErr GM_EnableSF2ForSong(GM_Song* pSong, XBOOL enable)
     }
     GM_SF2_ProcessProgramChange(pSong, 9, 129);
     // Allocate TSF info if needed
-    if (!pSong->tsfInfo && enable)
+    if (!pSong->sf2Info && enable)
     {
-        pSong->tsfInfo = XNewPtr(sizeof(GM_SF2Info));
-        if (!pSong->tsfInfo)
+        pSong->sf2Info = XNewPtr(sizeof(GM_SF2Info));
+        if (!pSong->sf2Info)
         {
             return MEMORY_ERR;
         }
-        XBlockMove(pSong->tsfInfo, 0, sizeof(GM_SF2Info));
+        XBlockMove(pSong->sf2Info, 0, sizeof(GM_SF2Info));
     }
     
-    if (pSong->tsfInfo)
+    if (pSong->sf2Info)
     {
-        GM_SF2Info* tsfInfo = (GM_SF2Info*)pSong->tsfInfo;
-        tsfInfo->tsf_active = enable;
-        tsfInfo->tsf_soundfont = enable ? g_tsf_soundfont : NULL;
-        tsfInfo->tsf_master_volume = g_tsf_master_volume;
-        tsfInfo->tsf_sample_rate = g_tsf_sample_rate;
-        tsfInfo->tsf_max_voices = g_tsf_max_voices;
+        GM_SF2Info* sf2Info = (GM_SF2Info*)pSong->sf2Info;
+        sf2Info->sf2_active = enable;
+        sf2Info->sf2_soundfont = enable ? g_tsf_soundfont : NULL;
+        sf2Info->sf2_master_volume = g_tsf_master_volume;
+        sf2Info->sf2_sample_rate = g_tsf_sample_rate;
+        sf2Info->sf2_max_voices = g_tsf_max_voices;
     // Init per-channel volume/expression defaults (GM defaults: volume 100? we'll use 127, expression 127)
-    for (int i=0;i<16;i++) { tsfInfo->channelVolume[i]=127; tsfInfo->channelExpression[i]=127; }
+    for (int i=0;i<16;i++) { sf2Info->channelVolume[i]=127; sf2Info->channelExpression[i]=127; }
         
         if (enable)
         {
-            strncpy(tsfInfo->tsf_sf2_path, g_tsf_sf2_path, sizeof(tsfInfo->tsf_sf2_path) - 1);
-            tsfInfo->tsf_sf2_path[sizeof(tsfInfo->tsf_sf2_path) - 1] = '\0';
+            strncpy(sf2Info->sf2_path, g_tsf_sf2_path, sizeof(sf2Info->sf2_path) - 1);
+            sf2Info->sf2_path[sizeof(sf2Info->sf2_path) - 1] = '\0';
         }
         
         if (!enable)
@@ -487,7 +487,7 @@ void GM_SF2_ProcessController(GM_Song* pSong, int16_t channel, int16_t controlle
     // Intercept volume (7) and expression (11) to update per-channel scaling
     if (controller == 7 || controller == 11)
     {
-        GM_SF2Info* info = (GM_SF2Info*)pSong->tsfInfo;
+        GM_SF2Info* info = (GM_SF2Info*)pSong->sf2Info;
         if (info)
         {
             if (controller == 7) { if (value<0) value=0; if (value>127) value=127; info->channelVolume[channel]=(uint8_t)value; }
@@ -565,7 +565,7 @@ void GM_SF2_RenderAudioSlice(GM_Song* pSong, int32_t* mixBuffer, int32_t frameCo
     }
     // Apply per-channel volume/expression: we post-scale the rendered buffer per frame
     float channelScales[16];
-    GM_SF2Info* info = (GM_SF2Info*)pSong->tsfInfo;
+    GM_SF2Info* info = (GM_SF2Info*)pSong->sf2Info;
     for(int c=0;c<16;c++)
     {
         float vol = 1.0f;

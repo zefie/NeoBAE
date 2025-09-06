@@ -1,7 +1,9 @@
-BUILD_DIR	:= build/
-TEST_OUT_DIR	:= tests/
-TARGET_OUT	:= bin/
-BAE_FLAGS	:=
+BUILD_DIR	  := build/
+TEST_OUT_DIR  := tests/
+TARGET_OUT	  := bin/
+BAE_FLAGS	  :=
+BAE_LD_FLAGS  :=
+BAE_LIBS      :=
 .DEFAULT_GOAL := all
 
 ifneq ($(WASM),1)
@@ -14,7 +16,7 @@ ifneq ($(WASM),1)
 		VORBIS_DEC := 1
 		VORBIS_ENC := 1
 		KARAOKE := 1
-		PLAYLIST :=1
+		PLAYLIST := 1
 		SF2_SUPPORT := 1
 		DISABLE_NOKIA := 0			    # Maps MSB5->MSB1 and MSG6->MSB2, relatively harmless, so patch is enabled by default, but optional in case
 		DISABLE_BEATNIK_SF2_NRPN := 0   # Also relatively harmless, it allows MIDIs to send certain commands in order to activate additional percussion channels while in SF2 mode
@@ -29,8 +31,9 @@ ifeq ($(USE_SDL2),1)
 	USE_SDL3 := 0
 endif
 
+# Use TSF by default since it's source is easily available
 ifeq ($(SF2_SUPPORT),1)
-	ifneq ($(USE_BASSMIDI),)
+	ifeq ($(USE_BASSMIDI),1)
 		USING_BASSMIDI := 1
 	else
 		USING_TSF := 1
@@ -237,6 +240,7 @@ ifeq ($(SF2_SUPPORT),1)
 		ifeq ($(WINDOWS),1)
 			ifeq ($(BITS),32)
 				BAE_LD_FLAGS := -Lsrc/thirdparty/bassmidi/libs/x86
+				BAE_LIBS := src/thirdparty/bassmidi/libs/x86/bassmidi.lib src/thirdparty/bassmidi/libs/x86/bass.lib -Wl,-rpath,'$$ORIGIN'
 			else
 				BAE_LD_FLAGS := -Lsrc/thirdparty/bassmidi/libs/x86_64
 				BAE_LIBS := src/thirdparty/bassmidi/libs/x86_64/bassmidi.lib src/thirdparty/bassmidi/libs/x86_64/bass.lib -Wl,-rpath,'$$ORIGIN'
@@ -247,6 +251,8 @@ ifeq ($(SF2_SUPPORT),1)
 				BAE_LD_FLAGS := -Lsrc/thirdparty/bassmidi/libs/x86_64
 			else ifeq ($(UNAME_M),aarch64)
 				BAE_LD_FLAGS := -Lsrc/thirdparty/bassmidi/libs/aarch64
+			else ifeq ($(UNAME_M),armhf)
+				BAE_LD_FLAGS := -Lsrc/thirdparty/bassmidi/libs/armhf				
 			else
 				BAE_LD_FLAGS := -Lsrc/thirdparty/bassmidi/libs/x86
 			endif

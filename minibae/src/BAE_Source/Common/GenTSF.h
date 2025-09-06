@@ -27,7 +27,7 @@ typedef struct GM_SF2Info
 {
     void*           sf2_soundfont;      // sf2* handle
     XBOOL           sf2_active;         // TRUE if SF2 is handling this song
-    char            sf2_sf2_path[256];  // path to loaded SF2 file
+    char            sf2_path[256];  // path to loaded SF2 file
     XFIXED          sf2_master_volume;  // master volume scaling
     int16_t         sf2_sample_rate;    // sample rate for SF2 rendering
     int16_t         sf2_max_voices;     // voice limit for SF2
@@ -80,7 +80,7 @@ void GM_SF2_SetSampleRate(int32_t sampleRate);
 void GM_SF2_SetStereoMode(XBOOL stereo, XBOOL applyNow);
 
 // TSF status queries
-int16_t GM_SF2_GetActiveVoiceCount(void);
+uint16_t GM_SF2_GetActiveVoiceCount(void);
 XBOOL GM_SF2_IsActive(void);
 void GM_ResetSF2(void);
 // Fills channelAmplitudes[16][2] with per-MIDI-channel RMS (L/R) in raw 0..~1.0 float space.
