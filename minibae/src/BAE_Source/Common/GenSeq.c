@@ -370,7 +370,12 @@
 #include "BAE_API.h"
 #include "X_Assert.h"
 #if USE_SF2_SUPPORT == TRUE
+#if _USING_BASSMIDI == TRUE
+#include "GenBassMidi.h"
+#endif
+#if _USING_TSF == TRUE
 #include "GenTSF.h"
+#endif
 #include "MiniBAE.h"
 #endif
 
@@ -783,9 +788,9 @@ void GM_PauseSequencer(XBOOL endVoices)
             for (int i = 0; i < MAX_SONGS; ++i)
             {
                 GM_Song *s = pMixer->pSongsToPlay[i];
-                if (s && GM_IsTSFSong(s))
+                if (s && GM_IsSF2Song(s))
                 {
-                    GM_TSF_SilenceSong(s);
+                    GM_SF2_SilenceSong(s);
                 }
             }
         }
@@ -831,7 +836,7 @@ void GM_PauseSong(GM_Song *pSong, XBOOL endVoices)
         {
             pSong->songPaused = TRUE;
 #if USE_SF2_SUPPORT == TRUE
-            if (GM_IsTSFSong(pSong))
+            if (GM_IsSF2Song(pSong))
             {
                 for (int i = 0; i < MAX_CHANNELS; i++)
                 {
@@ -839,7 +844,7 @@ void GM_PauseSong(GM_Song *pSong, XBOOL endVoices)
                     {
                         if (pSong->channelActiveNotes[i][note])
                         {
-                            GM_TSF_ProcessNoteOff(pSong, i, note, pSong->channelActiveNotes[i][note]);
+                            GM_SF2_ProcessNoteOff(pSong, i, note, pSong->channelActiveNotes[i][note]);
                         }
                     }
                 }
@@ -1108,25 +1113,25 @@ void GM_GetRealtimeChannelLevels(float left[16], float right[16])
     }
 
 #if USE_SF2_SUPPORT == TRUE
-    // Process TSF voices separately, only overwrite channels that have TSF activity
-    if (pMixer->isTSF) {
-        int activeTSFVoices = GM_TSF_GetActiveVoiceCount();
-        if (activeTSFVoices > 0) {
-            float tsfLevels[16][2];
-            tsf_get_channel_amplitudes(tsfLevels);
-            
-            // TSF levels are typically much lower than legacy levels, so boost them
-            // Only overwrite channels that actually have TSF activity
+    // Process SF2 voices separately, only overwrite channels that have SF2 activity
+    if (pMixer->isSF2) {
+        int activeSF2Voices = GM_SF2_GetActiveVoiceCount();
+        if (activeSF2Voices > 0) {
+            float sf2Levels[16][2];
+            sf2_get_channel_amplitudes(sf2Levels);
+
+            // SF2 levels are typically much lower than legacy levels, so boost them
+            // Only overwrite channels that actually have SF2 activity
             for (int ch = 0; ch < 16; ++ch) {
-                if (tsfLevels[ch][0] > 0.0f || tsfLevels[ch][1] > 0.0f) {
-                    // Boost TSF levels by 10x to make them visible in VU meters
-                    left[ch] = tsfLevels[ch][0];
-                    right[ch] = tsfLevels[ch][1];
+                if (sf2Levels[ch][0] > 0.0f || sf2Levels[ch][1] > 0.0f) {
+                    // Boost SF2 levels by 10x to make them visible in VU meters
+                    left[ch] = sf2Levels[ch][0];
+                    right[ch] = sf2Levels[ch][1];
                 }
             }
         }
     }
-#endif
+#endif // USE_SF2_SUPPORT
 
     // Final clamp
     for (int ch = 0; ch < 16; ++ch) {
@@ -1709,10 +1714,10 @@ static void PV_ProcessProgramChange(GM_Song *pSong, INT16 MIDIChannel, INT16 cur
             pSong->channelProgram[MIDIChannel] = program;
             
 #if USE_SF2_SUPPORT == TRUE
-            // If TSF is active for this song, send program change to TSF
-            if (GM_IsTSFSong(pSong))
+            // If SF2 is active for this song, send program change to SF2
+            if (GM_IsSF2Song(pSong))
             {
-                GM_TSF_ProcessProgramChange(pSong, MIDIChannel, program);
+                GM_SF2_ProcessProgramChange(pSong, MIDIChannel, program);
             }
 #endif
         }
@@ -1905,10 +1910,10 @@ static void PV_ProcessNoteOff(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTr
             }
             
 #if USE_SF2_SUPPORT == TRUE
-            // If TSF is active for this song, route to TSF instead of normal synthesis
-            if (GM_IsTSFSong(pSong) && !GM_IsRMFChannel(pSong, MIDIChannel))
+            // If SF2 is active for this song, route to SF2 instead of normal synthesis
+            if (GM_IsSF2Song(pSong) && !GM_IsRMFChannel(pSong, MIDIChannel))
             {
-                GM_TSF_ProcessNoteOff(pSong, MIDIChannel, note, volume);
+                GM_SF2_ProcessNoteOff(pSong, MIDIChannel, note, volume);
             }
             else
 #endif
@@ -1966,7 +1971,7 @@ static void PV_ProcessNoteOn(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTra
                 }
 
                 // If TSF is active for this song, route to TSF instead of normal synthesis
-                if (GM_IsTSFSong(pSong))
+                if (GM_IsSF2Song(pSong))
                 {
                     if (pSong->songFlags == SONG_FLAG_IS_RMF) {
                         INT16 thePatch = PV_ConvertPatchBank(pSong, note, MIDIChannel);
@@ -2011,8 +2016,8 @@ static void PV_ProcessNoteOn(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTra
                     INT16 Volume = PV_ModifyVelocityFromCurve(pSong, volume);
                     if (!GM_IsRMFChannel(pSong, MIDIChannel))
                     {
-                        // Standard MIDI                        
-                        GM_TSF_ProcessNoteOn(pSong, MIDIChannel, note, Volume);
+                        // Standard MIDI
+                        GM_SF2_ProcessNoteOn(pSong, MIDIChannel, note, volume);
                     } else {
                         // RMF
                         //Volume = Volume / 2; // Half RMF Instrument Volume
@@ -2078,9 +2083,9 @@ static void PV_ProcessPitchBend(GM_Song *pSong, INT16 MIDIChannel, INT16 current
     {
 #if USE_SF2_SUPPORT == TRUE
         // If TSF is active for this song, send pitch bend to TSF
-        if (GM_IsTSFSong(pSong))
+        if (GM_IsSF2Song(pSong))
         {
-            GM_TSF_ProcessPitchBend(pSong, MIDIChannel, valueMSB, valueLSB);
+            GM_SF2_ProcessPitchBend(pSong, MIDIChannel, valueMSB, valueLSB);
         }
 #endif
         
@@ -2208,19 +2213,17 @@ void PV_ProcessController(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTrack,
     if (PV_IsMuted(pSong, MIDIChannel, currentTrack) == FALSE)
     {
 #if USE_SF2_SUPPORT == TRUE
-        if (GM_IsTSFSong(pSong))
+        if (GM_IsSF2Song(pSong))
         {
-            BAE_PRINTF("PV_ProcessController Called In TSF Mode: ch: %i, trk: %i, controller: %i, value: %i\n", MIDIChannel, currentTrack, controler, value);
+            BAE_PRINTF("SF2 Controller: Channel %d, Controller %d, Value %d\n", MIDIChannel, controler, value);
             if (pSong->songFlags == SONG_FLAG_IS_RMF) {
                 if (controler == 0 && (value == 1 || value == 2)) {
-                    BAE_PRINTF("ProcessController DBUG: setting RMF mode for channel %d\n", MIDIChannel);
                     // if we are an RMF file and just set a bank MSB of 1 or 2, we are now in RMF mode for this channel
                     pSong->channelType[MIDIChannel] = CHANNEL_TYPE_RMF;
                 } else if (pSong->lastThreeControl[MIDIChannel][0].control == 0 &&
                         (pSong->lastThreeControl[MIDIChannel][0].value == 0 ||
                             pSong->lastThreeControl[MIDIChannel][0].value == 127)) {
                     // if we just set a bank MSB of 0/128, we are now in GM mode for this channel
-                    BAE_PRINTF("ProcessController DBUG: setting GM mode for channel %d\n", MIDIChannel);
                     pSong->channelType[MIDIChannel] = CHANNEL_TYPE_GM;
                 }
             }
@@ -2253,7 +2256,7 @@ void PV_ProcessController(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTrack,
                 pSong->lastThreeControl[MIDIChannel][0].value == 2)
             {
                 pSong->channelBankMode[MIDIChannel] = USE_GM_PERC_BANK;
-                PV_TSF_SetBankPreset(pSong, MIDIChannel, 128, 0);
+                PV_SF2_SetBankPreset(pSong, MIDIChannel, 128, 0);
                 BAE_PRINTF("Set channel %i to bank %i via Beatnik NRPN\n", MIDIChannel, 128);
             } else {
                 if  (pSong->lastThreeControl[MIDIChannel][0].control != 99 &&
@@ -2267,19 +2270,18 @@ void PV_ProcessController(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTrack,
                                 BAE_PRINTF("Ignoring control %i directly after NRPN on channel %i\n", controler, MIDIChannel);
                                 return;
                             }
-#endif
-                            BAE_PRINTF("Processed TSF controller: %i, value: %i, channel: %i\n", controler, value, MIDIChannel);
-                            GM_TSF_ProcessController(pSong, MIDIChannel, controler, value);
+#endif                            
+                            GM_SF2_ProcessController(pSong, MIDIChannel, controler, value);
 #if DISABLE_BEATNIK_SF2_NRPN != TRUE
                       }
 #endif                      
             }
-            if (pSong->channelType[MIDIChannel] == CHANNEL_TYPE_GM) {
+            if (pSong->channelType[MIDIChannel] != CHANNEL_TYPE_RMF) {
                 return;
             }
         }    
 #endif
-        
+        BAE_PRINTF("BAE Controller: Channel %d, Controller %d, Value %d\n", MIDIChannel, controler, value);
         switch (controler)
         {
         
@@ -4262,10 +4264,10 @@ void GM_MuteChannel(GM_Song *pSong, short int channel)
     if ((channel < MAX_CHANNELS) && (channel >= 0))
     {
 #if USE_SF2_SUPPORT == TRUE
-        if (GM_IsTSFSong(pSong))
+        if (GM_IsSF2Song(pSong))
         {
-            // For TSF songs, aggressively silence and also end legacy voices to ensure engine note-offs
-            GM_TSF_AllNotesOffChannel(pSong, channel);
+            // For SF2 songs, aggressively silence and also end legacy voices to ensure engine note-offs
+            GM_SF2_AllNotesOffChannel(pSong, channel);
         }
 #endif
         if (pSong)

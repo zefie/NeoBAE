@@ -574,7 +574,7 @@ void render_settings_dialog(SDL_Renderer *R, int mx, int my, bool mclick, bool m
                 bae_set_volume(*volume);
             }
 #if USE_SF2_SUPPORT == TRUE
-            if (!BAESong_IsTSFSong(g_live_song))
+            if (!BAESong_IsSF2Song(g_live_song))
 #endif            
             {            
                 BAESong_SetVelocityCurve(g_live_song, g_volume_curve);
@@ -1186,7 +1186,7 @@ void render_settings_dialog(SDL_Renderer *R, int mx, int my, bool mclick, bool m
                 g_volume_curve = i;
                 g_volumeCurveDropdownOpen = false;
 #if USE_SF2_SUPPORT == TRUE
-                if (!BAESong_IsTSFSong(g_bae.song))
+                if (!BAESong_IsSF2Song(g_bae.song))
 #endif                
                 {
                     BAE_SetDefaultVelocityCurve(g_volume_curve);

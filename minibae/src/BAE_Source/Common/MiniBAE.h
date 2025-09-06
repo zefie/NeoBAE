@@ -2663,7 +2663,7 @@ extern "C"
                                     int16_t *pVersionSubMinor);
 
 #if USE_SF2_SUPPORT == TRUE
-    XBOOL BAESong_IsTSFSong(BAESong song);
+    XBOOL BAESong_IsSF2Song(BAESong song);
 #endif
 
 #ifdef __cplusplus

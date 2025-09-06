@@ -10,7 +10,7 @@
  
 
 #include "GenTSF.h"
-#if USE_SF2_SUPPORT == TRUE
+#if USE_SF2_SUPPORT == TRUE && defined(_USING_TSF)
 #if USE_VORBIS_DECODER == TRUE
 #include "stb_vorbis.c"
 #endif
@@ -41,13 +41,13 @@ static float* g_tsf_mix_buffer = NULL;
 static int32_t g_tsf_mix_buffer_frames = 0;
 
 // Private function prototypes
-static XBOOL PV_TSF_CheckChannelMuted(GM_Song* pSong, int16_t channel);
-static void PV_TSF_ConvertFloatToInt32(float* input, int32_t* output, int32_t frameCount, float songVolumeScale, const float *channelScales);
-static void PV_TSF_AllocateMixBuffer(int32_t frameCount);
-static void PV_TSF_FreeMixBuffer(void);
+static XBOOL PV_SF2_CheckChannelMuted(GM_Song* pSong, int16_t channel);
+static void PV_SF2_ConvertFloatToInt32(float* input, int32_t* output, int32_t frameCount, float songVolumeScale, const float *channelScales);
+static void PV_SF2_AllocateMixBuffer(int32_t frameCount);
+static void PV_SF2_FreeMixBuffer(void);
 
 // Initialize TSF support for the mixer
-OPErr GM_InitializeTSF(void)
+OPErr GM_InitializeSF2(void)
 {
     if (g_tsf_initialized)
     {
@@ -58,7 +58,7 @@ OPErr GM_InitializeTSF(void)
     GM_Mixer* pMixer = GM_GetCurrentMixer();
     if (pMixer)
     {
-        pMixer->isTSF = TRUE;
+        pMixer->isSF2 = TRUE;
         g_tsf_sample_rate = (int16_t)GM_ConvertFromOutputRateToRate(pMixer->outputRate);
         if (g_tsf_sample_rate <= 0)
         {
@@ -70,22 +70,22 @@ OPErr GM_InitializeTSF(void)
     return NO_ERR;
 }
 
-void GM_SetMixerTSFMode(XBOOL isTSF) {
+void GM_SetMixerSF2Mode(XBOOL isSF2) {
     GM_Mixer* pMixer = GM_GetCurrentMixer();
     if (pMixer) {
-        pMixer->isTSF = isTSF;
+        pMixer->isSF2 = isSF2;
     }
 }
 
-XBOOL GM_GetMixerTSFMode() {
+XBOOL GM_GetMixerSF2Mode() {
     GM_Mixer* pMixer = GM_GetCurrentMixer();
     if (pMixer) {
-        return pMixer->isTSF;
+        return pMixer->isSF2;
     }
     return FALSE;
 }
 
-void GM_TSF_SetSampleRate(int32_t sampleRate)
+void GM_SF2_SetSampleRate(int32_t sampleRate)
 {
     if (!g_tsf_initialized)
     {
@@ -99,19 +99,19 @@ void GM_TSF_SetSampleRate(int32_t sampleRate)
     }
 }   
 
-void GM_CleanupTSF(void)
+void GM_CleanupSF2(void)
 {
     if (!g_tsf_initialized)
     {
         return;
     }
     
-    GM_UnloadTSFSoundfont();
-    PV_TSF_FreeMixBuffer();
+    GM_UnloadSF2Soundfont();
+    PV_SF2_FreeMixBuffer();
     g_tsf_initialized = FALSE;
 }
 
-void GM_ResetTSF(void) {
+void GM_ResetSF2(void) {
     // Reset all channels' MODs and stuff
     tsf_reset(g_tsf_soundfont);
     // That resets EVERYTHING, so we have to set Ch 10 to percussion by default, again
@@ -119,11 +119,11 @@ void GM_ResetTSF(void) {
 }
 
 // Load SF2 soundfont for TSF rendering
-OPErr GM_LoadTSFSoundfont(const char* sf2_path)
+OPErr GM_LoadSF2Soundfont(const char* sf2_path)
 {
     if (!g_tsf_initialized)
     {
-        OPErr err = GM_InitializeTSF();
+        OPErr err = GM_InitializeSF2();
         if (err != NO_ERR)
         {
             return err;
@@ -131,7 +131,7 @@ OPErr GM_LoadTSFSoundfont(const char* sf2_path)
     }
     
     // Unload any existing soundfont
-    GM_UnloadTSFSoundfont();
+    GM_UnloadSF2Soundfont();
     
     // Load new soundfont
     g_tsf_soundfont = tsf_load_filename(sf2_path);
@@ -154,7 +154,7 @@ OPErr GM_LoadTSFSoundfont(const char* sf2_path)
     return NO_ERR;
 }
 
-void GM_UnloadTSFSoundfont(void)
+void GM_UnloadSF2Soundfont(void)
 {
     if (g_tsf_soundfont)
     {
@@ -166,19 +166,17 @@ void GM_UnloadTSFSoundfont(void)
 
 
 // Check if a song should use TSF rendering (based on loaded soundfont bank type)
-XBOOL GM_IsTSFSong(GM_Song* pSong)
+XBOOL GM_IsSF2Song(GM_Song* pSong)
 {
     if (!g_tsf_initialized || !g_tsf_soundfont || !pSong)
     {
         return FALSE;
     }
-    
-    // Check if song is flagged for TSF rendering
-    // This could be set when loading an SF2 bank or explicitly enabled
-    return (pSong->tsfInfo && ((GM_TSFInfo*)pSong->tsfInfo)->tsf_active);
+
+    return pSong->isSF2Song;
 }
 
-void tsf_get_channel_amplitudes(float channelAmplitudes[16][2])
+void sf2_get_channel_amplitudes(float channelAmplitudes[16][2])
 {
     // Always zero-out destination first
     for (int ch = 0; ch < 16; ++ch) {
@@ -268,7 +266,7 @@ void tsf_get_channel_amplitudes(float channelAmplitudes[16][2])
 
 
 // Enable/disable TSF rendering for a song
-OPErr GM_EnableTSFForSong(GM_Song* pSong, XBOOL enable)
+OPErr GM_EnableSF2ForSong(GM_Song* pSong, XBOOL enable)
 {
     if (!pSong)
     {
@@ -279,21 +277,21 @@ OPErr GM_EnableTSFForSong(GM_Song* pSong, XBOOL enable)
     {
         return GENERAL_BAD; // No soundfont loaded
     }
-    GM_TSF_ProcessProgramChange(pSong, 9, 129);
+    GM_SF2_ProcessProgramChange(pSong, 9, 129);
     // Allocate TSF info if needed
     if (!pSong->tsfInfo && enable)
     {
-        pSong->tsfInfo = XNewPtr(sizeof(GM_TSFInfo));
+        pSong->tsfInfo = XNewPtr(sizeof(GM_SF2Info));
         if (!pSong->tsfInfo)
         {
             return MEMORY_ERR;
         }
-        XBlockMove(pSong->tsfInfo, 0, sizeof(GM_TSFInfo));
+        XBlockMove(pSong->tsfInfo, 0, sizeof(GM_SF2Info));
     }
     
     if (pSong->tsfInfo)
     {
-        GM_TSFInfo* tsfInfo = (GM_TSFInfo*)pSong->tsfInfo;
+        GM_SF2Info* tsfInfo = (GM_SF2Info*)pSong->tsfInfo;
         tsfInfo->tsf_active = enable;
         tsfInfo->tsf_soundfont = enable ? g_tsf_soundfont : NULL;
         tsfInfo->tsf_master_volume = g_tsf_master_volume;
@@ -311,7 +309,7 @@ OPErr GM_EnableTSFForSong(GM_Song* pSong, XBOOL enable)
         if (!enable)
         {
             // Stop all TSF notes when disabling
-            GM_TSF_AllNotesOff(pSong);
+            GM_SF2_AllNotesOff(pSong);
         }
     }
     
@@ -319,7 +317,7 @@ OPErr GM_EnableTSFForSong(GM_Song* pSong, XBOOL enable)
 }
 
 // TSF MIDI event processing
-void GM_TSF_ProcessNoteOn(GM_Song* pSong, int16_t channel, int16_t note, int16_t velocity)
+void GM_SF2_ProcessNoteOn(GM_Song* pSong, int16_t channel, int16_t note, int16_t velocity)
 {
     GM_Mixer* pMixer = GM_GetCurrentMixer();
     if (!pMixer)
@@ -331,13 +329,13 @@ void GM_TSF_ProcessNoteOn(GM_Song* pSong, int16_t channel, int16_t note, int16_t
         velocity = 127;
     }
     float tsfVelocity = (float)velocity / (float)MAX_NOTE_VOLUME;
-    if (!GM_IsTSFSong(pSong) || !g_tsf_soundfont)
+    if (!GM_IsSF2Song(pSong) || !g_tsf_soundfont)
     {
         return;
     }
     
     // Check if channel is muted using miniBAE's mute logic
-    if (PV_TSF_CheckChannelMuted(pSong, channel))
+    if (PV_SF2_CheckChannelMuted(pSong, channel))
     {
         return;
     }
@@ -363,11 +361,11 @@ void GM_TSF_ProcessNoteOn(GM_Song* pSong, int16_t channel, int16_t note, int16_t
     }
 }
 
-void GM_TSF_ProcessNoteOff(GM_Song* pSong, int16_t channel, int16_t note, int16_t velocity)
+void GM_SF2_ProcessNoteOff(GM_Song* pSong, int16_t channel, int16_t note, int16_t velocity)
 {
     (void)velocity; // unused in TSF
-    
-    if (!GM_IsTSFSong(pSong) || !g_tsf_soundfont)
+
+    if (!GM_IsSF2Song(pSong) || !g_tsf_soundfont)
     {
         return;
     }
@@ -384,16 +382,16 @@ void GM_TSF_ProcessNoteOff(GM_Song* pSong, int16_t channel, int16_t note, int16_
     tsf_channel_note_off(g_tsf_soundfont, channel, note);
 }
 
-void GM_TSF_ProcessProgramChange(GM_Song* pSong, int16_t channel, int16_t program)
+void GM_SF2_ProcessProgramChange(GM_Song* pSong, int16_t channel, int16_t program)
 {
-    if (!GM_IsTSFSong(pSong) || !g_tsf_soundfont)
+    if (!GM_IsSF2Song(pSong) || !g_tsf_soundfont)
     {
         return;
     }
     
     // Check if channel is muted
     /*
-    if (PV_TSF_CheckChannelMuted(pSong, channel))
+    if (PV_SF2_CheckChannelMuted(pSong, channel))
     {
         return;
     }
@@ -469,15 +467,15 @@ void GM_TSF_ProcessProgramChange(GM_Song* pSong, int16_t channel, int16_t progra
     }
 }
 
-void GM_TSF_ProcessController(GM_Song* pSong, int16_t channel, int16_t controller, int16_t value)
+void GM_SF2_ProcessController(GM_Song* pSong, int16_t channel, int16_t controller, int16_t value)
 {
-    if (!GM_IsTSFSong(pSong) || !g_tsf_soundfont)
+    if (!GM_IsSF2Song(pSong) || !g_tsf_soundfont)
     {
         return;
     }
     
     // Check if channel is muted for non-critical controllers
-    if (PV_TSF_CheckChannelMuted(pSong, channel))
+    if (PV_SF2_CheckChannelMuted(pSong, channel))
     {
         // Allow certain controllers even when muted (sustain pedal, all notes off, etc.)
         if (controller != 64 && controller != 120 && controller != 123)
@@ -489,7 +487,7 @@ void GM_TSF_ProcessController(GM_Song* pSong, int16_t channel, int16_t controlle
     // Intercept volume (7) and expression (11) to update per-channel scaling
     if (controller == 7 || controller == 11)
     {
-        GM_TSFInfo* info = (GM_TSFInfo*)pSong->tsfInfo;
+        GM_SF2Info* info = (GM_SF2Info*)pSong->tsfInfo;
         if (info)
         {
             if (controller == 7) { if (value<0) value=0; if (value>127) value=127; info->channelVolume[channel]=(uint8_t)value; }
@@ -499,15 +497,15 @@ void GM_TSF_ProcessController(GM_Song* pSong, int16_t channel, int16_t controlle
     tsf_channel_midi_control(g_tsf_soundfont, channel, controller, value);
 }
 
-void GM_TSF_ProcessPitchBend(GM_Song* pSong, int16_t channel, int16_t bendMSB, int16_t bendLSB)
+void GM_SF2_ProcessPitchBend(GM_Song* pSong, int16_t channel, int16_t bendMSB, int16_t bendLSB)
 {
-    if (!GM_IsTSFSong(pSong) || !g_tsf_soundfont)
+    if (!GM_IsSF2Song(pSong) || !g_tsf_soundfont)
     {
         return;
     }
     
     // Check if channel is muted
-    if (PV_TSF_CheckChannelMuted(pSong, channel))
+    if (PV_SF2_CheckChannelMuted(pSong, channel))
     {
         return;
     }
@@ -518,15 +516,15 @@ void GM_TSF_ProcessPitchBend(GM_Song* pSong, int16_t channel, int16_t bendMSB, i
 }
 
 // TSF audio rendering - this gets called during mixer slice processing
-void GM_TSF_RenderAudioSlice(GM_Song* pSong, int32_t* mixBuffer, int32_t frameCount)
+void GM_SF2_RenderAudioSlice(GM_Song* pSong, int32_t* mixBuffer, int32_t frameCount)
 {
-    if (!GM_IsTSFSong(pSong) || !g_tsf_soundfont || !mixBuffer || frameCount <= 0)
+    if (!GM_IsSF2Song(pSong) || !g_tsf_soundfont || !mixBuffer || frameCount <= 0)
     {
         return;
     }
     
     // Allocate mix buffer if needed
-    PV_TSF_AllocateMixBuffer(frameCount);
+    PV_SF2_AllocateMixBuffer(frameCount);
     if (!g_tsf_mix_buffer)
     {
         return;
@@ -567,7 +565,7 @@ void GM_TSF_RenderAudioSlice(GM_Song* pSong, int32_t* mixBuffer, int32_t frameCo
     }
     // Apply per-channel volume/expression: we post-scale the rendered buffer per frame
     float channelScales[16];
-    GM_TSFInfo* info = (GM_TSFInfo*)pSong->tsfInfo;
+    GM_SF2Info* info = (GM_SF2Info*)pSong->tsfInfo;
     for(int c=0;c<16;c++)
     {
         float vol = 1.0f;
@@ -579,31 +577,31 @@ void GM_TSF_RenderAudioSlice(GM_Song* pSong, int32_t* mixBuffer, int32_t frameCo
     }
     // Apply song + channel scaling inside conversion
     // For simplicity pass songScale now; channel scaling applied per sample pair inside conversion helper (modify helper signature?)
-    PV_TSF_ConvertFloatToInt32(g_tsf_mix_buffer, mixBuffer, frameCount, songScale, channelScales);
+    PV_SF2_ConvertFloatToInt32(g_tsf_mix_buffer, mixBuffer, frameCount, songScale, channelScales);
 }
 
 // TSF channel management (respects miniBAE mute/solo states)
-void GM_TSF_MuteChannel(GM_Song* pSong, int16_t channel)
+void GM_SF2_MuteChannel(GM_Song* pSong, int16_t channel)
 {
-    if (!GM_IsTSFSong(pSong) || !g_tsf_soundfont)
+    if (!GM_IsSF2Song(pSong) || !g_tsf_soundfont)
     {
         return;
     }
     
     // Stop all notes on this channel
-    GM_TSF_AllNotesOffChannel(pSong, channel);
+    GM_SF2_AllNotesOffChannel(pSong, channel);
 }
 
-void GM_TSF_UnmuteChannel(GM_Song* pSong, int16_t channel)
+void GM_SF2_UnmuteChannel(GM_Song* pSong, int16_t channel)
 {
     (void)pSong;
     (void)channel;
     // Nothing special needed for unmuting - new notes will play normally
 }
 
-void GM_TSF_AllNotesOff(GM_Song* pSong)
+void GM_SF2_AllNotesOff(GM_Song* pSong)
 {
-    if (!GM_IsTSFSong(pSong) || !g_tsf_soundfont)
+    if (!GM_IsSF2Song(pSong) || !g_tsf_soundfont)
     {
         return;
     }
@@ -619,13 +617,13 @@ void GM_TSF_AllNotesOff(GM_Song* pSong)
 
     for (int ch = 0; ch < 16; ++ch)
     {
-        GM_TSF_AllNotesOffChannel(pSong, ch);
+        GM_SF2_AllNotesOffChannel(pSong, ch);
     }
 }
 
-void GM_TSF_AllNotesOffChannel(GM_Song* pSong, int16_t channel)
+void GM_SF2_AllNotesOffChannel(GM_Song* pSong, int16_t channel)
 {
-    if (!GM_IsTSFSong(pSong) || !g_tsf_soundfont)
+    if (!GM_IsSF2Song(pSong) || !g_tsf_soundfont)
     {
         return;
     }
@@ -645,21 +643,21 @@ void GM_TSF_AllNotesOffChannel(GM_Song* pSong, int16_t channel)
 }
 
 // Force immediate silence for a TSF-backed song (used on pause to avoid hanging tails)
-void GM_TSF_SilenceSong(GM_Song* pSong)
+void GM_SF2_SilenceSong(GM_Song* pSong)
 {
-    if (!GM_IsTSFSong(pSong) || !g_tsf_soundfont)
+    if (!GM_IsSF2Song(pSong) || !g_tsf_soundfont)
     {
         return;
     }
     
     // Stop all notes immediately
-    GM_TSF_AllNotesOff(pSong);
+    GM_SF2_AllNotesOff(pSong);
     
     // Ensure any (legacy) voices allocated before TSF activation enter release
     GM_EndSongNotes(pSong);
 }
 
-void GM_TSF_KillChannelNotes(int ch) {
+void GM_SF2_KillChannelNotes(int ch) {
     if (!g_tsf_soundfont)
     {
         return;
@@ -667,18 +665,18 @@ void GM_TSF_KillChannelNotes(int ch) {
     tsf_channel_sounds_off_all(g_tsf_soundfont, ch);
 }
 
-void GM_TSF_KillAllNotes() {
+void GM_SF2_KillAllNotes() {
     if (!g_tsf_soundfont)
     {
         return;
     }
     for (int i=0; i<16; i++) {
-        GM_TSF_KillChannelNotes(i);
+        GM_SF2_KillChannelNotes(i);
     }
 }
 
 // TSF configuration
-void GM_TSF_SetMasterVolume(XFIXED volume)
+void GM_SF2_SetMasterVolume(XFIXED volume)
 {
     g_tsf_master_volume = volume;
     if (g_tsf_soundfont)
@@ -687,12 +685,12 @@ void GM_TSF_SetMasterVolume(XFIXED volume)
     }
 }
 
-XFIXED GM_TSF_GetMasterVolume(void)
+XFIXED GM_SF2_GetMasterVolume(void)
 {
     return g_tsf_master_volume;
 }
 
-void GM_TSF_SetMaxVoices(int16_t maxVoices)
+void GM_SF2_SetMaxVoices(int16_t maxVoices)
 {
     g_tsf_max_voices = maxVoices;
     if (g_tsf_soundfont)
@@ -701,13 +699,13 @@ void GM_TSF_SetMaxVoices(int16_t maxVoices)
     }
 }
 
-int16_t GM_TSF_GetMaxVoices(void)
+int16_t GM_SF2_GetMaxVoices(void)
 {
     return g_tsf_max_voices;
 }
 
 // TSF status queries
-int16_t GM_TSF_GetActiveVoiceCount(void)
+int16_t GM_SF2_GetActiveVoiceCount(void)
 {
     if (!g_tsf_soundfont)
     {
@@ -716,13 +714,13 @@ int16_t GM_TSF_GetActiveVoiceCount(void)
     return (int16_t)tsf_active_voice_count(g_tsf_soundfont);
 }
 
-XBOOL GM_TSF_IsActive(void)
+XBOOL GM_SF2_IsActive(void)
 {
     return g_tsf_initialized && (g_tsf_soundfont != NULL);
 }
 
 // Private helper functions
-static XBOOL PV_TSF_CheckChannelMuted(GM_Song* pSong, int16_t channel)
+static XBOOL PV_SF2_CheckChannelMuted(GM_Song* pSong, int16_t channel)
 {
     if (!pSong || channel < 0 || channel >= MAX_CHANNELS)
     {
@@ -734,7 +732,7 @@ static XBOOL PV_TSF_CheckChannelMuted(GM_Song* pSong, int16_t channel)
     return PV_IsMuted(pSong, channel, -1); // -1 for track means channel-only check
 }
 
-static void PV_TSF_ConvertFloatToInt32(float* input, int32_t* output, int32_t frameCount, float songVolumeScale, const float *channelScales)
+static void PV_SF2_ConvertFloatToInt32(float* input, int32_t* output, int32_t frameCount, float songVolumeScale, const float *channelScales)
 {
 
     // Map float -1..1 to internal mixer scale (~16-bit range << OUTPUT_SCALAR)
@@ -773,28 +771,28 @@ static void PV_TSF_ConvertFloatToInt32(float* input, int32_t* output, int32_t fr
     }
 }
 
-void GM_TSF_SetStereoMode(XBOOL stereo, XBOOL applyNow) {
+void GM_SF2_SetStereoMode(XBOOL stereo, XBOOL applyNow) {
     g_tsf_mono_mode = !stereo;
     if (applyNow) {
         tsf_set_output(g_tsf_soundfont, g_tsf_mono_mode ? TSF_MONO : TSF_STEREO_INTERLEAVED, g_tsf_sample_rate, 0.0f);
     }
 }
 
-static void PV_TSF_AllocateMixBuffer(int32_t frameCount)
+static void PV_SF2_AllocateMixBuffer(int32_t frameCount)
 {
     if (g_tsf_mix_buffer && g_tsf_mix_buffer_frames >= frameCount)
     {
         return; // Already have sufficient buffer
     }
     
-    PV_TSF_FreeMixBuffer();
+    PV_SF2_FreeMixBuffer();
     
     g_tsf_mix_buffer_frames = frameCount;
     int channels = g_tsf_mono_mode ? 1 : 2;
     g_tsf_mix_buffer = (float*)XNewPtr(frameCount * channels * sizeof(float));
 }
 
-static void PV_TSF_FreeMixBuffer(void)
+static void PV_SF2_FreeMixBuffer(void)
 {
     if (g_tsf_mix_buffer)
     {
@@ -804,8 +802,8 @@ static void PV_TSF_FreeMixBuffer(void)
     }
 }
 
-void PV_TSF_SetBankPreset(GM_Song* pSong, int16_t channel, int16_t bank, int16_t preset) {
-    if (!GM_IsTSFSong(pSong) || !g_tsf_soundfont)
+void PV_SF2_SetBankPreset(GM_Song* pSong, int16_t channel, int16_t bank, int16_t preset) {
+    if (!GM_IsSF2Song(pSong) || !g_tsf_soundfont)
     {
         return;
     }

@@ -162,7 +162,12 @@
 #include <stdint.h>
 #include "bankinfo.h" // embedded bank metadata (hash -> friendly)
 #if USE_SF2_SUPPORT == TRUE
+#if _USING_BASSMIDI == TRUE
+#include "GenBassMidi.h"
+#endif
+#if _USING_TSF == TRUE
 #include "GenTSF.h"
+#endif
 #endif
 
 
@@ -353,12 +358,31 @@ const char *BAE_GetFeatureString()
 
     // SF2 support
 #if USE_SF2_SUPPORT == TRUE && USE_VORBIS_DECODER == TRUE
-    const char *sf2supp = "SF2/SF3/SFO Support";
+    char *sf2supp = "SF2/SF3/SFO Support";
 #elif USE_SF2_SUPPORT == TRUE
-    const char *sf2supp = "SF2 Support";
+    char *sf2supp = "SF2 Support";
 #else
-    const char *sf2supp = NULL;
+    char *sf2supp = NULL;
 #endif
+
+#if USE_SF2_SUPPORT == TRUE
+#if _USING_BASSMIDI == TRUE
+    // BASSMIDI
+    if (sf2supp && sf2supp[0]) {
+        static char sf2supp_buf[64];
+        snprintf(sf2supp_buf, sizeof(sf2supp_buf), "%s (BASSMIDI)", sf2supp);
+        sf2supp = sf2supp_buf;
+    }
+#elif _USING_TSF == TRUE
+    // TSF
+    if (sf2supp && sf2supp[0]) {
+        static char sf2supp_buf[64];
+        snprintf(sf2supp_buf, sizeof(sf2supp_buf), "%s (TSF)", sf2supp);
+        sf2supp = sf2supp_buf;
+    }
+#endif
+#endif
+
     if (sf2supp && sf2supp[0])
     {
         snprintf(featBuf + strlen(featBuf), sizeof(featBuf) - strlen(featBuf), "%s%s", first ? "" : ", ", sf2supp);
@@ -964,11 +988,11 @@ BAEResult BAE_TranslateOPErr(OPErr theErr)
 }
 
 #if USE_SF2_SUPPORT == TRUE
-XBOOL BAESong_IsTSFSong(BAESong song)
+XBOOL BAESong_IsSF2Song(BAESong song)
 {
     if (!song || !song->pSong)
         return FALSE;
-    return GM_IsTSFSong(song->pSong);
+    return GM_IsSF2Song(song->pSong);
 }
 #endif 
 
@@ -2818,11 +2842,11 @@ BAEResult BAEMixer_GetRealtimeStatus(BAEMixer mixer, BAEAudioInfo *pStatus)
         if (pStatus)
         {
 #if USE_SF2_SUPPORT == TRUE            
-            if (mixer->pMixer->isTSF)
+            if (mixer->pMixer->isSF2)
             {
                 GM_GetRealtimeAudioInformation(&status);
                 XSetMemory(pStatus, (int32_t)sizeof(BAEAudioInfo), 0);
-                pStatus->voicesActive = GM_TSF_GetActiveVoiceCount();
+                pStatus->voicesActive = GM_SF2_GetActiveVoiceCount();
 
             }
             else
@@ -6702,7 +6726,7 @@ static BAEResult PV_BAESong_InitLiveSong(BAESong song, BAE_BOOL addToMixer)
             GM_ChangeSongVoices(song->pSong, maxSongVoices, mixLevel, maxEffectVoices);
             GM_SetVelocityCurveType(song->pSong, (VelocityCurveType)g_defaultVelocityCurve);
 #if USE_SF2_SUPPORT == TRUE
-            if (GM_TSF_IsActive()) { GM_EnableTSFForSong(song->pSong, TRUE); }
+            if (GM_SF2_IsActive()) { GM_EnableSF2ForSong(song->pSong, TRUE); }
 #endif
             GM_SetReverbType(g_defaultReverbType);
 
@@ -6927,7 +6951,7 @@ BAEResult BAESong_LoadGroovoid(BAESong song, char *cName, BAE_BOOL ignoreBadInst
                         GM_SetVelocityCurveType(pSong, (VelocityCurveType)g_defaultVelocityCurve);
                         song->pSong = pSong;                            // preserve for use later
 #if USE_SF2_SUPPORT == TRUE
-                        if (GM_TSF_IsActive()) { GM_EnableTSFForSong(song->pSong, TRUE); }
+                        if (GM_SF2_IsActive()) { GM_EnableSF2ForSong(song->pSong, TRUE); }
 #endif
                         theErr = NO_ERR;
                     }
@@ -6994,8 +7018,8 @@ BAEResult BAESong_LoadMidiFromMemory(BAESong song, void const *pMidiData, uint32
                 {
                     PV_BAESong_Unload(song);
 #if USE_SF2_SUPPORT == TRUE
-                    if (GM_TSF_IsActive()) {
-                        GM_ResetTSF();
+                    if (GM_SF2_IsActive()) {
+                        GM_ResetSF2();
                     }
 #endif                     
                     pSong = GM_LoadSong(song->mixer->pMixer,
@@ -7018,7 +7042,7 @@ BAEResult BAESong_LoadMidiFromMemory(BAESong song, void const *pMidiData, uint32
                         GM_SetVelocityCurveType(pSong, (VelocityCurveType)g_defaultVelocityCurve);
                         song->pSong = pSong;                            // preserve for use later
 #if USE_SF2_SUPPORT == TRUE
-                        if (GM_TSF_IsActive()) { GM_EnableTSFForSong(song->pSong, TRUE); }
+                        if (GM_SF2_IsActive()) { GM_EnableSF2ForSong(song->pSong, TRUE); }
 #endif
 
                         if (pSong->titleOffset)
@@ -7104,8 +7128,8 @@ BAEResult BAESong_LoadMidiFromFile(BAESong song, BAEPathName filePath, BAE_BOOL 
                 {                    
                     PV_BAESong_Unload(song);
 #if USE_SF2_SUPPORT == TRUE
-                    if (GM_TSF_IsActive()) {
-                        GM_ResetTSF();
+                    if (GM_SF2_IsActive()) {
+                        GM_ResetSF2();
                     }
 #endif                    
                     pSong = GM_LoadSong(song->mixer->pMixer,
@@ -7128,7 +7152,7 @@ BAEResult BAESong_LoadMidiFromFile(BAESong song, BAEPathName filePath, BAE_BOOL 
                         GM_SetVelocityCurveType(pSong, (VelocityCurveType)g_defaultVelocityCurve);
                         song->pSong = pSong;                            // preserve for use later
 #if USE_SF2_SUPPORT == TRUE
-                        if (GM_TSF_IsActive()) { GM_EnableTSFForSong(song->pSong, TRUE); }
+                        if (GM_SF2_IsActive()) { GM_EnableSF2ForSong(song->pSong, TRUE); }
 #endif
                     }
                     else
@@ -7194,8 +7218,8 @@ BAEResult BAESong_LoadRmfFromMemory(BAESong song, void *pRMFData, uint32_t rmfSi
                     {
                         PV_BAESong_Unload(song);
 #if USE_SF2_SUPPORT == TRUE
-                        if (GM_TSF_IsActive()) {
-                            GM_ResetTSF();
+                        if (GM_SF2_IsActive()) {
+                            GM_ResetSF2();
                         }
 #endif                         
                         pSong = GM_LoadSong(song->mixer->pMixer,
@@ -7229,7 +7253,7 @@ BAEResult BAESong_LoadRmfFromMemory(BAESong song, void *pRMFData, uint32_t rmfSi
                                 BAE_PRINTF("    %u - INST: %u\n", i, pSong->RMFInstrumentIDs[i]);
                             }
                             pSong->songFlags = SONG_FLAG_IS_RMF;
-                            if (GM_TSF_IsActive()) { GM_EnableTSFForSong(pSong, TRUE); }
+                            if (GM_SF2_IsActive()) { GM_EnableSF2ForSong(pSong, TRUE); }
 #endif
                             GM_SetVelocityCurveType(pSong, (VelocityCurveType)g_defaultVelocityCurve);
                             song->pSong = pSong;                            // preserve for use later
@@ -7278,7 +7302,7 @@ BAEResult BAESong_LoadRmfFromMemory(BAESong song, void *pRMFData, uint32_t rmfSi
                                 GM_SetVelocityCurveType(pSong, (VelocityCurveType)g_defaultVelocityCurve);
                                 song->pSong = pSong;
 #if USE_SF2_SUPPORT == TRUE
-                                if (GM_TSF_IsActive()) { GM_EnableTSFForSong(song->pSong, TRUE); }
+                                if (GM_SF2_IsActive()) { GM_EnableSF2ForSong(song->pSong, TRUE); }
 #endif
                             }
                             else
@@ -7381,10 +7405,10 @@ BAEResult BAESong_LoadRmfFromFile(BAESong song, BAEPathName filePath, int16_t so
                 {
                     PV_BAESong_Unload(song);
 #if USE_SF2_SUPPORT == TRUE
-                    if (GM_TSF_IsActive()) {
-                        GM_ResetTSF();
+                    if (GM_SF2_IsActive()) {
+                        GM_ResetSF2();
                     }
-#endif                     
+#endif                    
                     pSong = GM_LoadSong(song->mixer->pMixer,
                                         NULL,
                                         song,
@@ -7424,7 +7448,7 @@ BAEResult BAESong_LoadRmfFromFile(BAESong song, BAEPathName filePath, int16_t so
                         song->pSong = pSong;                            // preserve for use later
                         
 #if USE_SF2_SUPPORT == TRUE
-                        if (GM_TSF_IsActive()) { GM_EnableTSFForSong(song->pSong, TRUE); }
+                        if (GM_SF2_IsActive()) { GM_EnableSF2ForSong(song->pSong, TRUE); }
 #endif
                     }
                     else

@@ -29,6 +29,14 @@ ifeq ($(USE_SDL2),1)
 	USE_SDL3 := 0
 endif
 
+ifeq ($(SF2_SUPPORT),1)
+	ifneq ($(USE_BASSMIDI),)
+		USING_BASSMIDI := 1
+	else
+		USING_TSF := 1
+	endif
+endif
+
 # Force OGG support if VORBIS is chosen
 ifneq ($(OGG_SUPPORT),1)
 	ifneq ($(filter 1,$(VORBIS_ENC) $(VORBIS_DEC)),) 
@@ -218,9 +226,37 @@ SRC		+=	src/BAE_Source/Common/DriverTools.c \
 			src/BAE_Source/Common/sha1mini.c
 
 
-# TSF (TinySoundFont) support
+# BassMidi support
 ifeq ($(SF2_SUPPORT),1)
-	SRC += src/BAE_Source/Common/GenTSF.c
+	ifeq ($(USING_BASSMIDI),1)
+		SRC += src/BAE_Source/Common/GenBassMidi.c
+		BAE_FLAGS += -D_USING_BASSMIDI=1
+		# Include BassMidi headers and libraries
+		INC_PATH += -Isrc/thirdparty/bassmidi
+		# Link BassMidi and BASS libraries (adjust path based on architecture)
+		ifeq ($(WINDOWS),1)
+			ifeq ($(BITS),32)
+				BAE_LD_FLAGS := -Lsrc/thirdparty/bassmidi/libs/x86
+			else
+				BAE_LD_FLAGS := -Lsrc/thirdparty/bassmidi/libs/x86_64
+				BAE_LIBS := src/thirdparty/bassmidi/libs/x86_64/bassmidi.lib src/thirdparty/bassmidi/libs/x86_64/bass.lib -Wl,-rpath,'$$ORIGIN'
+			endif			
+		else
+			UNAME_M := $(shell uname -m)
+			ifeq ($(UNAME_M),x86_64)
+				BAE_LD_FLAGS := -Lsrc/thirdparty/bassmidi/libs/x86_64
+			else ifeq ($(UNAME_M),aarch64)
+				BAE_LD_FLAGS := -Lsrc/thirdparty/bassmidi/libs/aarch64
+			else
+				BAE_LD_FLAGS := -Lsrc/thirdparty/bassmidi/libs/x86
+			endif
+			BAE_LIBS := -lbassmidi -lbass -Wl,-rpath,'$$ORIGIN'
+		endif	
+	endif
+	ifeq ($(USING_TSF),1)
+		SRC += src/BAE_Source/Common/GenTSF.c
+		BAE_FLAGS += -D_USING_TSF=1 
+	endif
 endif
 
 ifeq ($(MP3_DEC),1)

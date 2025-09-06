@@ -209,7 +209,12 @@
 #include "X_Assert.h"
 #include <stdint.h>
 #if USE_SF2_SUPPORT == TRUE
+#if _USING_BASSMIDI == TRUE
+#include "GenBassMidi.h" // BassMidi integration (silence on end)
+#endif
+#if _USING_TSF == TRUE
 #include "GenTSF.h" // TSF integration (silence on end)
+#endif
 #endif
 
 // Functions
@@ -1115,11 +1120,11 @@ static void PV_EndSongWithControl(void *threadContext, GM_Song *pSong, XBOOL rem
         if (pSong)
         {
             // For TSF-backed songs ensure TinySoundFont is fully silenced (sustain off, all sound off, all notes off)
-            // which also clears engine bookkeeping, otherwise lingering TSF voices can reappear after stop.
+            // which also clears engine bookkeeping, otherwise lingering SF2 voices can reappear after stop.
 #if USE_SF2_SUPPORT == TRUE
-            if (GM_IsTSFSong(pSong))
+            if (GM_IsSF2Song(pSong))
             {
-                GM_TSF_SilenceSong(pSong); // also calls GM_EndSongNotes internally
+                GM_SF2_SilenceSong(pSong); // also calls GM_EndSongNotes internally
             }
             else
 #endif

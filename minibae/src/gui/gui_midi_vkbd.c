@@ -2,7 +2,7 @@
 
 #include "gui_midi_vkbd.h"
 #if USE_SF2_SUPPORT == TRUE
-#include "GenTSF.h"
+#include "GenBassMidi.h"
 #endif
 
 // Virtual keyboard state
@@ -34,7 +34,7 @@ void gui_panic_all_notes(BAESong s)
     for (int ch = 0; ch < 16; ++ch)
     {
 #if USE_SF2_SUPPORT == TRUE
-        GM_TSF_KillChannelNotes(ch);
+        GM_SF2_KillChannelNotes(ch);
 #endif
         for (int n = 0; n < 128; ++n)
         {
@@ -55,7 +55,7 @@ void gui_panic_channel_notes(BAESong s, int ch)
     BAESong_ControlChange(s, (unsigned char)ch, 123, 0, 0); // All Notes Off
     // Explicit NoteOff for any keys we believe are active from MIDI-in
 #if USE_SF2_SUPPORT == TRUE
-    GM_TSF_KillAllNotes();
+    GM_SF2_KillAllNotes();
 #endif
     for (int n = 0; n < 128; ++n)
     {

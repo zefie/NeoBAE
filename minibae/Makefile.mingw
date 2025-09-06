@@ -145,6 +145,13 @@ ifeq ($(USE_SDL3),1)
         -lodbccp32
 endif
 
+ifneq ($(BAE_LD_FLAGS),)
+    LD_FLAGS += $(BAE_LD_FLAGS)
+endif
+
+ifneq ($(BAE_LIBS),)
+    LIBS += $(BAE_LIBS)
+endif
 
 # Use C++ linker if we have any C++ sources
 ifneq ($(filter %.cpp,$(SRC) $(SRC_BIN)),)
@@ -171,6 +178,13 @@ $(TARGET_LIB).dll: ${OBJ}
 ifeq ($(USE_SDL3),1)
 	@cp ../windeps/SDL3-3.2.22/x86_64-w64-mingw32/bin/SDL3.dll $(TARGET_OUT)
 endif
+ifeq ($(USING_BASSMIDI),1)
+ifeq ($(BITS),32)
+	@$(shell cp src/thirdparty/bassmidi/libs/x86/bass*.dll* $(TARGET_OUT) 2>/dev/null || true)
+else
+	@$(shell cp src/thirdparty/bassmidi/libs/x86_64/bass*.dll* $(TARGET_OUT) 2>/dev/null || true)
+endif
+endif	
 
 $(TARGET_BIN): ${OBJ_BIN}
 	@mkdir -p $(TARGET_OUT)

@@ -580,7 +580,7 @@ OPErr GM_InitGeneralSound(void *threadContext, Rate theRate, TerpMode theTerp, A
         if (pMixer)
         {
 #if USE_SF2_SUPPORT == TRUE
-            pMixer->isTSF = FALSE;
+            pMixer->isSF2 = FALSE;
 #endif
             // Turn off all notes!
             for (count = 0; count < MAX_VOICES; count++)

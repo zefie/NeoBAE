@@ -8,7 +8,7 @@
 #include "gui_karaoke.h" // For karaoke functions
 #include "X_API.h"
 #if USE_SF2_SUPPORT
-#include "GenTSF.h"
+#include "GenBassMidi.h"
 #endif
 #include <stdio.h>
 #include <stdlib.h>
@@ -138,7 +138,7 @@ bool load_bank(const char *path, bool current_playing_state, int transpose, int 
     if (strcmp(path, "__builtin__") == 0)
     {
 #if USE_SF2_SUPPORT == TRUE
-        GM_UnloadTSFSoundfont();
+        GM_UnloadSF2Soundfont();
 #endif
         if (g_bae.bank_loaded) {
             BAEMixer_UnloadBank(g_bae.mixer, g_bae.bank_token);
@@ -527,7 +527,7 @@ bool bae_load_bank(const char *bank_path)
 
     const char *ext = strrchr(bank_path, '.');
 #if USE_SF2_SUPPORT == TRUE
-    GM_UnloadTSFSoundfont();
+    GM_UnloadSF2Soundfont();
     // Check if this is an SF2 file
     if (ext && (strcasecmp(ext, ".sf2") == 0
 #if USE_VORBIS_DECODER == TRUE
@@ -536,7 +536,7 @@ bool bae_load_bank(const char *bank_path)
     ))
     {
         // Load SF2 bank
-        OPErr err = GM_LoadTSFSoundfont(bank_path);
+        OPErr err = GM_LoadSF2Soundfont(bank_path);
         if (err != NO_ERR)
         {
             BAE_PRINTF("SF2 bank load failed: %d %s\n", err, bank_path);
@@ -1152,8 +1152,8 @@ bool bae_play(bool *playing)
                     BAESong_Preroll(g_bae.song);
                     Settings settings = load_settings();
 #if USE_SF2_SUPPORT == TRUE
-                    XBOOL isTSFSong = BAESong_IsTSFSong(g_bae.song);
-                    if (isTSFSong) {
+                    XBOOL isSF2Song = BAESong_IsSF2Song(g_bae.song);
+                    if (isSF2Song) {
                         BAESong_SetVelocityCurve(g_bae.song, 1); // Perky for SF2
                     }
                     else

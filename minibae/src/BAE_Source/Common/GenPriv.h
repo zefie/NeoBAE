@@ -717,7 +717,7 @@ struct GM_Mixer
 #endif
 #endif
 #if USE_SF2_SUPPORT == TRUE
-    XBOOL               isTSF;
+    XBOOL               isSF2;
 #endif
 
 // MIDI Interpreter variables

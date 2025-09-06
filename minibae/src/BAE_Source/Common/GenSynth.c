@@ -348,7 +348,12 @@
 #include "X_Assert.h"
 #include <stdint.h>
 #if USE_SF2_SUPPORT == TRUE
+#if _USING_BASSMIDI == TRUE
+#include "GenBassMidi.h"
+#endif
+#if _USING_TSF == TRUE
 #include "GenTSF.h"
+#endif
 #endif
 
 // the only global. Our current mixer pointer.
@@ -2169,9 +2174,9 @@ INLINE static void PV_ServeInstruments(void)
         for (si = 0; si < MAX_SONGS; ++si)
         {
             GM_Song *song = pMixer->pSongsToPlay[si];
-            if (song && GM_IsTSFSong(song))
+            if (song && GM_IsBassMidiSong(song))
             {
-                GM_TSF_RenderAudioSlice(song, (int32_t *)pMixer->songBufferDry, pMixer->One_Loop);
+                GM_BassMidi_RenderAudioSlice(song, (int32_t *)pMixer->songBufferDry, pMixer->One_Loop);
             }
         }
     }
@@ -2205,9 +2210,9 @@ INLINE static void PV_ServeInstruments(void)
             for (si = 0; si < MAX_SONGS; ++si)
             {
                 GM_Song *song = pMixer->pSongsToPlay[si];
-                if (song && GM_IsTSFSong(song))
+                if (song && GM_IsSF2Song(song))
                 {
-                    GM_TSF_RenderAudioSlice(song, (int32_t *)pMixer->songBufferDry, pMixer->One_Loop);
+                    GM_SF2_RenderAudioSlice(song, (int32_t *)pMixer->songBufferDry, pMixer->One_Loop);
                 }
             }
         }
@@ -2240,9 +2245,9 @@ INLINE static void PV_ServeInstruments(void)
             for (si = 0; si < MAX_SONGS; ++si)
             {
                 GM_Song *song = pMixer->pSongsToPlay[si];
-                if (song && GM_IsTSFSong(song))
+                if (song && GM_IsSF2Song(song))
                 {
-                    GM_TSF_RenderAudioSlice(song, (int32_t *)pMixer->songBufferDry, pMixer->One_Loop);
+                    GM_SF2_RenderAudioSlice(song, (int32_t *)pMixer->songBufferDry, pMixer->One_Loop);
                 }
             }
         }

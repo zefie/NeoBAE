@@ -52,7 +52,7 @@
 #include "gui_panels.h"
 
 #if USE_SF2_SUPPORT == TRUE
-#include "GenTSF.h"
+#include "GenBassMidi.h"
 #endif
 
 /* Forward-declare dialog renderer from gui_dialogs.c to avoid including the
@@ -495,15 +495,15 @@ bool recreate_mixer_and_restore(int sampleRateHz, bool stereo, int reverbType,
     g_bae.bank_loaded = false;
     g_bae.bank_token = 0;
 #if USE_SF2_SUPPORT == TRUE
-    if (GM_TSF_IsActive())
+    if (GM_SF2_IsActive())
     {
-        GM_TSF_SetStereoMode(stereo, FALSE); // Don't apply now because we are going to apply next
-        GM_TSF_SetSampleRate(sampleRateHz);
+        GM_SF2_SetStereoMode(stereo, FALSE); // Don't apply now because we are going to apply next
+        GM_SF2_SetSampleRate(sampleRateHz);
     }
 #endif    
     // Create new mixer
 #if USE_SF2_SUPPORT == TRUE
-    XBOOL wasTSF = GM_GetMixerTSFMode();
+    XBOOL wasBassMidi = GM_GetMixerSF2Mode();
 #endif
     g_bae.mixer = BAEMixer_New();
     if (!g_bae.mixer)
@@ -512,7 +512,7 @@ bool recreate_mixer_and_restore(int sampleRateHz, bool stereo, int reverbType,
         return false;
     }
 #if USE_SF2_SUPPORT == TRUE
-    GM_SetMixerTSFMode(wasTSF);
+    GM_SetMixerSF2Mode(wasBassMidi);
 #endif
     BAERate rate = map_rate_from_hz(sampleRateHz);
     BAEAudioModifiers mods = BAE_USE_16 | (stereo ? BAE_USE_STEREO : 0);

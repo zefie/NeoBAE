@@ -6,7 +6,6 @@ endif
 
 include inc/Makefile.common
 
-ARCH		:= -static
 CC		:= gcc
 CXX		:= g++
 LD		:= $(CC)
@@ -29,13 +28,20 @@ include inc/Makefile.versioning
 CFLAGS		+= -D_VERSION=\""$(VERSION)"\"
 
 
-LDFLAGS		:= $(ARCH) $(OPTI)
+LDFLAGS		:= $(OPTI)
+ifneq ($(BAE_LD_FLAGS),)
+	LDFLAGS += $(BAE_LD_FLAGS)
+endif
+
 ifneq ($(DEBUG),1)
 	LDFLAGS += -s
 endif
 
 LIBS	= 	-lpthread -lm -ldl
 
+ifneq ($(BAE_LIBS),)
+	LIBS += $(BAE_LIBS)
+endif
 
 UNAME_S:=$(shell uname -s 2>/dev/null)
 ifeq ($(USE_SDL3),1)
@@ -118,6 +124,9 @@ $(TARGET_LIB).a: $(OBJ)
 $(TARGET_LIB).so: ${OBJ}
 	@mkdir -p $(TARGET_OUT)
 	${LD} -shared $(LDFLAGS) ${OBJ} $(LIBS) -o $(TARGET_OUT)${TARGET_LIB}.so
+ifeq ($(USING_BASSMIDI),1)
+	@$(shell cp src/thirdparty/bassmidi/libs/$(if $(filter x86_64 aarch64,$(UNAME_M)),x86_64,x86)/libbass*.so* $(TARGET_OUT) 2>/dev/null || true)
+endif	
 
 $(TARGET_BIN): ${OBJ_BIN}
 	@mkdir -p $(TARGET_OUT)

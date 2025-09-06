@@ -51,6 +51,12 @@ CFLAGS		+= -D_VERSION=\""$(VERSION)"\"
 
 CXXFLAGS 	:= $(CFLAGS)
 LDFLAGS		:= $(ARCH) $(OPTI)
+
+
+ifneq ($(BAE_LD_FLAGS),)
+	LDFLAGS += $(BAE_LD_FLAGS)
+endif
+
 ifneq ($(LDEBUG),1)
 	LDFLAGS += -s
 endif
@@ -93,6 +99,10 @@ LIBS = \
 	-lodbc32 \
 	-lodbccp32
 
+ifneq ($(BAE_LIBS),)
+	LIBS += $(BAE_LIBS)
+endif	
+
 all: $(TARGET_LIB).a ${TARGET_LIB}.dll $(TARGET_BIN)
 
 $(TARGET_LIB).a: $(OBJ)
@@ -107,6 +117,13 @@ $(TARGET_LIB).dll: ${OBJ}
 	@rm -f $(OBJ_DIR)$(TARGET_LIB).def2 $(OBJ_DIR)exports.o
 	@$(DLLTOOL) -e $(OBJ_DIR)exports.o -d $(OBJ_DIR)$(TARGET_LIB).def -l $(TARGET_OUT)$(TARGET_LIB).lib $(OBJ)
 	${LD} -shared $(LDFLAGS) ${OBJ} $(OBJ_DIR)exports.o -Wl,--subsystem,windows -o $(TARGET_OUT)${TARGET_LIB}.dll ${LIBS}
+ifeq ($(USING_BASSMIDI),1)
+ifeq ($(BITS),32)
+	@$(shell cp src/thirdparty/bassmidi/libs/x86/bass*.dll* $(TARGET_OUT) 2>/dev/null || true)
+else
+	@$(shell cp src/thirdparty/bassmidi/libs/x86_64/bass*.dll* $(TARGET_OUT) 2>/dev/null || true)
+endif
+endif
 
 $(TARGET_BIN): ${OBJ_BIN}
 	@mkdir -p $(TARGET_OUT)/Banks

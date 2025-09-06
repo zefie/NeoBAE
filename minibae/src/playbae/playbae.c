@@ -45,7 +45,12 @@
 #include <stdint.h>
 #include "bankinfo.h" // reuse embedded bank metadata for friendly names
 #if USE_SF2_SUPPORT == TRUE
+#if _USING_BASSMIDI == TRUE
+#include "GenBassMidi.h"
+#endif
+#if _USING_TSF == TRUE
 #include "GenTSF.h"
+#endif
 #endif
 #ifdef main
 #undef main
@@ -1443,7 +1448,7 @@ int main(int argc, char *argv[])
          || strcasecmp(ext, ".sf3") == 0 || strcasecmp(ext, ".sfo") == 0
 #endif
          ) && !bankLoaded) {
-               err = (BAEResult)GM_LoadTSFSoundfont(parmFile);
+               err = (BAEResult)GM_LoadSF2Soundfont(parmFile);
                if (err != BAE_NO_ERROR) {
                   playbae_printf("Error %d loading SoundFont bank %s", err, parmFile);
                   return 1;
