@@ -2015,7 +2015,7 @@ static void PV_ProcessNoteOn(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTra
                         GM_TSF_ProcessNoteOn(pSong, MIDIChannel, note, Volume);
                     } else {
                         // RMF
-                        Volume = Volume / 2; // Half RMF Instrument Volume
+                        //Volume = Volume / 2; // Half RMF Instrument Volume
                         thePatch = PV_DetermineInstrumentToUse(pSong, note, MIDIChannel);
                         PV_StartMIDINote(pSong, thePatch, MIDIChannel, currentTrack, note, Volume);
                     }

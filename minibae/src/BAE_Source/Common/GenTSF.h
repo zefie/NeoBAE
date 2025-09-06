@@ -12,6 +12,7 @@
 
 #include "X_API.h"
 #include "GenSnd.h"
+#include "MiniBAE.h"
 
 #ifdef __cplusplus
 extern "C" {

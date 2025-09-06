@@ -963,6 +963,15 @@ BAEResult BAE_TranslateOPErr(OPErr theErr)
     return igorErr;
 }
 
+#if USE_SF2_SUPPORT == TRUE
+XBOOL BAESong_IsTSFSong(BAESong song)
+{
+    if (!song || !song->pSong)
+        return FALSE;
+    return GM_IsTSFSong(song->pSong);
+}
+#endif 
+
 // Translate from BAEResult to OPErr
 OPErr BAE_TranslateBAErr(BAEResult theErr)
 {

@@ -164,6 +164,7 @@ void GM_UnloadTSFSoundfont(void)
     g_tsf_sf2_path[0] = '\0';
 }
 
+
 // Check if a song should use TSF rendering (based on loaded soundfont bank type)
 XBOOL GM_IsTSFSong(GM_Song* pSong)
 {

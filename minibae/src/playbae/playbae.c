@@ -1448,6 +1448,7 @@ int main(int argc, char *argv[])
                   playbae_printf("Error %d loading SoundFont bank %s", err, parmFile);
                   return 1;
                }
+               gVelocityCurve = 1; // SoundFont default
                bankLoaded = TRUE;
             }
 #endif

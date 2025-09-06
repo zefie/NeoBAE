@@ -366,7 +366,7 @@ void render_settings_dialog(SDL_Renderer *R, int mx, int my, bool mclick, bool m
 
     // Left column controls (stacked)
     // Volume Curve selector
-    draw_text(R, leftX, dlg.y + 36, "Volume Curve:", g_text_color);
+    draw_text(R, leftX, dlg.y + 36, "Vol. Curve (HSB):", g_text_color);
     const char *volumeCurveNames[] = {"Default S Curve", "Peaky S Curve", "WebTV Curve", "2x Exponential", "2x Linear"};
     int vcCount = 5;
     Rect vcRect = {controlRightX, dlg.y + 32, controlW, 24};
@@ -573,7 +573,12 @@ void render_settings_dialog(SDL_Renderer *R, int mx, int my, bool mclick, bool m
             {
                 bae_set_volume(*volume);
             }
-            BAESong_SetVelocityCurve(g_live_song, g_volume_curve);
+#if USE_SF2_SUPPORT == TRUE
+            if (!BAESong_IsTSFSong(g_live_song))
+#endif            
+            {            
+                BAESong_SetVelocityCurve(g_live_song, g_volume_curve);
+            }
         }
         else
         {
@@ -1180,17 +1185,22 @@ void render_settings_dialog(SDL_Renderer *R, int mx, int my, bool mclick, bool m
             {
                 g_volume_curve = i;
                 g_volumeCurveDropdownOpen = false;
-                BAE_SetDefaultVelocityCurve(g_volume_curve);
-                if (g_bae.song && !g_bae.is_audio_file)
+#if USE_SF2_SUPPORT == TRUE
+                if (!BAESong_IsTSFSong(g_bae.song))
+#endif                
                 {
-                    BAESong_SetVelocityCurve(g_bae.song, g_volume_curve);
-                }
+                    BAE_SetDefaultVelocityCurve(g_volume_curve);
+                    if (g_bae.song && !g_bae.is_audio_file)
+                    {
+                        BAESong_SetVelocityCurve(g_bae.song, g_volume_curve);
+                    }
 #if SUPPORT_MIDI_HW == TRUE
-                if (g_live_song && g_midi_input_enabled)
-                {
-                    BAESong_SetVelocityCurve(g_live_song, g_volume_curve);
-                }
+                    if (g_live_song && g_midi_input_enabled)
+                    {
+                        BAESong_SetVelocityCurve(g_live_song, g_volume_curve);
+                    }
 #endif
+                }
                 save_settings(g_current_bank_path[0] ? g_current_bank_path : NULL, *reverbType, *loopPlay);
             }
         }

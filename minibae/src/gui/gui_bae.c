@@ -1151,7 +1151,16 @@ bool bae_play(bool *playing)
 #endif
                     BAESong_Preroll(g_bae.song);
                     Settings settings = load_settings();
-                    BAESong_SetVelocityCurve(g_bae.song, settings.volume_curve);
+#if USE_SF2_SUPPORT == TRUE
+                    XBOOL isTSFSong = BAESong_IsTSFSong(g_bae.song);
+                    if (isTSFSong) {
+                        BAESong_SetVelocityCurve(g_bae.song, 1); // Perky for SF2
+                    }
+                    else
+#endif
+                    {
+                        BAESong_SetVelocityCurve(g_bae.song, settings.volume_curve);
+                    }
                 }
                 else
                 {
