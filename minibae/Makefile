@@ -132,10 +132,6 @@ $(TARGET_BIN): ${OBJ_BIN}
 	@mkdir -p $(TARGET_OUT)
 	${LD} -o $(TARGET_OUT)${TARGET_BIN} ${LDFLAGS} ${OBJ_BIN} ${LIBS}
 
-pack: ${TARGET_BIN}
-	cat $(TARGET_OUT)${TARGET_BIN} | gzip -9c > $(TARGET_OUT)playbae_linux32_static.gz
-
-
 # Generate rules for all unique source files
 ALL_SOURCES := $(sort $(SRC) $(SRC_BIN))
 $(foreach src,$(ALL_SOURCES),$(eval $(call make_obj_rule,$(src))))

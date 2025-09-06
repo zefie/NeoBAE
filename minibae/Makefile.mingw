@@ -190,13 +190,6 @@ $(TARGET_BIN): ${OBJ_BIN}
 	@mkdir -p $(TARGET_OUT)
 	${LD} -o $(TARGET_OUT)${TARGET_BIN} ${LDFLAGS} ${OBJ_BIN} ${LIBS}
 
-pack: ${TARGET_BIN}
-ifeq ($(USING_BASSMIDI),1)
-	cd $(TARGET_OUT) && zip -9 ${TARGET_NAME}.zip ${TARGET_BIN} bass*
-else
-	cd $(TARGET_OUT) && zip -9 ${TARGET_NAME}.zip ${TARGET_BIN}
-endif
-
 # Rules for compiling source files to object files
 $(OBJ_DIR)%.o : %.cpp
 	@echo @compile $<

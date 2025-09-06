@@ -128,10 +128,7 @@ $(TARGET_LIB).so: ${OBJ}
 $(TARGET_BIN): ${OBJ_BIN}
 	@mkdir -p $(TARGET_OUT)
 	${LD} -o $(TARGET_OUT)${TARGET_BIN} ${LDFLAGS} ${OBJ_BIN} ${LIBS}
-
-pack: ${TARGET_BIN}
-	cat $(TARGET_OUT)${TARGET_BIN} | gzip -9c > $(TARGET_OUT)playbae_linux32_clang_static.gz
-
+	
 # Rules for compiling source files to object files
 $(OBJ_DIR)%.o : %.cpp
 	@echo @compile $<
