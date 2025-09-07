@@ -210,10 +210,10 @@
 #include <stdint.h>
 #if USE_SF2_SUPPORT == TRUE
 #if _USING_BASSMIDI == TRUE
-#include "GenBassMidi.h" // BassMidi integration (silence on end)
+#include "GenSF2_BassMidi.h" // BassMidi integration (silence on end)
 #endif
 #if _USING_TSF == TRUE
-#include "GenTSF.h" // TSF integration (silence on end)
+#include "GenSF2_TSF.h" // TSF integration (silence on end)
 #endif
 #endif
 

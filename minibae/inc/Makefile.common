@@ -35,6 +35,8 @@ endif
 ifeq ($(SF2_SUPPORT),1)
 	ifeq ($(USE_BASSMIDI),1)
 		USING_BASSMIDI := 1
+	else ifeq ($(USE_FLUIDSYNTH),1)
+		USING_FLUIDSYNTH := 1
 	else
 		USING_TSF := 1
 	endif
@@ -193,7 +195,9 @@ endif
 
 ifeq ($(SF2_SUPPORT),1)
 	BAE_FLAGS += -DUSE_SF2_SUPPORT=1
-	INC_PATH += -Isrc/thirdparty/TinySoundFont
+	ifeq ($(USING_TSF),1)
+		INC_PATH += -Isrc/thirdparty/TinySoundFont
+	endif
 endif
 
 
@@ -236,7 +240,7 @@ SRC		+=	src/BAE_Source/Common/DriverTools.c \
 # BassMidi support
 ifeq ($(SF2_SUPPORT),1)
 	ifeq ($(USING_BASSMIDI),1)
-		SRC += src/BAE_Source/Common/GenBassMidi.c
+		SRC += src/BAE_Source/Common/GenSF2_BassMidi.c
 		BAE_FLAGS += -D_USING_BASSMIDI=1
 		# Include BassMidi headers and libraries
 		INC_PATH += -Isrc/thirdparty/bassmidi
@@ -263,9 +267,44 @@ ifeq ($(SF2_SUPPORT),1)
 			BAE_LIBS := -lbassmidi -lbass -Wl,-rpath,'$$ORIGIN'
 		endif	
 	endif
-	ifeq ($(USING_TSF),1)
-		SRC += src/BAE_Source/Common/GenTSF.c
-		BAE_FLAGS += -D_USING_TSF=1 
+	ifeq ($(USING_FLUIDSYNTH),1)
+		BAE_FLAGS += -D_USING_FLUIDSYNTH=1 
+		ifeq ($(WINDOWS),1)		
+			ifeq ($(BITS),32)
+				INC_PATH += -I../windeps/FluidSynth-2.4.7/x86/include
+				BAE_LD_FLAGS := -L../windeps/FluidSynth-2.4.7/x86/lib/
+				BAE_LIBS := ../windeps/FluidSynth-2.4.7/x86/lib/libfluidsynth-3.lib -Wl,-rpath,'$$ORIGIN'
+			else
+				INC_PATH += -I../windeps/FluidSynth-2.4.8/x86/include
+				BAE_LD_FLAGS := -L../windeps/FluidSynth-2.4.8/x86_64/lib/
+				BAE_LIBS := ../windeps/FluidSynth-2.4.8/x86_64/lib/libfluidsynth-3.lib -Wl,-rpath,'$$ORIGIN'
+			endif			
+		else
+			UNAME_S:=$(shell uname -s 2>/dev/null)
+			# System FluidSynth for Linux (dynamic) if pkg-config available
+			ifneq (,$(findstring Linux,$(UNAME_S)))
+				FLUIDSYNTH_CFLAGS := $(shell pkg-config --cflags fluidsynth 2>/dev/null)
+				FLUIDSYNTH_LIBS   := $(shell pkg-config --libs fluidsynth 2>/dev/null)
+				ifneq ($(SFLUIDSYNTH_LIBS),)
+					CFLAGS += $(FLUIDSYNTH_CFLAGS)
+					# Prepend pkg-config libs; they already have -lfluidsynth and any needed deps
+					LIBS := $(FLUIDSYNTH_LIBS) $(filter-out -lfluidsynth,$(LIBS))
+					ifneq (,$(findstring -static,$(ARCH)))
+						ARCH := $(filter-out -static,$(ARCH))
+						LDFLAGS := $(filter-out -static,$(LDFLAGS))
+					endif
+				else
+					# Fallback minimal guess
+					CFLAGS += -I/usr/include/fluidsynth
+					LIBS := -lfluidsynth $(LIBS)
+				endif
+			endif
+		endif
+	else
+		ifeq ($(USING_TSF),1)
+			SRC += src/BAE_Source/Common/GenSF2_TSF.c
+			BAE_FLAGS += -D_USING_TSF=1 
+		endif
 	endif
 endif
 

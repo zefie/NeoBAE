@@ -7,7 +7,7 @@
  *
  ****************************************************************************/
 
-#include "GenBassMidi.h"
+#include "GenSF2_BassMidi.h"
 #if USE_SF2_SUPPORT == TRUE && defined(_USING_BASSMIDI)
 
 #include "bass.h"

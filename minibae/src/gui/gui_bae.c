@@ -9,10 +9,10 @@
 #include "X_API.h"
 #if USE_SF2_SUPPORT
 #if _USING_BASSMIDI == TRUE
-#include "GenBassMidi.h"
+#include "GenSF2_BassMidi.h"
 #endif
 #if _USING_TSF == TRUE
-#include "GenTSF.h"
+#include "GenSF2_TSF.h"
 #endif
 #endif
 #include <stdio.h>
