@@ -236,48 +236,118 @@ void sf2_get_channel_amplitudes(float channelAmplitudes[16][2])
         return;
     }
     
-    // Use our tracked channel activity to estimate amplitudes
+    // Method 1: Voice-based amplitude monitoring (more accurate)
+    // Get list of active voices from FluidSynth
+    const int maxVoices = 1024;  // FluidSynth default max polyphony
+    fluid_voice_t* voiceList[maxVoices];
+    
+    // Get all active voices
+    fluid_synth_get_voicelist(g_fluidsynth_synth, voiceList, maxVoices, -1);
+    
+    // Accumulate amplitude estimates per channel based on active voices
+    float channelVoiceCounts[16] = {0};
+    float channelVelocitySum[16] = {0};
+    
+    for (int i = 0; i < maxVoices && voiceList[i] != NULL; i++)
+    {
+        fluid_voice_t* voice = voiceList[i];
+        
+        // Skip if voice is not playing
+        if (!fluid_voice_is_playing(voice))
+            continue;
+            
+        int channel = fluid_voice_get_channel(voice);
+        if (channel < 0 || channel >= 16)
+            continue;
+            
+        int velocity = fluid_voice_get_actual_velocity(voice);
+        
+        // Accumulate voice information per channel
+        channelVoiceCounts[channel] += 1.0f;
+        channelVelocitySum[channel] += velocity;
+        
+        // Get voice envelope/amplitude level (if available)
+        // Note: FluidSynth doesn't directly expose voice amplitude,
+        // so we estimate based on velocity and voice state
+        float voiceAmplitude = 0.0f;
+        
+        if (fluid_voice_is_on(voice))
+        {
+            // Voice is in attack/sustain phase
+            voiceAmplitude = (float)velocity / 127.0f * 0.8f;
+        }
+        else
+        {
+            // Voice is in release phase - assume lower amplitude
+            voiceAmplitude = (float)velocity / 127.0f * 0.3f;
+        }
+        
+        // Add to channel amplitude (simplified stereo assumption)
+        channelAmplitudes[channel][0] += voiceAmplitude * 0.1f; // Scale down for multiple voices
+        channelAmplitudes[channel][1] += voiceAmplitude * 0.1f;
+    }
+    
+    // Method 2: Fallback to note tracking for channels with no voice data
     for (int ch = 0; ch < 16; ch++)
     {
-        ChannelActivity* activity = &g_channel_activity[ch];
-        
-        if (activity->activeNotes > 0)
+        if (channelVoiceCounts[ch] == 0.0f)
         {
-            // Calculate amplitude based on active notes and velocity
-            float baseLevel = (float)activity->activeNotes / 8.0f; // Normalize to typical polyphony
-            float velocityFactor = activity->noteVelocity / 127.0f;
-            float amplitude = baseLevel * velocityFactor * 0.3f; // Scale for reasonable display levels
+            // No voices found, use our note tracking as fallback
+            ChannelActivity* activity = &g_channel_activity[ch];
             
-            // Apply decay based on time since last activity
-            float decayFactor = 1.0f;
-            if (activity->lastActivity > 0)
+            if (activity->activeNotes > 0)
             {
-                // Decay over roughly 1 second (assuming 44.1kHz, 512 frame slices = ~86 frames/sec)
-                float decayTime = (float)activity->lastActivity / 86.0f;
-                decayFactor = expf(-decayTime * 2.0f); // Exponential decay
-            }
-            
-            amplitude *= decayFactor;
-            
-            if (g_fluidsynth_mono_mode)
-            {
-                // Mono mode: same level for both channels
-                channelAmplitudes[ch][0] = amplitude;
-                channelAmplitudes[ch][1] = amplitude;
-            }
-            else
-            {
-                // Stereo mode: use tracked left/right levels if available
-                channelAmplitudes[ch][0] = activity->leftLevel * amplitude;
-                channelAmplitudes[ch][1] = activity->rightLevel * amplitude;
+                // Calculate amplitude based on active notes and velocity
+                float baseLevel = (float)activity->activeNotes / 8.0f; // Normalize to typical polyphony
+                float velocityFactor = activity->noteVelocity / 127.0f;
+                float amplitude = baseLevel * velocityFactor * 0.3f; // Scale for reasonable display levels
                 
-                // If no specific left/right tracking, distribute evenly
-                if (activity->leftLevel == 0.0f && activity->rightLevel == 0.0f)
+                // Apply decay based on time since last activity
+                float decayFactor = 1.0f;
+                if (activity->lastActivity > 0)
                 {
+                    // Decay over roughly 1 second (assuming 44.1kHz, 512 frame slices = ~86 frames/sec)
+                    float decayTime = (float)activity->lastActivity / 86.0f;
+                    decayFactor = expf(-decayTime * 2.0f); // Exponential decay
+                }
+                
+                amplitude *= decayFactor;
+                
+                if (g_fluidsynth_mono_mode)
+                {
+                    // Mono mode: same level for both channels
                     channelAmplitudes[ch][0] = amplitude;
                     channelAmplitudes[ch][1] = amplitude;
                 }
+                else
+                {
+                    // Stereo mode: use tracked left/right levels if available
+                    channelAmplitudes[ch][0] = activity->leftLevel * amplitude;
+                    channelAmplitudes[ch][1] = activity->rightLevel * amplitude;
+                    
+                    // If no specific left/right tracking, distribute evenly
+                    if (activity->leftLevel == 0.0f && activity->rightLevel == 0.0f)
+                    {
+                        channelAmplitudes[ch][0] = amplitude;
+                        channelAmplitudes[ch][1] = amplitude;
+                    }
+                }
             }
+        }
+        else
+        {
+            // Apply mono/stereo mode to voice-based amplitudes
+            if (g_fluidsynth_mono_mode)
+            {
+                // Convert stereo to mono
+                float mono = (channelAmplitudes[ch][0] + channelAmplitudes[ch][1]) * 0.5f;
+                channelAmplitudes[ch][0] = mono;
+                channelAmplitudes[ch][1] = mono;
+            }
+            
+            // Clamp to reasonable display ranges
+            if (channelAmplitudes[ch][0] > 1.0f) channelAmplitudes[ch][0] = 1.0f;
+            if (channelAmplitudes[ch][1] > 1.0f) channelAmplitudes[ch][1] = 1.0f;
         }
     }
 }
