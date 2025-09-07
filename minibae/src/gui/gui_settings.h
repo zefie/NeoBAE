@@ -28,6 +28,8 @@ typedef struct
     bool shuffle_enabled;
     bool has_repeat;
     int repeat_mode;
+    bool has_playlist_enabled;
+    bool playlist_enabled;
     bool has_window_pos;
     int window_x;
     int window_y;

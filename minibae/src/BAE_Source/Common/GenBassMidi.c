@@ -219,7 +219,7 @@ void GM_SF2_SetSampleRate(int32_t sampleRate)
             {
                 // Reinitialize channels with defaults
                 // Set Ch 10 to percussion by default
-                BASS_MIDI_StreamEvent(g_bassmidi_stream, 9, MIDI_EVENT_BANK, 128);
+                BASS_MIDI_StreamEvent(g_bassmidi_stream, 9, MIDI_EVENT_BANK, 127);
                 BASS_MIDI_StreamEvent(g_bassmidi_stream, 9, MIDI_EVENT_PROGRAM, 0);
                 
                 // Initialize all channels with reduced volumes
@@ -312,7 +312,7 @@ OPErr GM_LoadSF2Soundfont(const char* sf2_path)
     g_bassmidi_sf2_path[sizeof(g_bassmidi_sf2_path) - 1] = '\0';
     
     // Set Ch 10 to percussion by default
-    BASS_MIDI_StreamEvent(g_bassmidi_stream, 9, MIDI_EVENT_BANK, 128);
+    BASS_MIDI_StreamEvent(g_bassmidi_stream, 9, MIDI_EVENT_BANK, 127);
     BASS_MIDI_StreamEvent(g_bassmidi_stream, 9, MIDI_EVENT_PROGRAM, 0);
     
     // Initialize all channels with GM defaults (reduced volumes)
@@ -526,10 +526,12 @@ void GM_SF2_ProcessProgramChange(GM_Song* pSong, int16_t channel, int16_t progra
 
     if (pSong->channelBankMode[channel] == USE_GM_PERC_BANK) {
         if (midiProgram == 0 && midiBank == 0) {
+            BASS_MIDI_StreamEvent(g_bassmidi_stream, channel, MIDI_EVENT_DRUMS, 1);
             midiBank = 127;
         } else {
             // change back to normal channel if the program is not a percussion program
-            pSong->channelBankMode[channel] == USE_GM_DEFAULT;
+            pSong->channelBankMode[channel] = USE_GM_DEFAULT;
+            BASS_MIDI_StreamEvent(g_bassmidi_stream, channel, MIDI_EVENT_DRUMS, 0);
             midiBank = midiBank / 2;
         }
 
@@ -922,12 +924,15 @@ void PV_SF2_SetBankPreset(GM_Song* pSong, int16_t channel, int16_t bank, int16_t
     {
         return;
     }
-    
+        
     // Send bank select MSB and LSB if needed
     if (bank >= 0)
     {
-        BASS_MIDI_StreamEvent(g_bassmidi_stream, channel, MIDI_EVENT_BANK, (bank >> 7) & 0x7F);   // Bank MSB
-        BASS_MIDI_StreamEvent(g_bassmidi_stream, channel, MIDI_EVENT_BANK_LSB, bank & 0x7F);         // Bank LSB
+        if (bank >= 128) {
+            bank = 127;
+        }
+        BASS_MIDI_StreamEvent(g_bassmidi_stream, channel, MIDI_EVENT_BANK, bank);   // Bank MSB
+        BASS_MIDI_StreamEvent(g_bassmidi_stream, channel, MIDI_EVENT_BANK_LSB, preset);         // Bank LSB
     }
     
     // Send program change
@@ -995,7 +1000,7 @@ void GM_ResetSF2(void)
         else
         {
             // Set channel 10 to standard drum kit
-            BASS_MIDI_StreamEvent(g_bassmidi_stream, channel, MIDI_EVENT_BANK, 128);   // Percussion bank
+            BASS_MIDI_StreamEvent(g_bassmidi_stream, channel, MIDI_EVENT_BANK, 127);   // Percussion bank
             BASS_MIDI_StreamEvent(g_bassmidi_stream, channel, MIDI_EVENT_PROGRAM, 0);  // Standard kit
         }
     }

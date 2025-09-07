@@ -124,6 +124,11 @@ Settings load_settings(void)
             }
             settings.has_repeat = true;
         }
+        else if (strncmp(line, "playlist_enabled=", 17) == 0)
+        {
+            settings.playlist_enabled = (atoi(line + 17) != 0);
+            settings.has_playlist_enabled = true;
+        }
         else if (strncmp(line, "window_x=", 9) == 0)
         {
             settings.window_x = atoi(line + 9);
@@ -169,6 +174,7 @@ void save_settings(const char *last_bank_path, int reverb_type, bool loop_enable
 #if SUPPORT_PLAYLIST == TRUE
         fprintf(f, "shuffle_enabled=%d\n", g_playlist.shuffle_enabled ? 1 : 0);
         fprintf(f, "repeat_mode=%d\n", g_playlist.repeat_mode);
+        fprintf(f, "playlist_enabled=%d\n", g_playlist.enabled ? 1 : 0);
 #endif
         // Save window position if available
         extern SDL_Window *g_main_window;
@@ -246,6 +252,10 @@ void save_full_settings(const Settings *settings)
         {
             fprintf(f, "repeat_mode=%d\n", settings->repeat_mode);
         }
+        if (settings->has_playlist_enabled)
+        {
+            fprintf(f, "playlist_enabled=%d\n", settings->playlist_enabled ? 1 : 0);
+        }
         if (settings->has_window_pos)
         {
             fprintf(f, "window_x=%d\n", settings->window_x);
@@ -306,6 +316,12 @@ void apply_settings_to_ui(const Settings *settings, int *transpose, int *tempo, 
     {
         g_playlist.repeat_mode = settings->repeat_mode;
     }
+    if (settings->has_playlist_enabled)
+    {
+        g_playlist.enabled = settings->playlist_enabled;
+    } else {
+        g_playlist.enabled = true; // Default to enabled if not specified
+    }
 #endif
 }
 
@@ -355,6 +371,9 @@ void render_settings_dialog(SDL_Renderer *R, int mx, int my, bool mclick, bool m
     {
         g_show_settings_dialog = false;
         g_volumeCurveDropdownOpen = false;
+#if SUPPORT_MIDI_HW == TRUE
+        g_midiRecordFormatDropdownOpen = false;
+#endif
     }
 
     // Two-column geometry
@@ -364,23 +383,40 @@ void render_settings_dialog(SDL_Renderer *R, int mx, int my, bool mclick, bool m
     int controlW = 150;
     int controlRightX = leftX + colW - controlW; // dropdowns right-aligned in left column
 
+    // Declare rects that will be used in dropdown rendering
+    Rect vcRect = {controlRightX, dlg.y + 32, controlW, 24};
+    Rect srRect = {controlRightX, dlg.y + 68, controlW, 24};
+#if USE_MPEG_ENCODER == TRUE
+    Rect expRect = {controlRightX, dlg.y + 104, controlW, 24};
+#endif
+#if SUPPORT_MIDI_HW == TRUE
+    Rect midiDevRect = {controlRightX, dlg.y + 172, controlW + 200, 24};
+    Rect midiOutDevRect = {controlRightX, dlg.y + 200, controlW + 200, 24};
+    Rect recordCodecRect = {controlRightX, dlg.y + 228, controlW + 200, 24};
+#endif
+
     // Left column controls (stacked)
     // Volume Curve selector
     draw_text(R, leftX, dlg.y + 36, "Vol. Curve (HSB):", g_text_color);
     const char *volumeCurveNames[] = {"Default S Curve", "Peaky S Curve", "WebTV Curve", "2x Exponential", "2x Linear"};
     int vcCount = 5;
-    Rect vcRect = {controlRightX, dlg.y + 32, controlW, 24};
+    bool volumeCurveEnabled = !g_midiRecordFormatDropdownOpen;
     SDL_Color dd_bg = g_button_base;
     SDL_Color dd_txt = g_button_text;
     SDL_Color dd_frame = g_button_border;
-    if (point_in(mx, my, vcRect))
+    if (!volumeCurveEnabled)
+    {
+        dd_bg.a = 180;
+        dd_txt.a = 180;
+    }
+    else if (point_in(mx, my, vcRect))
         dd_bg = g_button_hover;
     draw_rect(R, vcRect, dd_bg);
     draw_frame(R, vcRect, dd_frame);
     const char *vcCur = (g_volume_curve >= 0 && g_volume_curve < vcCount) ? volumeCurveNames[g_volume_curve] : "?";
     draw_text(R, vcRect.x + 6, vcRect.y + 3, vcCur, dd_txt);
     draw_text(R, vcRect.x + vcRect.w - 16, vcRect.y + 3, g_volumeCurveDropdownOpen ? "^" : "v", dd_txt);
-    if (point_in(mx, my, vcRect) && mclick)
+    if (volumeCurveEnabled && point_in(mx, my, vcRect) && mclick)
     {
         g_volumeCurveDropdownOpen = !g_volumeCurveDropdownOpen;
         if (g_volumeCurveDropdownOpen)
@@ -390,6 +426,7 @@ void render_settings_dialog(SDL_Renderer *R, int mx, int my, bool mclick, bool m
 #if SUPPORT_MIDI_HW == TRUE
             g_midi_input_device_dd_open = false;
             g_midi_output_device_dd_open = false;
+            g_midiRecordFormatDropdownOpen = false;
 #endif
         }
     }
@@ -422,8 +459,7 @@ void render_settings_dialog(SDL_Renderer *R, int mx, int my, bool mclick, bool m
     }
     char srLabel[32];
     snprintf(srLabel, sizeof(srLabel), "%d Hz", g_sample_rate_hz);
-    Rect srRect = {controlRightX, dlg.y + 68, controlW, 24};
-    bool sampleRateEnabled = !g_volumeCurveDropdownOpen;
+    bool sampleRateEnabled = !g_volumeCurveDropdownOpen && !g_midiRecordFormatDropdownOpen;
     SDL_Color sr_bg = g_button_base;
     if (!sampleRateEnabled)
     {
@@ -449,15 +485,15 @@ void render_settings_dialog(SDL_Renderer *R, int mx, int my, bool mclick, bool m
 #if SUPPORT_MIDI_HW == TRUE
             g_midi_input_device_dd_open = false;
             g_midi_output_device_dd_open = false;
+            g_midiRecordFormatDropdownOpen = false;
 #endif
         }
     }
 
     // Export codec selector (left column, below sample rate)
 #if USE_MPEG_ENCODER == TRUE
-    Rect expRect = {controlRightX, dlg.y + 104, controlW, 24};
     draw_text(R, leftX, dlg.y + 108, "Export Codec:", g_text_color);
-    bool exportEnabled = !g_volumeCurveDropdownOpen && !g_sampleRateDropdownOpen;
+    bool exportEnabled = !g_volumeCurveDropdownOpen && !g_sampleRateDropdownOpen && !g_midiRecordFormatDropdownOpen;
     SDL_Color exp_bg = g_button_base;
     SDL_Color exp_txt = g_button_text;
     if (!exportEnabled)
@@ -487,13 +523,14 @@ void render_settings_dialog(SDL_Renderer *R, int mx, int my, bool mclick, bool m
 #if SUPPORT_MIDI_HW == TRUE
             g_midi_input_device_dd_open = false;
             g_midi_output_device_dd_open = false;
+            g_midiRecordFormatDropdownOpen = false;
 #endif
         }
     }
 #endif
 #if SUPPORT_MIDI_HW == TRUE
     // MIDI input enable checkbox and device selector (left column, below Export)
-    Rect midiEnRect = {leftX, dlg.y + 140, 18, 18};
+    Rect midiEnRect = {leftX, dlg.y + 176, 18, 18};
     if (ui_toggle(R, midiEnRect, &g_midi_input_enabled, "MIDI Input", mx, my, mclick))
     {
         // initialize or shutdown midi input as requested
@@ -653,7 +690,6 @@ void render_settings_dialog(SDL_Renderer *R, int mx, int my, bool mclick, bool m
         save_settings(g_current_bank_path[0] ? g_current_bank_path : NULL, *reverbType, *loopPlay);
     }
     // MIDI device dropdown (right-aligned in left column)
-    Rect midiDevRect = {controlRightX, dlg.y + 136, controlW + 200, 24};
     // populate device list lazily when dropdown opened
     if (g_midi_input_device_dd_open || g_midi_output_device_dd_open)
     {
@@ -757,10 +793,10 @@ void render_settings_dialog(SDL_Renderer *R, int mx, int my, bool mclick, bool m
     }
     // draw current input device name
     const char *curDev = (g_midi_input_device_index >= 0 && g_midi_input_device_index < g_midi_input_device_count) ? g_midi_device_name_cache[g_midi_input_device_index] : "(Default)";
-    // Allow input UI to be active unless other dropdowns (sample rate, volume curve, export) are open.
-    bool midiInputEnabled = !(g_volumeCurveDropdownOpen || g_sampleRateDropdownOpen || g_exportDropdownOpen);
+    // Allow input UI to be active unless other dropdowns (sample rate, volume curve, export, record codec) are open.
+    bool midiInputEnabled = !(g_volumeCurveDropdownOpen || g_sampleRateDropdownOpen || g_exportDropdownOpen || g_midiRecordFormatDropdownOpen);
     // MIDI output should be disabled whenever the MIDI input dropdown is open (so only one of them can be active at once)
-    bool midiOutputEnabled = !(g_volumeCurveDropdownOpen || g_sampleRateDropdownOpen || g_exportDropdownOpen || g_midi_input_device_dd_open);
+    bool midiOutputEnabled = !(g_volumeCurveDropdownOpen || g_sampleRateDropdownOpen || g_exportDropdownOpen || g_midi_input_device_dd_open || g_midiRecordFormatDropdownOpen);
     SDL_Color md_bg = g_button_base;
     SDL_Color md_txt = g_button_text;
     if (!midiInputEnabled)
@@ -783,13 +819,14 @@ void render_settings_dialog(SDL_Renderer *R, int mx, int my, bool mclick, bool m
             g_sampleRateDropdownOpen = false;
             g_exportDropdownOpen = false;
             g_midi_output_device_dd_open = false;
+            g_midiRecordFormatDropdownOpen = false;
         }
     }
 
     // MIDI output checkbox and device selector (placed next to input)
-    Rect midiOutEnRect = {leftX, dlg.y + 168, 18, 18};
+    Rect midiOutEnRect = {leftX, dlg.y + 204, 18, 18};
     // Disable MIDI Output toggle while exporting or when export dropdown is open
-    bool midiOut_toggle_allowed = !g_exporting && !g_exportDropdownOpen;
+    bool midiOut_toggle_allowed = !g_exporting && !g_exportDropdownOpen && !g_midiRecordFormatDropdownOpen;
     if (!midiOut_toggle_allowed)
     {
         // Draw disabled (dimmed) checkbox and label but do not allow toggling
@@ -861,7 +898,6 @@ void render_settings_dialog(SDL_Renderer *R, int mx, int my, bool mclick, bool m
             save_settings(g_current_bank_path[0] ? g_current_bank_path : NULL, *reverbType, *loopPlay);
         }
     }
-    Rect midiOutDevRect = {controlRightX, dlg.y + 164, controlW + 200, 24};
     const char *curOutDev = (g_midi_output_device_index >= 0 && g_midi_output_device_index < g_midi_output_device_count) ? g_midi_device_name_cache[g_midi_input_device_count + g_midi_output_device_index] : "(Default)";
     SDL_Color mo_bg = g_button_base;
     SDL_Color mo_txt = g_button_text;
@@ -885,8 +921,31 @@ void render_settings_dialog(SDL_Renderer *R, int mx, int my, bool mclick, bool m
             g_sampleRateDropdownOpen = false;
             g_exportDropdownOpen = false;
             g_midi_input_device_dd_open = false;
+            g_midiRecordFormatDropdownOpen = false;
         }
     }
+
+    // Record Codec selector (left column, below MIDI Output)
+    draw_text(R, leftX, dlg.y + 232, "MIDI In Record:", g_text_color);
+    bool recordCodecEnabled = !(g_volumeCurveDropdownOpen || g_sampleRateDropdownOpen || g_exportDropdownOpen || g_midi_input_device_dd_open || g_midi_output_device_dd_open);
+    SDL_Color rc_bg = g_button_base;
+    SDL_Color rc_txt = g_button_text;
+
+    if (!recordCodecEnabled)
+    {
+        rc_bg.a = 180;
+        rc_txt.a = 180;
+    }
+    else if (point_in(mx, my, recordCodecRect))
+        rc_bg = g_button_hover;
+    if (g_midiRecordFormatDropdownOpen)
+        rc_bg = g_button_press;    
+    draw_rect(R, recordCodecRect, rc_bg);
+    draw_frame(R, recordCodecRect, g_button_border);
+    const char *rcName = g_midiRecordFormatNames[g_midiRecordFormatIndex];
+    draw_text(R, recordCodecRect.x + 6, recordCodecRect.y + 3, rcName, rc_txt);
+    draw_text(R, recordCodecRect.x + recordCodecRect.w - 16, recordCodecRect.y + 3, g_midiRecordFormatDropdownOpen ? "^" : "v", rc_txt);
+    // Note: ui_dropdown_two_column handles the button click internally, so we don't handle clicks here
 #endif
     // Right column controls (checkboxes)
     Rect cbRect = {rightX, dlg.y + 36, 18, 18};
@@ -937,7 +996,19 @@ void render_settings_dialog(SDL_Renderer *R, int mx, int my, bool mclick, bool m
             g_keyboard_channel_dd_open = false;
     }
 
-    Rect wtvRect = {rightX, dlg.y + 108, 18, 18};
+    Rect playlistRect = {rightX, dlg.y + 108, 18, 18};
+#if SUPPORT_PLAYLIST == TRUE
+    if (ui_toggle(R, playlistRect, &g_playlist.enabled, "Enable Playlist", mx, my, mclick))
+    {
+        save_settings(g_current_bank_path[0] ? g_current_bank_path : NULL, *reverbType, *loopPlay);
+    }
+#else
+    // Show disabled checkbox when playlist support is not compiled in
+    draw_custom_checkbox(R, playlistRect, false, false);
+    draw_text(R, playlistRect.x + playlistRect.w + 6, playlistRect.y + 2, "Enable Playlist (disabled)", g_text_color);
+#endif
+
+    Rect wtvRect = {rightX, dlg.y + 144, 18, 18};
     bool webtv_enabled = !g_disable_webtv_progress_bar;
     if (ui_toggle(R, wtvRect, &webtv_enabled, "WebTV Style Bar", mx, my, mclick))
     {
@@ -1153,6 +1224,28 @@ void render_settings_dialog(SDL_Renderer *R, int mx, int my, bool mclick, bool m
             g_midi_output_device_dd_open = false;
     }
 #endif
+
+    // Record Codec dropdown
+#if SUPPORT_MIDI_HW == TRUE
+    if (g_midiRecordFormatDropdownOpen || (recordCodecEnabled && point_in(mx, my, recordCodecRect) && mclick))
+    {
+        // Close other dropdowns when this one is about to open
+        if (!g_midiRecordFormatDropdownOpen)
+        {
+            g_volumeCurveDropdownOpen = false;
+            g_sampleRateDropdownOpen = false;
+            g_exportDropdownOpen = false;
+            g_midi_input_device_dd_open = false;
+            g_midi_output_device_dd_open = false;
+        }
+        bool changed = ui_dropdown_two_column_above(R, recordCodecRect, &g_midiRecordFormatIndex, g_midiRecordFormatNames, g_midiRecordFormatCount, &g_midiRecordFormatDropdownOpen, mx, my, mdown, mclick);
+        if (changed)
+        {
+            save_settings(g_current_bank_path[0] ? g_current_bank_path : NULL, *reverbType, *loopPlay);
+        }
+    }
+#endif
+
     if (g_volumeCurveDropdownOpen)
     {
         int itemH = vcRect.h;

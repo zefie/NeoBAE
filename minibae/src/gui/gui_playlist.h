@@ -24,6 +24,7 @@ typedef struct {
     bool shuffle_enabled;
     int repeat_mode; // 0=None, 1=All, 2=Track
     bool visible;
+    bool enabled;
     int scroll_offset;
     int hover_index;
     bool dragging;

@@ -7368,7 +7368,6 @@ BAEResult TranslateInstrumentToBankProgram(uint32_t rmfInstId, uint32_t *bankId,
     unsigned int multiplier = (rmfInstId / 128);
     unsigned int bank = (multiplier * 128) / 256;
     unsigned int program = rmfInstId - (multiplier * 128);
-
     if (
         (rmfInstId >= 128 && rmfInstId < 256) ||
         (rmfInstId >= 384 && rmfInstId < 512) ||
@@ -7384,6 +7383,11 @@ BAEResult TranslateInstrumentToBankProgram(uint32_t rmfInstId, uint32_t *bankId,
         *progId = program;
         *noteId = 0;
     }
+#if _USING_BASSMIDI == TRUE
+    if (*bankId > 127) {
+        *bankId = 127;
+    }
+#endif    
     return BAE_NO_ERROR;
 }
 #endif

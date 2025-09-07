@@ -240,6 +240,98 @@ bool ui_dropdown_two_column(SDL_Renderer *R, Rect r, int *value, const char **it
     return changed;
 }
 
+bool ui_dropdown_two_column_above(SDL_Renderer *R, Rect r, int *value, const char **items, int count, bool *open,
+                                   int mx, int my, bool mdown, bool mclick)
+{
+    bool changed = false;
+    if (count <= 0)
+        return false;
+    SDL_Color bg = g_button_base;
+    SDL_Color txt = g_button_text;
+    SDL_Color frame = g_button_border;
+    bool overMain = point_in(mx, my, r);
+    if (overMain)
+        bg = (SDL_Color){80, 80, 90, 255};
+    draw_rect(R, r, bg);
+    draw_frame(R, r, frame);
+    const char *cur = (*value >= 0 && *value < count) ? items[*value] : "?";
+    char buf[64];
+    snprintf(buf, sizeof(buf), "%s", cur);
+    int txt_w = 0, txt_h = 0;
+    measure_text(buf, &txt_w, &txt_h);
+    int txt_y = r.y + (r.h - txt_h) / 2 - 3; // nudge up ~3px
+    if (txt_y < r.y + 1)
+        txt_y = r.y + 1;
+    draw_text(R, r.x + 6, txt_y, buf, txt);
+    int aw = 0, ah = 0;
+    measure_text(*open ? "^" : "v", &aw, &ah);
+    int arrow_y = r.y + (r.h - ah) / 2;
+    if (arrow_y < r.y + 2)
+        arrow_y = r.y + 2;
+    draw_text(R, r.x + r.w - 16, arrow_y, *open ? "^" : "v", txt);
+    if (overMain && mclick)
+    {
+        *open = !*open;
+    }
+    if (*open)
+    {
+        // Determine minimum item height from text metrics
+        int maxItemTextH = 0;
+        for (int i = 0; i < count; ++i)
+        {
+            int tw, th;
+            measure_text(items[i], &tw, &th);
+            if (th > maxItemTextH)
+                maxItemTextH = th;
+        }
+        int itemH = r.h;
+        if (itemH < maxItemTextH + 8)
+            itemH = maxItemTextH + 8;
+        int cols = 2;
+        int rows = (count + cols - 1) / cols;
+        int totalH = itemH * rows;
+        // Render ABOVE the button instead of below
+        Rect box = {r.x, r.y - totalH - 1, r.w, totalH};
+        draw_rect(R, box, g_panel_bg);
+        draw_frame(R, box, frame);
+        int colW = box.w / cols;
+        for (int i = 0; i < count; i++)
+        {
+            int col = i / rows;
+            int row = i % rows;
+            Rect ir = {box.x + col * colW, box.y + row * itemH, colW, itemH};
+            bool over = point_in(mx, my, ir);
+            SDL_Color ibg = (i == *value) ? g_highlight_color : g_panel_bg;
+            if (over)
+                ibg = g_button_hover;
+            draw_rect(R, ir, ibg);
+            if (i < count - 1 && row < rows - 1)
+            {
+                SDL_Color sep = g_panel_border;
+                SDL_SetRenderDrawColor(R, sep.r, sep.g, sep.b, sep.a);
+                SDL_RenderDrawLine(R, ir.x, ir.y + ir.h, ir.x + ir.w, ir.y + ir.h);
+            }
+            int iw, ih;
+            measure_text(items[i], &iw, &ih);
+            int iy = ir.y + (ir.h - ih) / 2;
+            if (iy < ir.y + 2)
+                iy = ir.y + 2;
+            draw_text(R, ir.x + 6, iy, items[i], txt);
+            if (over && mclick)
+            {
+                *value = i;
+                *open = false;
+                changed = true;
+            }
+        }
+        if (mclick && !overMain && !point_in(mx, my, box))
+        {
+            *open = false;
+        }
+    }
+    return changed;
+}
+
 // Custom checkbox drawing function
 void draw_custom_checkbox(SDL_Renderer *R, Rect r, bool checked, bool hovered)
 {

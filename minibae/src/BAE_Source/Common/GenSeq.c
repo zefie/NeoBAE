@@ -1989,10 +1989,9 @@ static void PV_ProcessNoteOn(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTra
                         BAE_PRINTF("Invalid MIDIChannel index: %d\n", MIDIChannel);
                         return;
                     }
-                    
+                    uint32_t bankId = 0, progId = 0, noteId = 0;
                     if (pSong->songFlags == SONG_FLAG_IS_RMF) {
-                        INT16 thePatch = PV_ConvertPatchBank(pSong, note, MIDIChannel);
-                        uint32_t bankId = 0, progId = 0, noteId = 0;
+                        INT16 thePatch = PV_ConvertPatchBank(pSong, note, MIDIChannel);                        
                         TranslateInstrumentToBankProgram(thePatch, &bankId, &progId, &noteId);
                         XBOOL foundPatch = FALSE;
                         for (uint32_t i = 1; i <= pSong->RMFInstrumentIDs[0]; i++)
@@ -2007,6 +2006,7 @@ static void PV_ProcessNoteOn(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTra
                             }
                             for (uint32_t j = 0; j < MAX_CHANNELS; j++) {
                                 if (pSong->channelProgram[MIDIChannel] == pSong->RMFInstrumentIDs[i]) {
+                                    // The currently defined program on this channel matches an embedded RMF instrument
                                     BAE_PRINTF("NoteOn Debug: Found Embedded RMF Instrument: %d\n", pSong->RMFInstrumentIDs[i]);
                                     foundPatch = TRUE;
                                     break;
@@ -2021,7 +2021,7 @@ static void PV_ProcessNoteOn(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTra
                         }
 
                         if (foundPatch || bankId == 1 || bankId == 2) {
-                            BAE_PRINTF("NoteOn Debug: Found RMF Instrument ID %d (progId: %d, thePatch: %d)\n", progId, thePatch);
+                            BAE_PRINTF("NoteOn Debug: Found RMF Instrument ID (progId: %d, thePatch: %i)\n", progId, thePatch);
                             pSong->channelType[MIDIChannel] = CHANNEL_TYPE_RMF;
                         } else {
                             pSong->channelType[MIDIChannel] = CHANNEL_TYPE_GM;
@@ -2032,11 +2032,14 @@ static void PV_ProcessNoteOn(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTra
                     
                     if (!GM_IsRMFChannel(pSong, MIDIChannel))
                     {
-                        BAE_PRINTF("NoteOn Debug: Channel %d is GM\n", MIDIChannel);
                         // Standard MIDI
                         GM_SF2_ProcessNoteOn(pSong, MIDIChannel, note, volume);
+                        if (pSong->songFlags == SONG_FLAG_IS_RMF) {
+                            PV_SF2_SetBankPreset(pSong, MIDIChannel, bankId, progId);
+                        }
                     } else {
                         // RMF
+                        volume = (INT16)((float)volume * 0.45f); // RMF seems to be louder, so turn it down a bit
                         thePatch = PV_DetermineInstrumentToUse(pSong, note, MIDIChannel);
                         PV_StartMIDINote(pSong, thePatch, MIDIChannel, currentTrack, note, volume);
                     }
@@ -2282,14 +2285,15 @@ void PV_ProcessController(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTrack,
                             pSong->lastThreeControl[MIDIChannel][1].value == 2 &&
                             controler == 0) {
                                 // we just set NRPN mode and the MIDI is trying to reset the MSB again, ignore it
-                                BAE_PRINTF("Ignoring control %i directly after NRPN on channel %i\n", controler, MIDIChannel);
-                                return;
-                            }
-#endif                      
-                            // send to SF2
-                            if (pSong->channelType[MIDIChannel] != CHANNEL_TYPE_RMF) {
-                                GM_SF2_ProcessController(pSong, MIDIChannel, controler, value);
-                            }                            
+                                BAE_PRINTF("Ignoring control %i directly after NRPN on channel %i\n", controler, MIDIChannel);                                
+                            } else
+#endif
+                            {
+                                // send to SF2
+                                if (pSong->channelType[MIDIChannel] != CHANNEL_TYPE_RMF) {
+                                    GM_SF2_ProcessController(pSong, MIDIChannel, controler, value);
+                                }
+                            }                        
 #if DISABLE_BEATNIK_SF2_NRPN != TRUE
                       }
 #endif                      
