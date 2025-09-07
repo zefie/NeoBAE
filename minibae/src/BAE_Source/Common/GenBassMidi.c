@@ -946,8 +946,21 @@ void GM_SF2_SetStereoMode(XBOOL stereo, XBOOL applyNow)
 {
     g_bassmidi_mono_mode = !stereo;
     
-    // BassMidi stereo mode would require stream recreation
-    // For now, we'll just store the setting
+    if (applyNow && g_bassmidi_initialized && g_bassmidi_stream)
+    {
+        // BassMidi doesn't have direct mono output - we handle mono in the conversion
+        // The stream itself remains stereo, but we convert to mono in PV_SF2_ConvertFloatToInt32
+        // No stream recreation needed for BASS, unlike TSF
+        
+        // If we need to force stream recreation for some reason in the future, 
+        // we would need to save current state and recreate like in GM_SF2_SetSampleRate
+        BAE_PRINTF("SF2 stereo mode set to: %s\n", stereo ? "stereo" : "mono");
+    }
+}
+
+XBOOL GM_SF2_GetStereoMode(void)
+{
+    return !g_bassmidi_mono_mode;
 }
 
 // BassMidi status queries
@@ -1021,11 +1034,22 @@ void sf2_get_channel_amplitudes(float channelAmplitudes[16][2])
         return;
     }
     
-    // Initialize all channels to zero
+    // Fill channel amplitudes
     for (int i = 0; i < 16; i++)
     {
-        channelAmplitudes[i][0] = g_midiLevels[i].left;
-        channelAmplitudes[i][1] = g_midiLevels[i].right;
+        if (g_bassmidi_mono_mode)
+        {
+            // In mono mode, average left and right channels
+            float monoLevel = (g_midiLevels[i].left + g_midiLevels[i].right) * 0.5f;
+            channelAmplitudes[i][0] = monoLevel;
+            channelAmplitudes[i][1] = monoLevel;
+        }
+        else
+        {
+            // Stereo mode: use original left/right levels
+            channelAmplitudes[i][0] = g_midiLevels[i].left;
+            channelAmplitudes[i][1] = g_midiLevels[i].right;
+        }
     }
 }
 
@@ -1060,26 +1084,52 @@ static void PV_SF2_ConvertFloatToInt32(float* input, int32_t* output, int32_t fr
     
     // Apply significant volume reduction to prevent BASSMIDI from being too loud
     const float volumeReduction = 0.01f;  // Further reduced to 1%   
-    // Convert float samples to int32 format used by miniBAE mixer
-    for (int32_t i = 0; i < frameCount; i++)
+    
+    if (g_bassmidi_mono_mode)
     {
-        // Apply volume scaling with reduction
-        float leftSample = input[i * 2] * songVolumeScale * volumeReduction;
-        float rightSample = input[i * 2 + 1] * songVolumeScale * volumeReduction;
-        
-        // Convert to int32 and clamp
-        int32_t leftInt = (int32_t)(leftSample * 2147483647.0f);
-        int32_t rightInt = (int32_t)(rightSample * 2147483647.0f);
-        
-        // Clamp to prevent overflow
-        if (leftInt > 2147483647) leftInt = 2147483647;
-        if (leftInt < -2147483648) leftInt = -2147483648;
-        if (rightInt > 2147483647) rightInt = 2147483647;
-        if (rightInt < -2147483648) rightInt = -2147483648;
-        
-        // Mix into output buffer (assuming stereo interleaved)
-        output[i * 2] += leftInt;
-        output[i * 2 + 1] += rightInt;
+        // Convert stereo input to mono output
+        for (int32_t i = 0; i < frameCount; i++)
+        {
+            // Mix left and right channels for mono output
+            float leftSample = input[i * 2] * songVolumeScale * volumeReduction;
+            float rightSample = input[i * 2 + 1] * songVolumeScale * volumeReduction;
+            float monoSample = (leftSample + rightSample) * 0.5f;
+            
+            // Convert to int32 and clamp
+            int32_t monoInt = (int32_t)(monoSample * 2147483647.0f);
+            
+            // Clamp to prevent overflow
+            if (monoInt > 2147483647) monoInt = 2147483647;
+            if (monoInt < -2147483648) monoInt = -2147483648;
+            
+            // Output mono to both left and right channels
+            output[i * 2] += monoInt;     // Left
+            output[i * 2 + 1] += monoInt; // Right
+        }
+    }
+    else
+    {
+        // Convert float samples to int32 format used by miniBAE mixer (stereo)
+        for (int32_t i = 0; i < frameCount; i++)
+        {
+            // Apply volume scaling with reduction
+            float leftSample = input[i * 2] * songVolumeScale * volumeReduction;
+            float rightSample = input[i * 2 + 1] * songVolumeScale * volumeReduction;
+            
+            // Convert to int32 and clamp
+            int32_t leftInt = (int32_t)(leftSample * 2147483647.0f);
+            int32_t rightInt = (int32_t)(rightSample * 2147483647.0f);
+            
+            // Clamp to prevent overflow
+            if (leftInt > 2147483647) leftInt = 2147483647;
+            if (leftInt < -2147483648) leftInt = -2147483648;
+            if (rightInt > 2147483647) rightInt = 2147483647;
+            if (rightInt < -2147483648) rightInt = -2147483648;
+            
+            // Mix into output buffer (stereo interleaved)
+            output[i * 2] += leftInt;
+            output[i * 2 + 1] += rightInt;
+        }
     }
 }
 
@@ -1090,6 +1140,7 @@ static void PV_SF2_AllocateMixBuffer(int32_t frameCount)
         PV_SF2_FreeMixBuffer();
         
         // Allocate buffer for stereo float samples
+        // Note: BASS always outputs stereo, mono conversion is handled in PV_SF2_ConvertFloatToInt32
         g_bassmidi_mix_buffer = (float*)malloc(frameCount * sizeof(float) * 2);
         if (g_bassmidi_mix_buffer)
         {

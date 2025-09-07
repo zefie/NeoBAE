@@ -22,8 +22,8 @@ extern int g_exportCodecIndex;
 extern const char *g_exportCodecNames[];
 extern const int g_exportCodecCount;
 
-#ifdef SUPPORT_MIDI_HW
 extern bool g_midiRecordFormatDropdownOpen;
+#ifdef SUPPORT_MIDI_HW
 extern int g_midiRecordFormatIndex;
 extern const char *g_midiRecordFormatNames[];
 extern const int g_midiRecordFormatCount;

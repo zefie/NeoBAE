@@ -158,9 +158,9 @@ const int g_exportCompressionCount = (int)(sizeof(g_exportCompressionMap) / size
 const int g_exportCompressionCount = 1; // only WAV
 #endif
 
+bool g_midiRecordFormatDropdownOpen = false;
 #ifdef SUPPORT_MIDI_HW
 // MIDI-record format dropdown (visible when MIDI-in is enabled)
-bool g_midiRecordFormatDropdownOpen = false;
 int g_midiRecordFormatIndex = 0; // 0 = MIDI, 1 = WAV, 2..n = MP3 bitrates
 const char *g_midiRecordFormatNames[] = {
     "MIDI Sequence",

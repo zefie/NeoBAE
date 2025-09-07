@@ -39,6 +39,8 @@ for f in Makefile.gui-mingw Makefile.mingw Makefile.gui Makefile Makefile.clang;
     runtest make -f ${f} VORBIS_ENC=1 VORBIS_DEC=1
     # SF2 Support
     runtest make -f ${f} SF2_SUPPORT=1
+    # BASSMIDI
+    runtest make -f ${f} SF2_SUPPORT=1 USE_BASSMIDI=1
     if [ "$(echo "${f}" | grep "gui" -c)" -eq 1 ]; then
         # midi hw only
         runtest make -f ${f} ENABLE_MIDI_HW=1

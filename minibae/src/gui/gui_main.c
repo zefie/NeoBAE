@@ -53,7 +53,12 @@
 #include "gui_panels.h"
 
 #if USE_SF2_SUPPORT == TRUE
+#if _USING_BASSMIDI == TRUE
 #include "GenBassMidi.h"
+#endif
+#if _USING_TSF == TRUE
+#include "GenTSF.h"
+#endif
 #endif
 
 /* Forward-declare dialog renderer from gui_dialogs.c to avoid including the
@@ -651,7 +656,7 @@ void setWindowIcon(SDL_Window *window)
 #endif
 }
 
-
+#ifdef _WIN32
 bool isWindows10LTSC2021(void) {
     HKEY hKey;
     char productName[256] = {0};
@@ -679,7 +684,7 @@ bool isWindows10LTSC2021(void) {
 
     return (strstr(productName, "LTSC") != NULL && strcmp(releaseId, "21H2") == 0);
 }
-
+#endif
 
 
 

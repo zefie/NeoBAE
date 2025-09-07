@@ -82,6 +82,7 @@ int16_t GM_SF2_GetMaxVoices(void);
 void PV_SF2_SetBankPreset(GM_Song* pSong, int16_t channel, int16_t bank, int16_t preset);
 void GM_SF2_SetSampleRate(int32_t sampleRate);
 void GM_SF2_SetStereoMode(XBOOL stereo, XBOOL applyNow);
+XBOOL GM_SF2_GetStereoMode(void);
 
 // BassMidi status queries
 uint16_t GM_SF2_GetActiveVoiceCount(void);

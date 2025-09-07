@@ -47,10 +47,15 @@ ifeq ($(DEBUG),1)
 	CFLAGS		+= $(CLANG_SANI)
 	LDFLAGS		+= $(CLANG_SANI)
 endif
+ifneq ($(BAE_LD_FLAGS),)
+	LDFLAGS += $(BAE_LD_FLAGS)
+endif
 
 LIBS	= 	-lpthread -lm -ldl
 
-
+ifneq ($(BAE_LIBS),)
+	LIBS += $(BAE_LIBS)
+endif
 
 # ------------------------------------------------------------
 # SDL2 integration (vendored static or system dynamic)
