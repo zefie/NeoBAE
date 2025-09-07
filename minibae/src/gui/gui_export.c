@@ -3,6 +3,8 @@
 #include "gui_export.h"
 #include "gui_common.h"
 #include "gui_theme.h"
+#include "gui_midi_hw.h"
+#include "gui_bae.h"
 #include "MiniBAE.h"
 #include "GenPriv.h"
 #include "BAE_API.h"
@@ -23,34 +25,7 @@
 #include <unistd.h>
 #endif
 
-// Forward declare the BAEGUI structure (defined in gui_main.old.c)
-typedef struct
-{
-    BAEMixer mixer;
-    BAESong song;
-    BAESound sound;
-    uint32_t song_length_us;
-    bool song_loaded;
-    bool is_audio_file;
-    bool is_rmf_file;
-    bool paused;
-    bool is_playing;
-    bool was_playing_before_export;
-    bool loop_enabled_gui;
-    bool loop_was_enabled_before_export;
-    uint32_t position_us_before_export;
-    bool audio_engaged_before_export;
-    char loaded_path[1024];
-    bool preserve_position_on_next_start;
-    uint32_t preserved_start_position_us;
-    bool song_finished;
-    BAEBankToken bank_token;
-    char bank_name[256];
-    bool bank_loaded;
-    char status_message[256];
-    Uint32 status_message_time;
-} BAEGUI;
-
+// Forward declare the BAEGUI structure (defined in gui_bae.h, included above)
 // External globals
 extern BAEGUI g_bae;
 extern void set_status_message(const char *msg);
@@ -350,6 +325,13 @@ bool bae_start_export(const char *output_file, int export_type, int compression)
         BAE_WaitMicroseconds(1000); // 1ms pause between each service call
     }
 
+    // Ensure channel mutes are applied during export initialization
+    bool ch_enable[16];
+    for (int i = 0; i < 16; i++) {
+        ch_enable[i] = g_thread_ch_enabled[i] ? true : false;
+    }
+    bae_update_channel_mutes(ch_enable);
+
     // Prime the encoder/mixer (like playbae does) to ensure events are processed
     for (int prime = 0; prime < 8; ++prime)
     {
@@ -599,6 +581,13 @@ bool bae_start_mpeg_export(const char *output_file, int codec_index)
         }
     }
 
+    // Ensure channel mutes are applied during export initialization
+    bool ch_enable[16];
+    for (int i = 0; i < 16; i++) {
+        ch_enable[i] = g_thread_ch_enabled[i] ? true : false;
+    }
+    bae_update_channel_mutes(ch_enable);
+
     // If song still reports done, keep priming briefly until active or safety limit
     BAE_BOOL preDone = TRUE;
     int safety = 0;
@@ -817,6 +806,13 @@ static void *export_thread_proc(void *param)
 #endif
 {
     BAE_PRINTF("Export thread started\n");
+    
+    // Apply channel mutes at the start of export to ensure they're respected
+    bool ch_enable[16];
+    for (int i = 0; i < 16; i++) {
+        ch_enable[i] = g_thread_ch_enabled[i] ? true : false;
+    }
+    bae_update_channel_mutes(ch_enable);
       
     while (!g_export_thread_should_stop && g_exporting)
     {
