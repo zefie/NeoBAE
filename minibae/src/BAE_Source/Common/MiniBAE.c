@@ -168,6 +168,9 @@
 #if _USING_TSF == TRUE
 #include "GenSF2_TSF.h"
 #endif
+#if _USING_FLUIDSYNTH == TRUE
+#include "GenSF2_FluidSynth.h"
+#endif
 #endif
 
 
@@ -373,6 +376,8 @@ const char *BAE_GetFeatureString()
     // SF2 support
 #if USE_SF2_SUPPORT == TRUE && USE_VORBIS_DECODER == TRUE
     char *sf2supp = "SF2/SF3/SFO Support";
+#elif _USING_FLUIDSYNTH == TRUE
+    char *sf2supp = "SF2/SF3/SFO/DLS Support";
 #elif USE_SF2_SUPPORT == TRUE
     char *sf2supp = "SF2 Support";
 #else
@@ -392,6 +397,13 @@ const char *BAE_GetFeatureString()
     if (sf2supp && sf2supp[0]) {
         static char sf2supp_buf[64];
         snprintf(sf2supp_buf, sizeof(sf2supp_buf), "%s (TSF)", sf2supp);
+        sf2supp = sf2supp_buf;
+    }
+#elif _USING_FLUIDSYNTH == TRUE
+    // FluidSynth
+    if (sf2supp && sf2supp[0]) {
+        static char sf2supp_buf[64];
+        snprintf(sf2supp_buf, sizeof(sf2supp_buf), "%s (FluidSynth)", sf2supp);
         sf2supp = sf2supp_buf;
     }
 #endif

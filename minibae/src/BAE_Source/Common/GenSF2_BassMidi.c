@@ -8,7 +8,7 @@
  ****************************************************************************/
 
 #include "GenSF2_BassMidi.h"
-#if USE_SF2_SUPPORT == TRUE && defined(_USING_BASSMIDI)
+#if USE_SF2_SUPPORT == TRUE && _USING_BASSMIDI == TRUE
 
 #include "bass.h"
 #include "bassmidi.h"

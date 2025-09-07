@@ -268,6 +268,7 @@ ifeq ($(SF2_SUPPORT),1)
 		endif	
 	endif
 	ifeq ($(USING_FLUIDSYNTH),1)
+		SRC += src/BAE_Source/Common/GenSF2_FluidSynth.c
 		BAE_FLAGS += -D_USING_FLUIDSYNTH=1 
 		ifeq ($(WINDOWS),1)		
 			ifeq ($(BITS),32)
@@ -275,7 +276,7 @@ ifeq ($(SF2_SUPPORT),1)
 				BAE_LD_FLAGS := -L../windeps/FluidSynth-2.4.7/x86/lib/
 				BAE_LIBS := ../windeps/FluidSynth-2.4.7/x86/lib/libfluidsynth-3.lib -Wl,-rpath,'$$ORIGIN'
 			else
-				INC_PATH += -I../windeps/FluidSynth-2.4.8/x86/include
+				INC_PATH += -I../windeps/FluidSynth-2.4.8/x86_64/include
 				BAE_LD_FLAGS := -L../windeps/FluidSynth-2.4.8/x86_64/lib/
 				BAE_LIBS := ../windeps/FluidSynth-2.4.8/x86_64/lib/libfluidsynth-3.lib -Wl,-rpath,'$$ORIGIN'
 			endif			
@@ -285,18 +286,18 @@ ifeq ($(SF2_SUPPORT),1)
 			ifneq (,$(findstring Linux,$(UNAME_S)))
 				FLUIDSYNTH_CFLAGS := $(shell pkg-config --cflags fluidsynth 2>/dev/null)
 				FLUIDSYNTH_LIBS   := $(shell pkg-config --libs fluidsynth 2>/dev/null)
-				ifneq ($(SFLUIDSYNTH_LIBS),)
-					CFLAGS += $(FLUIDSYNTH_CFLAGS)
+				ifneq ($(FLUIDSYNTH_LIBS),)
+					BAE_FLAGS += $(FLUIDSYNTH_CFLAGS)
 					# Prepend pkg-config libs; they already have -lfluidsynth and any needed deps
-					LIBS := $(FLUIDSYNTH_LIBS) $(filter-out -lfluidsynth,$(LIBS))
+					BAE_LIBS := $(FLUIDSYNTH_LIBS) $(filter-out -lfluidsynth,$(BAE_LIBS))
 					ifneq (,$(findstring -static,$(ARCH)))
 						ARCH := $(filter-out -static,$(ARCH))
 						LDFLAGS := $(filter-out -static,$(LDFLAGS))
 					endif
 				else
 					# Fallback minimal guess
-					CFLAGS += -I/usr/include/fluidsynth
-					LIBS := -lfluidsynth $(LIBS)
+					BAE_FLAGS += -I/usr/include/fluidsynth
+					BAE_LIBS := -lfluidsynth $(BAE_LIBS)
 				endif
 			endif
 		endif

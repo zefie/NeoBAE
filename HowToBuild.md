@@ -5,7 +5,7 @@ Package names and commands may vary if using a different OS.
 
 When using the `-j` flag with `make`, do not run `clean` and `all` in the same command, it will fail. You can build with the `-j` flag after cleaning without it. See below.
 
-By default, all builds will build with TSF (TinySoundFont) SF2/SF3/SFO support. TSF is a solid SF2 solution, but is missing some SF2 functions, such as ReverbEffectsSend, ChorusEffectsSend, and Modulator support. For full SF2 support, use BASSMIDI (`USE_BASSMIDI=1`). BASSMIDI is not included in the source tree, see [README.txt](minibae/src/thirdparty/bassmidi/README.txt) for more information about setting up the environment for BASSMIDI.
+By default, all builds will build with TSF (TinySoundFont) SF2/SF3/SFO support. TSF is a solid SF2 solution, but is missing some SF2 functions, such as ReverbEffectsSend, ChorusEffectsSend, and Modulator support. For full SF2 support, use BASSMIDI (`USE_BASSMIDI=1`) or FluidSynth (`USE_FLUIDSYNTH=1`). BASSMIDI is not included in the source tree, see [README.txt](minibae/src/thirdparty/bassmidi/README.txt) for more information about setting up the environment for BASSMIDI.
 
 ## Get the source (git, easier)
 - `git clone https://github.com/zefie/miniBAE`
@@ -161,6 +161,7 @@ When passed `NOAUTO=1`, the build is under your control, and the automatic enabl
 - `VORBIS_ENC=1` - Enables OGG Vorbis exporting
 - `SF2_SUPPORT=1` - Enable SF2 SoundFont 2 support (use with VORBIS_DEC=1 to get SF3/SFO support as well)
 - `USE_BASSMIDI=1` - Use BASSMIDI instead of TSF. You must provide the binary blobs. See [README.txt](minibae/src/thirdparty/bassmidi/README.txt) for the directory structure.
+- `USE_FLUIDSYNTH=1` - Use FluidSynth instead of TSF or BASSMIDI. Includes DLS support.
 - `PLAYLIST=1` - Enable playlist support in the GUI
 - `USE_SDL2=1` - To enable usage of SDL2 on platforms that support other native audio
 - `USE_SDL3=1` - To enable usage of SDL3 on platforms that support other native audio

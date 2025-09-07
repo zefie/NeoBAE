@@ -10,7 +10,7 @@
  
 
 #include "GenSF2_TSF.h"
-#if USE_SF2_SUPPORT == TRUE && defined(_USING_TSF)
+#if USE_SF2_SUPPORT == TRUE && _USING_TSF == TRUE
 #if USE_VORBIS_DECODER == TRUE
 #include "stb_vorbis.c"
 #endif

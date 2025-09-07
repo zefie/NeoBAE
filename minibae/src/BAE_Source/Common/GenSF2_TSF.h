@@ -18,7 +18,7 @@
 extern "C" {
 #endif
 
-#if USE_SF2_SUPPORT == TRUE && defined(_USING_TSF)
+#if USE_SF2_SUPPORT == TRUE && _USING_TSF == TRUE
 // Include TSF headers
 #include "tsf.h"
 

@@ -953,6 +953,12 @@ void render_about_dialog(SDL_Renderer *R, int mx, int my, bool mclick)
             "Copyright (c) 2006-2024 Un4seen Developments Ltd. All rights reserved.",
             "https://www.un4seen.com/",
 #endif
+#if _USING_FLUIDSYNTH == TRUE
+            "",
+            "FluidSynth",
+            "Copyright (C) 2004-2023 FluidSynth Team",
+            "https://www.fluidsynth.org/",
+#endif
             "",
             NULL};
         

@@ -18,7 +18,7 @@
 extern "C" {
 #endif
 
-#if USE_SF2_SUPPORT == TRUE && defined(_USING_BASSMIDI)
+#if USE_SF2_SUPPORT == TRUE && _USING_BASSMIDI == TRUE
 // Include BassMidi headers
 #include "bass.h"
 #include "bassmidi.h"

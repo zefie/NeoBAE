@@ -14,6 +14,9 @@
 #if _USING_TSF == TRUE
 #include "GenSF2_TSF.h"
 #endif
+#if _USING_FLUIDSYNTH == TRUE
+#include "GenSF2_FluidSynth.h"
+#endif
 #endif
 #include <stdio.h>
 #include <stdlib.h>
@@ -536,7 +539,10 @@ bool bae_load_bank(const char *bank_path)
 #if USE_SF2_SUPPORT == TRUE
     GM_UnloadSF2Soundfont();
     // Check if this is an SF2 file
-    if (ext && (strcasecmp(ext, ".sf2") == 0
+    if (ext && (strcasecmp(ext, ".sf2") == 0    
+#if _USING_FLUIDSYNTH == TRUE
+    || strcasecmp(ext, ".dls") == 0
+#endif    
 #if USE_VORBIS_DECODER == TRUE
     || (strcasecmp(ext, ".sf3") == 0 || strcasecmp(ext, ".sfo") == 0)
 #endif

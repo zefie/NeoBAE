@@ -124,6 +124,13 @@ else
 	@$(shell cp src/thirdparty/bassmidi/libs/x86_64/bass*.dll* $(TARGET_OUT) 2>/dev/null || true)
 endif
 endif
+ifeq ($(USING_FLUIDSYNTH),1)
+ifeq ($(BITS),32)
+	@$(shell cp ../windeps/FluidSynth-2.4.7/x86/bin/*.dll $(TARGET_OUT) 2>/dev/null || true)
+else
+	@$(shell cp ../windeps/FluidSynth-2.4.8/x86_64/bin/*.dll $(TARGET_OUT) 2>/dev/null || true)
+endif
+endif
 
 $(TARGET_BIN): ${OBJ_BIN}
 	@mkdir -p $(TARGET_OUT)/Banks

@@ -51,6 +51,9 @@
 #if _USING_TSF == TRUE
 #include "GenSF2_TSF.h"
 #endif
+#if _USING_FLUIDSYNTH == TRUE
+#include "GenSF2_FluidSynth.h"
+#endif
 #endif
 #ifdef main
 #undef main
@@ -1447,6 +1450,9 @@ int main(int argc, char *argv[])
 #if USE_VORBIS_DECODER == TRUE
          || strcasecmp(ext, ".sf3") == 0 || strcasecmp(ext, ".sfo") == 0
 #endif
+#if _USING_FLUIDSYNTH == TRUE
+         || strcasecmp(ext, ".dls") == 0
+#endif                  
          ) && !bankLoaded) {
                err = (BAEResult)GM_LoadSF2Soundfont(parmFile);
                if (err != BAE_NO_ERROR) {

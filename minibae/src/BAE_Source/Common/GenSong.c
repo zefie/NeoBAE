@@ -210,10 +210,13 @@
 #include <stdint.h>
 #if USE_SF2_SUPPORT == TRUE
 #if _USING_BASSMIDI == TRUE
-#include "GenSF2_BassMidi.h" // BassMidi integration (silence on end)
+#include "GenSF2_BassMidi.h" // BassMidi integration
 #endif
 #if _USING_TSF == TRUE
-#include "GenSF2_TSF.h" // TSF integration (silence on end)
+#include "GenSF2_TSF.h" // TSF integration
+#endif
+#if _USING_FLUIDSYNTH == TRUE
+#include "GenSF2_FluidSynth.h" // FluidSynth integration
 #endif
 #endif
 
