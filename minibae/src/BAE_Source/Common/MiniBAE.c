@@ -374,10 +374,10 @@ const char *BAE_GetFeatureString()
 #endif
 
     // SF2 support
-#if USE_SF2_SUPPORT == TRUE && USE_VORBIS_DECODER == TRUE
-    char *sf2supp = "SF2/SF3/SFO Support";
-#elif _USING_FLUIDSYNTH == TRUE
+#if _USING_FLUIDSYNTH == TRUE
     char *sf2supp = "SF2/SF3/SFO/DLS Support";
+#elif USE_SF2_SUPPORT == TRUE && USE_VORBIS_DECODER == TRUE
+    char *sf2supp = "SF2/SF3/SFO Support";
 #elif USE_SF2_SUPPORT == TRUE
     char *sf2supp = "SF2 Support";
 #else
