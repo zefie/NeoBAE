@@ -713,8 +713,16 @@ void render_about_dialog(SDL_Renderer *R, int mx, int my, bool mclick)
         line2[0] = '\0';
 
     char line3[256];
-    if (baeFeatures && baeFeatures[0])
+    if (baeFeatures && baeFeatures[0]) {
         snprintf(line3, sizeof(line3), "features: %s", baeFeatures);
+        SDL_RendererInfo info;
+        SDL_GetRendererInfo(R, &info);
+        if (info.name && info.name[0]) {
+            strncat(line3, " | SDL Graphics Renderer: ", sizeof(line3) - strlen(line3) - 1);
+            strncat(line3, info.name, sizeof(line3) - strlen(line3) - 1);
+        }
+
+    }
     else
         line3[0] = '\0';
 
