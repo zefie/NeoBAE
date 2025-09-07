@@ -608,6 +608,10 @@ bool bae_load_song(const char *path)
     g_bae.song_length_us = 0;
     g_show_rmf_info_dialog = false;
     rmf_info_reset();
+    
+#if USE_SF2_SUPPORT == TRUE
+    GM_ResetSF2();
+#endif    
 
     // Detect extension
     const char *le = strrchr(path, '.');

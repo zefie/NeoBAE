@@ -1003,6 +1003,14 @@ void GM_ResetSF2(void)
             BASS_MIDI_StreamEvent(g_bassmidi_stream, channel, MIDI_EVENT_BANK, 127);   // Percussion bank
             BASS_MIDI_StreamEvent(g_bassmidi_stream, channel, MIDI_EVENT_PROGRAM, 0);  // Standard kit
         }
+        if (channel == 9) // Channel 10 is percussion
+        { 
+            BASS_MIDI_StreamEvent(g_bassmidi_stream, channel, MIDI_EVENT_DRUMS, 1);
+        }
+        else
+        {
+            BASS_MIDI_StreamEvent(g_bassmidi_stream, channel, MIDI_EVENT_DRUMS, 0);
+        }
     }
 }
 
