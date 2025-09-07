@@ -76,6 +76,9 @@ OPErr GM_InitializeSF2(void)
         {
             g_fluidsynth_sample_rate = 44100; // fallback
         }
+        
+        // Sync our mono flag with the mixer's stereo setting
+        g_fluidsynth_mono_mode = !pMixer->generateStereoOutput;
     }
     
     // Create FluidSynth settings
@@ -89,7 +92,7 @@ OPErr GM_InitializeSF2(void)
     fluid_settings_setnum(g_fluidsynth_settings, "synth.sample-rate", g_fluidsynth_sample_rate);
     fluid_settings_setint(g_fluidsynth_settings, "synth.polyphony", g_fluidsynth_max_voices);
     fluid_settings_setnum(g_fluidsynth_settings, "synth.gain", XFIXED_TO_FLOAT(g_fluidsynth_master_volume));
-    fluid_settings_setint(g_fluidsynth_settings, "synth.audio-channels", g_fluidsynth_mono_mode ? 1 : 2);
+    fluid_settings_setint(g_fluidsynth_settings, "synth.audio-channels", 2);  // Always stereo - we simulate mono in conversion
     
     // Create FluidSynth synthesizer
     g_fluidsynth_synth = new_fluid_synth(g_fluidsynth_settings);
@@ -314,6 +317,15 @@ OPErr GM_EnableSF2ForSong(GM_Song* pSong, XBOOL enable)
         sf2Info->sf2_sample_rate = g_fluidsynth_sample_rate;
         sf2Info->sf2_max_voices = g_fluidsynth_max_voices;
         
+        // Verify the synth pointer is valid before using
+        if (enable && !g_fluidsynth_synth)
+        {
+            // Synth is not available, disable SF2 for this song
+            sf2Info->sf2_active = FALSE;
+            sf2Info->sf2_synth = NULL;
+            enable = FALSE;
+        }
+        
         // Init per-channel volume/expression defaults (GM defaults: volume 127, expression 127)
         for (int i = 0; i < 16; i++) 
         { 
@@ -513,6 +525,12 @@ void GM_SF2_RenderAudioSlice(GM_Song* pSong, int32_t* mixBuffer, int32_t frameCo
         return;
     }
     
+    // Additional safety check during synth recreation
+    if (!g_fluidsynth_initialized || g_fluidsynth_soundfont_id < 0)
+    {
+        return;
+    }
+    
     // Update channel activity decay
     PV_SF2_DecayChannelActivity();
     
@@ -523,25 +541,13 @@ void GM_SF2_RenderAudioSlice(GM_Song* pSong, int32_t* mixBuffer, int32_t frameCo
         return;
     }
     
-    // Clear the float buffer (stereo)
-    int channels = g_fluidsynth_mono_mode ? 1 : 2;
-    memset(g_fluidsynth_mix_buffer, 0, frameCount * channels * sizeof(float));
+    // Clear the float buffer (always stereo now)
+    memset(g_fluidsynth_mix_buffer, 0, frameCount * 2 * sizeof(float));
     
-    // Render FluidSynth audio
-    if (g_fluidsynth_mono_mode)
-    {
-        // Mono rendering
-        fluid_synth_write_float(g_fluidsynth_synth, frameCount, 
-                               g_fluidsynth_mix_buffer, 0, 1,
-                               g_fluidsynth_mix_buffer, 0, 1);
-    }
-    else
-    {
-        // Stereo rendering
-        fluid_synth_write_float(g_fluidsynth_synth, frameCount,
-                               g_fluidsynth_mix_buffer, 0, 2,
-                               g_fluidsynth_mix_buffer, 1, 2);
-    }
+    // Render FluidSynth audio (always stereo - we simulate mono in conversion)
+    fluid_synth_write_float(g_fluidsynth_synth, frameCount,
+                           g_fluidsynth_mix_buffer, 0, 2,
+                           g_fluidsynth_mix_buffer, 1, 2);
     
     // Apply song volume scaling
     float songScale = 1.0f;
@@ -650,27 +656,48 @@ int16_t GM_SF2_GetMaxVoices(void)
 
 void GM_SF2_SetStereoMode(XBOOL stereo, XBOOL applyNow)
 {
+    // Just set the flag - we'll simulate mono in the conversion function
+    // instead of recreating the FluidSynth synth which can cause crashes
     g_fluidsynth_mono_mode = !stereo;
     
-    // FluidSynth stereo mode would require recreating the synth
-    // For now, we'll just store the setting
-    if (applyNow && g_fluidsynth_settings)
-    {
-        fluid_settings_setint(g_fluidsynth_settings, "synth.audio-channels", stereo ? 2 : 1);
-    }
+    // No need to recreate the synth - FluidSynth stays in stereo mode always
+    // We handle mono simulation in PV_SF2_ConvertFloatToInt32
 }
 
 void GM_SF2_SetSampleRate(int32_t sampleRate)
 {
     if (!g_fluidsynth_initialized)
     {
+        // Just store the sample rate for later initialization
+        g_fluidsynth_sample_rate = sampleRate;
         return;
     }
 
     g_fluidsynth_sample_rate = sampleRate;
-    if (g_fluidsynth_settings)
+    
+    // FluidSynth requires recreating the synth to change sample rate
+    // Store current state
+    char currentSF2Path[256];
+    strncpy(currentSF2Path, g_fluidsynth_sf2_path, sizeof(currentSF2Path) - 1);
+    currentSF2Path[sizeof(currentSF2Path) - 1] = '\0';
+    
+    // Cleanup current synth
+    GM_UnloadSF2Soundfont();
+    if (g_fluidsynth_synth)
     {
-        fluid_settings_setnum(g_fluidsynth_settings, "synth.sample-rate", sampleRate);
+        delete_fluid_synth(g_fluidsynth_synth);
+        g_fluidsynth_synth = NULL;
+    }
+    
+    // Update settings
+    fluid_settings_setnum(g_fluidsynth_settings, "synth.sample-rate", sampleRate);
+    
+    // Recreate synth with new settings
+    g_fluidsynth_synth = new_fluid_synth(g_fluidsynth_settings);
+    if (g_fluidsynth_synth && currentSF2Path[0] != '\0')
+    {
+        // Reload soundfont
+        GM_LoadSF2Soundfont(currentSF2Path);
     }
 }
 
@@ -788,6 +815,8 @@ static XBOOL PV_SF2_CheckChannelMuted(GM_Song* pSong, int16_t channel)
 
 static void PV_SF2_ConvertFloatToInt32(float* input, int32_t* output, int32_t frameCount, float songVolumeScale, const float *channelScales)
 {
+    const float kScale = 2147483647.0f;
+    
     // For now, apply a simple global scaling since we don't have per-channel separation in the final mix
     // A more sophisticated implementation would require per-channel rendering
     float globalScale = songVolumeScale;
@@ -800,38 +829,57 @@ static void PV_SF2_ConvertFloatToInt32(float* input, int32_t* output, int32_t fr
     }
     avgChannelScale /= 16.0f;
     globalScale *= avgChannelScale;
-    
+
     if (g_fluidsynth_mono_mode)
     {
-        // Mono conversion
-        for (int32_t i = 0; i < frameCount; i++)
+        // True mono mode: FluidSynth renders stereo, but we downconvert to mono
+        // Output true mono format - one sample per frame (output[frame])
+        // The mixer expects mono buffer layout when mono mode is enabled
+        for (int32_t frame = 0; frame < frameCount; frame++)
         {
-            float sample = input[i] * globalScale;
-            // Convert to 32-bit fixed point and add to existing buffer
-            int32_t intSample = (int32_t)(sample * 2147483647.0f);
-            output[i * 2] += intSample;     // Left
-            output[i * 2 + 1] += intSample; // Right (duplicate for mono)
+            float leftSample = input[frame * 2] * globalScale;
+            float rightSample = input[frame * 2 + 1] * globalScale;
+            
+            // Mix stereo to mono (average L+R)
+            float mono = (leftSample + rightSample) * 0.5f;
+            
+            // Clamp to prevent overflow
+            if (mono > 1.0f) mono = 1.0f;
+            else if (mono < -1.0f) mono = -1.0f;
+            
+            // Convert to 32-bit fixed point
+            int32_t intSample = (int32_t)(mono * kScale);
+            
+            // Write single-channel PCM (one sample per frame, true mono layout)
+            output[frame] += intSample;
         }
     }
     else
     {
-        // Stereo conversion
-        for (int32_t i = 0; i < frameCount; i++)
+        // Stereo conversion: input buffer has frameCount * 2 samples (interleaved L,R)
+        // Output interleaved stereo format - two samples per frame (output[frame * 2], output[frame * 2 + 1])
+        for (int32_t frame = 0; frame < frameCount; frame++)
         {
-            float leftSample = input[i * 2] * globalScale;
-            float rightSample = input[i * 2 + 1] * globalScale;
+            float leftSample = input[frame * 2] * globalScale;
+            float rightSample = input[frame * 2 + 1] * globalScale;
+            
+            // Clamp to prevent overflow
+            if (leftSample > 1.0f) leftSample = 1.0f;
+            else if (leftSample < -1.0f) leftSample = -1.0f;
+            if (rightSample > 1.0f) rightSample = 1.0f;
+            else if (rightSample < -1.0f) rightSample = -1.0f;
             
             // Convert to 32-bit fixed point and add to existing buffer
-            output[i * 2] += (int32_t)(leftSample * 2147483647.0f);     // Left
-            output[i * 2 + 1] += (int32_t)(rightSample * 2147483647.0f); // Right
+            output[frame * 2] += (int32_t)(leftSample * kScale);     // Left
+            output[frame * 2 + 1] += (int32_t)(rightSample * kScale); // Right
         }
     }
 }
 
 static void PV_SF2_AllocateMixBuffer(int32_t frameCount)
 {
-    int channels = g_fluidsynth_mono_mode ? 1 : 2;
-    int32_t requiredSize = frameCount * channels;
+    // Always allocate for stereo since FluidSynth stays in stereo mode
+    int32_t requiredSize = frameCount * 2;
     
     if (g_fluidsynth_mix_buffer_frames < requiredSize)
     {
