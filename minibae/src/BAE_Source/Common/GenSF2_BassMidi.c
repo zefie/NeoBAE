@@ -84,6 +84,9 @@ OPErr GM_InitializeSF2(void)
         {
             g_bassmidi_sample_rate = 44100; // fallback
         }
+        
+        // Sync our mono flag with the mixer's stereo setting
+        g_bassmidi_mono_mode = !pMixer->generateStereoOutput;
     }
 
     // Initialize BASS
@@ -1087,7 +1090,7 @@ static void PV_SF2_ConvertFloatToInt32(float* input, int32_t* output, int32_t fr
     
     if (g_bassmidi_mono_mode)
     {
-        // Convert stereo input to mono output
+        // Convert stereo input to true mono output (single channel)
         for (int32_t i = 0; i < frameCount; i++)
         {
             // Mix left and right channels for mono output
@@ -1102,9 +1105,8 @@ static void PV_SF2_ConvertFloatToInt32(float* input, int32_t* output, int32_t fr
             if (monoInt > 2147483647) monoInt = 2147483647;
             if (monoInt < -2147483648) monoInt = -2147483648;
             
-            // Output mono to both left and right channels
-            output[i * 2] += monoInt;     // Left
-            output[i * 2 + 1] += monoInt; // Right
+            // Output true mono (single sample per frame)
+            output[i] += monoInt;
         }
     }
     else
