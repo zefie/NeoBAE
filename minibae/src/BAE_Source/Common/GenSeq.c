@@ -2038,7 +2038,9 @@ static void PV_ProcessNoteOn(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTra
                         // Standard MIDI
                         GM_SF2_ProcessNoteOn(pSong, MIDIChannel, note, volume);
                         if (pSong->songFlags == SONG_FLAG_IS_RMF) {
-                            PV_SF2_SetBankPreset(pSong, MIDIChannel, bankId, progId);
+                            if (bankId != 0) {
+                                PV_SF2_SetBankPreset(pSong, MIDIChannel, bankId, progId);
+                            }
                         }
                     } else {
                         // RMF
