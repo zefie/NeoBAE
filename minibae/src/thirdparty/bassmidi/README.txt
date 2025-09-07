@@ -9,7 +9,6 @@ All files are relative to (projectDir)/minibae/src/thirdparty/bassmidi/
 
 For Linux x64:
 ./libs/x86_64/libbassmidi.so
-./libs/x86_64/bassmidi.dll
 ./libs/x86_64/libbass.so
 
 For Linux x86:
@@ -18,9 +17,11 @@ For Linux x86:
 
 For Linux armhf:
 ./libs/armhf/libbassmidi.so
+./libs/armhf/libbass.so
 
 For Linux aarch64:
 ./libs/aarch64/libbassmidi.so
+./libs/aarch64/libbass.so
 
 For Windowx x86:
 ./libs/x86/bass.lib
