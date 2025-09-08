@@ -291,14 +291,13 @@ ifeq ($(SF2_SUPPORT),1)
 		SRC += src/BAE_Source/Common/GenSF2_FluidSynth.c
 		BAE_FLAGS += -D_USING_FLUIDSYNTH=1 
 		ifeq ($(WINDOWS),1)		
+			INC_PATH += -I../windeps/FluidSynth/common/include
 			ifeq ($(BITS),32)
-				INC_PATH += -I../windeps/FluidSynth-2.4.7/x86/include
-				BAE_LD_FLAGS := -L../windeps/FluidSynth-2.4.7/x86/lib/
-				BAE_LIBS := ../windeps/FluidSynth-2.4.7/x86/lib/libfluidsynth-3.lib -Wl,-rpath,'$$ORIGIN'
+				BAE_LD_FLAGS := -L../windeps/FluidSynth/x86/lib/
+				BAE_LIBS := ../windeps/FluidSynth/x86/lib/libfluidsynth-3.lib -Wl,-rpath,'$$ORIGIN'
 			else
-				INC_PATH += -I../windeps/FluidSynth-2.4.8/x86_64/include
-				BAE_LD_FLAGS := -L../windeps/FluidSynth-2.4.8/x86_64/lib/
-				BAE_LIBS := ../windeps/FluidSynth-2.4.8/x86_64/lib/libfluidsynth-3.lib -Wl,-rpath,'$$ORIGIN'
+				BAE_LD_FLAGS := -L../windeps/FluidSynth/x86_64/lib/
+				BAE_LIBS := ../windeps/FluidSynth/x86_64/lib/libfluidsynth-3.lib -Wl,-rpath,'$$ORIGIN'
 			endif			
 		else
 			UNAME_S:=$(shell uname -s 2>/dev/null)
