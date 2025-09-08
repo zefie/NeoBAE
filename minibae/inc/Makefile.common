@@ -256,13 +256,6 @@ SRC		+=	src/BAE_Source/Common/DriverTools.c \
 			src/BAE_Source/Common/g72x.c \
 			src/BAE_Source/Common/sha1mini.c
 
-ifeq ($(WINDOWS),1)
-	ifeq ($(BITS),32)
-		INC_PATH += -I${HOME}/dev/mxe/usr/i686-w64-mingw32.static/include -I${HOME}/dev/mxe/usr/i686-w64-mingw32.static/include/lame
-	else
-		INC_PATH += -I${HOME}/dev/mxe/usr/x86_64-w64-mingw32.static/include -I${HOME}/dev/mxe/usr/x86_64-w64-mingw32.static/include/lame
-	endif
-endif
 
 # BassMidi support
 ifeq ($(SF2_SUPPORT),1)
@@ -299,9 +292,13 @@ ifeq ($(SF2_SUPPORT),1)
 		BAE_FLAGS += -D_USING_FLUIDSYNTH=1 
 		ifeq ($(WINDOWS),1)		
 			ifeq ($(BITS),32)
-				BAE_LIBS := -lfluidsynth -Wl,-rpath,'$$ORIGIN'
+				INC_PATH += -I../windeps/FluidSynth-2.4.7/x86/include
+				BAE_LD_FLAGS := -L../windeps/FluidSynth-2.4.7/x86/lib/
+				BAE_LIBS := ../windeps/FluidSynth-2.4.7/x86/lib/libfluidsynth-3.lib -Wl,-rpath,'$$ORIGIN'
 			else
-				BAE_LIBS := -lfluidsynth -Wl,-rpath,'$$ORIGIN'
+				INC_PATH += -I../windeps/FluidSynth-2.4.8/x86_64/include
+				BAE_LD_FLAGS := -L../windeps/FluidSynth-2.4.8/x86_64/lib/
+				BAE_LIBS := ../windeps/FluidSynth-2.4.8/x86_64/lib/libfluidsynth-3.lib -Wl,-rpath,'$$ORIGIN'
 			endif			
 		else
 			UNAME_S:=$(shell uname -s 2>/dev/null)
@@ -350,41 +347,172 @@ endif
 # and provides an adapter that implements the legacy MPG_Encode* API.
 ifeq ($(MP3_ENC),1)
 	# Let LAME detect standard headers correctly on our build host
-	BAE_FLAGS += -DUSE_MPEG_ENCODER=1 -DUSE_LAME_ENCODER=1
-	BAE_LIBS += -lmp3lame 
+	BAE_FLAGS += -DUSE_MPEG_ENCODER=1 -DUSE_LAME_ENCODER=1 -DIEEE_FLOAT -DSTDC_HEADERS=1 -DHAVE_STDINT_H=1 -DHAVE_INTTYPES_H=1 -DHAVE_CONFIG_H=1
+	# Add LAME include path so adapter can find "lame.h"
+	INC_PATH += -Isrc/thirdparty/lame-3.100-slim/include
+	# Also make top-level LAME dir visible so <config.h> (provided below) is found
+	INC_PATH += -Isrc/thirdparty/lame-3.100-slim
+	INC_PATH += -Isrc/thirdparty/lame-3.100-slim/libmp3lame
+	# Let the build find LAME source files (libmp3lame and mpglib)
+	# Add all libmp3lame and mpglib C sources and the LAME adapter.
+	# Using wildcard keeps this list maintainable when LAME sources change.
+	ifeq ($(shell [ -d src/thirdparty/lame-3.100-slim/libmp3lame ] && echo yes),yes)
+		SRC += src/thirdparty/lame-3.100-slim/libmp3lame/bitstream.c \
+			src/thirdparty/lame-3.100-slim/libmp3lame/newmdct.c \
+			src/thirdparty/lame-3.100-slim/libmp3lame/tables.c \
+			src/thirdparty/lame-3.100-slim/libmp3lame/encoder.c \
+			src/thirdparty/lame-3.100-slim/libmp3lame/presets.c \
+			src/thirdparty/lame-3.100-slim/libmp3lame/takehiro.c \
+			src/thirdparty/lame-3.100-slim/libmp3lame/fft.c \
+			src/thirdparty/lame-3.100-slim/libmp3lame/psymodel.c \
+			src/thirdparty/lame-3.100-slim/libmp3lame/util.c \
+			src/thirdparty/lame-3.100-slim/libmp3lame/gain_analysis.c \
+			src/thirdparty/lame-3.100-slim/libmp3lame/quantize.c \
+			src/thirdparty/lame-3.100-slim/libmp3lame/vbrquantize.c \
+			src/thirdparty/lame-3.100-slim/libmp3lame/id3tag.c \
+			src/thirdparty/lame-3.100-slim/libmp3lame/quantize_pvt.c \
+			src/thirdparty/lame-3.100-slim/libmp3lame/VbrTag.c \
+			src/thirdparty/lame-3.100-slim/libmp3lame/lame.c \
+			src/thirdparty/lame-3.100-slim/libmp3lame/reservoir.c \
+			src/thirdparty/lame-3.100-slim/libmp3lame/version.c \
+			src/thirdparty/lame-3.100-slim/libmp3lame/mpglib_interface.c \
+			src/thirdparty/lame-3.100-slim/libmp3lame/set_get.c \
+			src/thirdparty/lame-3.100-slim/mpglib/common.c \
+			src/thirdparty/lame-3.100-slim/mpglib/decode_i386.c \
+			src/thirdparty/lame-3.100-slim/mpglib/layer1.c \
+			src/thirdparty/lame-3.100-slim/mpglib/layer3.c \
+			src/thirdparty/lame-3.100-slim/mpglib/dct64_i386.c \
+			src/thirdparty/lame-3.100-slim/mpglib/interface.c \
+			src/thirdparty/lame-3.100-slim/mpglib/layer2.c \
+			src/thirdparty/lame-3.100-slim/mpglib/tabinit.c
+	endif
 	SRC += src/BAE_MPEG_Source_II/XMPEG_lame_encoder.cpp
 endif
 
 # Add FLAC decoder source files
 ifeq ($(FLAC_DEC),1)
 	BAE_FLAGS += -DUSE_FLAC_DECODER=1
-	BAE_LIBS += -lFLAC	
+	SRC += src/thirdparty/flac/src/libFLAC/stream_decoder.c \
+		src/thirdparty/flac/src/libFLAC/bitreader.c \
+		src/thirdparty/flac/src/libFLAC/bitmath.c \
+		src/thirdparty/flac/src/libFLAC/bitwriter.c \
+		src/thirdparty/flac/src/libFLAC/cpu.c \
+		src/thirdparty/flac/src/libFLAC/crc.c \
+		src/thirdparty/flac/src/libFLAC/fixed.c \
+		src/thirdparty/flac/src/libFLAC/format.c \
+		src/thirdparty/flac/src/libFLAC/lpc.c \
+		src/thirdparty/flac/src/libFLAC/md5.c \
+		src/thirdparty/flac/src/libFLAC/memory.c \
+		src/thirdparty/flac/src/libFLAC/metadata_iterators.c \
+		src/thirdparty/flac/src/libFLAC/metadata_object.c \
+		src/thirdparty/flac/src/libFLAC/stream_encoder_framing.c \
+		src/thirdparty/flac/src/libFLAC/window.c
+	# Add OGG support files for FLAC if OGG is enabled
+	ifeq ($(OGG_SUPPORT),1)
+		SRC += src/thirdparty/flac/src/libFLAC/ogg_decoder_aspect.c \
+			src/thirdparty/flac/src/libFLAC/ogg_helper.c \
+			src/thirdparty/flac/src/libFLAC/ogg_mapping.c
+	endif
 endif
 
 # Add FLAC encoder source files  
 ifeq ($(FLAC_ENC),1)
 	BAE_FLAGS += -DUSE_FLAC_ENCODER=1
-	BAE_LIBS += -lFLAC
-endif
-
-# Add libvorbis decoder source files
-ifeq ($(VORBIS_DEC),1)
-	BAE_FLAGS += -DUSE_VORBIS_DECODER=1
-	BAE_LIBS += -lvorbis
-endif
-
-# Add libvorbis encoder source files  
-ifeq ($(VORBIS_ENC),1)
-	BAE_FLAGS += -DUSE_VORBIS_ENCODER=1
-	SRC += src/BAE_Source/Common/XVorbisFiles.c
-	BAE_LIBS += -lvorbisenc -lvorbisfile -lvorbis
+	# stream_encoder.c is the main encoding engine, and it depends on decoder for verification
+	SRC += src/thirdparty/flac/src/libFLAC/stream_encoder.c
+	ifeq ($(OGG_SUPPORT),1)
+		SRC += src/thirdparty/flac/src/libFLAC/ogg_encoder_aspect.c
+	endif
+	ifneq ($(FLAC_DEC),1)
+		# Add required FLAC files for encoding, including decoder support for verification
+		SRC += src/thirdparty/flac/src/libFLAC/stream_decoder.c \
+			src/thirdparty/flac/src/libFLAC/bitreader.c \
+			src/thirdparty/flac/src/libFLAC/bitmath.c \
+			src/thirdparty/flac/src/libFLAC/bitwriter.c \
+			src/thirdparty/flac/src/libFLAC/cpu.c \
+			src/thirdparty/flac/src/libFLAC/crc.c \
+			src/thirdparty/flac/src/libFLAC/fixed.c \
+			src/thirdparty/flac/src/libFLAC/format.c \
+			src/thirdparty/flac/src/libFLAC/lpc.c \
+			src/thirdparty/flac/src/libFLAC/md5.c \
+			src/thirdparty/flac/src/libFLAC/memory.c \
+			src/thirdparty/flac/src/libFLAC/metadata_iterators.c \
+			src/thirdparty/flac/src/libFLAC/metadata_object.c \
+			src/thirdparty/flac/src/libFLAC/stream_encoder_framing.c \
+			src/thirdparty/flac/src/libFLAC/window.c
+		# Add OGG support files for FLAC if OGG is enabled
+		ifeq ($(OGG_SUPPORT),1)
+			SRC += src/thirdparty/flac/src/libFLAC/ogg_decoder_aspect.c \
+				src/thirdparty/flac/src/libFLAC/ogg_helper.c \
+				src/thirdparty/flac/src/libFLAC/ogg_mapping.c
+		endif
+	endif
 endif
 
 # Add libogg source files
 ifeq ($(OGG_SUPPORT),1)
 	BAE_FLAGS += -DUSE_OGG_FORMAT=1
-	BAE_LIBS += -logg
+	SRC += src/thirdparty/libogg/src/bitwise.c src/thirdparty/libogg/src/framing.c
 endif
+
+# Add libvorbis decoder source files
+ifeq ($(VORBIS_DEC),1)
+	BAE_FLAGS += -DUSE_VORBIS_DECODER=1
+	SRC += src/thirdparty/libvorbis/lib/analysis.c \
+		src/thirdparty/libvorbis/lib/bitrate.c \
+		src/thirdparty/libvorbis/lib/block.c \
+		src/thirdparty/libvorbis/lib/codebook.c \
+		src/thirdparty/libvorbis/lib/envelope.c \
+		src/thirdparty/libvorbis/lib/floor0.c \
+		src/thirdparty/libvorbis/lib/floor1.c \
+		src/thirdparty/libvorbis/lib/info.c \
+		src/thirdparty/libvorbis/lib/lookup.c \
+		src/thirdparty/libvorbis/lib/lsp.c \
+		src/thirdparty/libvorbis/lib/mapping0.c \
+		src/thirdparty/libvorbis/lib/mdct.c \
+		src/thirdparty/libvorbis/lib/psy.c \
+		src/thirdparty/libvorbis/lib/registry.c \
+		src/thirdparty/libvorbis/lib/res0.c \
+		src/thirdparty/libvorbis/lib/sharedbook.c \
+		src/thirdparty/libvorbis/lib/smallft.c \
+		src/thirdparty/libvorbis/lib/synthesis.c \
+		src/thirdparty/libvorbis/lib/vorbisfile.c \
+		src/BAE_Source/Common/XVorbisFiles.c \
+		src/thirdparty/libvorbis/lib/lpc.c \
+		src/thirdparty/libvorbis/lib/window.c
+endif
+
+# Add libvorbis encoder source files  
+ifeq ($(VORBIS_ENC),1)
+	BAE_FLAGS += -DUSE_VORBIS_ENCODER=1
+	SRC += src/thirdparty/libvorbis/lib/vorbisenc.c
+	# If decoder not already included, add required decoder files for encoder
+	ifneq ($(VORBIS_DEC),1)
+		SRC += src/thirdparty/libvorbis/lib/analysis.c \
+			src/thirdparty/libvorbis/lib/bitrate.c \
+			src/thirdparty/libvorbis/lib/block.c \
+			src/thirdparty/libvorbis/lib/codebook.c \
+			src/thirdparty/libvorbis/lib/envelope.c \
+			src/thirdparty/libvorbis/lib/floor0.c \
+			src/thirdparty/libvorbis/lib/floor1.c \
+			src/thirdparty/libvorbis/lib/info.c \
+			src/thirdparty/libvorbis/lib/lookup.c \
+			src/thirdparty/libvorbis/lib/lsp.c \
+			src/thirdparty/libvorbis/lib/mapping0.c \
+			src/thirdparty/libvorbis/lib/mdct.c \
+			src/thirdparty/libvorbis/lib/psy.c \
+			src/thirdparty/libvorbis/lib/registry.c \
+			src/thirdparty/libvorbis/lib/res0.c \
+			src/thirdparty/libvorbis/lib/sharedbook.c \
+			src/thirdparty/libvorbis/lib/smallft.c \
+			src/thirdparty/libvorbis/lib/synthesis.c \
+			src/thirdparty/libvorbis/lib/vorbisfile.c \
+			src/BAE_Source/Common/XVorbisFiles.c \
+			src/thirdparty/libvorbis/lib/lpc.c \
+			src/thirdparty/libvorbis/lib/window.c
+	endif
+endif
+
 
 ifeq ($(BUILD_GUI),1)
 	BAE_FLAGS += -DOUTPUT_TO_LOGFILE=1
@@ -434,6 +562,14 @@ ifeq ($(LOGFILE),1)
 	BAE_FLAGS += -DOUTPUT_TO_LOGFILE=1
 endif
 
+ifeq ($(WINDOWS),1)
+	ifneq ($(filter 1,$(FLAC_DEC) $(FLAC_ENC)),)
+		INC_PATH += -Isrc/thirdparty/flac/src/share/win_utf8_io
+		BAE_FLAGS += -DFLAC__NO_DLL
+		SRC += src/thirdparty/flac/src/share/win_utf8_io/win_utf8_io.c
+		SRC_BIN += src/thirdparty/flac/src/share/win_utf8_io/win_utf8_io.c
+	endif
+endif
 
 ifeq ($(KARAOKE),1)
 	BAE_FLAGS += -DSUPPORT_KARAOKE=1
