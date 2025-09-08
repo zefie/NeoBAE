@@ -44,15 +44,16 @@
 #include <stdarg.h>
 #include <stdint.h>
 #include "bankinfo.h" // reuse embedded bank metadata for friendly names
+
 #if USE_SF2_SUPPORT == TRUE
-#if _USING_TSF == TRUE
-#include "GenSF2_TSF.h"
+   #if _USING_FLUIDSYNTH == TRUE
+      #include "GenSF2_FluidSynth.h"
+      #if USE_XMF_SUPPORT == TRUE
+         #include "GenXMF.h"
+      #endif
+   #endif
 #endif
-#if _USING_FLUIDSYNTH == TRUE
-#include "GenSF2_FluidSynth.h"
-#endif
-#include "GenXMF.h"
-#endif
+
 #ifdef main
 #undef main
 #endif

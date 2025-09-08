@@ -193,9 +193,6 @@ endif
 
 ifeq ($(SF2_SUPPORT),1)
 	BAE_FLAGS += -DUSE_SF2_SUPPORT=1
-	ifeq ($(USING_TSF),1)
-		INC_PATH += -Isrc/thirdparty/TinySoundFont
-	endif
 endif
 
 ifeq ($(XMF_SUPPORT),1)

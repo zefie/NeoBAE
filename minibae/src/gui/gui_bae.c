@@ -8,12 +8,12 @@
 #include "gui_karaoke.h" // For karaoke functions
 #include "X_API.h"
 #if USE_SF2_SUPPORT
-#if _USING_TSF == TRUE
-#include "GenSF2_TSF.h"
-#endif
-#if _USING_FLUIDSYNTH == TRUE
-#include "GenSF2_FluidSynth.h"
-#endif
+    #if _USING_FLUIDSYNTH == TRUE
+        #include "GenSF2_FluidSynth.h"
+        #if USE_XMF_SUPPORT == TRUE
+            #include "GenXMF.h"
+        #endif
+    #endif
 #endif
 #include <stdio.h>
 #include <stdlib.h>

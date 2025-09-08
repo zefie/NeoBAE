@@ -2,12 +2,9 @@
 
 #include "gui_midi_vkbd.h"
 #if USE_SF2_SUPPORT == TRUE
-#if _USING_TSF == TRUE
-#include "GenSF2_TSF.h"
-#endif
-#if _USING_FLUIDSYNTH == TRUE
-#include "GenSF2_FluidSynth.h"
-#endif
+    #if _USING_FLUIDSYNTH == TRUE
+        #include "GenSF2_FluidSynth.h"
+    #endif
 #endif
 
 // Virtual keyboard state

@@ -240,8 +240,8 @@
 #include <stdint.h>
 
 #if USE_SF2_SUPPORT == TRUE
-#if _USING_TSF == TRUE
-#include "GenSF2_TSF.h"
+#if _USING_FLUIDSYNTH == TRUE
+#include "GenSF2_FluidSynth.h" // FluidSynth integration
 #endif
 #include "MiniBAE.h"
 #endif

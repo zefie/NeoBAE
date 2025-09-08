@@ -370,9 +370,6 @@
 #include "BAE_API.h"
 #include "X_Assert.h"
 #if USE_SF2_SUPPORT == TRUE
-#if _USING_TSF == TRUE
-#include "GenSF2_TSF.h"
-#endif
 #if _USING_FLUIDSYNTH == TRUE
 #include "GenSF2_FluidSynth.h"
 #endif
@@ -781,7 +778,7 @@ void GM_PauseSequencer(XBOOL endVoices)
             GM_EndAllNotes();
         }
 #if USE_SF2_SUPPORT == TRUE
-        // In TSF mode sustained notes can hang indefinitely during a pause; force silence
+        // In SF2 mode sustained notes can hang indefinitely during a pause; force silence
         GM_Mixer *pMixer = GM_GetCurrentMixer();
         if (pMixer)
         {
@@ -1979,7 +1976,7 @@ static void PV_ProcessNoteOn(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTra
                 }
 #if USE_SF2_SUPPORT == TRUE
 
-                // If TSF is active for this song, route to TSF instead of normal synthesis
+                // If SF2 is active for this song, route to SF2 synthesis instead of BAE synthesis
                 if (GM_IsSF2Song(pSong))
                 {
                     // adding this pleases the compiler
@@ -2103,7 +2100,7 @@ static void PV_ProcessPitchBend(GM_Song *pSong, INT16 MIDIChannel, INT16 current
     if (PV_IsMuted(pSong, MIDIChannel, currentTrack) == FALSE)
     {
 #if USE_SF2_SUPPORT == TRUE
-        // If TSF is active for this song, send pitch bend to TSF
+        // If SF2 is active for this song, send pitch bend to SF2
         if (GM_IsSF2Song(pSong))
         {
             GM_SF2_ProcessPitchBend(pSong, MIDIChannel, valueMSB, valueLSB);

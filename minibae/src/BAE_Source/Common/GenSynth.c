@@ -348,9 +348,6 @@
 #include "X_Assert.h"
 #include <stdint.h>
 #if USE_SF2_SUPPORT == TRUE
-#if _USING_TSF == TRUE
-#include "GenSF2_TSF.h"
-#endif
 #if _USING_FLUIDSYNTH == TRUE
 #include "GenSF2_FluidSynth.h"
 #endif
@@ -2204,7 +2201,7 @@ INLINE static void PV_ServeInstruments(void)
             }
         }
 #if USE_SF2_SUPPORT == TRUE
-        // Mix TSF (SoundFont) voices before chorus/reverb so they get processed by effects
+        // Mix SF2 voices before chorus/reverb so they get processed by effects
         {
             int si;
             for (si = 0; si < MAX_SONGS; ++si)
@@ -2239,7 +2236,7 @@ INLINE static void PV_ServeInstruments(void)
             }
         }
 #if USE_SF2_SUPPORT == TRUE
-        // Mix TSF output with reverb-enabled voices before reverb stage
+        // Mix SF2 output with reverb-enabled voices before reverb stage
         {
             int si;
             for (si = 0; si < MAX_SONGS; ++si)
