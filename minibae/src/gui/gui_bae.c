@@ -8,9 +8,6 @@
 #include "gui_karaoke.h" // For karaoke functions
 #include "X_API.h"
 #if USE_SF2_SUPPORT
-#if _USING_BASSMIDI == TRUE
-#include "GenSF2_BassMidi.h"
-#endif
 #if _USING_TSF == TRUE
 #include "GenSF2_TSF.h"
 #endif

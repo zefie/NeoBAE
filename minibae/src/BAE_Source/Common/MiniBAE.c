@@ -162,9 +162,6 @@
 #include <stdint.h>
 #include "bankinfo.h" // embedded bank metadata (hash -> friendly)
 #if USE_SF2_SUPPORT == TRUE
-#if _USING_BASSMIDI == TRUE
-#include "GenSF2_BassMidi.h"
-#endif
 #if _USING_TSF == TRUE
 #include "GenSF2_TSF.h"
 #endif
@@ -388,14 +385,7 @@ const char *BAE_GetFeatureString()
 #endif
 
 #if USE_SF2_SUPPORT == TRUE
-#if _USING_BASSMIDI == TRUE
-    // BASSMIDI
-    if (sf2supp && sf2supp[0]) {
-        static char sf2supp_buf[64];
-        snprintf(sf2supp_buf, sizeof(sf2supp_buf), "%s (BASSMIDI)", sf2supp);
-        sf2supp = sf2supp_buf;
-    }
-#elif _USING_TSF == TRUE
+#if _USING_TSF == TRUE
     // TSF
     if (sf2supp && sf2supp[0]) {
         static char sf2supp_buf[64];
@@ -7398,11 +7388,6 @@ BAEResult TranslateInstrumentToBankProgram(uint32_t rmfInstId, uint32_t *bankId,
         *progId = program;
         *noteId = 0;
     }
-#if _USING_BASSMIDI == TRUE
-    if (*bankId > 127) {
-        *bankId = 127;
-    }
-#endif    
     return BAE_NO_ERROR;
 }
 #endif

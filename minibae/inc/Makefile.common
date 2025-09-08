@@ -36,20 +36,7 @@ endif
 # Also disable XMF_SUPPORT if not using FluidSynth
 
 ifeq ($(SF2_SUPPORT),1)
-	ifeq ($(USE_BASSMIDI),1)
-		# BASSMIDI does not support DLS
-		USING_BASSMIDI := 1
-		XMF_SUPPORT := 0
-	else ifeq ($(USE_FLUIDSYNTH),1)
-		USING_FLUIDSYNTH := 1
-	else
-		# TSF does not support DLS
-		USING_TSF := 1
-		XMF_SUPPORT := 0
-	endif
-else
-	# SF2 support is required for XMF support
-	XMF_SUPPORT := 0
+	USING_FLUIDSYNTH := 1
 endif
 
 
@@ -256,37 +243,7 @@ SRC		+=	src/BAE_Source/Common/DriverTools.c \
 			src/BAE_Source/Common/g72x.c \
 			src/BAE_Source/Common/sha1mini.c
 
-
-# BassMidi support
 ifeq ($(SF2_SUPPORT),1)
-	ifeq ($(USING_BASSMIDI),1)
-		SRC += src/BAE_Source/Common/GenSF2_BassMidi.c
-		BAE_FLAGS += -D_USING_BASSMIDI=1
-		# Include BassMidi headers and libraries
-		INC_PATH += -Isrc/thirdparty/bassmidi
-		# Link BassMidi and BASS libraries (adjust path based on architecture)
-		ifeq ($(WINDOWS),1)
-			ifeq ($(BITS),32)
-				BAE_LD_FLAGS := -Lsrc/thirdparty/bassmidi/libs/x86
-				BAE_LIBS := src/thirdparty/bassmidi/libs/x86/bassmidi.lib src/thirdparty/bassmidi/libs/x86/bass.lib -Wl,-rpath,'$$ORIGIN'
-			else
-				BAE_LD_FLAGS := -Lsrc/thirdparty/bassmidi/libs/x86_64
-				BAE_LIBS := src/thirdparty/bassmidi/libs/x86_64/bassmidi.lib src/thirdparty/bassmidi/libs/x86_64/bass.lib -Wl,-rpath,'$$ORIGIN'
-			endif			
-		else
-			UNAME_M := $(shell uname -m)
-			ifeq ($(UNAME_M),x86_64)
-				BAE_LD_FLAGS := -Lsrc/thirdparty/bassmidi/libs/x86_64
-			else ifeq ($(UNAME_M),aarch64)
-				BAE_LD_FLAGS := -Lsrc/thirdparty/bassmidi/libs/aarch64
-			else ifeq ($(UNAME_M),armhf)
-				BAE_LD_FLAGS := -Lsrc/thirdparty/bassmidi/libs/armhf				
-			else
-				BAE_LD_FLAGS := -Lsrc/thirdparty/bassmidi/libs/x86
-			endif
-			BAE_LIBS := -lbassmidi -lbass -Wl,-rpath,'$$ORIGIN'
-		endif	
-	endif
 	ifeq ($(USING_FLUIDSYNTH),1)
 		SRC += src/BAE_Source/Common/GenSF2_FluidSynth.c
 		BAE_FLAGS += -D_USING_FLUIDSYNTH=1 
@@ -319,11 +276,6 @@ ifeq ($(SF2_SUPPORT),1)
 					BAE_LIBS := -lfluidsynth $(BAE_LIBS)
 				endif
 			endif
-		endif
-	else
-		ifeq ($(USING_TSF),1)
-			SRC += src/BAE_Source/Common/GenSF2_TSF.c
-			BAE_FLAGS += -D_USING_TSF=1 
 		endif
 	endif
 endif

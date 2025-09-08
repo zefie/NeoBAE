@@ -1068,10 +1068,10 @@ typedef int32_t UNIT_TYPE;
     } SequenceType;
 
 #if USE_SF2_SUPPORT == TRUE
-    // Song flags for BassMidi integration
+    // Song flags for SF2 integration
     enum
     {
-        SONG_FLAG_USE_BASSMIDI = 0x00000001,  // Song should use BassMidi for SF2 rendering
+        SONG_FLAG_USE_SF2 = 0x00000001,  // Song should use SF2 for rendering
         SONG_FLAG_IS_RMF  = 0x00000002   // Song is in RMF format
     };
 #endif
@@ -1263,13 +1263,13 @@ typedef int32_t UNIT_TYPE;
         //  XSDWORD             trackcumuticks[MAX_TRACKS];     // current number of beat ticks into track
 
 #if USE_SF2_SUPPORT == TRUE
-        // BassMidi integration support
+        // SF2 integration support
         void *sf2Info;             // Pointer to GM_SF2Info structure when SF2 is active
         XBOOL isSF2Song;               // TRUE if this song uses SF2 instruments
-        XDWORD songFlags;                // Song flags including SONG_FLAG_USE_BASSMIDI
+        XDWORD songFlags;                // Song flags including SONG_FLAG_USE_SF2 and SONG_FLAG_IS_RMF
         XDWORD RMFInstrumentIDs[MAX_INSTRUMENTS+1];
-        XBYTE channelBankMSB[MAX_CHANNELS];  // Bank MSB values for BassMidi program changes
-        XBYTE channelBankLSB[MAX_CHANNELS];  // Bank LSB values for BassMidi program changes        
+        XBYTE channelBankMSB[MAX_CHANNELS];  // Bank MSB values for SF2 program changes
+        XBYTE channelBankLSB[MAX_CHANNELS];  // Bank LSB values for SF2 program changes
 #if DISABLE_BEATNIK_SF2_NRPN != TRUE
         LastControlEntry lastThreeControl[MAX_CHANNELS][4];
 #endif

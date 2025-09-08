@@ -962,12 +962,6 @@ void render_about_dialog(SDL_Renderer *R, int mx, int my, bool mclick)
             "Copyright (C) 2017-2023 Bernhard Schelling",
             "https://github.com/schellingb/TinySoundFont",
 #endif
-#if _USING_BASSMIDI == TRUE
-            "",
-            "BASSMIDI",
-            "Copyright (c) 2006-2024 Un4seen Developments Ltd. All rights reserved.",
-            "https://www.un4seen.com/",
-#endif
 #if _USING_FLUIDSYNTH == TRUE
             "",
             "FluidSynth",
