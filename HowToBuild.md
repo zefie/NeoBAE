@@ -5,7 +5,7 @@ Package names and commands may vary if using a different OS.
 
 When using the `-j` flag with `make`, do not run `clean` and `all` in the same command, it will fail. You can build with the `-j` flag after cleaning without it. See below.
 
-By default, all builds will build with TSF (TinySoundFont) SF2/SF3/SFO support. TSF is a solid SF2 solution, but is missing some SF2 functions, such as ReverbEffectsSend, ChorusEffectsSend, and Modulator support. For full SF2 support, use BASSMIDI (`USE_BASSMIDI=1`) or FluidSynth (`USE_FLUIDSYNTH=1`). BASSMIDI is not included in the source tree, see [README.txt](minibae/src/thirdparty/bassmidi/README.txt) for more information about setting up the environment for BASSMIDI.
+By default, all builds will build with SF2 support via FluidSynth. FluidSynth provides SF2/SF3/SFO support, as well as limited DLS (level 1 and 2) support via [libinstpatch](https://github.com/zefie/libinstpatch). miniBAE uses a modified [libinstpatch](https://github.com/zefie/libinstpatch) for mobileBAE PGAL support.
 
 ## Get the source (git, easier)
 - `git clone https://github.com/zefie/miniBAE`
@@ -30,7 +30,7 @@ By default, all builds will build with TSF (TinySoundFont) SF2/SF3/SFO support. 
 #### Setup & Compile Linux SDL2
 - Install dependencies support (one time):
     - `apt-get update`
-    - `apt-get install libc6-dev libsdl2-dev`
+    - `apt-get install libc6-dev libsdl2-dev libfluidsynth-dev`
 - Build playbae
     - `cd minibae`
     - `make clean`
@@ -41,7 +41,7 @@ By default, all builds will build with TSF (TinySoundFont) SF2/SF3/SFO support. 
 #### Setup & Compile Linux SDL2 with clang
 - Install dependencies support (one time):
     - `apt-get update`
-    - `apt-get install libc6-dev clang libsdl2-dev`
+    - `apt-get install libc6-dev clang libsdl2-dev libfluidsynth-dev`
 - Build playbae
     - `cd minibae`
     - `make clean`
@@ -52,7 +52,7 @@ By default, all builds will build with TSF (TinySoundFont) SF2/SF3/SFO support. 
 #### Setup & Compile zefidi GUI
 - Install dependencies:
     - `apt-get update`
-    - `apt-get install libsdl2-dev libsdl2-ttf-dev`
+    - `apt-get install libsdl2-dev libsdl2-ttf-dev libfluidsynth-dev`
 - Build GUI
     - `make clean && -f Makefile.gui -j$(nproc)`
     - If you want hardware MIDI (in/out) support, you will have to choose if you want the ALSA backend, JACK backend, or both:
@@ -71,7 +71,7 @@ By default, all builds will build with TSF (TinySoundFont) SF2/SF3/SFO support. 
 #### Setup & Compile Win32 mingw build (using Debian WSL2)
 - Install mingw into your Debian WSL2:
     - `apt-get update`
-    - `apt-get install binutils-mingw-w64-x86_64 g++-mingw-w64-x86_64 g++-mingw-w64-x86_64-posix g++-mingw-w64-x86_64-win32 gcc-mingw-w64-base gcc-mingw-w64-x86_64 gcc-mingw-w64-x86_64-posix gcc-mingw-w64-x86_64-posix-runtime gcc-mingw-w64-x86_64-win32 gcc-mingw-w64-x86_64-win32-runtime mingw-w64-common mingw-w64-x86_64-dev`
+    - `apt-get install binutils-mingw-w64-x86_64 g++-mingw-w64-x86_64 g++-mingw-w64-x86_64-posix g++-mingw-w64-x86_64-win32 gcc-mingw-w64-base gcc-mingw-w64-x86_64 gcc-mingw-w64-x86_64-posix gcc-mingw-w64-x86_64-posix-runtime gcc-mingw-w64-x86_64-win32 gcc-mingw-w64-x86_64-win32-runtime mingw-w64-common mingw-w64-x86_64-dev libz-mingw-w64-dev`
 - Build playbae
     - `cd minibae`
     - For DirectSound support:
@@ -87,7 +87,7 @@ By default, all builds will build with TSF (TinySoundFont) SF2/SF3/SFO support. 
 #### Setup & Compile zefidi GUI (using Debian WSL2)
 - All SDL2 dependencies are already provided
 - Install mingw into your Debian WSL2:
-    - `apt-get install binutils-mingw-w64-x86_64 g++-mingw-w64-x86_64 g++-mingw-w64-x86_64-posix g++-mingw-w64-x86_64-win32 gcc-mingw-w64-base gcc-mingw-w64-x86_64 gcc-mingw-w64-x86_64-posix gcc-mingw-w64-x86_64-posix-runtime gcc-mingw-w64-x86_64-win32 gcc-mingw-w64-x86_64-win32-runtime mingw-w64-common mingw-w64-x86_64-dev`
+    - `apt-get install binutils-mingw-w64-x86_64 g++-mingw-w64-x86_64 g++-mingw-w64-x86_64-posix g++-mingw-w64-x86_64-win32 gcc-mingw-w64-base gcc-mingw-w64-x86_64 gcc-mingw-w64-x86_64-posix gcc-mingw-w64-x86_64-posix-runtime gcc-mingw-w64-x86_64-win32 gcc-mingw-w64-x86_64-win32-runtime mingw-w64-common mingw-w64-x86_64-dev libz-mingw-w64-dev`
     - SDL dependency for mingw is provided in the repo
 - Build GUI
     - `cd minibae`
@@ -106,9 +106,9 @@ By default, all builds will build with TSF (TinySoundFont) SF2/SF3/SFO support. 
 - If using mingw32, all deps are already provided, you can just skip to build
 - Linux: Install dependencies:
     - `apt-get update`
-    - `apt-get install libsdl2-dev libsdl2-ttf-dev`
+    - `apt-get install libsdl2-dev libsdl2-ttf-dev libfluidsynth-dev`
 - Linux cross-dev (Windows):
-    - `apt-get install binutils-mingw-w64-x86_64 g++-mingw-w64-x86_64 g++-mingw-w64-x86_64-posix g++-mingw-w64-x86_64-win32 gcc-mingw-w64-base gcc-mingw-w64-x86_64 gcc-mingw-w64-x86_64-posix gcc-mingw-w64-x86_64-posix-runtime gcc-mingw-w64-x86_64-win32 gcc-mingw-w64-x86_64-win32-runtime mingw-w64-common mingw-w64-x86_64-dev`
+    - `apt-get install binutils-mingw-w64-x86_64 g++-mingw-w64-x86_64 g++-mingw-w64-x86_64-posix g++-mingw-w64-x86_64-win32 gcc-mingw-w64-base gcc-mingw-w64-x86_64 gcc-mingw-w64-x86_64-posix gcc-mingw-w64-x86_64-posix-runtime gcc-mingw-w64-x86_64-win32 gcc-mingw-w64-x86_64-win32-runtime mingw-w64-common mingw-w64-x86_64-dev libz-mingw-w64-dev`
     - SDL dependency for mingw is provided in the repo
 - Build GUI
     - Linux: `make clean && -f Makefile.gui -j$(nproc)`
@@ -129,7 +129,7 @@ By default, all builds will build with TSF (TinySoundFont) SF2/SF3/SFO support. 
     - Run `zefidi.exe`, or drag a supported file over the exe
 
 ## WebAssembly
-#### Setup & Compile Emscripten WASM32 build (no sound card support)
+#### Setup & Compile Emscripten WASM32 build (no SF2 support, uses WebAudio instead of sound hardware directly)
 - Install emscripten (one time):
     - `apt-get update`
     - `apt-get install emscripten`
