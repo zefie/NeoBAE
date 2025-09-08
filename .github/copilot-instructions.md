@@ -6,7 +6,8 @@ miniBAE is a cross-platform audio engine with these core components:
 
 - **Audio Engine**: Core synthesis and playback in `src/BAE_Source/Common/`
 - **Platform Layer**: OS abstraction in `src/BAE_Source/Platform/` 
-- **Format Handlers**: Support for MIDI, RMF, WAV, AIFF, AU, FLAC, OGG, MP3
+- **Format Handlers**: Support for MIDI, RMF, WAV, AIFF, AU, FLAC, OGG VORBIS, MP3
+- **Optional Formats**: SoundFont 2.0, SoundFont 3.0, DLS, XMF, MXMF
 - **Applications**: `playbae` (CLI) and `zefidi` (GUI) frontends
 - **Sample Cache**: Efficient memory management for audio samples
 
@@ -21,8 +22,18 @@ miniBAE is a cross-platform audio engine with these core components:
 - `FLAC_DEC=1/FLAC_ENC=1`: FLAC support  
 - `VORBIS_DEC=1/VORBIS_ENC=1`: OGG Vorbis support
 - `SF2_SUPPORT=1`: SoundFont 2.0 support
-- `DLS_SUPPORT=1`: DLS (Downloadable Sounds) support (future)
+    - `USE_BASSMIDI=1`: BASSMIDI SoundFont playback (no DLS)
+    - `USE_FLUIDSYNTH=1`: FluidSnyth SF2 with DLS support, required for `XMF_SUPPORT=1`
+    - `USE_TSF=1`: TinySoundFont SF2 (no DLS)
+- `XMF_SUPPORT=1`: Support for XMF files (requires FluidSynth)
 - `KARAOKE=1`: MIDI karaoke lyrics support
+
+### XMF and MXMF Support
+- Requires `USE_FLUIDSYNTH=1` for DLS support
+- XMF: Extended MIDI with DLS samples
+- MXMF: Beatnik's proprietary format with DLS samples
+- Loader in `src/BAE_Source/Common/GenXMF.c`
+- Details in [XMF.md](XMF.md)
 
 ### Build Commands
 ```bash
@@ -47,12 +58,15 @@ make DEBUG=1 -j$(nproc)
 # When debugging crashes
 make DEBUG=1 LDEBUG=1 -j$(nproc)
 
-# When debugging DLS
-make DEBUG=1 DLS_SUPPORT=1 -j$(nproc)
+# When debugging XMF or MXMF files (requires FluidSynth)
+make DEBUG=1 USE_FLUIDSYNTH=1 -j$(nproc)
 
-# Debugging with playbae (DLS)
-bin/playbae -f /mnt/d/Music/MIDI/Mario/kart-credits.mid -p /home/zefie/Downloads/gm.dls -t 3 2>&1
+# Debugging with playbae (XMF)
+bin/playbae -f ../content/xmf/midnightsoul.xmf -t 3 2>&1
 ```
+
+### FluidSynth Quirks
+- When loading a DLS, it will always report `fluidsynth: error: Not a SoundFont file`, we must ignore that "error".
 
 ### Platform Support
 - **Linux**: SDL2, ALSA/JACK (GUI)
@@ -130,9 +144,6 @@ struct GM_Instrument {
 - SDL2 for cross-platform compatibility
 - Hardware MIDI input/output (GUI)
 - Real-time audio mixing and effects
-
-## HSB File Format
-See [HSB.md](HSB.md) for detailed information on the HSB file format and its structure.
 
 ## Integration Points
 

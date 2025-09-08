@@ -2263,6 +2263,10 @@ extern "C"
                                       int16_t songIndex,
                                       BAE_BOOL ignoreBadInstruments);
 
+#if USE_XMF_SUPPORT == TRUE
+#include "GenXMF.h"
+#endif
+
     // BAESong_Preroll()
     // --------------------------------------
     // Prepares the indicated BAESong for later instant playback by performing any and

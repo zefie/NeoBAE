@@ -170,6 +170,9 @@
 #endif
 #if _USING_FLUIDSYNTH == TRUE
 #include "GenSF2_FluidSynth.h"
+#if USE_XMF_SUPPORT == TRUE
+#include "GenXMF.h"
+#endif
 #endif
 #endif
 

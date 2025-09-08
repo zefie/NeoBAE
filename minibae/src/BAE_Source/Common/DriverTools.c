@@ -200,6 +200,7 @@
 #include "GenPriv.h"
 #include "GenSnd.h"
 #include "X_Assert.h"
+#include <stdio.h>
 
 #if 0
     #pragma mark ** Documentation for adding new sub types in RMF files **

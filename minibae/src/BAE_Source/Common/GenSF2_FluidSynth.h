@@ -49,6 +49,7 @@ void GM_SetMixerSF2Mode(XBOOL isSF2);
 XBOOL GM_GetMixerSF2Mode(void);
 
 // Load SF2 soundfont for FluidSynth rendering
+OPErr GM_LoadSF2SoundfontFromMemory(const unsigned char *data, size_t size);
 OPErr GM_LoadSF2Soundfont(const char* sf2_path);
 void GM_UnloadSF2Soundfont(void);
 
@@ -98,6 +99,10 @@ void sf2_get_channel_amplitudes(float channelAmplitudes[16][2]);
 // Private helper functions
 void GM_SF2_SetDefaultControllers(int16_t channel);
 void PV_SF2_SetBankPreset(GM_Song* pSong, int16_t channel, int16_t bank, int16_t preset);
+
+// Query whether the currently loaded soundfont exposes any presets at all.
+// Optionally returns the counted number of presets.
+XBOOL GM_SF2_CurrentFontHasAnyPreset(int *outPresetCount);
 
 #endif // USE_SF2_SUPPORT
 

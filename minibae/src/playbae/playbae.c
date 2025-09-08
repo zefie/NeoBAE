@@ -54,6 +54,7 @@
 #if _USING_FLUIDSYNTH == TRUE
 #include "GenSF2_FluidSynth.h"
 #endif
+#include "GenXMF.h"
 #endif
 #ifdef main
 #undef main
@@ -403,6 +404,9 @@ static void init_playFileString(void)
 {
    /* Build the human-friendly file type list at runtime (can't call strcat at file-scope). */
    strcpy(playFileString, "Play a file (MIDI, RMF, WAV, AIFF");
+#if USE_XMF_SUPPORT == TRUE && _USING_FLUIDSYNTH == TRUE
+   strcat(playFileString, ", XMF/MXMF");
+#endif
 #if defined(USE_MPEG_DECODER) && (USE_MPEG_DECODER != 0)
    strcat(playFileString, ", MPEG audio: MP2/MP3");
 #endif
@@ -1116,6 +1120,115 @@ static BAEResult PlayRMF(BAEMixer theMixer, char *fileName, BAE_UNSIGNED_FIXED v
    return (err);
 }
 
+#if USE_XMF_SUPPORT == TRUE && _USING_FLUIDSYNTH == TRUE
+// PlayXMF() - Load an XMF/MXMF container (extracts embedded SMF and optional bank)
+static BAEResult PlayXMF(BAEMixer theMixer, char *fileName, BAE_UNSIGNED_FIXED volume, unsigned int timeLimit, unsigned int loopCount, BAEReverbType reverbType, char *midiMuteChannels)
+{
+   BAEResult err;
+   BAESong theSong = BAESong_New(theMixer);
+   uint32_t currentPosition;
+   uint32_t lastPosition = 0;
+   uint32_t cumulativeTime = 0;
+   BAE_BOOL done;
+#ifdef SUPPORT_KARAOKE
+   cli_karaoke_reset();
+#endif
+   if (!theSong)
+      return BAE_MEMORY_ERR;
+
+   err = BAESong_LoadXmfFromFile(theSong, (BAEPathName)fileName, TRUE);
+   if (err != BAE_NO_ERROR)
+   {
+      playbae_printf("playbae:  Couldn't open XMF file '%s' (BAE Error #%d)\n", fileName, err);
+      BAESong_Delete(theSong);
+      return err;
+   }
+
+   if (gVelocityCurve >= 0)
+   {
+      BAESong_SetVelocityCurve(theSong, gVelocityCurve);
+      playbae_printf("Velocity curve set to %d\n", gVelocityCurve);
+   }
+#ifdef SUPPORT_KARAOKE
+   if (!gWriteToFile && gEnableKaraoke)
+   {
+      if (BAESong_SetLyricCallback(theSong, cli_karaoke_lyric_callback, NULL) != BAE_NO_ERROR)
+      {
+         BAESong_SetMetaEventCallback(theSong, cli_karaoke_meta_callback, NULL);
+      }
+   }
+#endif
+   err = BAESong_Start(theSong, 0);
+   if (err != BAE_NO_ERROR)
+   {
+      playbae_printf("playbae:  Couldn't start song (BAE Error #%d)\n", err);
+      BAESong_Delete(theSong);
+      return err;
+   }
+
+   BAESong_SetVolume(theSong, calculateVolume(volume, TRUE));
+   BAEMixer_SetDefaultReverb(theMixer, (BAEReverbType)reverbType);
+   playbae_printf("Reverb Type set to %d\n", reverbType);
+
+   if (strlen(midiMuteChannels) > 0)
+   {
+      MuteCommaSeperatedChannels(theSong, midiMuteChannels);
+   }
+   BAESong_SetLoops(theSong, loopCount);
+   playbae_printf("Master song volume set to %lu%%\n", calculateVolume(volume, FALSE));
+   if (loopCount > 0)
+   {
+      playbae_printf("Will loop song %u times\n", loopCount);
+   }
+   if (timeLimit > 0)
+   {
+      playbae_printf("Max Play Duration: %d seconds\n", timeLimit);
+   }
+
+   done = FALSE;
+   while (done == FALSE)
+   {
+      if (interruptPlayBack)
+      {
+         playbae_printf("Stop requested... please wait for data flush...\n");
+         interruptPlayBack = 0;
+         BAESong_Stop(theSong, fadeOut);
+      }
+      if (gWriteToFile)
+      {
+         BAEMixer_ServiceAudioOutputToFile(theMixer);
+      }
+      BAESong_IsDone(theSong, &done);
+      BAESong_GetMicrosecondPosition(theSong, &currentPosition);
+      currentPosition = currentPosition / 1000;
+
+      if (currentPosition < lastPosition && (lastPosition - currentPosition) > 1000)
+      {
+         cumulativeTime += lastPosition;
+      }
+      lastPosition = currentPosition;
+      uint32_t totalPlayedTime = cumulativeTime + currentPosition;
+      displayCurrentPosition(currentPosition, totalPlayedTime);
+
+      if (timeLimit > 0)
+      {
+         if (totalPlayedTime > (timeLimit * 1000) - 750)
+         {
+            BAESong_Stop(theSong, fadeOut);
+         }
+      }
+      if (done == FALSE)
+      {
+         PV_Idle(theMixer, 15000);
+      }
+   }
+   PV_Idle(theMixer, 900000);
+   playbae_printf("\n");
+   BAESong_Delete(theSong);
+   return err;
+}
+#endif // USE_XMF_SUPPORT && _USING_FLUIDSYNTH
+
 static int PV_IsFileExtension(const char *path, const char *ext)
 {
    size_t lp, le;
@@ -1158,6 +1271,20 @@ BAEResult playFile(BAEMixer theMixer, char *parmFile, BAE_UNSIGNED_FIXED volume,
       {
          playbae_printf("Playing RMF %s\n", parmFile);
          err = PlayRMF(theMixer, parmFile, volume, timeLimit, loopCount, reverbType, midiMuteChannels);
+      }
+      else if (
+#if USE_XMF_SUPPORT == TRUE && _USING_FLUIDSYNTH == TRUE
+               strcmp(fileHeader, X_FILETYPE_XMF) == 0 ||
+#endif
+               PV_IsFileExtension(parmFile, ".xmf") || PV_IsFileExtension(parmFile, ".mxmf"))
+      {
+#if USE_XMF_SUPPORT == TRUE && _USING_FLUIDSYNTH == TRUE
+         playbae_printf("Playing XMF %s\n", parmFile);
+         err = PlayXMF(theMixer, parmFile, volume, timeLimit, loopCount, reverbType, midiMuteChannels);
+#else
+         playbae_printf("XMF support not built. Rebuild with USE_XMF_SUPPORT=1 and FluidSynth enabled.\n");
+         err = BAE_UNSUPPORTED_FORMAT;
+#endif
       }
       else if (strcmp(fileHeader, X_FILETYPE_AIFF) == 0)
       {

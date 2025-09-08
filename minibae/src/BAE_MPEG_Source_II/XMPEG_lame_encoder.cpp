@@ -17,7 +17,7 @@
 #include <math.h>
 #include <new>
 
-#include <lame.h>
+#include <lame/lame.h>
 
 #define MAX_BITSTREAM_SIZE 8192
 

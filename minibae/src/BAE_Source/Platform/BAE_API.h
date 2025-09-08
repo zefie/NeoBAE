@@ -111,6 +111,7 @@
 
 #define X_FILETYPE_MIDI "MThd"
 #define X_FILETYPE_RMF  "IREZ"
+#define X_FILETYPE_XMF  "XMF "
 #define X_FILETYPE_AIFF "FORM"
 #define X_FILETYPE_WAVE "RIFF"
 #include <stdint.h>

@@ -16,8 +16,15 @@
 #include "X_Assert.h"
 #include <string.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include <math.h>
 #include "MiniBAE.h"
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
+// For temporary file fallback when loading DLS banks (path-based load only)
+#include <unistd.h>  // mkstemp, write, close, unlink, fsync
 
 #define SAMPLE_BLOCK_SIZE 512
 
@@ -40,6 +47,28 @@ static XFIXED g_fluidsynth_master_volume = XFIXED_1 / 256;
 static int16_t g_fluidsynth_max_voices = MAX_VOICES;
 static uint16_t g_fluidsynth_sample_rate = 44100;
 static char g_fluidsynth_sf2_path[256] = {0};
+// Track a temp file we create for DLS fallback so we can remove it on unload
+static char g_temp_sf_path[256] = {0};
+static XBOOL g_temp_sf_is_tempfile = FALSE;
+// When loading DLS banks, FluidSynth will emit an error log
+// "Not a SoundFont file". This is expected; ignore it.
+static XBOOL g_suppress_not_sf2_error = FALSE;
+
+// Minimal FluidSynth log filter used for DLS loads to suppress the expected error
+static void pv_fluidsynth_log_filter(int level, const char* message, void* data)
+{
+    (void)data;
+    // Suppress only the noisy, expected error during DLS load
+    if (g_suppress_not_sf2_error && level == FLUID_ERR && message && strstr(message, "Not a SoundFont file") != NULL)
+    {
+        return; // ignore
+    }
+    // Fallback to stderr to preserve other logs
+    if (message)
+    {
+        fprintf(stderr, "fluidsynth: %s", message);
+    }
+}
 
 // Channel activity tracking
 static ChannelActivity g_channel_activity[16];
@@ -57,6 +86,53 @@ static void PV_SF2_FreeMixBuffer(void);
 static void PV_SF2_InitializeChannelActivity(void);
 static void PV_SF2_UpdateChannelActivity(int16_t channel, int16_t velocity, XBOOL noteOn);
 static void PV_SF2_DecayChannelActivity(void);
+
+// Choose sane default presets per channel after loading a bank to avoid
+// "No preset found on channel X" warnings. Prefer bank 128 on channel 10.
+static void PV_SF2_SetValidDefaultProgramsForAllChannels(void);
+
+// Helpers to validate and choose presets present in the current font
+static XBOOL PV_SF2_PresetExists(int bank, int prog)
+{
+    if (!g_fluidsynth_synth || g_fluidsynth_soundfont_id < 0) return FALSE;
+    fluid_sfont_t* sf = fluid_synth_get_sfont(g_fluidsynth_synth, 0);
+    if (!sf) return FALSE;
+    fluid_preset_t* p = NULL;
+    fluid_sfont_iteration_start(sf);
+    while ((p = fluid_sfont_iteration_next(sf)) != NULL) {
+        if (fluid_preset_get_banknum(p) == bank && fluid_preset_get_num(p) == prog)
+            return TRUE;
+    }
+    return FALSE;
+}
+
+static XBOOL PV_SF2_FindFirstPresetInBank(int bank, int *outProg)
+{
+    if (!g_fluidsynth_synth || g_fluidsynth_soundfont_id < 0 || !outProg) return FALSE;
+    fluid_sfont_t* sf = fluid_synth_get_sfont(g_fluidsynth_synth, 0);
+    if (!sf) return FALSE;
+    fluid_preset_t* p = NULL;
+    fluid_sfont_iteration_start(sf);
+    while ((p = fluid_sfont_iteration_next(sf)) != NULL) {
+        if (fluid_preset_get_banknum(p) == bank) { *outProg = fluid_preset_get_num(p); return TRUE; }
+    }
+    return FALSE;
+}
+
+static XBOOL PV_SF2_FindAnyPreset(int *outBank, int *outProg)
+{
+    if (!g_fluidsynth_synth || g_fluidsynth_soundfont_id < 0 || !outBank || !outProg) return FALSE;
+    fluid_sfont_t* sf = fluid_synth_get_sfont(g_fluidsynth_synth, 0);
+    if (!sf) return FALSE;
+    fluid_preset_t* p = NULL;
+    fluid_sfont_iteration_start(sf);
+    if ((p = fluid_sfont_iteration_next(sf)) != NULL) {
+        *outBank = fluid_preset_get_banknum(p);
+        *outProg = fluid_preset_get_num(p);
+        return TRUE;
+    }
+    return FALSE;
+}
 
 // Initialize FluidSynth support for the mixer
 OPErr GM_InitializeSF2(void)
@@ -105,6 +181,8 @@ OPErr GM_InitializeSF2(void)
     
     // Initialize channel activity tracking
     PV_SF2_InitializeChannelActivity();
+    // Establish safe default programs/controllers (will be refined after font load)
+    PV_SF2_SetValidDefaultProgramsForAllChannels();
     
     g_fluidsynth_initialized = TRUE;
     return NO_ERR;
@@ -161,10 +239,194 @@ void GM_ResetSF2(void)
         
     // Reset all channels and voices
     fluid_synth_system_reset(g_fluidsynth_synth);
-    
-    // Set Ch 10 to percussion by default
-    fluid_synth_bank_select(g_fluidsynth_synth, 9, 128);
-    fluid_synth_program_change(g_fluidsynth_synth, 9, 0);
+    // Pick valid defaults again after reset
+    PV_SF2_SetValidDefaultProgramsForAllChannels();
+}
+
+
+// In-memory SF2/DLS loading via FluidSynth defsfloader + custom file callbacks
+typedef struct {
+    const unsigned char *data;
+    size_t size;
+    size_t pos;
+} fs_mem_stream_t;
+
+static const unsigned char *g_mem_sf_data = NULL;
+static size_t g_mem_sf_size = 0;
+static fluid_sfloader_t *g_mem_sf_loader = NULL; // persistent loader with callbacks
+
+static void *fs_mem_open(const char *filename) {
+    (void)filename; // unused
+    if (!g_mem_sf_data || g_mem_sf_size == 0) {
+        BAE_PRINTF("[FluidMem] fs_mem_open: no buffer set (filename=%s)\n", filename ? filename : "(null)");
+        return NULL;
+    }
+    fs_mem_stream_t *s = (fs_mem_stream_t *)malloc(sizeof(fs_mem_stream_t));
+    if (!s) return NULL;
+    s->data = g_mem_sf_data;
+    s->size = g_mem_sf_size;
+    s->pos = 0;
+    BAE_PRINTF("[FluidMem] fs_mem_open: %zu bytes (filename=%s)\n", s->size, filename ? filename : "(null)");
+    return s;
+}
+
+static int fs_mem_read(void *buf, fluid_long_long_t count, void *handle) {
+    fs_mem_stream_t *s = (fs_mem_stream_t *)handle;
+    if (!s || !buf || count <= 0) return FLUID_FAILED;
+    // clamp count to available bytes and to size_t
+    size_t want = (size_t)count;
+    if (s->pos + want > s->size) {
+        // not enough data to satisfy exactly count bytes
+        return FLUID_FAILED;
+    }
+    memcpy(buf, s->data + s->pos, want);
+    s->pos += want;
+    return FLUID_OK;
+}
+
+static int fs_mem_seek(void *handle, fluid_long_long_t offset, int origin) {
+    fs_mem_stream_t *s = (fs_mem_stream_t *)handle;
+    if (!s) return FLUID_FAILED;
+    // compute new position
+    size_t new_pos = 0;
+    switch (origin) {
+        case SEEK_SET:
+            if (offset < 0) return FLUID_FAILED;
+            new_pos = (size_t)offset;
+            break;
+        case SEEK_CUR:
+            if ((offset < 0 && (size_t)(-offset) > s->pos)) return FLUID_FAILED;
+            new_pos = s->pos + (size_t)offset;
+            break;
+        case SEEK_END:
+            if ((offset < 0 && (size_t)(-offset) > s->size)) return FLUID_FAILED;
+            new_pos = s->size + (size_t)offset;
+            break;
+        default:
+            return FLUID_FAILED;
+    }
+    if (new_pos > s->size) return FLUID_FAILED;
+    s->pos = new_pos;
+    return FLUID_OK;
+}
+
+static fluid_long_long_t fs_mem_tell(void *handle) {
+    fs_mem_stream_t *s = (fs_mem_stream_t *)handle;
+    if (!s) return (fluid_long_long_t)FLUID_FAILED;
+    return (fluid_long_long_t)s->pos;
+}
+
+static int fs_mem_close(void *handle) {
+    if (handle) free(handle);
+    return FLUID_OK;
+}
+
+OPErr GM_LoadSF2SoundfontFromMemory(const unsigned char *data, size_t size) {
+    if (!g_fluidsynth_initialized) {
+        OPErr err = GM_InitializeSF2();
+        if (err != NO_ERR) {
+            return err;
+        }
+    }
+
+    if (!data || size == 0 || !g_fluidsynth_synth) {
+        return PARAM_ERR;
+    }
+
+    // Detect container type
+    XBOOL isRIFF = (size >= 12 && data[0]=='R' && data[1]=='I' && data[2]=='F' && data[3]=='F');
+    XBOOL isSF2 = FALSE, isDLS = FALSE;
+    if (isRIFF) {
+        const unsigned char *type = data + 8;
+        isSF2 = (type[0]=='s' && type[1]=='f' && type[2]=='b' && type[3]=='k');
+        isDLS = (type[0]=='D' && type[1]=='L' && type[2]=='S' && type[3]==' ');
+    }
+
+    if (isDLS) {
+        // Fallback: write to a temp .dls file and load via path
+        GM_UnloadSF2Soundfont();
+        char tmpl[] = "/tmp/minibae_dls_XXXXXX.dls"; // keep .dls suffix
+#if defined(_WIN32) || defined(_WIN64)
+        int fd = mkstemp(tmpl);
+#else
+        int fd = mkstemps(tmpl, 4);
+#endif
+        if (fd < 0) {
+            return GENERAL_BAD;
+        }
+        ssize_t written = 0;
+        while ((size_t)written < size) {
+            ssize_t w = write(fd, data + written, size - (size_t)written);
+            if (w <= 0) { close(fd); unlink(tmpl); return GENERAL_BAD; }
+            written += w;
+        }
+#if _WIN32
+        HANDLE h = (HANDLE)_get_osfhandle(fd);
+        FlushFileBuffers(h);
+#else        
+        fsync(fd);
+#endif
+        close(fd);
+        // Temporarily suppress the expected FluidSynth error log for DLS
+        g_suppress_not_sf2_error = TRUE;
+        fluid_log_function_t prev_err = fluid_set_log_function(FLUID_ERR, pv_fluidsynth_log_filter, NULL);
+        OPErr perr = GM_LoadSF2Soundfont(tmpl);
+        // Restore previous logging behavior
+        fluid_set_log_function(FLUID_ERR, prev_err, NULL);
+        g_suppress_not_sf2_error = FALSE;
+        if (perr == NO_ERR) {
+            strncpy(g_temp_sf_path, tmpl, sizeof(g_temp_sf_path)-1);
+            g_temp_sf_path[sizeof(g_temp_sf_path)-1] = '\0';
+            g_temp_sf_is_tempfile = TRUE;
+        } else {
+            unlink(tmpl);
+        }
+        return perr;
+    }
+
+    // Prepare global memory buffer for callbacks (SF2)
+    g_mem_sf_data = data;
+    g_mem_sf_size = size;
+
+    // Ensure we have a defsfloader with our callbacks installed once
+    if (!g_mem_sf_loader) {
+        g_mem_sf_loader = new_fluid_defsfloader(g_fluidsynth_settings);
+        if (!g_mem_sf_loader) {
+            g_mem_sf_data = NULL; g_mem_sf_size = 0;
+            return MEMORY_ERR;
+        }
+        // Install callbacks as per FluidSynth 2.x API
+        fluid_sfloader_set_callbacks(
+            g_mem_sf_loader,
+            fs_mem_open,
+            fs_mem_read,
+            fs_mem_seek,
+            fs_mem_tell,
+            fs_mem_close
+        );
+    // Add our loader to the synth
+        fluid_synth_add_sfloader(g_fluidsynth_synth, g_mem_sf_loader);
+    BAE_PRINTF("[FluidMem] defsfloader registered\n");
+    }
+
+    // Unload any existing font first
+    GM_UnloadSF2Soundfont();
+
+    // Trigger load; the filename is ignored by our open callback
+    int sfid = fluid_synth_sfload(g_fluidsynth_synth, "__mem_sf2__", TRUE);
+    // Clear buffer reference regardless of result (loader holds no state)
+    g_mem_sf_data = NULL; g_mem_sf_size = 0;
+    if (sfid == FLUID_FAILED) {
+        return GENERAL_BAD;
+    }
+
+    g_fluidsynth_soundfont_id = sfid;
+    strncpy(g_fluidsynth_sf2_path, "__memory__", sizeof(g_fluidsynth_sf2_path) - 1);
+    g_fluidsynth_sf2_path[sizeof(g_fluidsynth_sf2_path) - 1] = '\0';
+
+    // Choose valid default presets to avoid warnings
+    PV_SF2_SetValidDefaultProgramsForAllChannels();
+    return NO_ERR;
 }
 
 // Load SF2 soundfont for FluidSynth rendering
@@ -195,8 +457,7 @@ OPErr GM_LoadSF2Soundfont(const char* sf2_path)
     g_fluidsynth_sf2_path[sizeof(g_fluidsynth_sf2_path) - 1] = '\0';
     
     // Set Ch 10 to percussion by default
-    fluid_synth_bank_select(g_fluidsynth_synth, 9, 128);
-    fluid_synth_program_change(g_fluidsynth_synth, 9, 0);
+    PV_SF2_SetValidDefaultProgramsForAllChannels();
     
     return NO_ERR;
 }
@@ -209,6 +470,11 @@ void GM_UnloadSF2Soundfont(void)
         g_fluidsynth_soundfont_id = -1;
     }
     g_fluidsynth_sf2_path[0] = '\0';
+    if (g_temp_sf_is_tempfile) {
+        unlink(g_temp_sf_path);
+        g_temp_sf_path[0] = '\0';
+        g_temp_sf_is_tempfile = FALSE;
+    }
 }
 
 // Check if a song should use FluidSynth rendering
@@ -526,9 +792,36 @@ void GM_SF2_ProcessProgramChange(GM_Song* pSong, int16_t channel, int16_t progra
     if (midiBank == 2) {
         pSong->channelType[channel] = CHANNEL_TYPE_RMF;
     } else {
+        // Validate bank/program exist in current font; apply fallback if not
+        int useBank = midiBank;
+        int useProg = midiProgram;
+        if (!PV_SF2_PresetExists(useBank, useProg)) {
+            int altProg;
+            if (PV_SF2_FindFirstPresetInBank(useBank, &altProg)) {
+                // Use first program available in requested bank
+                BAE_PRINTF("[FluidMem] Fallback: bank %d has no prog %d; using prog %d\n", useBank, useProg, altProg);
+                useProg = altProg;
+            } else {
+                // If percussion intent, try bank 128; else try bank 0; finally pick any preset
+                XBOOL percIntent = (channel == 9) || (useBank == 128);
+                int fbBank = -1, fbProg = 0;
+                if (percIntent && PV_SF2_FindFirstPresetInBank(128, &fbProg)) {
+                    fbBank = 128;
+                } else if (!percIntent && PV_SF2_FindFirstPresetInBank(0, &fbProg)) {
+                    fbBank = 0;
+                } else if (PV_SF2_FindAnyPreset(&fbBank, &fbProg)) {
+                    // leave as found
+                }
+                if (fbBank >= 0) {
+                    BAE_PRINTF("[FluidMem] Fallback: no presets in bank %d; selecting %d:%d\n", useBank, fbBank, fbProg);
+                    useBank = fbBank; useProg = fbProg;
+                }
+            }
+        }
+
         // Send MIDI program change event to FluidSynth
-        fluid_synth_bank_select(g_fluidsynth_synth, channel, midiBank);
-        fluid_synth_program_change(g_fluidsynth_synth, channel, midiProgram);
+        fluid_synth_bank_select(g_fluidsynth_synth, channel, useBank);
+        fluid_synth_program_change(g_fluidsynth_synth, channel, useProg);
     }
     
 }
@@ -800,6 +1093,26 @@ XBOOL GM_SF2_IsActive(void)
     return g_fluidsynth_initialized && g_fluidsynth_synth && g_fluidsynth_soundfont_id >= 0;
 }
 
+XBOOL GM_SF2_CurrentFontHasAnyPreset(int *outPresetCount)
+{
+    if (!g_fluidsynth_synth || g_fluidsynth_soundfont_id < 0) {
+        if (outPresetCount) *outPresetCount = 0;
+        return FALSE;
+    }
+    int count = 0;
+    fluid_sfont_t* sf = fluid_synth_get_sfont(g_fluidsynth_synth, 0);
+    if (sf) {
+        fluid_preset_t* p = NULL;
+        fluid_sfont_iteration_start(sf);
+        while ((p = fluid_sfont_iteration_next(sf)) != NULL) {
+            count++;
+            if (count > 0) break; // early out once we know it's non-empty
+        }
+    }
+    if (outPresetCount) *outPresetCount = count;
+    return (count > 0) ? TRUE : FALSE;
+}
+
 // FluidSynth default controller setup
 void GM_SF2_SetDefaultControllers(int16_t channel)
 {
@@ -814,17 +1127,7 @@ void GM_SF2_SetDefaultControllers(int16_t channel)
     fluid_synth_cc(g_fluidsynth_synth, channel, 91, 0);   // Reverb depth
     fluid_synth_cc(g_fluidsynth_synth, channel, 93, 0);   // Chorus depth
     
-    // Set default programs
-    if (channel == 9) // Percussion channel
-    {
-        fluid_synth_bank_select(g_fluidsynth_synth, channel, 128);
-        fluid_synth_program_change(g_fluidsynth_synth, channel, 0);
-    }
-    else // Normal channels
-    {
-        fluid_synth_bank_select(g_fluidsynth_synth, channel, 0);
-        fluid_synth_program_change(g_fluidsynth_synth, channel, 0); // Acoustic Grand Piano
-    }
+    // Program selection handled globally in PV_SF2_SetValidDefaultProgramsForAllChannels()
 }
 
 void PV_SF2_SetBankPreset(GM_Song* pSong, int16_t channel, int16_t bank, int16_t preset) 
@@ -1049,6 +1352,71 @@ static void PV_SF2_DecayChannelActivity(void)
                 activity->rightLevel = 0.0f;
                 activity->noteVelocity = 0.0f;
                 activity->lastActivity = 0;
+            }
+        }
+    }
+}
+
+// Iterate presets and pick one that exists. Prefer any preset on bank 128 for channel 10.
+static void PV_SF2_SetValidDefaultProgramsForAllChannels(void)
+{
+    if (!g_fluidsynth_synth)
+        return;
+
+    // Controller defaults first
+    for (int ch = 0; ch < 16; ch++) {
+        fluid_synth_cc(g_fluidsynth_synth, ch, 7, 80);
+        fluid_synth_cc(g_fluidsynth_synth, ch, 10, 64);
+        fluid_synth_cc(g_fluidsynth_synth, ch, 11, 100);
+        fluid_synth_cc(g_fluidsynth_synth, ch, 64, 0);
+        fluid_synth_cc(g_fluidsynth_synth, ch, 91, 0);
+        fluid_synth_cc(g_fluidsynth_synth, ch, 93, 0);
+    }
+
+    // If no font loaded, nothing else to do
+    if (g_fluidsynth_soundfont_id < 0)
+        return;
+
+    // Try to find a default melodic preset and a drum kit preset
+    // We prefer: melodic -> bank 0, drums -> bank 128. If those don't exist, fall back to first preset found.
+    int foundMelodicBank = -1, foundMelodicProg = 0;
+    int foundDrumBank = -1, foundDrumProg = 0; // look for bank 128 if available
+    int firstBank = -1, firstProg = 0;         // fallback to the very first preset seen
+    fluid_sfont_t* sf = fluid_synth_get_sfont(g_fluidsynth_synth, 0);
+    if (sf) {
+        fluid_preset_t* p = NULL;
+        fluid_sfont_iteration_start(sf);
+        while ((p = fluid_sfont_iteration_next(sf)) != NULL) {
+            int bank = fluid_preset_get_banknum(p);
+            int prog = fluid_preset_get_num(p);
+            if (firstBank < 0) { firstBank = bank; firstProg = prog; }
+            if (bank == 128 && foundDrumBank < 0) {
+                foundDrumBank = bank; foundDrumProg = prog;
+            }
+            if (bank == 0 && foundMelodicBank < 0) { // capture first bank 0 as a generic melodic default
+                foundMelodicBank = bank; foundMelodicProg = prog;
+            }
+        }
+    }
+
+    // Fallbacks if preferred banks not found
+    if (foundMelodicBank < 0 && firstBank >= 0) { foundMelodicBank = firstBank; foundMelodicProg = firstProg; }
+    if (foundDrumBank   < 0 && firstBank >= 0)   { foundDrumBank   = firstBank; foundDrumProg   = firstProg; }
+
+    BAE_PRINTF("[FluidMem] Default presets: melodic bank=%d prog=%d, drums bank=%d prog=%d (first=%d:%d)\n",
+               foundMelodicBank, foundMelodicProg, foundDrumBank, foundDrumProg, firstBank, firstProg);
+
+    // Apply per-channel defaults
+    for (int ch = 0; ch < 16; ch++) {
+        if (ch == 9) {
+            if (foundDrumBank >= 0) {
+                fluid_synth_bank_select(g_fluidsynth_synth, ch, foundDrumBank);
+                fluid_synth_program_change(g_fluidsynth_synth, ch, foundDrumProg);
+            }
+        } else {
+            if (foundMelodicBank >= 0) {
+                fluid_synth_bank_select(g_fluidsynth_synth, ch, foundMelodicBank);
+                fluid_synth_program_change(g_fluidsynth_synth, ch, foundMelodicProg);
             }
         }
     }

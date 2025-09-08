@@ -18,6 +18,7 @@ ifneq ($(WASM),1)
 		KARAOKE := 1
 		PLAYLIST := 1
 		SF2_SUPPORT := 1
+		XMF_SUPPORT := 1
 		DISABLE_NOKIA := 0			    # Maps MSB5->MSB1 and MSG6->MSB2, relatively harmless, so patch is enabled by default, but optional in case
 		DISABLE_BEATNIK_SF2_NRPN := 0   # Also relatively harmless, it allows MIDIs to send certain commands in order to activate additional percussion channels while in SF2 mode
 	endif
@@ -32,15 +33,25 @@ ifeq ($(USE_SDL2),1)
 endif
 
 # Use TSF by default since it's source is easily available
+# Also disable XMF_SUPPORT if not using FluidSynth
+
 ifeq ($(SF2_SUPPORT),1)
 	ifeq ($(USE_BASSMIDI),1)
+		# BASSMIDI does not support DLS
 		USING_BASSMIDI := 1
+		XMF_SUPPORT := 0
 	else ifeq ($(USE_FLUIDSYNTH),1)
 		USING_FLUIDSYNTH := 1
 	else
+		# TSF does not support DLS
 		USING_TSF := 1
+		XMF_SUPPORT := 0
 	endif
+else
+	# SF2 support is required for XMF support
+	XMF_SUPPORT := 0
 endif
+
 
 # Force OGG support if VORBIS is chosen
 ifneq ($(OGG_SUPPORT),1)
@@ -197,6 +208,15 @@ ifeq ($(SF2_SUPPORT),1)
 	BAE_FLAGS += -DUSE_SF2_SUPPORT=1
 	ifeq ($(USING_TSF),1)
 		INC_PATH += -Isrc/thirdparty/TinySoundFont
+	endif
+endif
+
+ifeq ($(XMF_SUPPORT),1)
+	BAE_FLAGS += -DUSE_XMF_SUPPORT=1
+	SRC += src/BAE_Source/Common/GenXMF.c
+	UNAME_S:=$(shell uname -s 2>/dev/null)
+	ifneq (,$(findstring Linux,$(UNAME_S)))
+		BAE_LIBS += -lz
 	endif
 endif
 
