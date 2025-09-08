@@ -58,6 +58,7 @@
     #endif
 #endif
 
+int g_thread_ch_enabled[16] = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
 /* Forward-declare dialog renderer from gui_dialogs.c to avoid including the
     full header (which defines globals that conflict with this file's statics). */
 void render_about_dialog(SDL_Renderer *R, int mx, int my, bool mclick);
@@ -1417,7 +1418,7 @@ int main(int argc, char *argv[])
                             is_bank_file = strcasecmp(ext, ".sfo") == 0;
 #if _USING_FLUIDSYNTH == TRUE
                         if (!is_bank_file)
-                            is_bank_file = _stricmp(ext, ".dls") == 0;
+                            is_bank_file = strcasecmp(ext, ".dls") == 0;
 #endif
 #endif
                         is_playlist_file = (strcasecmp(ext, ".m3u") == 0);

@@ -1,3 +1,13 @@
+# Built-in Patches (affects entine miniBAE library)
+# Must be an HSB bank, leave empty to disable built-in patches completely
+EMBED_PATCH_FILE := src/banks/patches111/patches111.hsb
+
+# TTF Font (for zefidi GUI)
+# Not required but severely recommended
+EMBED_TTF_FONT := src/thirdparty/fonts/HelveticaNeue.ttf
+
+### It is probably best not to change anything below this line, unless absolutely necessary for your environment
+
 BUILD_DIR	  := build/
 TEST_OUT_DIR  := tests/
 TARGET_OUT	  := bin/
@@ -6,6 +16,7 @@ BAE_LD_FLAGS  :=
 BAE_LIBS      :=
 .DEFAULT_GOAL := all
 
+# Default build options (override with NOAUTO=1)
 ifneq ($(WASM),1)
 	ifneq ($(NOAUTO),1)
 		MP3_DEC := 1
@@ -18,27 +29,32 @@ ifneq ($(WASM),1)
 		KARAOKE := 1
 		PLAYLIST := 1
 		SF2_SUPPORT := 1
-		XMF_SUPPORT := 1
+		USE_FLUIDSYNTH := 1
+		XMF_SUPPORT := 0				# Experimental, disabled by default until ready
 		DISABLE_NOKIA := 0			    # Maps MSB5->MSB1 and MSG6->MSB2, relatively harmless, so patch is enabled by default, but optional in case
 		DISABLE_BEATNIK_SF2_NRPN := 0   # Also relatively harmless, it allows MIDIs to send certain commands in order to activate additional percussion channels while in SF2 mode
 	endif
 endif
 
+# Disable SDL2 if using SDL3
 ifeq ($(USE_SDL3),1)
 	USE_SDL2 := 0
 endif
 
+# Likewise, Disable SDL3 if using SDL2
 ifeq ($(USE_SDL2),1)
 	USE_SDL3 := 0
 endif
 
-# Use TSF by default since it's source is easily available
-# Also disable XMF_SUPPORT if not using FluidSynth
-
+# We only support FluidSynth for SF2 now
 ifeq ($(SF2_SUPPORT),1)
-	USING_FLUIDSYNTH := 1
+	USE_FLUIDSYNTH := 1
 endif
 
+# In case we support other synths again
+ifneq ($(USE_FLUIDSYNTH),1)
+	XMF_SUPPORT := 0
+endif
 
 # Force OGG support if VORBIS is chosen
 ifneq ($(OGG_SUPPORT),1)
@@ -46,12 +62,6 @@ ifneq ($(OGG_SUPPORT),1)
 		OGG_SUPPORT := 1
 	endif
 endif
-
-# GUI Font
-EMBED_TTF_FONT := src/thirdparty/fonts/HelveticaNeue.ttf
-
-# Built-in Patches
-EMBED_PATCH_FILE := src/banks/patches111/patches111.hsb
 
 ifneq ($(filter 1,$(VERBOSE) $(V)),)
 	SILENT :=
@@ -241,7 +251,7 @@ SRC		+=	src/BAE_Source/Common/DriverTools.c \
 			src/BAE_Source/Common/sha1mini.c
 
 ifeq ($(SF2_SUPPORT),1)
-	ifeq ($(USING_FLUIDSYNTH),1)
+	ifeq ($(USE_FLUIDSYNTH),1)
 		SRC += src/BAE_Source/Common/GenSF2_FluidSynth.c
 		BAE_FLAGS += -D_USING_FLUIDSYNTH=1 
 		ifeq ($(WINDOWS),1)		

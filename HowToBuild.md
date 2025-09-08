@@ -23,10 +23,20 @@ By default, all builds will build with SF2 support via FluidSynth. FluidSynth pr
    - Place it in the `minibae/src/thirdparty/libvorbis` folder
 - Get the [RtMidi source](https://github.com/thestk/rtmidi)
    - Place it in the `minibae/src/thirdparty/rtmidi` folder
+
+# Linux only
+- Get the [FluidSynth source](https://github.com/fluidsynth/fluidsynth)
+   - Place it in the `minibae/src/thirdparty/fluidsynth` folder
+- Get then [zefie libinstpatch source](https://github.com/zefie/libinstpatch)
+   - Place it in the `minibae/src/thirdparty/libinstpatch` folder
+
 - A slimmed down copy of Lame v3.100 is included in the main source tree, for mp3 encoding.
 - You only need to grab what you want to support, [see below](#modular-build-system).
 
 ## Linux
+For full support including PGAL for mobileBAE, you will need to compile your own libinstpatch and fluidsynth, then link miniBAE/zefidi against the local copy.
+If you do not care about XMF/MXMF support, you can use your system's libfluidsynth.
+
 #### Setup & Compile Linux SDL2
 - Install dependencies support (one time):
     - `apt-get update`
@@ -159,13 +169,13 @@ When passed `NOAUTO=1`, the build is under your control, and the automatic enabl
 - `FLAC_ENC=1` - Enable FLAC exporting
 - `VORBIS_DEC=1` - Enable OGG Vorbis playback
 - `VORBIS_ENC=1` - Enables OGG Vorbis exporting
-- `SF2_SUPPORT=1` - Enable SF2 SoundFont 2 support (use with VORBIS_DEC=1 to get SF3/SFO support as well)
-- `USE_BASSMIDI=1` - Use BASSMIDI instead of TSF. You must provide the binary blobs. See [README.txt](minibae/src/thirdparty/bassmidi/README.txt) for the directory structure.
-- `USE_FLUIDSYNTH=1` - Use FluidSynth instead of TSF or BASSMIDI. Includes DLS support.
+- `SF2_SUPPORT=1` - Enable SF2 SoundFont 2 support
+- `USE_FLUIDSYNTH=1` - Use FluidSynth for SF2 Support
 - `PLAYLIST=1` - Enable playlist support in the GUI
 - `USE_SDL2=1` - To enable usage of SDL2 on platforms that support other native audio
 - `USE_SDL3=1` - To enable usage of SDL3 on platforms that support other native audio
 - `OGG_SUPPORT=1` - Enable OGG Support (useless without Vorbis)
+- `XMF_SUPPORT=1` - Enables support for `.xmf` and `.mxmf` files. Requires `SF2_SUPPORT=1` and `USE_FLUIDSYNTH=1` (enabled by default), otherwise will disable itself.
 - `DISABLE_NOKIA_PATCH=1` - If you want to disable the harmless Nokia Patch (MSB5 -> MSB1, MSB6 -> MSB2)
 - `DISABLE_BEATNIK_NRPN=1` - Disables SF2 NRPN support for Beatnik extra percussion channel(s).
 - `DEBUG=1` - Enable verbose output (console for playbae, logfile for zefidi)

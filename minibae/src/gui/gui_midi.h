@@ -7,5 +7,6 @@
 /* Declaration only - actual definition is provided in gui_bae.c.
 	Use extern to avoid multiple-definition linker errors. */
 extern double g_last_requested_master_volume;
+extern int g_thread_ch_enabled[16];
 
 #endif // GUI_MIDI_H

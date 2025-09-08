@@ -53,7 +53,7 @@ extern Uint32 g_channel_peak_hold_ms;
 
 // Forward declaration
 extern void set_status_message(const char *msg);
-extern unsigned char g_keyboard_active_notes_by_channel[16][128];
+extern bool g_keyboard_active_notes_by_channel[16][128];
 
 // MIDI state globals
 bool g_midi_input_enabled = false;         // enable external MIDI input keyboard
@@ -85,7 +85,6 @@ extern double g_last_requested_master_volume;
 // MIDI service thread
 SDL_Thread *g_midi_service_thread = NULL;
 volatile int g_midi_service_quit = 0;
-volatile unsigned char g_thread_ch_enabled[16] = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
 
 // MIDI device cache
 char g_midi_device_name_cache[64][128];

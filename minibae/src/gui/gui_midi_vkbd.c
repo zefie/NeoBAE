@@ -12,8 +12,8 @@ bool g_show_virtual_keyboard = false; // user toggle (default off)
 int g_keyboard_channel = 0;           // 0..15
 bool g_keyboard_channel_dd_open = false;
 bool g_keyboard_show_all_channels = false;  // default: show only selected channel
-unsigned char g_keyboard_active_notes[128]; // temp buffer each frame
-unsigned char g_keyboard_active_notes_by_channel[16][128];
+bool g_keyboard_active_notes[128]; // temp buffer each frame
+bool g_keyboard_active_notes_by_channel[16][128];
 int g_keyboard_mouse_note = -1; // currently held note by mouse, -1 if none
 Uint32 g_keyboard_suppress_until = 0;
 int g_keyboard_pressed_note[512]; // SDL_NUM_SCANCODES

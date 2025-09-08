@@ -37,7 +37,6 @@ extern SDL_mutex *g_midi_record_mutex;
 // MIDI service thread
 extern SDL_Thread *g_midi_service_thread;
 extern volatile int g_midi_service_quit;
-extern volatile unsigned char g_thread_ch_enabled[16];
 
 // MIDI device cache
 extern char g_midi_device_name_cache[64][128];

@@ -386,7 +386,7 @@ const char *BAE_GetFeatureString()
     // FluidSynth
     if (sf2supp && sf2supp[0]) {
         static char sf2supp_buf[64];
-        snprintf(sf2supp_buf, sizeof(sf2supp_buf), "%s (FluidSynth)", sf2supp);
+        snprintf(sf2supp_buf, sizeof(sf2supp_buf), "%s (FluidSynth v%s)", sf2supp, FLUIDSYNTH_VERSION);
         sf2supp = sf2supp_buf;
     }
 #endif

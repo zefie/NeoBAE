@@ -3,7 +3,7 @@
 #include "gui_export.h"
 #include "gui_common.h"
 #include "gui_theme.h"
-#include "gui_midi_hw.h"
+#include "gui_midi.h"
 #include "gui_bae.h"
 #include "MiniBAE.h"
 #include "GenPriv.h"
@@ -215,7 +215,7 @@ MidiRecordFormatInfo get_midi_record_format_info(int index) {
 // External references to virtual keyboard and PCM recording
 extern bool g_show_virtual_keyboard;
 extern int g_keyboard_mouse_note;
-extern unsigned char g_keyboard_channel;
+extern int g_keyboard_channel;
 extern BAESong g_live_song;
 extern bool g_keyboard_active_notes_by_channel[16][128];
 extern bool g_keyboard_active_notes[128];
