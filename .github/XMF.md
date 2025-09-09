@@ -126,3 +126,5 @@ The tree is traversed post-parsing to find and extract MIDI data (required; thro
   - MXMF (XMF 2.00): [RP-043](https://amei.or.jp/midistandardcommittee/Recommended_Practice/e/rp43.pdf)
   - Additional: RP-42a (content description), RP-47 (ID3 metadata).
 - **Code-Specific**: Implements extraction for a `BasicMIDI` object, setting `bankOffset=0`, `embeddedSoundBank`, and `rmidiInfo`. No support for auto-start/preload or external loading.
+
+Also see [xmf_loader.ts](xmf_loader.ts) for a working TypeScript implementation from SpessaSynth
