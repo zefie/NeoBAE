@@ -1,5 +1,4 @@
 Included is a precompiled binary for Windows.
-Nothing in the FluidSynth code was changed, however, libinstpatch was modified for PGAL support.
-(See https://github.com/zefie/libinstpatch)
+Nothing in the FluidSynth code was changed.
 
-This libfluidsynth is built statically, so includes that change.
+This is v2.5.1.
