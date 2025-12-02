@@ -8,7 +8,7 @@
 // NEW_BASELINE_PCT: UI 100% corresponds to this engine gain percent (e.g. 35 means UI 100 -> engine 0.35)
 // NEW_MAX_VOLUME_PCT: maximum allowed UI percent (e.g. 300 allows up to 3.0x baseline)
 #define NEW_BASELINE_PCT 100
-#define NEW_MAX_VOLUME_PCT 200
+#define NEW_MAX_VOLUME_PCT 100
 
 // BAE GUI state structure (shared between gui_main.c and gui_bae.c)
 typedef struct
