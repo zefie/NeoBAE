@@ -791,10 +791,11 @@ void render_about_dialog(SDL_Renderer *R, int mx, int my, bool mclick)
                 shortSha[i] = '\0';
                 snprintf(url, sizeof(url), "https://github.com/zefie/miniBAE/commit/%s", shortSha);
             }
-            else
+            else if (strncmp(raw, "built", 5) != 0 && !strstr(raw, "dirty"))
             {
                 snprintf(url, sizeof(url), "https://github.com/zefie/miniBAE/tree/%s", raw);
             }
+
             if (url[0])
             {
 #ifdef _WIN32

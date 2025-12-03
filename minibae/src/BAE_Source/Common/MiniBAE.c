@@ -281,9 +281,9 @@ const char *BAE_GetVersion()
     if (!versionString)
         return "";
 #ifdef _VERSION
-    snprintf(versionString, maxStrSize, "version %s", _VERSION);
+    snprintf(versionString, maxStrSize, "%s", _VERSION);
 #else
-    snprintf(versionString, maxStrSize, "unknown version built %s", __DATE__);
+    snprintf(versionString, maxStrSize, "built on %s", __DATE__);
 #endif
     return versionString;
 }
