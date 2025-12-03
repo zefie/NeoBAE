@@ -72,7 +72,6 @@ fi
 
 if [ -z "${SKIPTO}" ] || [ "${SKIPTO}" -le 2 ]; then
 	export USE_SDL2=1
-	export USE_SDL3=
 	echo "Building MingW32 SDL2 x32..."
 	runcmd make clean
 	runcmd make -f Makefile.mingw "-j$(nproc)" all
@@ -84,24 +83,9 @@ if [ -z "${SKIPTO}" ] || [ "${SKIPTO}" -le 2 ]; then
 	runcmd make -f Makefile.mingw clean
 fi
 
-if [ -z "${SKIPTO}" ] || [ "${SKIPTO}" -le 2 ]; then
-	export USE_SDL2=
-	export USE_SDL3=1
-	echo "Building MingW32 SDL3 x32..."
-	runcmd make clean
-	runcmd make -f Makefile.mingw "-j$(nproc)" all
-    signit "${BDIR}/playbae.exe" "${BDIR}/playbae_signed.exe"
-    mv "${BDIR}/playbae_signed.exe" "${BDIR}/playbae.exe"
-	runcmd cd "${BDIR}" || exit 1 && runcmd zip -9 "${ODIR}/playbae_sdl3_x32.zip" -- playbae.exe
-	runcmd cd "${BDIR}" || exit 1 && runcmd zip -9 "${ODIR}/libMiniBAE_win_sdl3_x32.zip" -- *.dll *.lib *.a
-	runcmd cd "${RDIR}" || exit 1
-	runcmd make -f Makefile.mingw clean
-fi
-
 if [ -z "${SKIPTO}" ] || [ "${SKIPTO}" -le 3 ]; then
 	export BITS=64
 	export USE_SDL2=
-	export USE_SDL3=
 	echo "Building MingW32 DirectSound x64..."
 	runcmd make clean
 	runcmd make -f Makefile.mingw "-j$(nproc)" all 
@@ -115,7 +99,6 @@ fi
 
 if [ -z "${SKIPTO}" ] || [ "${SKIPTO}" -le 4 ]; then
 	export USE_SDL2=1
-	export USE_SDL3=
 	echo "Building MingW32 SDL2 x64..."
 	runcmd make clean
 	runcmd make -f Makefile.mingw "-j$(nproc)" all
@@ -127,27 +110,13 @@ if [ -z "${SKIPTO}" ] || [ "${SKIPTO}" -le 4 ]; then
 	runcmd make -f Makefile.mingw clean
 fi
 
-if [ -z "${SKIPTO}" ] || [ "${SKIPTO}" -le 4 ]; then
-	export USE_SDL2=
-	export USE_SDL3=1
-	echo "Building MingW32 SDL3 x64..."
-	runcmd make clean
-	runcmd make -f Makefile.mingw "-j$(nproc)" all
-    signit "${BDIR}/playbae.exe" "${BDIR}/playbae_signed.exe"
-    mv "${BDIR}/playbae_signed.exe" "${BDIR}/playbae.exe"
-	runcmd cd "${BDIR}" || exit 1 && runcmd zip -9 "${ODIR}/playbae_sdl3_x64.zip" -- playbae.exe SDL*.dll
-	runcmd cd "${BDIR}" || exit 1 && runcmd zip -9 "${ODIR}/libMiniBAE_win_sdl3_x64.zip" -- *.dll *.lib *.a
-	runcmd cd "${RDIR}" || exit 1
-	runcmd make -f Makefile.mingw clean
-fi
-
 if [ -z "${SKIPTO}" ] || [ "${SKIPTO}" -le 5 ]; then
-	echo "Building MingW32 SDL3 GUI x64..."
+	echo "Building MingW32 SDL2 GUI x64..."
 	runcmd make clean
 	runcmd make -f Makefile.gui-mingw "-j$(nproc)" all
     signit "${BDIR}/zefidi.exe" "${BDIR}/zefidi_signed.exe"
     mv "${BDIR}/zefidi_signed.exe" "${BDIR}/zefidi.exe"
-	runcmd cd "${BDIR}" || exit 1 && zip -9 "${ODIR}/zefidi_sdl3_x64.zip" -- zefidi.exe SDL*.dll
+	runcmd cd "${BDIR}" || exit 1 && zip -9 "${ODIR}/zefidi_sdl2_x64.zip" -- zefidi.exe
 	runcmd cd "${RDIR}" || exit 1
 	runcmd make -f Makefile.gui-mingw clean
 fi

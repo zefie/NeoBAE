@@ -72,14 +72,14 @@ static const int16_t qtab_723_40[15] = {-122, -16, 68, 139, 198, 250, 298, 339,
                                         378, 413, 445, 475, 502, 528, 553};
 #if 0
 /*
- * bae_g723_40_encoder()
+ * g723_40_encoder()
  *
  * Encodes a 16-bit linear PCM, A-law or u-law input sample and retuens
  * the resulting 5-bit CCITT G.723 40Kbps code.
  * Returns -1 if the input coding value is invalid.
  */
 int
-bae_g723_40_encoder(
+g723_40_encoder(
     int     sl,
     int     in_coding,
     struct g72x_state *state_ptr)
@@ -129,14 +129,14 @@ bae_g723_40_encoder(
 #endif
 
 /*
- * bae_g723_40_decoder()
+ * g723_40_decoder()
  *
  * Decodes a 5-bit CCITT G.723 40Kbps code and returns
  * the resulting 16-bit linear PCM, A-law or u-law sample value.
  * -1 is returned if the output coding is unknown.
  */
 int
-bae_g723_40_decoder(
+g723_40_decoder(
     int     i,
     int     out_coding,
     struct g72x_state *state_ptr)
@@ -148,19 +148,19 @@ bae_g723_40_decoder(
     int16_t       dqsez;
 
     i &= 0x1f;          /* mask to get proper bits */
-    sezi = bae_predictor_zero(state_ptr);
+    sezi = predictor_zero(state_ptr);
     sez = sezi >> 1;
-    sei = sezi + bae_predictor_pole(state_ptr);
+    sei = sezi + predictor_pole(state_ptr);
     se = sei >> 1;          /* se = estimated signal */
 
-    y = bae_step_size(state_ptr);   /* adaptive quantizer step size */
-    dq = bae_reconstruct(i & 0x10, _dqlntab[i], y); /* estimation diff. */
+    y = step_size(state_ptr);   /* adaptive quantizer step size */
+    dq = reconstruct(i & 0x10, _dqlntab[i], y); /* estimation diff. */
 
     sr = (dq < 0) ? (se - (dq & 0x7FFF)) : (se + dq); /* reconst. signal */
 
     dqsez = sr - se + sez;      /* pole prediction diff. */
 
-    bae_update(5, y, _witab[i], _fitab[i], dq, sr, dqsez, state_ptr);
+    update(5, y, _witab[i], _fitab[i], dq, sr, dqsez, state_ptr);
 
     switch (out_coding) {
     case AUDIO_ENCODING_ALAW:

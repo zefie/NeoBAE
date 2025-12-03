@@ -69,58 +69,58 @@ struct g72x_state {
 /* External function definitions. */
 
 extern void g72x_init_state(struct g72x_state *);
-extern int bae_g721_encoder(
+extern int g721_encoder(
         int sample,
         int in_coding,
         struct g72x_state *state_ptr);
-extern int bae_g721_decoder(
+extern int g721_decoder(
         int code,
         int out_coding,
         struct g72x_state *state_ptr);
-extern int bae_g723_24_encoder(
+extern int g723_24_encoder(
         int sample,
         int in_coding,
         struct g72x_state *state_ptr);
-extern int bae_g723_24_decoder(
+extern int g723_24_decoder(
         int code,
         int out_coding,
         struct g72x_state *state_ptr);
-extern int bae_g723_40_encoder(
+extern int g723_40_encoder(
         int sample,
         int in_coding,
         struct g72x_state *state_ptr);
-extern int bae_g723_40_decoder(
+extern int g723_40_decoder(
         int code,
         int out_coding,
         struct g72x_state *state_ptr);
 
 extern int
-bae_predictor_zero(
+predictor_zero(
     struct g72x_state *state_ptr);
 
 extern int
-bae_predictor_pole(
+predictor_pole(
     struct g72x_state *state_ptr);
 
 extern int
-bae_step_size(
+step_size(
     struct g72x_state *state_ptr);
 
 extern int
-bae_quantize(
+quantize(
     int     d,  /* Raw difference signal sample */
     int     y,  /* Step size multiplier */
     int16_t       *table, /* quantization table */
     int     size);  /* table size of short integers */
 
 extern int
-bae_reconstruct(
+reconstruct(
     int     sign,   /* 0 for non-negative value */
     int     dqln,   /* G.72x codeword */
     int     y); /* Step size multiplier */
 
 extern void
-bae_update(
+update(
     int     code_size,  /* distinguish 723_40 with others */
     int     y,      /* quantizer step size */
     int     wi,     /* scale factor multiplier */

@@ -67,13 +67,13 @@ static const int16_t  _fitab[16] = {0, 0, 0, 0x200, 0x200, 0x200, 0x600, 0xE00,
 
 #if 0
 /*
- * bae_g721_encoder()
+ * g721_encoder()
  *
  * Encodes the input vale of linear PCM, A-law or u-law data sl and returns
  * the resulting code. -1 is returned for unknown input coding value.
  */
 int
-bae_g721_encoder(
+g721_encoder(
     int     sl,
     int     in_coding,
     struct g72x_state *state_ptr)
@@ -122,7 +122,7 @@ bae_g721_encoder(
 #endif
 
 /*
- * bae_g721_decoder()
+ * g721_decoder()
  *
  * Description:
  *
@@ -131,7 +131,7 @@ bae_g721_encoder(
  * return -1 for unknown out_coding value.
  */
 int
-bae_g721_decoder(
+g721_decoder(
     int     i,
     int     out_coding,
     struct g72x_state *state_ptr)
@@ -143,20 +143,20 @@ bae_g721_decoder(
     int16_t       dqsez;
 
     i &= 0x0f;          /* mask to get proper bits */
-    sezi = bae_predictor_zero(state_ptr);
+    sezi = predictor_zero(state_ptr);
     sez = sezi >> 1;
-    sei = sezi + bae_predictor_pole(state_ptr);
+    sei = sezi + predictor_pole(state_ptr);
     se = sei >> 1;          /* se = estimated signal */
 
-    y = bae_step_size(state_ptr);   /* dynamic quantizer step size */
+    y = step_size(state_ptr);   /* dynamic quantizer step size */
 
-    dq = bae_reconstruct(i & 0x08, _dqlntab[i], y); /* quantized diff. */
+    dq = reconstruct(i & 0x08, _dqlntab[i], y); /* quantized diff. */
 
     sr = (dq < 0) ? (se - (dq & 0x3FFF)) : se + dq; /* reconst. signal */
 
     dqsez = sr - se + sez;          /* pole prediction diff. */
 
-    bae_update(4, y, _witab[i] << 5, _fitab[i], dq, sr, dqsez, state_ptr);
+    update(4, y, _witab[i] << 5, _fitab[i], dq, sr, dqsez, state_ptr);
 
     switch (out_coding) {
     case AUDIO_ENCODING_ALAW:
