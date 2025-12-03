@@ -733,7 +733,7 @@ int main(int argc, char *argv[])
             SDL_SetHint(SDL_HINT_RENDER_DRIVER, "opengl");
         }
     #endif
-    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) != true)
+    if (SDL_Init(SDL_INIT_VIDEO) != true)
     {
         BAE_PRINTF("SDL_Init failed: %s\n", SDL_GetError());
         return 1;
@@ -902,16 +902,19 @@ int main(int argc, char *argv[])
     const float TARGET_FPS = 60.0f;
     const float FRAME_TIME_MS = 1000.0f / TARGET_FPS;
 
-    SDL_Window *win = SDL_CreateWindow("zefidi Media Player", window_x, window_y, 0);
-    g_main_window = win; // Store global reference for settings saving
-    setWindowTitle(win);
-    setWindowIcon(win);
+    SDL_Window *win = SDL_CreateWindow("zefidi Media Player", 900, g_window_h, 0);
     if (!win)
     {
         BAE_PRINTF("Window failed: %s\n", SDL_GetError());
         SDL_Quit();
         return 1;
     }
+    g_main_window = win; // Store global reference for settings saving
+    setWindowTitle(win);
+    setWindowIcon(win);
+    SDL_SetWindowResizable(win, false);
+    SDL_SetWindowPosition(win, window_x, window_y);
+
     SDL_Renderer *R = SDL_CreateRenderer(win, NULL);
 
     if (!R)

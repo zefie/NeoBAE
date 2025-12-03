@@ -8,6 +8,7 @@
  ****************************************************************************/
 
 #include "GenSF2_FluidSynth.h"
+
 #if USE_SF2_SUPPORT == TRUE && _USING_FLUIDSYNTH == TRUE
 
 #include "fluidsynth.h"
@@ -43,7 +44,7 @@ static fluid_synth_t* g_fluidsynth_synth = NULL;
 static int g_fluidsynth_soundfont_id = -1;
 static XBOOL g_fluidsynth_initialized = FALSE;
 static XBOOL g_fluidsynth_mono_mode = FALSE;
-static XFIXED g_fluidsynth_master_volume = round((XFIXED_1 / 256) * 3);
+static XFIXED g_fluidsynth_master_volume = round((XFIXED_1 / 256) * 10);
 static int16_t g_fluidsynth_max_voices = MAX_VOICES;
 static uint16_t g_fluidsynth_sample_rate = 44100;
 static char g_fluidsynth_sf2_path[256] = {0};
@@ -214,8 +215,8 @@ void GM_CleanupSF2(void)
         return;
     }
     
-    GM_UnloadSF2Soundfont();
     PV_SF2_FreeMixBuffer();
+    GM_UnloadSF2Soundfont();
     
     if (g_fluidsynth_synth)
     {
@@ -236,7 +237,7 @@ void GM_ResetSF2(void)
 {
     if (!g_fluidsynth_synth)
         return;
-        
+
     // Reset all channels and voices
     fluid_synth_system_reset(g_fluidsynth_synth);
     // Pick valid defaults again after reset
@@ -341,7 +342,7 @@ OPErr GM_LoadSF2SoundfontFromMemory(const unsigned char *data, size_t size) {
         isSF2 = (type[0]=='s' && type[1]=='f' && type[2]=='b' && type[3]=='k');
         isDLS = (type[0]=='D' && type[1]=='L' && type[2]=='S' && type[3]==' ');
     }
-
+#if 0
     if (isDLS) {
         // Fallback: write to a temp .dls file and load via path
         GM_UnloadSF2Soundfont();
@@ -383,6 +384,7 @@ OPErr GM_LoadSF2SoundfontFromMemory(const unsigned char *data, size_t size) {
         }
         return perr;
     }
+#endif
 
     // Prepare global memory buffer for callbacks (SF2)
     g_mem_sf_data = data;
@@ -404,9 +406,9 @@ OPErr GM_LoadSF2SoundfontFromMemory(const unsigned char *data, size_t size) {
             fs_mem_tell,
             fs_mem_close
         );
-    // Add our loader to the synth
+        // Add our loader to the synth
         fluid_synth_add_sfloader(g_fluidsynth_synth, g_mem_sf_loader);
-    BAE_PRINTF("[FluidMem] defsfloader registered\n");
+        BAE_PRINTF("[FluidMem] defsfloader registered\n");
     }
 
     // Unload any existing font first
@@ -466,6 +468,7 @@ void GM_UnloadSF2Soundfont(void)
 {
     if (g_fluidsynth_synth && g_fluidsynth_soundfont_id >= 0)
     {
+        GM_ResetSF2();
         fluid_synth_sfunload(g_fluidsynth_synth, g_fluidsynth_soundfont_id, TRUE);
         g_fluidsynth_soundfont_id = -1;
     }

@@ -1,0 +1,12 @@
+prefix=D:/a/fluidsynth/fluidsynth/fluidsynth_install
+exec_prefix=${prefix}
+libdir=${exec_prefix}/lib
+includedir=${prefix}/include
+
+Name: FluidSynth
+Description: Software SoundFont synth
+Version: 2.5.1
+Requires.private: sndfile sdl3
+Libs: -L${libdir} -lfluidsynth-3
+Libs.private: -ldsound -lksuser -lwinmm -lole32 -lws2_32 
+Cflags: -I${includedir}

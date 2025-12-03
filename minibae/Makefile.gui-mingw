@@ -61,13 +61,13 @@ ifneq ($(LDEBUG),1)
 	LDFLAGS += -s
 endif
 ifeq ($(BITS),32)
-CFLAGS  += -I../windeps/SDL3-3.2.28/i686-w64-mingw32/include -I../windeps/SDL3-3.2.28/i686-w64-mingw32/include/SDL3 -I../windeps/SDL3_ttf-3.2.2/i686-w64-mingw32/include
-CXXFLAGS  += -I../windeps/SDL3-3.2.28/i686-w64-mingw32/include -I../windeps/SDL3-3.2.28/i686-w64-mingw32/include/SDL3 -I../windeps/SDL3_ttf-3.2.2/i686-w64-mingw32/include
-LDFLAGS += -L../windeps/SDL3-3.2.28/i686-w64-mingw32/lib -L../windeps/SDL3_ttf-3.2.2/i686-w64-mingw32/lib
+CFLAGS  += -I../windeps/SDL3/i686-w64-mingw32/include -I../windeps/SDL3/i686-w64-mingw32/include/SDL3 -I../windeps/SDL3_ttf/i686-w64-mingw32/include
+CXXFLAGS  += -I../windeps/SDL3/i686-w64-mingw32/include -I../windeps/SDL3/i686-w64-mingw32/include/SDL3 -I../windeps/SDL3_ttf/i686-w64-mingw32/include
+LDFLAGS += -L../windeps/SDL3/i686-w64-mingw32/lib -L../windeps/SDL3_ttf/i686-w64-mingw32/lib
 else
-CFLAGS  += -I../windeps/SDL3-3.2.28/x86_64-w64-mingw32/include -I../windeps/SDL3-3.2.28/x86_64-w64-mingw32/include/SDL3 -I../windeps/SDL3_ttf-3.2.2/x86_64-w64-mingw32/include
-CXXFLAGS  += -I../windeps/SDL3-3.2.28/x86_64-w64-mingw32/include -I../windeps/SDL3-3.2.28/x86_64-w64-mingw32/include/SDL3 -I../windeps/SDL3_ttf-3.2.2/x86_64-w64-mingw32/include
-LDFLAGS += -L../windeps/SDL3-3.2.28/x86_64-w64-mingw32/lib -L../windeps/SDL3_ttf-3.2.2/x86_64-w64-mingw32/lib
+CFLAGS  += -I../windeps/SDL3/x86_64-w64-mingw32/include -I../windeps/SDL3/x86_64-w64-mingw32/include/SDL3 -I../windeps/SDL3_ttf/x86_64-w64-mingw32/include
+CXXFLAGS  += -I../windeps/SDL3/x86_64-w64-mingw32/include -I../windeps/SDL3/x86_64-w64-mingw32/include/SDL3 -I../windeps/SDL3_ttf/x86_64-w64-mingw32/include
+LDFLAGS += -L../windeps/SDL3/x86_64-w64-mingw32/lib -L../windeps/SDL3_ttf/x86_64-w64-mingw32/lib
 endif
 
 LIBS = \
@@ -118,27 +118,40 @@ $(TARGET_LIB).dll: ${OBJ}
 	@$(DLLTOOL) -e $(OBJ_DIR)exports.o -d $(OBJ_DIR)$(TARGET_LIB).def -l $(TARGET_OUT)$(TARGET_LIB).lib $(OBJ)
 	${LD} -shared $(LDFLAGS) ${OBJ} $(OBJ_DIR)exports.o -Wl,--subsystem,windows -o $(TARGET_OUT)${TARGET_LIB}.dll ${LIBS}
 ifeq ($(BITS),32)
-	@$(shell cp ../windeps/SDL3_ttf-3.2.2/i686-w64-mingw32/bin/SDL3_ttf.dll ../windeps/SDL3-3.2.28/i686-w64-mingw32/bin/SDL3.dll $(TARGET_OUT) 2>/dev/null || true)
+	@$(shell cp ../windeps/SDL3_ttf/i686-w64-mingw32/bin/SDL3_ttf.dll ../windeps/SDL3/i686-w64-mingw32/bin/SDL3.dll $(TARGET_OUT) 2>/dev/null || true)
 else
-	@$(shell cp ../windeps/SDL3_ttf-3.2.2/x86_64-w64-mingw32/bin/SDL3_ttf.dll ../windeps/SDL3-3.2.28/x86_64-w64-mingw32/bin/SDL3.dll $(TARGET_OUT) 2>/dev/null || true)
+	@$(shell cp ../windeps/SDL3_ttf/x86_64-w64-mingw32/bin/SDL3_ttf.dll ../windeps/SDL3/x86_64-w64-mingw32/bin/SDL3.dll $(TARGET_OUT) 2>/dev/null || true)
 endif
 
-ifeq ($(USING_BASSMIDI),1)
+ifeq ($(USE_BASSMIDI),1)
 ifeq ($(BITS),32)
 	@$(shell cp src/thirdparty/bassmidi/libs/x86/bass*.dll* $(TARGET_OUT) 2>/dev/null || true)
 else
 	@$(shell cp src/thirdparty/bassmidi/libs/x86_64/bass*.dll* $(TARGET_OUT) 2>/dev/null || true)
 endif
 endif
-ifeq ($(USING_FLUIDSYNTH),1)
+
+ifeq ($(USE_FLUIDSYNTH),1)
 ifeq ($(BITS),32)
-	@$(shell cp ../windeps/FluidSynth/x86/lib/*.dll $(TARGET_OUT) 2>/dev/null || true)
+	@$(shell cp ../windeps/FluidSynth/i686-w64-mingw32/bin/libfluidsynth-3.dll $(TARGET_OUT) 2>/dev/null || true)
+	@$(shell cp ../windeps/FluidSynth/i686-w64-mingw32/bin/sndfile.dll $(TARGET_OUT) 2>/dev/null || true)
 else
-	@$(shell cp ../windeps/FluidSynth/x86_64/lib/*.dll $(TARGET_OUT) 2>/dev/null || true)
+	@$(shell cp ../windeps/FluidSynth/x86_64-w64-mingw32/bin/libfluidsynth-3.dll $(TARGET_OUT) 2>/dev/null || true)
+	@$(shell cp ../windeps/FluidSynth/x86_64-w64-mingw32/bin/sndfile.dll $(TARGET_OUT) 2>/dev/null || true)
 endif
 endif
 
-$(TARGET_BIN): ${OBJ_BIN}
+ifeq ($(BITS),32)
+	@$(shell cp ../windeps/SDL3/i686-w64-mingw32/bin/SDL3.dll $(TARGET_OUT) 2>/dev/null || true)
+	@$(shell cp ../windeps/SDL3_ttf/i686-w64-mingw32/bin/SDL3_ttf.dll $(TARGET_OUT) 2>/dev/null || true)
+else
+	@$(shell cp ../windeps/SDL3_ttf/x86_64-w64-mingw32/bin/SDL3.dll $(TARGET_OUT) 2>/dev/null || true)
+	@$(shell cp ../windeps/SDL3_ttf/x86_64-w64-mingw32/bin/SDL3_ttf.dll $(TARGET_OUT) 2>/dev/null || true)
+endif
+
+
+
+$(TARGET_BIN): $(TARGET_LIB).dll ${OBJ_BIN}
 	@mkdir -p $(TARGET_OUT)/Banks
 	$(${SOURCE_DIR}/src/banks/copy.sh $(TARGET_OUT)/Banks)
 	@if [ -f src/gui/zefidi.rc ]; then \
@@ -165,7 +178,6 @@ clean:
 	@rm -rf $(OBJ_DIR)
 	@rm -rf $(BUILD_DIR)
 	@rm -rf $(TEST_OUT_DIR)
-	@rm -f $(OBJ_DIR)minibae_gui.o
 	@echo Cleaned!
 
 # Generate rules for all unique source files (same approach as top-level Makefile)

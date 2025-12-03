@@ -1,0 +1,13 @@
+prefix=/tmp/tardir/SDL3_ttf-3.2.2/build-mingw/install-x86_64-w64-mingw32
+exec_prefix=${prefix}
+libdir=${prefix}/lib
+includedir=${prefix}/include
+
+Name: SDL3_ttf
+Description: ttf library for Simple DirectMedia Layer with FreeType 2 support
+Version: 3.2.2
+Requires: sdl3 >= 3.2.6
+Libs: -L${libdir} -lSDL3_ttf
+Requires.private: 
+Libs.private: 
+Cflags: -I${includedir}

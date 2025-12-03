@@ -138,15 +138,15 @@ bool load_bank(const char *path, bool current_playing_state, int transpose, int 
     {
         BAEMixer_UnloadBanks(g_bae.mixer);
         g_bae.bank_loaded = false;
-    }
-#ifdef _BUILT_IN_PATCHES
-    if (strcmp(path, "__builtin__") == 0)
-    {
 #if USE_SF2_SUPPORT == TRUE
         if (GM_SF2_IsActive()) {
             GM_UnloadSF2Soundfont();
         }
 #endif
+    }
+#ifdef _BUILT_IN_PATCHES
+    if (strcmp(path, "__builtin__") == 0)
+    {
         if (g_bae.bank_loaded) {
             BAEMixer_UnloadBank(g_bae.mixer, g_bae.bank_token);
         }
