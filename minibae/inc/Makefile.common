@@ -254,13 +254,14 @@ ifeq ($(SF2_SUPPORT),1)
 	ifeq ($(USE_FLUIDSYNTH),1)
 		SRC += src/BAE_Source/Common/GenSF2_FluidSynth.c
 		BAE_FLAGS += -D_USING_FLUIDSYNTH=1 
-		ifeq ($(WINDOWS),1)		
-			INC_PATH += -I../windeps/FluidSynth/common/include
+		ifeq ($(WINDOWS),1)					
 			ifeq ($(BITS),32)
-				BAE_LD_FLAGS := -L../windeps/FluidSynth/x86/lib/
+				INC_PATH += -I../windeps/FluidSynth/i686-w64-mingw32/include
+				BAE_LD_FLAGS := -L../windeps/FluidSynth/i686-w64-mingw32/lib/
 				BAE_LIBS := ../windeps/FluidSynth/i686-w64-mingw32/lib/libfluidsynth-3.lib -Wl,-rpath,'$$ORIGIN'
 			else
-				BAE_LD_FLAGS := -L../windeps/FluidSynth/x86_64/lib/
+				INC_PATH += -I../windeps/FluidSynth/x86_64-w64-mingw32/include
+				BAE_LD_FLAGS := -L../windeps/FluidSynth/x86_64-w64-mingw32/lib/
 				BAE_LIBS := ../windeps/FluidSynth/x86_64-w64-mingw32/lib/libfluidsynth-3.lib -Wl,-rpath,'$$ORIGIN'
 			endif			
 		else
