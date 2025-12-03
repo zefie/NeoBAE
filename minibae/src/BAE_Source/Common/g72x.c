@@ -115,13 +115,13 @@ g72x_init_state(
 }
 
 /*
- * predictor_zero()
+ * bae_predictor_zero()
  *
  * computes the estimated signal from 6-zero predictor.
  *
  */
 int
-predictor_zero(
+bae_predictor_zero(
     struct g72x_state *state_ptr)
 {
     int     i;
@@ -133,26 +133,26 @@ predictor_zero(
     return (sezi);
 }
 /*
- * predictor_pole()
+ * bae_predictor_pole()
  *
  * computes the estimated signal from 2-pole predictor.
  *
  */
 int
-predictor_pole(
+bae_predictor_pole(
     struct g72x_state *state_ptr)
 {
     return (fmult(state_ptr->a[1] >> 2, state_ptr->sr[1]) +
         fmult(state_ptr->a[0] >> 2, state_ptr->sr[0]));
 }
 /*
- * step_size()
+ * bae_step_size()
  *
  * computes the quantization step size of the adaptive quantizer.
  *
  */
 int
-step_size(
+bae_step_size(
     struct g72x_state *state_ptr)
 {
     int     y;
@@ -174,7 +174,7 @@ step_size(
 }
 
 /*
- * quantize()
+ * bae_quantize()
  *
  * Given a raw sample, 'd', of the difference signal and a
  * quantization step size scale factor, 'y', this routine returns the
@@ -183,7 +183,7 @@ step_size(
  * as a subtraction.
  */
 int
-quantize(
+bae_quantize(
     int     d,  /* Raw difference signal sample */
     int     y,  /* Step size multiplier */
     int16_t       *table, /* quantization table */
@@ -227,14 +227,14 @@ quantize(
         return (i);
 }
 /*
- * reconstruct()
+ * bae_reconstruct()
  *
  * Returns reconstructed difference signal 'dq' obtained from
  * codeword 'i' and quantization step size scale factor 'y'.
  * Multiplication is performed in log base 2 domain as addition.
  */
 int
-reconstruct(
+bae_reconstruct(
     int     sign,   /* 0 for non-negative value */
     int     dqln,   /* G.72x codeword */
     int     y)  /* Step size multiplier */
@@ -258,12 +258,12 @@ reconstruct(
 
 
 /*
- * update()
+ * bae_update()
  *
  * updates the state variables for each output code
  */
 void
-update(
+bae_update(
     int     code_size,  /* distinguish 723_40 with others */
     int     y,      /* quantizer step size */
     int     wi,     /* scale factor multiplier */
@@ -494,7 +494,7 @@ tandem_adjust_alaw(
         sr = -1;
     sp = linear2alaw((sr >> 1) << 3);   /* int16_t to A-law compression */
     dx = (alaw2linear(sp) >> 2) - se;   /* 16-bit prediction error */
-    id = quantize(dx, y, qtab, sign - 1);
+    id = bae_quantize(dx, y, qtab, sign - 1);
 
     if (id == i) {          /* no adjustment on sp */
         return (sp);
@@ -543,7 +543,7 @@ tandem_adjust_ulaw(
         sr = 0;
     sp = linear2ulaw(sr << 2);  /* int16_t to u-law compression */
     dx = (ulaw2linear(sp) >> 2) - se;   /* 16-bit prediction error */
-    id = quantize(dx, y, qtab, sign - 1);
+    id = bae_quantize(dx, y, qtab, sign - 1);
     if (id == i) {
         return (sp);
     } else {
