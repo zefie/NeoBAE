@@ -74,12 +74,12 @@ LIBS   = \
 
 ifeq ($(USE_SDL2),1)
     ifeq ($(BITS),32)
-        CFLAGS   += -I../windeps/SDL2-2.32.8/i686-w64-mingw32/include
-        LDFLAGS  += -L../windeps/SDL2-2.32.8/i686-w64-mingw32/lib
+        CFLAGS   += -I../windeps/SDL2/i686-w64-mingw32/include
+        LDFLAGS  += -L../windeps/SDL2/i686-w64-mingw32/lib
         TARGET_NAME := playbae_sdl2_x32
     else
-        CFLAGS    += -I../windeps/SDL2-2.32.8/x86_64-w64-mingw32/include
-        LDFLAGS   += -L../windeps/SDL2-2.32.8/x86_64-w64-mingw32/lib
+        CFLAGS    += -I../windeps/SDL2/x86_64-w64-mingw32/include
+        LDFLAGS   += -L../windeps/SDL2/x86_64-w64-mingw32/lib
         TARGET_NAME := playbae_sdl2_x64
     endif
     # Override LIBS completely for SDL build to enforce correct ordering
@@ -111,12 +111,12 @@ endif
 
 ifeq ($(USE_SDL3),1)
     ifeq ($(BITS),32)
-        CFLAGS   += -I../windeps/SDL3-3.2.22/i686-w64-mingw32/include
-        LDFLAGS  += -L../windeps/SDL3-3.2.22/i686-w64-mingw32/lib
+        CFLAGS   += -I../windeps/SDL3/i686-w64-mingw32/include
+        LDFLAGS  += -L../windeps/SDL3/i686-w64-mingw32/lib
         TARGET_NAME := playbae_sdl2_x32
     else
-        CFLAGS    += -I../windeps/SDL3-3.2.22/x86_64-w64-mingw32/include
-        LDFLAGS   += -L../windeps/SDL3-3.2.22/x86_64-w64-mingw32/lib
+        CFLAGS    += -I../windeps/SDL3/x86_64-w64-mingw32/include
+        LDFLAGS   += -L../windeps/SDL3/x86_64-w64-mingw32/lib
         TARGET_NAME := playbae_sdl2_x64
     endif
     # Override LIBS completely for SDL build to enforce correct ordering
@@ -175,23 +175,26 @@ $(TARGET_LIB).dll: ${OBJ}
 	@rm -f $(OBJ_DIR)$(TARGET_LIB).def2 $(OBJ_DIR)exports.o
 	@$(DLLTOOL) -e $(OBJ_DIR)exports.o -d $(OBJ_DIR)$(TARGET_LIB).def -l $(TARGET_OUT)$(TARGET_LIB).lib $(OBJ)
 	${CC} -shared $(LDFLAGS) ${OBJ} $(OBJ_DIR)exports.o -o $(TARGET_OUT)${TARGET_LIB}.dll ${LIBS}
-ifeq ($(USE_SDL3),1)
-	@cp ../windeps/SDL3-3.2.22/x86_64-w64-mingw32/bin/SDL3.dll $(TARGET_OUT)
-endif
-ifeq ($(USING_BASSMIDI),1)
+
+ifeq ($(USE_BASSMIDI),1)
 ifeq ($(BITS),32)
 	@$(shell cp src/thirdparty/bassmidi/libs/x86/bass*.dll* $(TARGET_OUT) 2>/dev/null || true)
 else
 	@$(shell cp src/thirdparty/bassmidi/libs/x86_64/bass*.dll* $(TARGET_OUT) 2>/dev/null || true)
 endif
 endif
-ifeq ($(USING_FLUIDSYNTH),1)
+
+ifeq ($(USE_FLUIDSYNTH),1)
 ifeq ($(BITS),32)
-	@$(shell cp ../windeps/FluidSynth/x86/lib/*.dll $(TARGET_OUT) 2>/dev/null || true)
+	@$(shell cp ../windeps/FluidSynth/i686-w64-mingw32/bin/libfluidsynth-3.dll $(TARGET_OUT) 2>/dev/null || true)
+	@$(shell cp ../windeps/FluidSynth/i686-w64-mingw32/bin/sndfile.dll $(TARGET_OUT) 2>/dev/null || true)
+	@cp ../windeps/SDL3/i686-w64-mingw32/bin/SDL3.dll $(TARGET_OUT)
 else
-	@$(shell cp ../windeps/FluidSynth/x86_64/lib/*.dll $(TARGET_OUT) 2>/dev/null || true)
-endif			
-endif	
+	@$(shell cp ../windeps/FluidSynth/x86_64-w64-mingw32/bin/libfluidsynth-3.dll $(TARGET_OUT) 2>/dev/null || true)
+	@$(shell cp ../windeps/FluidSynth/x86_64-w64-mingw32/bin/sndfile.dll $(TARGET_OUT) 2>/dev/null || true)
+	@cp ../windeps/SDL3/x86_64-w64-mingw32/bin/SDL3.dll $(TARGET_OUT)
+endif
+endif
 
 $(TARGET_BIN): ${OBJ_BIN}
 	@mkdir -p $(TARGET_OUT)
