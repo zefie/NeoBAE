@@ -4,9 +4,7 @@ obj/
 out/
 */out/
 build/
-*/buuld/
-bin/
-*/bin/
+*/build/
 gen/
 */gen/
 tests/
