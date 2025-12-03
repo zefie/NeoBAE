@@ -419,7 +419,7 @@ extern void midi_output_send_all_notes_off(void);
 extern void gui_panic_all_notes(BAESong song);
 extern void gui_panic_channel_notes(BAESong song, int channel);
 extern void pcm_wav_finalize(void);
-extern SDL_mutex *g_lyric_mutex;
+extern SDL_Mutex *g_lyric_mutex;
 
 // Audio position tracking helpers
 void update_audio_position(void)

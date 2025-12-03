@@ -2,7 +2,7 @@
 #define GUI_TEXT_H
 
 #include "gui_common.h"
-#include <SDL2/SDL_ttf.h>
+#include <SDL3_ttf/SDL_ttf.h>
 
 // Font management
 extern TTF_Font *g_font;

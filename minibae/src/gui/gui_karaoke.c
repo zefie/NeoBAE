@@ -52,7 +52,7 @@ void karaoke_commit_line(uint32_t time_us, const char *line);
 LyricEvent g_lyric_events[KARAOKE_MAX_LINES];
 int g_lyric_count = 0;           // total valid events captured this song
 int g_lyric_cursor = 0;          // current line index (last displayed/current)
-SDL_mutex *g_lyric_mutex = NULL; // protect event array from audio callback thread
+SDL_Mutex *g_lyric_mutex = NULL; // protect event array from audio callback thread
 char g_lyric_accumulate[256];    // accumulate partial words until newline (if needed)
 
 // Track display lines similar to BXPlayer logic

@@ -1,5 +1,5 @@
 BAE_BUILT_IN_PATCHES	:= 1
-BAE_API			:= SDL2
+BAE_API			:= SDL3
 
 BUILD_GUI   	:= 1
 include inc/Makefile.common
@@ -51,49 +51,49 @@ endif
 UNAME_S:=$(shell uname -s 2>/dev/null)
 # System SDL for Linux (dynamic) if pkg-config available
 ifneq (,$(findstring Linux,$(UNAME_S)))
-	SDL2_CFLAGS := $(shell pkg-config --cflags sdl2 2>/dev/null)
-	SDL2_LIBS   := $(shell pkg-config --libs sdl2 2>/dev/null)
-	# Try SDL2_ttf
-	SDL2_TTF_CFLAGS := $(shell pkg-config --cflags SDL2_ttf 2>/dev/null)
-	SDL2_TTF_LIBS   := $(shell pkg-config --libs SDL2_ttf 2>/dev/null)
-	ifneq ($(SDL2_LIBS),)
-		CFLAGS += $(SDL2_CFLAGS)
-		ifneq ($(SDL2_TTF_LIBS),)
-			CFLAGS += $(SDL2_TTF_CFLAGS)
-			LIBS += $(SDL2_TTF_LIBS) $(LIBS)
+		_CFLAGS := $(shell pkg-config --cflags SDL3 2>/dev/null)
+	SDL3_LIBS   := $(shell pkg-config --libs SDL3 2>/dev/null)
+	# Try SDL3_ttf
+	SDL3_TTF_CFLAGS := $(shell pkg-config --cflags SDL3_ttf 2>/dev/null)
+	SDL3_TTF_LIBS   := $(shell pkg-config --libs SDL3_ttf 2>/dev/null)
+	ifneq ($(SDL3_LIBS),)
+		CFLAGS += $(SDL3_CFLAGS)
+		ifneq ($(SDL3_TTF_LIBS),)
+			CFLAGS += $(SDL3_TTF_CFLAGS)
+			LIBS += $(SDL3_TTF_LIBS) $(LIBS)
 		else
-			# Fallback: hope -lSDL2_ttf works
-			LIBS += -lSDL2_ttf $(LIBS)
+			# Fallback: hope -lSDL3_ttf works
+			LIBS += -lSDL3_ttf $(LIBS)
 		endif
-		# Prepend pkg-config libs; they already have -lSDL2 and any needed deps
-		LIBS += $(SDL2_LIBS) $(filter-out -lSDL2,$(LIBS))
+		# Prepend pkg-config libs; they already have -lSDL3 and any needed deps
+		LIBS += $(SDL3_LIBS) $(filter-out -lSDL3,$(LIBS))
 		# If you kept -static in ARCH but want dynamic SDL, strip it here:
 		ifneq (,$(findstring -static,$(ARCH)))
 			LDFLAGS += $(filter-out -static,$(LDFLAGS))
 		endif
 	else
 		# Fallback minimal guess
-		CFLAGS += -I/usr/include/SDL2
-		LIBS += -lSDL2 -lSDL2_ttf $(LIBS)
+		CFLAGS += -I/usr/include/SDL3
+		LIBS += -lSDL3 -lSDL3_ttf $(LIBS)
 	endif
 else
 	# Non-Linux (e.g., BSD) fallback
-	SDL2_CFLAGS := $(shell pkg-config --cflags sdl2 2>/dev/null)
-	SDL2_LIBS   := $(shell pkg-config --libs sdl2 2>/dev/null)
-	SDL2_TTF_CFLAGS := $(shell pkg-config --cflags SDL2_ttf 2>/dev/null)
-	SDL2_TTF_LIBS   := $(shell pkg-config --libs SDL2_ttf 2>/dev/null)
-	ifneq ($(SDL2_LIBS),)
-		CFLAGS += $(SDL2_CFLAGS)
-		ifneq ($(SDL2_TTF_LIBS),)
-			CFLAGS += $(SDL2_TTF_CFLAGS)
-			LIBS += $(SDL2_TTF_LIBS) $(LIBS)
+	SDL3_CFLAGS := $(shell pkg-config --cflags sdl3 2>/dev/null)
+	SDL3_LIBS   := $(shell pkg-config --libs sdl3 2>/dev/null)
+	SDL3_TTF_CFLAGS := $(shell pkg-config --cflags sdl3-ttf 2>/dev/null)
+	SDL3_TTF_LIBS   := $(shell pkg-config --libs sdl3-ttf 2>/dev/null)
+	ifneq ($(SDL3_LIBS),)
+		CFLAGS += $(SDL3_CFLAGS)
+		ifneq ($(SDL3_TTF_LIBS),)
+			CFLAGS += $(SDL3_TTF_CFLAGS)
+			LIBS += $(SDL3_TTF_LIBS) $(LIBS)
 		else
-			LIBS += -lSDL2_ttf $(LIBS)
+			LIBS += -lSDL3_ttf $(LIBS)
 		endif
-		LIBS += $(SDL2_LIBS) $(LIBS)
+		LIBS += $(SDL3_LIBS) $(LIBS)
 	else
-		CFLAGS += -I/usr/include/SDL2
-		LIBS += -lSDL2 -lSDL2_ttf $(LIBS)
+		CFLAGS += -I/usr/include/SDL3
+		LIBS += -lSDL3 -lSDL3_ttf $(LIBS)
 	endif
 endif
 

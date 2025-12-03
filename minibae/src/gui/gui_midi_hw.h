@@ -32,7 +32,7 @@ extern const int g_midi_record_division;
 extern const uint32_t g_midi_record_tempo;
 extern bool g_midi_record_first_event;
 extern uint64_t g_midi_record_start_pc;
-extern SDL_mutex *g_midi_record_mutex;
+extern SDL_Mutex *g_midi_record_mutex;
 
 // MIDI service thread
 extern SDL_Thread *g_midi_service_thread;

@@ -1,5 +1,5 @@
 BAE_BUILT_IN_PATCHES	:= 1
-BAE_API			:= SDL2
+BAE_API			:= SDL3
 BUILD_GUI   	:= 1
 WINDOWS 		:= 1
 ifneq ($(NOAUTO),1)
@@ -61,20 +61,19 @@ ifneq ($(LDEBUG),1)
 	LDFLAGS += -s
 endif
 ifeq ($(BITS),32)
-CFLAGS  += -I../windeps/SDL2-2.32.8/i686-w64-mingw32/include -I../windeps/SDL2-2.32.8/i686-w64-mingw32/include/SDL2 -I../windeps/SDL2_ttf-2.24.0/i686-w64-mingw32/include
-CXXFLAGS  += -I../windeps/SDL2-2.32.8/i686-w64-mingw32/include -I../windeps/SDL2-2.32.8/i686-w64-mingw32/include/SDL2 -I../windeps/SDL2_ttf-2.24.0/i686-w64-mingw32/include
-LDFLAGS += -L../windeps/SDL2-2.32.8/i686-w64-mingw32/lib -L../windeps/SDL2_ttf-2.24.0/i686-w64-mingw32/lib
+CFLAGS  += -I../windeps/SDL3-3.2.28/i686-w64-mingw32/include -I../windeps/SDL3-3.2.28/i686-w64-mingw32/include/SDL3 -I../windeps/SDL3_ttf-3.2.2/i686-w64-mingw32/include
+CXXFLAGS  += -I../windeps/SDL3-3.2.28/i686-w64-mingw32/include -I../windeps/SDL3-3.2.28/i686-w64-mingw32/include/SDL3 -I../windeps/SDL3_ttf-3.2.2/i686-w64-mingw32/include
+LDFLAGS += -L../windeps/SDL3-3.2.28/i686-w64-mingw32/lib -L../windeps/SDL3_ttf-3.2.2/i686-w64-mingw32/lib
 else
-CFLAGS  += -I../windeps/SDL2-2.32.8/x86_64-w64-mingw32/include -I../windeps/SDL2-2.32.8/x86_64-w64-mingw32/include/SDL2 -I../windeps/SDL2_ttf-2.24.0/x86_64-w64-mingw32/include
-CXXFLAGS  += -I../windeps/SDL2-2.32.8/x86_64-w64-mingw32/include -I../windeps/SDL2-2.32.8/x86_64-w64-mingw32/include/SDL2 -I../windeps/SDL2_ttf-2.24.0/x86_64-w64-mingw32/include
-LDFLAGS += -L../windeps/SDL2-2.32.8/x86_64-w64-mingw32/lib -L../windeps/SDL2_ttf-2.24.0/x86_64-w64-mingw32/lib
+CFLAGS  += -I../windeps/SDL3-3.2.28/x86_64-w64-mingw32/include -I../windeps/SDL3-3.2.28/x86_64-w64-mingw32/include/SDL3 -I../windeps/SDL3_ttf-3.2.2/x86_64-w64-mingw32/include
+CXXFLAGS  += -I../windeps/SDL3-3.2.28/x86_64-w64-mingw32/include -I../windeps/SDL3-3.2.28/x86_64-w64-mingw32/include/SDL3 -I../windeps/SDL3_ttf-3.2.2/x86_64-w64-mingw32/include
+LDFLAGS += -L../windeps/SDL3-3.2.28/x86_64-w64-mingw32/lib -L../windeps/SDL3_ttf-3.2.2/x86_64-w64-mingw32/lib
 endif
 
 LIBS = \
 	-lmingw32 \
-	-lSDL2main \
-	-lSDL2 \
-	-lSDL2_ttf \
+	-lSDL3.dll \
+	-lSDL3_ttf.dll \
 	-lusp10 \
 	-lrpcrt4 \
 	-lsetupapi \
@@ -118,6 +117,12 @@ $(TARGET_LIB).dll: ${OBJ}
 	@rm -f $(OBJ_DIR)$(TARGET_LIB).def2 $(OBJ_DIR)exports.o
 	@$(DLLTOOL) -e $(OBJ_DIR)exports.o -d $(OBJ_DIR)$(TARGET_LIB).def -l $(TARGET_OUT)$(TARGET_LIB).lib $(OBJ)
 	${LD} -shared $(LDFLAGS) ${OBJ} $(OBJ_DIR)exports.o -Wl,--subsystem,windows -o $(TARGET_OUT)${TARGET_LIB}.dll ${LIBS}
+ifeq ($(BITS),32)
+	@$(shell cp ../windeps/SDL3_ttf-3.2.2/i686-w64-mingw32/bin/SDL3_ttf.dll ../windeps/SDL3-3.2.28/i686-w64-mingw32/bin/SDL3.dll $(TARGET_OUT) 2>/dev/null || true)
+else
+	@$(shell cp ../windeps/SDL3_ttf-3.2.2/x86_64-w64-mingw32/bin/SDL3_ttf.dll ../windeps/SDL3-3.2.28/x86_64-w64-mingw32/bin/SDL3.dll $(TARGET_OUT) 2>/dev/null || true)
+endif
+
 ifeq ($(USING_BASSMIDI),1)
 ifeq ($(BITS),32)
 	@$(shell cp src/thirdparty/bassmidi/libs/x86/bass*.dll* $(TARGET_OUT) 2>/dev/null || true)

@@ -7,12 +7,12 @@
 
 #include "rtmidi_c.h"
 
-#include <SDL2/SDL.h>
+#include <SDL3/SDL.h>
 
 static RtMidiOutPtr g_rtmidi_out = NULL;
 // Mutex to protect access to g_rtmidi_out when GUI toggles devices while engine thread
 // may be sending messages.
-static SDL_mutex *g_midi_out_mutex = NULL;
+static SDL_Mutex *g_midi_out_mutex = NULL;
 
 bool midi_output_init(const char *client_name, int api_index, int port_index)
 {

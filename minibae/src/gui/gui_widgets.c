@@ -17,7 +17,7 @@ void draw_rect(SDL_Renderer *R, Rect r, SDL_Color c)
     // Ensure renderer uses blending so alpha is honored for overlays
     SDL_SetRenderDrawBlendMode(R, SDL_BLENDMODE_BLEND);
     SDL_SetRenderDrawColor(R, c.r, c.g, c.b, c.a);
-    SDL_Rect rr = {r.x, r.y, r.w, r.h};
+    SDL_FRect rr = {(float)r.x, (float)r.y, (float)r.w, (float)r.h};
     SDL_RenderFillRect(R, &rr);
 }
 
@@ -26,8 +26,8 @@ void draw_frame(SDL_Renderer *R, Rect r, SDL_Color c)
     // Frame strokes may also use alpha; enable blending to be safe
     SDL_SetRenderDrawBlendMode(R, SDL_BLENDMODE_BLEND);
     SDL_SetRenderDrawColor(R, c.r, c.g, c.b, c.a);
-    SDL_Rect rr = {r.x, r.y, r.w, r.h};
-    SDL_RenderDrawRect(R, &rr);
+    SDL_FRect rr = {(float)r.x, (float)r.y, (float)r.w, (float)r.h};
+    SDL_RenderRect(R, &rr);
 }
 
 bool ui_button(SDL_Renderer *R, Rect r, const char *label, int mx, int my, bool mdown)
@@ -122,7 +122,7 @@ bool ui_dropdown(SDL_Renderer *R, Rect r, int *value, const char **items, int co
                 SDL_Color sep = g_panel_border;
                 sep.a = 255;
                 SDL_SetRenderDrawColor(R, sep.r, sep.g, sep.b, sep.a);
-                SDL_RenderDrawLine(R, ir.x, ir.y + ir.h, ir.x + ir.w, ir.y + ir.h);
+                SDL_RenderLine(R, ir.x, ir.y + ir.h, ir.x + ir.w, ir.y + ir.h);
             }
             // vertically center item text inside its row
             int iw, ih;
@@ -217,7 +217,7 @@ bool ui_dropdown_two_column(SDL_Renderer *R, Rect r, int *value, const char **it
             {
                 SDL_Color sep = g_panel_border;
                 SDL_SetRenderDrawColor(R, sep.r, sep.g, sep.b, sep.a);
-                SDL_RenderDrawLine(R, ir.x, ir.y + ir.h, ir.x + ir.w, ir.y + ir.h);
+                SDL_RenderLine(R, ir.x, ir.y + ir.h, ir.x + ir.w, ir.y + ir.h);
             }
             int iw, ih;
             measure_text(items[i], &iw, &ih);
@@ -309,7 +309,7 @@ bool ui_dropdown_two_column_above(SDL_Renderer *R, Rect r, int *value, const cha
             {
                 SDL_Color sep = g_panel_border;
                 SDL_SetRenderDrawColor(R, sep.r, sep.g, sep.b, sep.a);
-                SDL_RenderDrawLine(R, ir.x, ir.y + ir.h, ir.x + ir.w, ir.y + ir.h);
+                SDL_RenderLine(R, ir.x, ir.y + ir.h, ir.x + ir.w, ir.y + ir.h);
             }
             int iw, ih;
             measure_text(items[i], &iw, &ih);
@@ -385,8 +385,8 @@ void draw_custom_checkbox(SDL_Renderer *R, Rect r, bool checked, bool hovered)
         inner.g = (Uint8)MAX(0, inner.g - 60);
         inner.b = (Uint8)MAX(0, inner.b - 60);
         SDL_SetRenderDrawColor(R, inner.r, inner.g, inner.b, 255);
-        SDL_RenderDrawLine(R, r.x + 1, r.y + 1, r.x + r.w - 2, r.y + 1); // top inner
-        SDL_RenderDrawLine(R, r.x + 1, r.y + 1, r.x + 1, r.y + r.h - 2); // left inner
+        SDL_RenderLine(R, r.x + 1, r.y + 1, r.x + r.w - 2, r.y + 1); // top inner
+        SDL_RenderLine(R, r.x + 1, r.y + 1, r.x + 1, r.y + r.h - 2); // left inner
     }
 
     // Draw checkmark if checked
@@ -409,8 +409,8 @@ void draw_custom_checkbox(SDL_Renderer *R, Rect r, bool checked, bool hovered)
         // Draw thicker strokes for visibility
         for (int off = -1; off <= 1; ++off)
         {
-            SDL_RenderDrawLine(R, check_x1, check_y1 + off, check_x2, check_y2 + off);
-            SDL_RenderDrawLine(R, check_x2, check_y2 + off, check_x3, check_y3 + off);
+            SDL_RenderLine(R, check_x1, check_y1 + off, check_x2, check_y2 + off);
+            SDL_RenderLine(R, check_x2, check_y2 + off, check_x3, check_y3 + off);
         }
     }
 }

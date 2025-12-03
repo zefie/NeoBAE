@@ -1046,7 +1046,7 @@ void render_settings_dialog(SDL_Renderer *R, int mx, int my, bool mclick, bool m
             {
                 SDL_Color sep = g_panel_border;
                 SDL_SetRenderDrawColor(R, sep.r, sep.g, sep.b, 255);
-                SDL_RenderDrawLine(R, ir.x, ir.y + ir.h, ir.x + ir.w, ir.y + ir.h);
+                SDL_RenderLine(R, ir.x, ir.y + ir.h, ir.x + ir.w, ir.y + ir.h);
             }
             char txt[32];
             snprintf(txt, sizeof(txt), "%d Hz", r);
@@ -1132,7 +1132,7 @@ void render_settings_dialog(SDL_Renderer *R, int mx, int my, bool mclick, bool m
                 if (i < g_midi_input_device_count - 1)
                 {
                     SDL_SetRenderDrawColor(R, g_panel_border.r, g_panel_border.g, g_panel_border.b, 255);
-                    SDL_RenderDrawLine(R, ir.x, ir.y + ir.h, ir.x + ir.w, ir.y + ir.h);
+                    SDL_RenderLine(R, ir.x, ir.y + ir.h, ir.x + ir.w, ir.y + ir.h);
                 }
                 draw_text(R, ir.x + 6, ir.y + 6, g_midi_device_name_cache[i], g_button_text);
                 if (over && mclick)
@@ -1186,7 +1186,7 @@ void render_settings_dialog(SDL_Renderer *R, int mx, int my, bool mclick, bool m
                 if (i < g_midi_output_device_count - 1)
                 {
                     SDL_SetRenderDrawColor(R, g_panel_border.r, g_panel_border.g, g_panel_border.b, 255);
-                    SDL_RenderDrawLine(R, ir.x, ir.y + ir.h, ir.x + ir.w, ir.y + ir.h);
+                    SDL_RenderLine(R, ir.x, ir.y + ir.h, ir.x + ir.w, ir.y + ir.h);
                 }
                 draw_text(R, ir.x + 6, ir.y + 6, g_midi_device_name_cache[g_midi_input_device_count + i], g_button_text);
                 if (over && mclick)
@@ -1270,7 +1270,7 @@ void render_settings_dialog(SDL_Renderer *R, int mx, int my, bool mclick, bool m
             {
                 SDL_Color sep = g_panel_border;
                 SDL_SetRenderDrawColor(R, sep.r, sep.g, sep.b, 255);
-                SDL_RenderDrawLine(R, ir.x, ir.y + ir.h, ir.x + ir.w, ir.y + ir.h);
+                SDL_RenderLine(R, ir.x, ir.y + ir.h, ir.x + ir.w, ir.y + ir.h);
             }
             SDL_Color itxt = (i == g_volume_curve || over) ? g_button_text : g_text_color;
             draw_text(R, ir.x + 6, ir.y + 6, volumeCurveNames[i], itxt);

@@ -2,7 +2,7 @@
 #define GUI_PLAYLIST_H
 
 #include "gui_common.h"
-#include <SDL2/SDL.h>
+#include <SDL3/SDL.h>
 #include <stdbool.h>
 
 // Playlist entry structure

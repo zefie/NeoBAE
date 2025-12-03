@@ -728,11 +728,10 @@ void render_about_dialog(SDL_Renderer *R, int mx, int my, bool mclick)
     char line3[256];
     if (baeFeatures && baeFeatures[0]) {
         snprintf(line3, sizeof(line3), "features: %s", baeFeatures);
-        SDL_RendererInfo info;
-        SDL_GetRendererInfo(R, &info);
-        if (info.name && info.name[0]) {
+        const char *renderer_name = SDL_GetRendererName(R);
+        if (renderer_name && renderer_name[0]) {
             strncat(line3, " | SDL Graphics Renderer: ", sizeof(line3) - strlen(line3) - 1);
-            strncat(line3, info.name, sizeof(line3) - strlen(line3) - 1);
+            strncat(line3, renderer_name, sizeof(line3) - strlen(line3) - 1);
         }
 
     }
@@ -753,7 +752,7 @@ void render_about_dialog(SDL_Renderer *R, int mx, int my, bool mclick)
         if (overVerLink)
         {
             SDL_SetRenderDrawColor(R, verLinkCol.r, verLinkCol.g, verLinkCol.b, verLinkCol.a);
-            SDL_RenderDrawLine(R, verLinkRect.x, verLinkRect.y + verLinkRect.h - 2, verLinkRect.x + verLinkRect.w, verLinkRect.y + verLinkRect.h - 2);
+            SDL_RenderLine(R, verLinkRect.x, verLinkRect.y + verLinkRect.h - 2, verLinkRect.x + verLinkRect.w, verLinkRect.y + verLinkRect.h - 2);
         }
         if (mclick && overVerLink)
         {
@@ -841,7 +840,7 @@ void render_about_dialog(SDL_Renderer *R, int mx, int my, bool mclick)
             if (over)
             {
                 SDL_SetRenderDrawColor(R, col.r, col.g, col.b, col.a);
-                SDL_RenderDrawLine(R, r.x, r.y + r.h - 2, r.x + r.w, r.y + r.h - 2);
+                SDL_RenderLine(R, r.x, r.y + r.h - 2, r.x + r.w, r.y + r.h - 2);
             }
             if (mclick && over)
             {
@@ -873,7 +872,13 @@ void render_about_dialog(SDL_Renderer *R, int mx, int my, bool mclick)
             "https://github.com/heyigor/miniBAE/",
             // SDL is also required for this GUI so no #ifdef is necessary
             "",
+#if X_PLATFORM == X_SDL2            
             "SDL2 & SDL2_ttf",
+#elif X_PLATFORM == X_SDL3
+            "SDL3 & SDL3_ttf",
+#else
+            "SDL & SDL_ttf",
+#endif
             "Copyright (C) 1997-2025 Sam Lantinga <slouken@libsdl.org>",
             "https://www.libsdl.org/",
 #if USE_MPEG_ENCODER == TRUE
@@ -897,7 +902,7 @@ void render_about_dialog(SDL_Renderer *R, int mx, int my, bool mclick)
                 if (over)
                 {
                     SDL_SetRenderDrawColor(R, col.r, col.g, col.b, col.a);
-                    SDL_RenderDrawLine(R, r.x, r.y + r.h - 2, r.x + r.w, r.y + r.h - 2);
+                    SDL_RenderLine(R, r.x, r.y + r.h - 2, r.x + r.w, r.y + r.h - 2);
                 }
                 if (mclick && over)
                 {
@@ -1011,7 +1016,7 @@ void render_about_dialog(SDL_Renderer *R, int mx, int my, bool mclick)
                     if (over)
                     {
                         SDL_SetRenderDrawColor(R, col.r, col.g, col.b, col.a);
-                        SDL_RenderDrawLine(R, r.x, r.y + r.h - 2, r.x + r.w, r.y + r.h - 2);
+                        SDL_RenderLine(R, r.x, r.y + r.h - 2, r.x + r.w, r.y + r.h - 2);
                     }
                     if (mclick && over)
                     {

@@ -1,4 +1,4 @@
-# Built-in Patches (affects entine miniBAE library)
+# Built-in Patches (affects entire miniBAE library)
 # Must be an HSB bank, leave empty to disable built-in patches completely
 EMBED_PATCH_FILE := src/banks/patches111/patches111.hsb
 

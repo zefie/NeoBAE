@@ -46,7 +46,7 @@ void bitmap_draw(SDL_Renderer *R, int x, int y, const char *text, SDL_Color col)
                     unsigned int mask = 1u << (4 - bit);
                     if (bits & mask)
                     {
-                        SDL_Rect rr = {x + bit * g_bitmap_font_scale, y + row * g_bitmap_font_scale, g_bitmap_font_scale, g_bitmap_font_scale};
+                        SDL_FRect rr = {(float)(x + bit * g_bitmap_font_scale), (float)(y + row * g_bitmap_font_scale), (float)g_bitmap_font_scale, (float)g_bitmap_font_scale};
                         SDL_RenderFillRect(R, &rr);
                     }
                 }
@@ -69,7 +69,7 @@ void measure_text(const char *text, int *w, int *h)
     if (g_font)
     {
         int tw = 0, th = 0;
-        if (TTF_SizeUTF8(g_font, text, &tw, &th) == 0)
+        if (TTF_GetStringSize(g_font, text, XStrLen(text), &tw, &th) == true)
         {
             if (w)
                 *w = tw;
@@ -89,14 +89,14 @@ void draw_text(SDL_Renderer *R, int x, int y, const char *text, SDL_Color col)
 {
     if (g_font)
     {
-        SDL_Surface *s = TTF_RenderUTF8_Blended(g_font, text, col);
+        SDL_Surface *s = TTF_RenderText_Blended(g_font, text, 0, col);
         if (s)
         {
             SDL_Texture *tx = SDL_CreateTextureFromSurface(R, s);
-            SDL_Rect dst = {x, y, s->w, s->h};
-            SDL_RenderCopy(R, tx, NULL, &dst);
+            SDL_FRect dst = {(float)x, (float)y, (float)s->w, (float)s->h};
+            SDL_RenderTexture(R, tx, NULL, &dst);
             SDL_DestroyTexture(tx);
-            SDL_FreeSurface(s);
+            SDL_DestroySurface(s);
             return;
         }
     }

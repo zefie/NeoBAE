@@ -2,8 +2,8 @@
 #define GUI_KARAOKE_H
 
 #include "gui_common.h"
-#include <SDL2/SDL.h>
-#include <SDL2/SDL_mutex.h>
+#include <SDL3/SDL.h>
+#include <SDL3/SDL_mutex.h>
 
 #ifdef SUPPORT_KARAOKE
 
@@ -22,7 +22,7 @@ extern bool g_karaoke_enabled;
 extern LyricEvent g_lyric_events[KARAOKE_MAX_LINES];
 extern int g_lyric_count;
 extern int g_lyric_cursor;
-extern SDL_mutex *g_lyric_mutex;
+extern SDL_Mutex *g_lyric_mutex;
 extern char g_lyric_accumulate[256];
 
 // Track display lines

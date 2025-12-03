@@ -12,7 +12,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
-#include <SDL.h>
+#include <SDL3/SDL.h>
 #include <unistd.h>
 
 // Forward declare the BAEGUI structure (defined in gui_main.old.c)
@@ -78,7 +78,7 @@ const int g_midi_record_division = 1000;     // ticks per quarter note for writt
 const uint32_t g_midi_record_tempo = 500000; // default microseconds per quarter note (120 BPM)
 bool g_midi_record_first_event = false;      // for first-event silence capture
 uint64_t g_midi_record_start_pc = 0;         // perf counter at record start
-SDL_mutex *g_midi_record_mutex = NULL;       // guard record file writes/close
+SDL_Mutex *g_midi_record_mutex = NULL;       // guard record file writes/close
 /* Refer to the single definition in gui_bae.c */
 extern double g_last_requested_master_volume;
 
