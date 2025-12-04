@@ -4,42 +4,25 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Beatnik Music Studio</title>
-    <link rel="stylesheet" href="music-studio.css">
+    <link rel="stylesheet" href="./music-studio.css">
 </head>
 <body>
     <div class="drop-overlay" id="dropOverlay">
         <div style="text-align: center;">
-            <img src="beatnik-spotlogo.png" alt="Beatnik" style="width: 180px; margin-bottom: 24px;">
+            <img src="./content/beatnik-spotlogo.png" alt="Beatnik" style="width: 180px; margin-bottom: 24px;">
             <div>Drop MIDI or RMF file to load</div>
         </div>
     </div>
     <div class="container">
         <header>
-            <img src="beatnik-spotlogo.png" alt="Beatnik" class="logo" id="beatnikLogo" style="cursor: pointer;">
+            <img src="./content/beatnik-spotlogo.png" alt="Beatnik" class="logo" id="beatnikLogo" style="cursor: pointer;">
             <h1>Music Studio</h1>
             <div class="preset-wrapper" id="presetWrapper">
                 <span class="preset-link" id="presetHyperactive">Play Demo</span>
                 <div class="preset-menu" id="presetMenu">
-                    <div class="preset-menu-item" data-song="/content/RMF/hyperactive.rmf" data-name="Hyperactive.rmf">Hyperactive.rmf</div>
-                    <div class="preset-menu-item" data-song="/content/MIDI/Other/Reflets.mid" data-name="Reflets.mid">Claude Debussy - Reflets dans l'eau.mid</div>
-                    <div class="preset-menu-item" data-song="/content/MIDI/Other/Chill_Jingle.mid" data-name="Chill_Jingle.mid">Chill_Jingle.mid</div>
-                    <div class="preset-menu-item" data-song="/content/MIDI/Other/flutey.mid" data-name="Flutey.mid">Flutey.mid</div>
-                    <div class="preset-menu-item" data-song="/content/MIDI/Other/royal.mid" data-name="Royal.mid">Royal.mid</div>
-                    <div class="preset-menu-item" data-song="/content/MIDI/Other/Shredded_Paper.mid" data-name="Shredded_Paper.mid">Shredded_Paper.mid</div>
-                    <div class="preset-menu-item" data-song="/content/MIDI/Other/sogrand.mid" data-name="SoGrand.mid">SoGrand.mid</div>
-                    <div class="preset-menu-item" data-song="/content/MIDI/WebTV/ClassicROM/DialingWebTV.mid" data-name="DialingWebTV.mid">DialingWebTV.mid</div>
-                    <div class="preset-menu-item" data-song="/content/MIDI/WebTV/ClassicROM/Daybreak.mid" data-name="Daybreak.mid">Daybreak.mid</div>
-                    <div class="preset-menu-item" data-song="/content/MIDI/WebTV/ClassicROM/world1.mid" data-name="world1.mid">world1.mid</div>
-                    <div class="preset-menu-item" data-song="/content/RMF/backwaters.rmf" data-name="Backwaters.rmf">Backwaters.rmf</div>
-                    <div class="preset-menu-item" data-song="/content/RMF/chopin-ballade-1.rmf" data-name="Chopin Ballade 1.rmf">Chopin Ballade 1.rmf</div>
-                    <div class="preset-menu-item" data-song="/content/RMF/chopin-ballade-2.rmf" data-name="Chopin Ballade 2.rmf">Chopin Ballade 2.rmf</div>
-                    <div class="preset-menu-item" data-song="/content/RMF/chopin-nocturne.rmf" data-name="Chopin Nocturne.rmf">Chopin Nocturne.rmf</div>
-                    <div class="preset-menu-item" data-song="/content/RMF/cozy.rmf" data-name="Cozy.rmf">Cozy.rmf</div>
-                    <div class="preset-menu-item" data-song="/content/RMF/la-barriera.rmf" data-name="La Barriera.rmf">La Barriera.rmf</div>
-                    <div class="preset-menu-item" data-song="/content/RMF/personal-twilight.rmf" data-name="Personal Twilight.rmf">Personal Twilight.rmf</div>
-                    <div class="preset-menu-item" data-song="/content/RMF/polyzoot.rmf" data-name="Polyzoot.rmf">Polyzoot.rmf</div>
-                    <div class="preset-menu-item" data-song="/content/RMF/sociable.rmf" data-name="Sociable.rmf">Sociable.rmf</div>
-                    <div class="preset-menu-item" data-song="/content/RMF/sunlane.rmf" data-name="Sunlane.rmf">Sunlane.rmf</div>
+                    <div class="preset-menu-item" data-song="./content/hyperactive.rmf" data-name="Hyperactive.rmf">Hyperactive.rmf</div>
+                    <div class="preset-menu-item" data-song="./content/Reflets.mid" data-name="Reflets.mid">Claude Debussy - Reflets dans l'eau.mid</div>
+                    <div class="preset-menu-item" data-song="./content/world1.mid" data-name="world1.mid">world1.mid</div>
                 </div>
             </div>
             <div class="drop-zone" id="dropZone" style="margin-left: auto; padding: 8px 20px;">
@@ -55,20 +38,9 @@
                     <div class="channel-label">Soundbank A</div>
                     <select id="soundbankLeft">
                         <option value="">-- Select Soundbank --</option>
-                        <option value="/content/PatchBanks/HSB/patchesp.hsb" selected>Beatnik Pro v3.0.0</option>
-                        <option value="/content/PatchBanks/HSB/patches-wtv-uncompressed.hsb">WebTV Plus Uncompressed</option>
-                        <option value="/content/PatchBanks/HSB/minibae-wtv.hsb">WebTV Classic</option>
-                        <option value="/content/PatchBanks/HSB/minibae-wtv_5-17-96.hsb">WebTV Alpha May 1996</option>
-                        <option value="/content/PatchBanks/HSB/big_synth-beos.hsb">BeOS Big Synth</option>
-                        <option value="/content/PatchBanks/HSB/danger-hiptop.hsb">T-Mobile Sidekick</option>
-                        <option value="/content/PatchBanks/HSB/minibae-nokia-3510.hsb">Nokia 3510</option>
-                        <option value="/content/PatchBanks/HSB/minibae-nokia-5140i.hsb">Nokia 5140i</option>
-                        <option value="/content/PatchBanks/HSB/minibae-nokia-7650.hsb">Nokia 7650</option>
-                        <option value="/content/PatchBanks/HSB/minibae-nokia-ngage.hsb">Nokia N-Gage</option>
-                        <option value="/content/PatchBanks/HSB/sony-ericsson-p800.hsb">Sony Ericsson P800</option>
-                        <option value="/content/PatchBanks/HSB/sony-ericsson-p900.hsb">Sony Ericsson P900</option>
-                        <option value="/content/PatchBanks/HSB/spmidi_meycro2.hsb">SP-MIDI Meycro2</option>
-                        <option value="/content/PatchBanks/HSB/spmidi_nano3.hsb">SP-MIDI Nano3</option>
+                        <option value="./content/patchesp.hsb" selected>Beatnik Pro v3.0.0</option>
+                        <option value="./content/patches-wtv-uncompressed.hsb">WebTV Plus Uncompressed</option>
+                        <option value="./content/minibae-wtv.hsb">WebTV Classic</option>
                     </select>
                     <div class="volume-row">
                         <label>Volume</label>
@@ -98,7 +70,7 @@
                         </div>
                         <div class="channel-grid-wrapper">
                             <div class="channel-grid" id="channelGridLeft"></div>
-                            <img src="tell-me-about.gif" alt="" class="mascot" id="mascotGif" title="Tell me about your childhood...">
+                            <img src="./content/tell-me-about.gif" alt="" class="mascot" id="mascotGif" title="Tell me about your childhood...">
                         </div>
                     </div>
                     <div class="soundbank-meter">
@@ -113,19 +85,9 @@
                     <div class="channel-label">Soundbank B</div>
                     <select id="soundbankRight">
                         <option value="">-- Select Soundbank --</option>
-                        <option value="/content/PatchBanks/HSB/patchesp.hsb">Beatnik Pro v3.0.0</option>
-                        <option value="/content/PatchBanks/HSB/patches-wtv-uncompressed.hsb">WebTV Plus Uncompressed</option>
-                        <option value="/content/PatchBanks/HSB/minibae-wtv.hsb">WebTV Classic</option>
-                        <option value="/content/PatchBanks/HSB/minibae-wtv_5-17-96.hsb">WebTV Alpha May 1996</option>
-                        <option value="/content/PatchBanks/HSB/big_synth-beos.hsb">BeOS Big Synth</option>
-                        <option value="/content/PatchBanks/HSB/danger-hiptop.hsb">T-Mobile Sidekick</option>
-                        <option value="/content/PatchBanks/HSB/minibae-nokia-3510.hsb">Nokia 3510</option>
-                        <option value="/content/PatchBanks/HSB/minibae-nokia-5140i.hsb">Nokia 5140i</option>
-                        <option value="/content/PatchBanks/HSB/minibae-nokia-7650.hsb">Nokia 7650</option>
-                        <option value="/content/PatchBanks/HSB/minibae-nokia-ngage.hsb">Nokia N-Gage</option>
-                        <option value="/content/PatchBanks/HSB/SonyUIQBank_P900.hsb">Sony Ericsson P900</option>
-                        <option value="/content/PatchBanks/HSB/spmidi_meycro2.hsb">SP-MIDI Meycro2</option>
-                        <option value="/content/PatchBanks/HSB/spmidi_nano3.hsb">SP-MIDI Nano3</option>
+                        <option value="./content/patchesp.hsb" selected>Beatnik Pro v3.0.0</option>
+                        <option value="./content/patches-wtv-uncompressed.hsb">WebTV Plus Uncompressed</option>
+                        <option value="./content/minibae-wtv.hsb">WebTV Classic</option>
                     </select>
                     <div class="volume-row">
                         <label>Volume</label>
@@ -260,8 +222,8 @@
         </div>
     </div>
 
-    <script src="player.js"></script>
-    <script src="engine.js"></script>
-    <script src="music-studio.js"></script>
+    <script src="./player.js"></script>
+    <script src="./engine.js"></script>
+    <script src="./music-studio.js"></script>
 </body>
 </html>

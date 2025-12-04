@@ -12,16 +12,6 @@ PACK_FILENAME	:= miniBAE_WASM.tar.gz
 
 include inc/Makefile.common
 
-EXTRA_FILES		:= \
-			src/wasm/player.js \
-			src/wasm/music-studio/music-studio.css \
-			src/wasm/music-studio/music-studio.html \
-			src/wasm/music-studio/music-studio.js \
-			src/wasm/music-studio/tell-me-about.gif \
-			src/wasm/music-studio/beatnik-spotlogo.png \
-			src/banks/WTVBanks/wpatches-classic.hsb \
-			src/TestSuite/world1.mid
-
 ARCH		:= -static
 CC		:= emcc
 CXX		:= emcc
@@ -60,8 +50,24 @@ LIBS	= 	-lpthread
 all: ${TARGET_JS} extra-files
 
 extra-files:
-	@mkdir -p $(TARGET_OUT)
-	@cp $(EXTRA_FILES) $(TARGET_OUT)
+	@mkdir -p $(TARGET_OUT)/content
+	@cp src/wasm/player.js $(TARGET_OUT)
+	@cp src/wasm/music-studio/music-studio.css $(TARGET_OUT)
+	@cp src/wasm/music-studio/music-studio.html $(TARGET_OUT)/index.html
+	@cp src/wasm/music-studio/music-studio.js $(TARGET_OUT)
+	@cp src/wasm/music-studio/tell-me-about.gif $(TARGET_OUT)/content/
+	@cp src/wasm/music-studio/beatnik-spotlogo.png $(TARGET_OUT)/content/
+	@cp src/banks/patchesp/patchesp.hsb $(TARGET_OUT)/content/
+	@cp src/banks/WTVBanks/wpatches-classic.hsb $(TARGET_OUT)/content/minibae-wtv.hsb
+	@cp src/banks/WTVBanks/wpatches-plus-uncompressed.hsb $(TARGET_OUT)/content/patches-wtv-uncompressed.hsb
+	@cp "../docs/musicObject/Music Object 3.4.0.7/sample-code/hyperactive/music/tell-me-about.rmf" $(TARGET_OUT)/content/
+	@cp src/TestSuite/world1.mid $(TARGET_OUT)/content/
+	@cp ../content/rmf/beatnik.rmf $(TARGET_OUT)/content/
+	@cp ../content/rmf/rmf-sampler/hyperactive.rmf $(TARGET_OUT)/content/
+	@cp ../content/midi/reflets.mid $(TARGET_OUT)/content/
+	@cp ../content/midi/royal.mid $(TARGET_OUT)/content/
+
+
 	
 $(TARGET_JS): ${OBJ}
 	@mkdir -p $(TARGET_OUT)

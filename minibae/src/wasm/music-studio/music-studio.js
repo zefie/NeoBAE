@@ -740,8 +740,8 @@ function updateMascotState() {
 }
 
 async function preloadEffectRmfs() {
-    try { const r = await fetch('/content/RMF/beatnik.rmf'); if (r.ok) beatnikRmfData = await r.arrayBuffer(); } catch (e) {}
-    try { const r = await fetch('/content/RMF/tell-me-about.rmf'); if (r.ok) tellMeRmfData = await r.arrayBuffer(); } catch (e) {}
+    try { const r = await fetch('./content/beatnik.rmf'); if (r.ok) beatnikRmfData = await r.arrayBuffer(); } catch (e) {}
+    try { const r = await fetch('./content/tell-me-about.rmf'); if (r.ok) tellMeRmfData = await r.arrayBuffer(); } catch (e) {}
 }
 
 function playEffectRmf(data) {
@@ -759,16 +759,16 @@ function playEffectRmf(data) {
 async function loadPresetSong(songUrl, songName) {
     if (!player) return;
     const isRMF = songUrl.toLowerCase().endsWith('.rmf');
-    const soundbankB = isRMF ? '/content/PatchBanks/HSB/patchesp.hsb' : '/content/PatchBanks/HSB/minibae-wtv.hsb';
+    const soundbankB = isRMF ? './content/patchesp.hsb' : './content/minibae-wtv.hsb';
     const soundbankBName = isRMF ? 'Beatnik Pro 3.0' : 'WebTV Classic';
 
-    elements.soundbankLeft.value = '/content/PatchBanks/HSB/patches-wtv-uncompressed.hsb';
+    elements.soundbankLeft.value = './content/patches-wtv-uncompressed.hsb';
     elements.soundbankRight.value = soundbankB;
     elements.panLeft.value = -40; elements.panLeftValue.textContent = 'L40'; player.setPanLeft(-40);
     elements.panRight.value = 40; elements.panRightValue.textContent = 'R40'; player.setPanRight(40);
 
     elements.statusLeft.textContent = 'Loading WebTV Plus...'; elements.statusLeft.className = 'status';
-    await player.loadSoundbankLeft('/content/PatchBanks/HSB/patches-wtv-uncompressed.hsb');
+    await player.loadSoundbankLeft('./content/patches-wtv-uncompressed.hsb');
     elements.statusLeft.textContent = 'WebTV Plus Uncompressed'; elements.statusLeft.className = 'status loaded';
 
     elements.statusRight.textContent = 'Loading ' + soundbankBName + '...'; elements.statusRight.className = 'status';
