@@ -60,6 +60,7 @@ LIBS	= 	-lpthread
 all: ${TARGET_JS} extra-files
 
 extra-files:
+	@mkdir -p $(TARGET_OUT)
 	@cp $(EXTRA_FILES) $(TARGET_OUT)
 	
 $(TARGET_JS): ${OBJ}
