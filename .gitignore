@@ -13,7 +13,6 @@ tests/
 
 local.properties
 .idea/
-.vscode/
 minibae/bin/
 minibae/out/
 minibae/.vscode/
