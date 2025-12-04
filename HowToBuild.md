@@ -5,7 +5,7 @@ Package names and commands may vary if using a different OS.
 
 When using the `-j` flag with `make`, do not run `clean` and `all` in the same command, it will fail. You can build with the `-j` flag after cleaning without it. See below.
 
-By default, all builds will build with SF2 support via FluidSynth. FluidSynth provides SF2/SF3/SFO support, as well as limited DLS (level 1 and 2) support via [libinstpatch](https://github.com/zefie/libinstpatch). miniBAE uses a modified [libinstpatch](https://github.com/zefie/libinstpatch) for mobileBAE PGAL support.
+By default, all builds will build with SF2 support via FluidSynth. FluidSynth provides SF2/SF3/SFO support, as well as limited DLS support.
 
 ## Get the source (git, easier)
 - `git clone https://github.com/zefie/miniBAE`
@@ -34,13 +34,11 @@ By default, all builds will build with SF2 support via FluidSynth. FluidSynth pr
 - You only need to grab what you want to support, [see below](#modular-build-system).
 
 ## Linux
-For full support including PGAL for mobileBAE, you will need to compile your own libinstpatch and fluidsynth, then link miniBAE/zefidi against the local copy.
-If you do not care about XMF/MXMF support, you can use your system's libfluidsynth.
 
-#### Setup & Compile Linux SDL2
+#### Setup & Compile Linux SDL3
 - Install dependencies support (one time):
     - `apt-get update`
-    - `apt-get install libc6-dev libsdl2-dev libfluidsynth-dev`
+    - `apt-get install libc6-dev libsdl3-dev libfluidsynth-dev`
 - Build playbae
     - `cd minibae`
     - `make clean`
@@ -48,10 +46,10 @@ If you do not care about XMF/MXMF support, you can use your system's libfluidsyn
 - Using Build:
     - Run `./bin/playbae -h` for information on usage
 
-#### Setup & Compile Linux SDL2 with clang
+#### Setup & Compile Linux SDL3 with clang
 - Install dependencies support (one time):
     - `apt-get update`
-    - `apt-get install libc6-dev clang libsdl2-dev libfluidsynth-dev`
+    - `apt-get install libc6-dev clang libsdl3-dev libfluidsynth-dev`
 - Build playbae
     - `cd minibae`
     - `make clean`
@@ -62,7 +60,7 @@ If you do not care about XMF/MXMF support, you can use your system's libfluidsyn
 #### Setup & Compile zefidi GUI
 - Install dependencies:
     - `apt-get update`
-    - `apt-get install libsdl2-dev libsdl2-ttf-dev libfluidsynth-dev`
+    - `apt-get install libsdl3-dev libsdl3-ttf-dev libfluidsynth-dev`
 - Build GUI
     - `make clean && -f Makefile.gui -j$(nproc)`
     - If you want hardware MIDI (in/out) support, you will have to choose if you want the ALSA backend, JACK backend, or both:
@@ -87,7 +85,7 @@ If you do not care about XMF/MXMF support, you can use your system's libfluidsyn
     - For DirectSound support:
        - `make clean`
        - `make -f Makefile.mingw -j$(nproc)`
-    - For SDL2 support:
+    - For SDL3 support:
        - `make clean`
        - `make -f Makefile.mingw USE_SDL=1 -j$(nproc)`
 - Using Build:
@@ -95,7 +93,7 @@ If you do not care about XMF/MXMF support, you can use your system's libfluidsyn
     - Run `playbae.exe -h`, or drag a supported file over the exe
 
 #### Setup & Compile zefidi GUI (using Debian WSL2)
-- All SDL2 dependencies are already provided
+- All SDL3 dependencies are already provided
 - Install mingw into your Debian WSL2:
     - `apt-get install binutils-mingw-w64-x86_64 g++-mingw-w64-x86_64 g++-mingw-w64-x86_64-posix g++-mingw-w64-x86_64-win32 gcc-mingw-w64-base gcc-mingw-w64-x86_64 gcc-mingw-w64-x86_64-posix gcc-mingw-w64-x86_64-posix-runtime gcc-mingw-w64-x86_64-win32 gcc-mingw-w64-x86_64-win32-runtime mingw-w64-common mingw-w64-x86_64-dev libz-mingw-w64-dev`
     - SDL dependency for mingw is provided in the repo
@@ -116,7 +114,7 @@ If you do not care about XMF/MXMF support, you can use your system's libfluidsyn
 - If using mingw32, all deps are already provided, you can just skip to build
 - Linux: Install dependencies:
     - `apt-get update`
-    - `apt-get install libsdl2-dev libsdl2-ttf-dev libfluidsynth-dev`
+    - `apt-get install libsdl3-dev libsdl3-ttf-dev libfluidsynth-dev`
 - Linux cross-dev (Windows):
     - `apt-get install binutils-mingw-w64-x86_64 g++-mingw-w64-x86_64 g++-mingw-w64-x86_64-posix g++-mingw-w64-x86_64-win32 gcc-mingw-w64-base gcc-mingw-w64-x86_64 gcc-mingw-w64-x86_64-posix gcc-mingw-w64-x86_64-posix-runtime gcc-mingw-w64-x86_64-win32 gcc-mingw-w64-x86_64-win32-runtime mingw-w64-common mingw-w64-x86_64-dev libz-mingw-w64-dev`
     - SDL dependency for mingw is provided in the repo
@@ -139,7 +137,7 @@ If you do not care about XMF/MXMF support, you can use your system's libfluidsyn
     - Run `zefidi.exe`, or drag a supported file over the exe
 
 ## WebAssembly
-#### Setup & Compile Emscripten WASM32 build (no SF2 support, uses WebAudio instead of sound hardware directly)
+#### Setup & Compile Emscripten WWebAssembly build (no SF2 support, uses WebAudio instead of sound hardware directly)
 - Install emscripten (one time):
     - `apt-get update`
     - `apt-get install emscripten`
@@ -148,12 +146,13 @@ If you do not care about XMF/MXMF support, you can use your system's libfluidsyn
     - `make clean`
     - `make -f Makefile.emcc -j$(nproc)`
 - Using Build:
-    - Copy `bin/minibae-audio.js`, `bin/minibae-audio.htm`, and `bin/playbae.js` to a web server (cannot use local filesystem due to browser security)
-    - Modify `minibae-audio.htm` to point to desired audio file (and optionally patches.hsb)
-    - Load in browser, and click the page to enable the Audio Context, miniBAE should start playing automatically.
-    - Current build utilizes realtime streaming to WebAudio, no longer converting to WAV first. You should now be able to safely play endless MIDIs with the emscripten build.
-    - Emscripten build is WIP, usage of browser debugger/inspector suggested.
-    - **NOTE:** The Emscripten build and the old musicObject JS are completely different, and not compatible with each other, *yet*...
+    - Enter the `bin/` directory
+    - Run `python -m http.server 8888`
+    - Nagivate your browser to `http://localhost:8888/`
+    - Alternatively upload the contents of the `bin/` folder to a web server
+- Notes:
+    - The WebAssembly build and the old musicObject JS are completely different, and not compatible with each other, *yet*...
+    - MPEG Support is enabled by default in the WebAssembly build, so RMFs with MPEG samples should work just fine
 
 ## Modular Build System
 zefie's modifications (aside from the core 64-bit port) are designed to be completely modular in the build system. If you don't like the idea of miniBAE having FLAC or Vorbis, you can easily build without them!
