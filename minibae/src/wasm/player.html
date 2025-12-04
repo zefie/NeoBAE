@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>miniBAE Player</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a0033, #2d1b4e, #4a2c7a);
+            color: #ffffff;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .player-container {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            padding: 30px;
+            width: 100%;
+            max-width: 600px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+
+        .player-title {
+            text-align: center;
+            font-size: 28px;
+            font-weight: 600;
+            margin-bottom: 30px;
+            background: linear-gradient(45deg, #a855f7, #ec4899, #f59e0b);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .preset-section {
+            margin-bottom: 25px;
+        }
+
+        .preset-label {
+            font-size: 16px;
+            font-weight: 500;
+            margin-bottom: 8px;
+            color: #e0e7ff;
+        }
+
+        .preset-select {
+            width: 100%;
+            padding: 12px 16px;
+            border-radius: 10px;
+            border: 1px solid rgba(168, 85, 247, 0.3);
+            background: rgba(0, 0, 0, 0.2);
+            color: #ffffff;
+            font-size: 16px;
+            transition: all 0.3s ease;
+        }
+
+        .preset-select:focus {
+            outline: none;
+            border-color: #a855f7;
+            box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.2);
+        }
+
+        .preset-select option {
+            background: #2d1b4e;
+            color: #ffffff;
+        }
+
+        .controls-section {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            margin-bottom: 25px;
+        }
+
+        .playback-controls {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .btn {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 10px;
+            background: linear-gradient(45deg, #a855f7, #8b5cf6);
+            color: white;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            min-width: 100px;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(168, 85, 247, 0.4);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .seek-container {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+
+        .time-display {
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            min-width: 60px;
+            text-align: center;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 5px 8px;
+            border-radius: 5px;
+        }
+
+        .seek-bar {
+            flex: 1;
+            height: 8px;
+            border-radius: 4px;
+            background: rgba(255, 255, 255, 0.2);
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .seek-progress {
+            height: 100%;
+            background: linear-gradient(90deg, #a855f7, #ec4899);
+            border-radius: 4px;
+            transition: width 0.1s ease;
+            width: 0%;
+        }
+
+        .volume-container {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .volume-label {
+            font-size: 14px;
+            font-weight: 500;
+            min-width: 60px;
+        }
+
+        .volume-slider {
+            flex: 1;
+            height: 6px;
+            border-radius: 3px;
+            background: rgba(255, 255, 255, 0.2);
+            outline: none;
+            cursor: pointer;
+            -webkit-appearance: none;
+        }
+
+        .volume-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #a855f7;
+            cursor: pointer;
+            border: 2px solid white;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+        }
+
+        .volume-slider::-moz-range-thumb {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #a855f7;
+            cursor: pointer;
+            border: 2px solid white;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+        }
+
+        .loop-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            justify-content: center;
+        }
+
+        .loop-checkbox {
+            width: 18px;
+            height: 18px;
+            accent-color: #a855f7;
+            cursor: pointer;
+        }
+
+        .loop-label {
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+        }
+
+        .vu-meters {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            align-items: center;
+            margin-top: 20px;
+            padding: 20px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 15px;
+        }
+
+        .vu-meter {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .vu-label {
+            font-size: 12px;
+            font-weight: 600;
+            color: #e0e7ff;
+        }
+
+        .vu-bar {
+            width: 20px;
+            height: 120px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .vu-level {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            background: linear-gradient(to top, 
+                #10b981 0%, 
+                #10b981 50%, 
+                #f59e0b 70%, 
+                #ef4444 90%);
+            border-radius: 10px;
+            transition: height 0.1s ease;
+            height: 0%;
+        }
+
+        .status {
+            text-align: center;
+            margin-top: 20px;
+            padding: 10px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 10px;
+            font-size: 14px;
+            color: #e0e7ff;
+        }
+
+        .error {
+            background: rgba(239, 68, 68, 0.2);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: #fca5a5;
+        }
+
+        .loading {
+            background: rgba(251, 191, 36, 0.2);
+            border: 1px solid rgba(251, 191, 36, 0.3);
+            color: #fcd34d;
+        }
+
+        .success {
+            background: rgba(16, 185, 129, 0.2);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            color: #6ee7b7;
+        }
+    </style>
+</head>
+<body>
+    <div class="player-container">
+        <h1 class="player-title">miniBAE Player</h1>
+
+        <div class="preset-section">
+            <label class="preset-label" for="presetSelect">Select Preset:</label>
+            <select id="presetSelect" class="preset-select">
+                <option value="">-- Choose a preset --</option>
+                <option value="preset1">world1.mid (WebTV Classic)</option>
+                <option value="preset2">royal.mid (WebTV Plus)</option>
+                <option value="preset3">hyperactive.rmf (Beatnik Pro)</option>
+            </select>
+        </div>
+
+        <div class="controls-section">
+            <div class="playback-controls">
+                <button id="playBtn" class="btn" disabled>Play</button>
+                <button id="pauseBtn" class="btn" disabled>Pause</button>
+                <button id="stopBtn" class="btn" disabled>Stop</button>
+            </div>
+
+            <div class="seek-container">
+                <div id="currentTime" class="time-display">0:00</div>
+                <div id="seekBar" class="seek-bar">
+                    <div id="seekProgress" class="seek-progress"></div>
+                </div>
+                <div id="duration" class="time-display">0:00</div>
+            </div>
+
+            <div class="volume-container">
+                <label class="volume-label">Volume:</label>
+                <input type="range" id="volumeSlider" class="volume-slider" 
+                       min="0" max="100" value="75">
+            </div>
+
+            <div class="loop-container">
+                <input type="checkbox" id="loopCheckbox" class="loop-checkbox">
+                <label for="loopCheckbox" class="loop-label">Loop</label>
+            </div>
+        </div>
+
+        <div class="vu-meters">
+            <div class="vu-meter">
+                <div class="vu-label">L</div>
+                <div class="vu-bar">
+                    <div id="vuLeft" class="vu-level"></div>
+                </div>
+            </div>
+            <div class="vu-meter">
+                <div class="vu-label">R</div>
+                <div class="vu-bar">
+                    <div id="vuRight" class="vu-level"></div>
+                </div>
+            </div>
+        </div>
+
+        <div id="status" class="status">Ready to load preset...</div>
+    </div>
+
+    <script src="./player.js"></script>
+    <script src="./engine.js"></script>
+    <script>
+        class MiniBAEPlayer {
+            constructor() {
+                this.player = null;
+                this.isLooping = false;
+                this.presets = {
+                    preset1: {
+                        name: "world1.mid (WebTV Classic)",
+                        bank: "./content/minibae-wtv.hsb",
+                        media: "./content/world1.mid"
+                    },
+                    preset2: {
+                        name: "royal.mid (WebTV Plus)", 
+                        bank: "./content/patches-wtv-uncompressed.hsb",
+                        media: "./content/royal.mid"
+                    },
+                    preset3: {
+                        name: "hyperactive.rmf (Beatnik Pro)",
+                        bank: "./content/patchesp.hsb", 
+                        media: "./content/hyperactive.rmf"
+                    }
+                };
+
+                this.initElements();
+                this.bindEvents();
+                this.initPlayer();
+                this.startVUMeterUpdates();
+            }
+
+            initElements() {
+                this.elements = {
+                    presetSelect: document.getElementById('presetSelect'),
+                    playBtn: document.getElementById('playBtn'),
+                    pauseBtn: document.getElementById('pauseBtn'),
+                    stopBtn: document.getElementById('stopBtn'),
+                    seekBar: document.getElementById('seekBar'),
+                    seekProgress: document.getElementById('seekProgress'),
+                    currentTime: document.getElementById('currentTime'),
+                    duration: document.getElementById('duration'),
+                    volumeSlider: document.getElementById('volumeSlider'),
+                    loopCheckbox: document.getElementById('loopCheckbox'),
+                    vuLeft: document.getElementById('vuLeft'),
+                    vuRight: document.getElementById('vuRight'),
+                    status: document.getElementById('status')
+                };
+            }
+
+            bindEvents() {
+                this.elements.presetSelect.addEventListener('change', (e) => {
+                    if (e.target.value) {
+                        this.loadPreset(e.target.value);
+                    }
+                });
+
+                this.elements.playBtn.addEventListener('click', () => this.play());
+                this.elements.pauseBtn.addEventListener('click', () => this.pause());
+                this.elements.stopBtn.addEventListener('click', () => this.stop());
+
+                this.elements.seekBar.addEventListener('click', (e) => {
+                    if (this.player && this.player.duration > 0) {
+                        const rect = this.elements.seekBar.getBoundingClientRect();
+                        const percent = (e.clientX - rect.left) / rect.width;
+                        const time = percent * this.player.duration;
+                        this.player.currentTime = time;
+                    }
+                });
+
+                this.elements.volumeSlider.addEventListener('input', (e) => {
+                    if (this.player) {
+                        this.player.volume = e.target.value / 100;
+                    }
+                });
+
+                this.elements.loopCheckbox.addEventListener('change', (e) => {
+                    this.isLooping = e.target.checked;
+                });
+            }
+
+            async initPlayer() {
+                try {
+                    this.updateStatus('Initializing audio engine...', 'loading');
+                    
+                    // Create player instance first
+                    this.player = new BeatnikPlayer();
+
+                    // Add event handlers BEFORE initialization
+                    this.player.addEventListener('ready', () => {
+                        this.updateStatus('Audio engine ready. Please select a preset.', 'success');
+                    });
+
+                    this.player.addEventListener('play', () => {
+                        this.updateButtonStates(true);
+                        this.updateStatus('Playing...', 'success');
+                    });
+
+                    this.player.addEventListener('pause', () => {
+                        this.updateButtonStates(false);
+                        this.updateStatus('Paused', 'success');
+                    });
+
+                    this.player.addEventListener('stop', () => {
+                        this.updateButtonStates(false);
+                        this.updateStatus('Stopped', 'success');
+                    });
+
+                    this.player.addEventListener('end', () => {
+                        if (this.isLooping) {
+                            this.player.currentTime = 0;
+                            this.player.play();
+                        } else {
+                            this.updateButtonStates(false);
+                            this.updateStatus('Finished', 'success');
+                        }
+                    });
+
+                    this.player.addEventListener('error', (error) => {
+                        this.updateStatus(`Error: ${error.message}`, 'error');
+                        console.error('Player error:', error);
+                    });
+
+                    this.player.addEventListener('timeupdate', (time) => {
+                        this.updateTimeDisplay(time);
+                    });
+
+                    // Now initialize the player
+                    await this.player._init({
+                        sampleRate: 44100,
+                        maxVoices: 64
+                    });
+
+                    this.player.volume = this.elements.volumeSlider.value / 100;
+
+                } catch (error) {
+                    this.updateStatus(`Failed to initialize: ${error.message}`, 'error');
+                    console.error('Init error:', error);
+                }
+            }
+
+            async loadPreset(presetId) {
+                const preset = this.presets[presetId];
+                if (!preset) return;
+
+                try {
+                    this.updateStatus(`Loading ${preset.name}...`, 'loading');
+                    
+                    // Load soundbank first
+                    await this.player.loadSoundbank(preset.bank);
+                    
+                    // Then load the media
+                    await this.player.load(preset.media);
+                    
+                    this.elements.playBtn.disabled = false;
+                    this.updateStatus(`${preset.name} loaded successfully`, 'success');
+                    
+                } catch (error) {
+                    this.updateStatus(`Failed to load ${preset.name}: ${error.message}`, 'error');
+                    console.error('Load error:', error);
+                }
+            }
+
+            play() {
+                if (this.player) {
+                    try {
+                        this.player.play();
+                    } catch (error) {
+                        this.updateStatus(`Play error: ${error.message}`, 'error');
+                    }
+                }
+            }
+
+            pause() {
+                if (this.player) {
+                    this.player.pause();
+                }
+            }
+
+            stop() {
+                if (this.player) {
+                    this.player.stop();
+                    this.updateTimeDisplay(0);
+                }
+            }
+
+            updateButtonStates(playing) {
+                this.elements.playBtn.disabled = playing;
+                this.elements.pauseBtn.disabled = !playing;
+                this.elements.stopBtn.disabled = !playing;
+            }
+
+            updateTimeDisplay(currentTime) {
+                const duration = this.player ? this.player.duration : 0;
+                
+                this.elements.currentTime.textContent = this.formatTime(currentTime);
+                this.elements.duration.textContent = this.formatTime(duration);
+                
+                if (duration > 0) {
+                    const percent = (currentTime / duration) * 100;
+                    this.elements.seekProgress.style.width = `${percent}%`;
+                }
+            }
+
+            formatTime(ms) {
+                const seconds = Math.floor(ms / 1000);
+                const minutes = Math.floor(seconds / 60);
+                const remainingSeconds = seconds % 60;
+                return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+            }
+
+            updateStatus(message, type = '') {
+                this.elements.status.textContent = message;
+                this.elements.status.className = `status ${type}`;
+            }
+
+            startVUMeterUpdates() {
+                const updateVU = () => {
+                    if (this.player && this.player.analyserLeft && this.player.analyserRight) {
+                        const leftData = new Uint8Array(this.player.analyserLeft.frequencyBinCount);
+                        const rightData = new Uint8Array(this.player.analyserRight.frequencyBinCount);
+                        
+                        this.player.analyserLeft.getByteFrequencyData(leftData);
+                        this.player.analyserRight.getByteFrequencyData(rightData);
+                        
+                        // Calculate RMS levels
+                        const leftLevel = this.calculateRMS(leftData);
+                        const rightLevel = this.calculateRMS(rightData);
+                        
+                        // Update VU meters
+                        this.elements.vuLeft.style.height = `${leftLevel}%`;
+                        this.elements.vuRight.style.height = `${rightLevel}%`;
+                    }
+                    
+                    requestAnimationFrame(updateVU);
+                };
+                
+                updateVU();
+            }
+
+            calculateRMS(data) {
+                let sum = 0;
+                for (let i = 0; i < data.length; i++) {
+                    sum += data[i] * data[i];
+                }
+                const rms = Math.sqrt(sum / data.length);
+                return Math.min(100, (rms / 255) * 100);
+            }
+        }
+
+        // Initialize the player when the page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            new MiniBAEPlayer();
+        });
+    </script>
+</body>
+</html>

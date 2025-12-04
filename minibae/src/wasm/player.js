@@ -17,12 +17,15 @@ class BeatnikPlayer {
         this._stopping = false;
 
         // Event handlers
-        this.onReady = null;
-        this.onPlay = null;
-        this.onPause = null;
-        this.onEnd = null;
-        this.onError = null;
-        this.onTimeUpdate = null;
+        this._eventListeners = {
+            ready: [],
+            play: [],
+            pause: [],
+            stop: [],
+            end: [],
+            error: [],
+            timeupdate: []
+        };
 
         // Internal state
         this._volume = 1.0;
@@ -56,14 +59,13 @@ class BeatnikPlayer {
         const {
             sampleRate = 44100,
             maxVoices = 64,
-            soundbankUrl = null,
-            wasmUrl = './minibae.wasm'
+            soundbankUrl = null
         } = options;
 
         try {
             // Load WebAssembly module
-            console.log('Loading Beatnik WebAssembly module...');
-            this._wasmModule = await this._loadWasm(wasmUrl);
+            console.log('Waiting for Beatnik WebAssembly module (engine.js)...');
+            this._wasmModule = await this._waitForWasm();
 
             // Create AudioContext
             this._audioContext = new (window.AudioContext || window.webkitAudioContext)({
@@ -75,6 +77,8 @@ class BeatnikPlayer {
             if (result !== 0) {
                 throw new Error(`Failed to initialize Beatnik engine: error ${result}`);
             }
+
+            console.log("Beatnik engine initialized");
 
             // Set up audio processing
             await this._setupAudioWorklet();
@@ -89,20 +93,16 @@ class BeatnikPlayer {
 
             this._isInitialized = true;
 
-            if (this.onReady) {
-                this.onReady();
-            }
+            this._dispatchEvent('ready');
 
         } catch (error) {
-            if (this.onError) {
-                this.onError(error);
-            }
+            this._dispatchEvent('error', error);
             throw error;
         }
     }
 
-    async _loadWasm(url) {
-        // BeatnikModule should be loaded from build/beatnik.js
+    async _waitForWasm() {
+        // BeatnikModule should be loaded from engine.js
         // Wait for it to be available (it's loaded via script tag)
         let attempts = 0;
         while (typeof BeatnikModule === 'undefined' && attempts < 100) {
@@ -199,40 +199,52 @@ class BeatnikPlayer {
      */
     async loadSoundbank(source) {
         if (!this._isInitialized) {
-            throw new Error('BeatnikPlayer not initialized');
+            const error = new Error('BeatnikPlayer not initialized');
+            this._dispatchEvent('error', error);
+            throw error;
         }
+        
+        try {
+            let data;
+            if (typeof source === 'string') {
+                // Fetch from URL
+                const response = await fetch(source);
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch soundbank: ${response.status} ${response.statusText}`);
+                }
+                data = await response.arrayBuffer();
+            } else {
+                data = source;
+            }
 
-        let data;
-        if (typeof source === 'string') {
-            // Fetch from URL
-            const response = await fetch(source);
-            data = await response.arrayBuffer();
-        } else {
-            data = source;
+            // Free previous soundbank memory if exists
+            if (this._soundbankPtr) {
+                this._wasmModule._free(this._soundbankPtr);
+                this._soundbankPtr = null;
+            }
+
+            // Copy to WASM memory
+            const ptr = this._wasmModule._malloc(data.byteLength);
+            const heapBytes = new Uint8Array(this._wasmModule.HEAPU8.buffer, ptr, data.byteLength);
+            heapBytes.set(new Uint8Array(data));
+
+            // Load in WASM
+            const result = this._wasmModule._BAE_WASM_LoadSoundbank(ptr, data.byteLength);
+
+            if (result !== 0) {
+                this._wasmModule._free(ptr);
+                const error = new Error(`Failed to load soundbank: error ${result}`);
+                this._dispatchEvent('error', error);
+                throw error;
+            }
+
+            // Keep soundbank memory alive - BAE doesn't copy it
+            this._soundbankPtr = ptr;
+            this._soundbankLoaded = true;
+        } catch (error) {
+            this._dispatchEvent('error', error);
+            throw error;
         }
-
-        // Free previous soundbank memory if exists
-        if (this._soundbankPtr) {
-            this._wasmModule._free(this._soundbankPtr);
-            this._soundbankPtr = null;
-        }
-
-        // Copy to WASM memory
-        const ptr = this._wasmModule._malloc(data.byteLength);
-        const heapBytes = new Uint8Array(this._wasmModule.HEAPU8.buffer, ptr, data.byteLength);
-        heapBytes.set(new Uint8Array(data));
-
-        // Load in WASM
-        const result = this._wasmModule._BAE_WASM_LoadSoundbank(ptr, data.byteLength);
-
-        if (result !== 0) {
-            this._wasmModule._free(ptr);
-            throw new Error(`Failed to load soundbank: error ${result}`);
-        }
-
-        // Keep soundbank memory alive - BAE doesn't copy it
-        this._soundbankPtr = ptr;
-        this._soundbankLoaded = true;
     }
 
     /**
@@ -243,64 +255,83 @@ class BeatnikPlayer {
      */
     async load(source, type = 'auto') {
         if (!this._soundbankLoaded) {
-            throw new Error('No soundbank loaded');
+            const error = new Error('No soundbank loaded');
+            this._dispatchEvent('error', error);
+            throw error;
         }
 
-        let data;
-        if (typeof source === 'string') {
-            const response = await fetch(source);
-            data = await response.arrayBuffer();
-        } else {
-            data = source;
+        try {
+            let data;
+            if (typeof source === 'string') {
+                const response = await fetch(source);
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch song: ${response.status} ${response.statusText}`);
+                }
+                data = await response.arrayBuffer();
+            } else {
+                data = source;
+            }
+
+            // Copy to WASM memory
+            const ptr = this._wasmModule._malloc(data.byteLength);
+            const heapBytes = new Uint8Array(this._wasmModule.HEAPU8.buffer, ptr, data.byteLength);
+            heapBytes.set(new Uint8Array(data));
+
+            // Load in WASM
+            const result = this._wasmModule._BAE_WASM_LoadSong(ptr, data.byteLength);
+
+            this._wasmModule._free(ptr);
+
+            if (result !== 0) {
+                const error = new Error(`Failed to load song: error ${result}`);
+                this._dispatchEvent('error', error);
+                throw error;
+            }
+
+            this._songLoaded = true;
+
+            // Apply current settings
+            this.volume = this._volume;
+            this.tempo = this._tempo;
+            this.transpose = this._transpose;
+            this.reverbType = this._reverbType;
+            this.outputGain = this._outputGain;
+        } catch (error) {
+            this._dispatchEvent('error', error);
+            throw error;
         }
-
-        // Copy to WASM memory
-        const ptr = this._wasmModule._malloc(data.byteLength);
-        const heapBytes = new Uint8Array(this._wasmModule.HEAPU8.buffer, ptr, data.byteLength);
-        heapBytes.set(new Uint8Array(data));
-
-        // Load in WASM
-        const result = this._wasmModule._BAE_WASM_LoadSong(ptr, data.byteLength);
-
-        this._wasmModule._free(ptr);
-
-        if (result !== 0) {
-            throw new Error(`Failed to load song: error ${result}`);
-        }
-
-        this._songLoaded = true;
-
-        // Apply current settings
-        this.volume = this._volume;
-        this.tempo = this._tempo;
-        this.transpose = this._transpose;
-        this.reverbType = this._reverbType;
-        this.outputGain = this._outputGain;
     }
 
     /**
      * Start playback
      */
     play() {
-        if (!this._songLoaded) {
-            throw new Error('No song loaded');
-        }
+        try {
+            if (!this._songLoaded) {
+                const error = new Error('No song loaded');
+                this._dispatchEvent('error', error);
+                throw error;
+            }
 
-        // Resume audio context if suspended (browser autoplay policy)
-        if (this._audioContext.state === 'suspended') {
-            this._audioContext.resume();
-        }
+            // Resume audio context if suspended (browser autoplay policy)
+            if (this._audioContext.state === 'suspended') {
+                this._audioContext.resume();
+            }
 
-        const result = this._wasmModule._BAE_WASM_Play();
-        if (result !== 0) {
-            throw new Error(`Failed to start playback: error ${result}`);
-        }
+            const result = this._wasmModule._BAE_WASM_Play();
+            if (result !== 0) {
+                const error = new Error(`Failed to start playback: error ${result}`);
+                this._dispatchEvent('error', error);
+                throw error;
+            }
 
-        this._isPlaying = true;
-        this._startTimeUpdates();
+            this._isPlaying = true;
+            this._startTimeUpdates();
 
-        if (this.onPlay) {
-            this.onPlay();
+            this._dispatchEvent('play');
+        } catch (error) {
+            this._dispatchEvent('error', error);
+            throw error;
         }
     }
 
@@ -314,9 +345,7 @@ class BeatnikPlayer {
         this._isPlaying = false;
         this._stopTimeUpdates();
 
-        if (this.onPause) {
-            this.onPause();
-        }
+        this._dispatchEvent('pause');
     }
 
     /**
@@ -329,9 +358,7 @@ class BeatnikPlayer {
         this._isPlaying = true;
         this._startTimeUpdates();
 
-        if (this.onPlay) {
-            this.onPlay();
-        }
+        this._dispatchEvent('play');
     }
 
     /**
@@ -346,9 +373,7 @@ class BeatnikPlayer {
         this._isPlaying = false;
         this._stopTimeUpdates();
 
-        if (this.onEnd) {
-            this.onEnd();
-        }
+        this._dispatchEvent('stop');
         this._stopping = false;
     }
 
@@ -668,15 +693,11 @@ class BeatnikPlayer {
             if (this._wasmModule._BAE_WASM_IsPlaying() === 0) {
                 this._isPlaying = false;
                 this._stopTimeUpdates();
-                if (this.onEnd) {
-                    this.onEnd();
-                }
+                this._dispatchEvent('end');
                 return;
             }
 
-            if (this.onTimeUpdate) {
-                this.onTimeUpdate(this.currentTime);
-            }
+            this._dispatchEvent('timeupdate', this.currentTime);
         }, 100);
     }
 
@@ -684,6 +705,49 @@ class BeatnikPlayer {
         if (this._timeUpdateInterval) {
             clearInterval(this._timeUpdateInterval);
             this._timeUpdateInterval = null;
+        }
+    }
+
+    /**
+     * Add event listener
+     * @param {string} event - Event type: 'ready', 'play', 'pause', 'stop', 'end', 'error', 'timeupdate'
+     * @param {function} listener - Event listener function
+     */
+    addEventListener(event, listener) {
+        if (this._eventListeners[event]) {
+            this._eventListeners[event].push(listener);
+        }
+    }
+
+    /**
+     * Remove event listener
+     * @param {string} event - Event type
+     * @param {function} listener - Event listener function to remove
+     */
+    removeEventListener(event, listener) {
+        if (this._eventListeners[event]) {
+            const index = this._eventListeners[event].indexOf(listener);
+            if (index > -1) {
+                this._eventListeners[event].splice(index, 1);
+            }
+        }
+    }
+
+    /**
+     * Dispatch event to all listeners
+     * @private
+     * @param {string} event - Event type
+     * @param {...any} args - Arguments to pass to listeners
+     */
+    _dispatchEvent(event, ...args) {
+        if (this._eventListeners[event]) {
+            this._eventListeners[event].forEach(listener => {
+                try {
+                    listener(...args);
+                } catch (error) {
+                    console.error(`Error in ${event} event listener:`, error);
+                }
+            });
         }
     }
 
@@ -719,6 +783,11 @@ class BeatnikPlayer {
         this._isPlaying = false;
         this._songLoaded = false;
         this._soundbankLoaded = false;
+        
+        // Clear all event listeners
+        Object.keys(this._eventListeners).forEach(event => {
+            this._eventListeners[event] = [];
+        });
     }
 }
 

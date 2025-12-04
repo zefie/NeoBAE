@@ -52,6 +52,7 @@ all: ${TARGET_JS} extra-files
 extra-files:
 	@mkdir -p $(TARGET_OUT)/content
 	@cp src/wasm/player.js $(TARGET_OUT)
+	@cp src/wasm/player.html $(TARGET_OUT)
 	@cp src/wasm/music-studio/music-studio.css $(TARGET_OUT)
 	@cp src/wasm/music-studio/music-studio.html $(TARGET_OUT)/index.html
 	@cp src/wasm/music-studio/music-studio.js $(TARGET_OUT)
@@ -66,6 +67,7 @@ extra-files:
 	@cp ../content/rmf/rmf-sampler/hyperactive.rmf $(TARGET_OUT)/content/
 	@cp ../content/midi/reflets.mid $(TARGET_OUT)/content/
 	@cp ../content/midi/royal.mid $(TARGET_OUT)/content/
+	@cp src/gui/beatnik.ico $(TARGET_OUT)/favicon.ico
 
 
 	
