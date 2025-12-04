@@ -16,6 +16,7 @@ When Beatnik ended business in December 2009, the source code was released under
 - **Cross-platform**: Runs on Linux, Windows, macOS, and can be compiled to WebAssembly
 - **Command-line player**: `playbae` - a versatile audio file player
 - **GUI application**: `zefidi` - a graphical interface with playlist support
+- **WebAssembly API**: Bring Beatnik back to the web with modern WebAssembly
 - **Hardware MIDI support**: MIDI input/output on supported platforms (GUI Only)
 - **Audio export**: Convert MIDI files to audio formats like WAV, MP3, FLAC, and Vorbis
 - **Low latency**: Designed for real-time audio applications
@@ -27,12 +28,12 @@ When Beatnik ended business in December 2009, the source code was released under
 
 All compilation has been tested on Debian Linux 11+ and Windows via MinGW cross-compilation.
 
-### Linux (SDL2)
+### Linux (SDL3)
 
 ```bash
 # Install dependencies
 apt-get update
-apt-get install libc6-dev libsdl2-dev
+apt-get install libc6-dev libsdl3-dev
 
 # Build
 cd minibae
@@ -49,17 +50,17 @@ make -j$(nproc)
 # Install MinGW toolchain
 apt-get install binutils-mingw-w64-x86_64 g++-mingw-w64-x86_64 gcc-mingw-w64-x86_64
 
-# Build with SDL2 support
+# Build with SDL3 support
 cd minibae
 make clean
-make -f Makefile.mingw USE_SDL=1 -j$(nproc)
+make -f Makefile.mingw USE_SDL3=1 -j$(nproc)
 ```
 
 ### GUI Application
 
 ```bash
 # Linux
-apt-get install libsdl2-dev libsdl2-ttf-dev
+apt-get install libsdl3-dev libsdl3-ttf-dev
 make clean
 make -f Makefile.gui -j$(nproc)
 
@@ -114,6 +115,14 @@ The GUI provides an intuitive interface for:
   - Also supports MIDI Output
 - Cross-platform: Runs on any device SDL2 does
 - Dark mode support (Default for Linux, on Windows it will default to your theme settings (10/11))
+
+### WebAssembly
+
+A brand new WebAssembly API for the miniBAE engine is available thanks to [webcd](https://github.com/charlie3684)!
+
+The new API can be used to build your own player, but a sample of webcd's Music Studio is included to demonstrate the WebAssembly's capabilities.
+
+Please note that the WebAssembly engine does not yet support FluidSynth, and is limited to Beatnik HSB banks.
 
 ## Supported Formats
 
