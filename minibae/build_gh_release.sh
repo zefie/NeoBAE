@@ -129,7 +129,7 @@ if [ -z "${SKIPTO}" ] || [ "${SKIPTO}" -le 6 ]; then
 	runcmd make clean
 	runcmd make -f Makefile.emcc "-j$(nproc)" all
 	runcmd make -f Makefile.emcc pack
-	install_file "${BDIR}/playbae_wasm.tar.gz" "${ODIR}/playbae_wasm.tar.gz"
+	install_file "${BDIR}/miniBAE_WASM.tar.gz" "${ODIR}/miniBAE_WASM.tar.gz"
 	runcmd make -f Makefile.emcc clean
 fi
 
