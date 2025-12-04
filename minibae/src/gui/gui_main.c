@@ -1542,7 +1542,6 @@ int main(int argc, char *argv[])
                         }
 #endif
                     }
-                    SDL_free((void *)dropped);
                 }
             }
             break;
