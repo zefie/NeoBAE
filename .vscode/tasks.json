@@ -1,0 +1,69 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Clean",
+      "type": "shell",
+      "command": "make",
+      "options": {
+        "cwd": "${workspaceFolder}/minibae"
+      },
+      "args": ["-f", "Makefile.gui-mingw", "clean"],
+      "problemMatcher": []
+    },
+    {
+        "label": "Run GUI",
+        "type": "shell",
+        "command": "${workspaceFolder}/minibae/bin/zefidi.exe",
+        "options": {
+            "cwd": "${workspaceFolder}/minibae/bin"
+        },
+        "dependsOn": ["Build GUI"]
+    },
+    {
+      "label": "Build GUI",
+      "type": "shell",
+      "command": "make",
+      "options": {
+        "cwd": "${workspaceFolder}/minibae"
+      },
+      "args": ["-f", "Makefile.gui-mingw", "-j8"],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "dependsOn": ["Clean"],
+      "problemMatcher": "$gcc"
+    },
+    {
+      "label": "Build GUI with Debug Logging",
+      "type": "shell",
+      "command": "make",
+      "options": {
+        "cwd": "${workspaceFolder}/minibae"
+      },
+      "args": ["-f", "Makefile.gui-mingw", "DEBUG=1", "-j8"],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "dependsOn": ["Clean"],
+      "problemMatcher": "$gcc"
+    },
+    {
+      "label": "Build GUI with Debug Logging and Symbols",
+      "type": "shell",
+      "command": "make",
+      "options": {
+        "cwd": "${workspaceFolder}/minibae"
+      },
+      "args": ["-f", "Makefile.gui-mingw", "DEBUG=1", "LDEBUG=1","-j8"],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "dependsOn": ["Clean"],
+      "problemMatcher": "$gcc"
+    }    
+  ]
+}

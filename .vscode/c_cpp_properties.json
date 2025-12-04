@@ -1,0 +1,51 @@
+{
+  "configurations": [
+    {
+      "name": "WSL2-MinGW-GUI-SDL3",
+      "includePath": [
+        "${workspaceFolder}/minibae/src/BAE_Source/Common/**",
+        "${workspaceFolder}/minibae/src/BAE_Source/Platform/**",
+        "${workspaceFolder}/minibae/src/BAE_MPEG_Source_II/**",
+        "${workspaceFolder}/minibae/src/banks/patches111/**",
+        "${workspaceFolder}/minibae/src/thirdparty/minimp3/**",
+        "${workspaceFolder}/minibae/src/thirdparty/rtmidi/**",
+        "${workspaceFolder}/minibae/src/thirdparty/flac/include/**",
+        "${workspaceFolder}/minibae/src/thirdparty/flac/src/libFLAC/include/**",
+        "${workspaceFolder}/minibae/src/thirdparty/libogg/include/**",
+        "${workspaceFolder}/minibae/src/thirdparty/libvorbis/include/**",
+        "${workspaceFolder}/minibae/src/thirdparty/libvorbis/lib/**",
+        "${workspaceFolder}/windeps/FluidSynth/x86_64-w64-mingw32/include/**",
+        "${workspaceFolder}/windeps/SDL3/x86_64-w64-mingw32/include/**",
+        "${workspaceFolder}/windeps/SDL3_ttf/x86_64-w64-mingw32/include/**",
+        "${workspaceFolder}/minibae/src/thirdparty/lame-3.100-slim/include/**",
+        "${workspaceFolder}/minibae/src/thirdparty/lame-3.100-slim/**",
+        "${workspaceFolder}/minibae/src/thirdparty/lame-3.100-slim/libmp3lame/**",
+        "${workspaceFolder}/minibae/src/thirdparty/flac/src/share/win_utf8_io/**"
+      ],
+      "defines": [
+        "X_PLATFORM=X_SDL3",
+        "MP3_DEC=1",
+		"MP3_ENC=1",
+		"FLAC_DEC=1",
+		"FLAC_ENC=1",
+		"OGG_SUPPORT=1",
+		"VORBIS_DEC=1",
+		"VORBIS_ENC=1",
+		"KARAOKE=1",
+		"PLAYLIST=1",
+		"SF2_SUPPORT=1",
+		"USE_FLUIDSYNTH=1",
+		"XMF_SUPPORT=0",
+		"DISABLE_NOKIA=0",
+		"DISABLE_BEATNIK_SF2_NRPN=0",
+        "SUPPORT_MIDI_HW=1",
+        "SUPPORT_KARAOKE=1"
+      ],
+      "compilerPath": "/usr/bin/x86_64-w64-mingw32-gcc",
+      "intelliSenseMode": "linux-gcc-x64",
+      "cStandard": "c11",
+      "cppStandard": "c++17"
+    }
+  ],
+  "version": 4
+}

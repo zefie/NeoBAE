@@ -1,0 +1,24 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+        "name": "Build & Debug GUI",
+        "type": "cppdbg",
+        "request": "launch",
+        "program": "${workspaceFolder}/minibae/bin/zefidi.exe",
+        "args": [],
+        "cwd": "${workspaceFolder}/minibae/bin",
+        "MIMode": "gdb",
+        "miDebuggerPath": "/mnt/d/w64devkit/bin/gdb.exe",
+        "setupCommands": [
+            {
+                "description": "Enable pretty-printing for gdb",
+                "text": "-enable-pretty-printing",
+                "ignoreFailures": true
+            }
+        ],
+        "preLaunchTask": "Build GUI with Debug Logging and Symbols"
+    }
+  ]
+}
+
