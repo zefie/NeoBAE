@@ -2038,7 +2038,7 @@ static void PV_ProcessNoteOn(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTra
                         }
                     } else {
                         // RMF
-                        volume = (INT16)((float)volume * 0.45f); // RMF seems to be louder, so turn it down a bit
+                        //volume = (INT16)((float)volume * 0.45f); // RMF seems to be louder, so turn it down a bit
                         thePatch = PV_DetermineInstrumentToUse(pSong, note, MIDIChannel);
                         PV_StartMIDINote(pSong, thePatch, MIDIChannel, currentTrack, note, volume);
                     }

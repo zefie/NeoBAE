@@ -1004,6 +1004,50 @@ function setupEventListeners() {
     });
 }
 
+async function zinit() {    
+    const waitForContext = async () => {
+        if (player && player.audioContext) {
+            while (player.audioContext.state === 'suspended') {
+                await new Promise(r => setTimeout(r, 100));
+                player.audioContext.resume();
+            }
+        }
+    };
+
+    await waitForContext();
+   
+    const urlParams = new URLSearchParams(window.location.search);
+    const fileParam = urlParams.get('file');
+    const soloParam = urlParams.get('solofile');
+    const soloBankParam = urlParams.get('solobank');
+    if (fileParam) {
+        const filename = fileParam.split('/').pop() || 'song.mid';
+        loadPresetSong(fileParam, filename);
+    }
+    else if (soloParam) {
+        if (soloBankParam) {
+            elements.soundbankLeft.value = soloBankParam;
+            await loadLeftSoundbank();
+            player.primeMixer();
+        }
+        fetch(soloParam)
+            .then(response => {
+                if (!response.ok) throw new Error('Failed to fetch file from URL');
+                return response.arrayBuffer();
+            })
+            .then(arrayBuffer => {
+                const filename = soloParam.split('/').pop() || 'song.mid';
+                const blob = new Blob([arrayBuffer], { type: 'audio/midi' });
+                const file = new File([blob], filename, { type: 'audio/midi' });
+                handleFile(file);
+            })
+            .catch(error => {
+                console.error('Error loading file from URL:', error);
+                elements.nowPlaying.textContent = 'Error loading file from URL';
+            });
+    }
+}
+
 let initCalled = false;
 function safeInit() {
     if (initCalled) return;
@@ -1012,7 +1056,9 @@ function safeInit() {
         elementIds.forEach(id => elements[id] = document.getElementById(id));
         setupEventListeners();
         init();
+        zinit();
     }
 }
 
 window.addEventListener('load', () => setTimeout(safeInit, 100));
+// Handle ?file= URL parameter
