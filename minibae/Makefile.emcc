@@ -1,19 +1,24 @@
 BAE_BUILT_IN_PATCHES	:= 1
-BAE_API			:= Ansi
-WASM			:=	1
+BAE_API			:= WASM
+WASM			:= 1
 DEBUG			:= 0
+SF2_SUPPORT		:= 0
+USE_FLUIDSYNTH  := 0
 NOAUTO			:= 1
 MP3_DEC			:= 1
 
-TARGET_LIB	:= libminiBAE.js
-TARGET_BIN	:= playbae.js
-PACK_FILENAME	:= playbae_wasm.tar.gz
+TARGET_JS	:= engine.js
+PACK_FILENAME	:= miniBAE_WASM.tar.gz
 
 include inc/Makefile.common
 
 EXTRA_FILES		:= \
-			src/playbae/minibae-audio.htm \
-			src/playbae/minibae-audio.js \
+			src/wasm/player.js \
+			src/wasm/music-studio/music-studio.css \
+			src/wasm/music-studio/music-studio.html \
+			src/wasm/music-studio/music-studio.js \
+			src/wasm/music-studio/tell-me-about.gif \
+			src/wasm/music-studio/beatnik-spotlogo.png \
 			src/banks/WTVBanks/wpatches-classic.hsb \
 			src/TestSuite/world1.mid
 
@@ -40,26 +45,28 @@ endif
 include inc/Makefile.versioning
 CFLAGS		+= -D_VERSION=\""$(VERSION)"\"
 
+
+
 CXXFLAGS 	:= $(CFLAGS)
-LDFLAGS		:= $(ARCH) $(OPTI) -s 'ASYNCIFY=1' -s 'DEFAULT_LIBRARY_FUNCS_TO_INCLUDE=[$$Browser]' -s EXPORT_ES6=1 -s EXPORTED_RUNTIME_METHODS=[FS] -s SINGLE_FILE=1 \
- --embed-file src/banks/patches111/patches111.hsb\@/home/web_user/patches.hsb -Wno-unused-command-line-argument
+LDFLAGS		:= $(ARCH) $(OPTI) -O3 -DNDEBUG -s WASM=1 -s ALLOW_MEMORY_GROWTH=1 -s INITIAL_MEMORY=67108864 -s MAXIMUM_MEMORY=536870912 \
+-s EXPORTED_FUNCTIONS="['_BAE_WASM_Init', '_BAE_WASM_LoadSoundbank', '_BAE_WASM_LoadSong', '_BAE_WASM_Play', '_BAE_WASM_Pause', '_BAE_WASM_Resume', '_BAE_WASM_Stop', '_BAE_WASM_IsPlaying', '_BAE_WASM_GetPosition', '_BAE_WASM_SetPosition', '_BAE_WASM_GetDuration', '_BAE_WASM_SetVolume', '_BAE_WASM_SetTempo', '_BAE_WASM_SetTranspose', '_BAE_WASM_MuteChannel', '_BAE_WASM_MuteTrack', '_BAE_WASM_SoloTrack', '_BAE_WASM_GetTrackMuteStatus', '_BAE_WASM_GetTrackSoloStatus', '_BAE_WASM_ProgramChange', '_BAE_WASM_ProgramBankChange', '_BAE_WASM_GetProgram', '_BAE_WASM_SetReverbType', '_BAE_WASM_GenerateAudio', '_BAE_WASM_GetAudioBuffer', '_BAE_WASM_GetBufferFrames', '_BAE_WASM_Shutdown', '_BAE_WASM_GetSongInfo', '_BAE_WASM_SetOutputGain', '_BAE_WASM_GetOutputGain', '_BAE_WASM_LoadEffect', '_BAE_WASM_PlayEffect', '_BAE_WASM_StopEffect', '_BAE_WASM_IsEffectPlaying', '_BAE_WASM_LoadSampleBank', '_BAE_WASM_TriggerSample', '_malloc', '_free']" \
+-s EXPORTED_RUNTIME_METHODS="['ccall','cwrap','UTF8ToString','HEAPU8','HEAP16']" -s MODULARIZE=1 -s EXPORT_NAME='BeatnikModule' -s ASSERTIONS=0 --no-entry \
+-Wno-unused-command-line-argument
 
 
 
 LIBS	= 	-lpthread
 
-all: ${TARGET_LIB} $(TARGET_BIN)
+all: ${TARGET_JS} extra-files
 
-$(TARGET_LIB): ${OBJ}
-	@mkdir -p $(TARGET_OUT)
-	${LD} -o $(TARGET_OUT)${TARGET_LIB} ${LDFLAGS} ${OBJ} $(LIBS)
-
-$(TARGET_BIN): ${OBJ_BIN}
-	@mkdir -p $(TARGET_OUT)
+extra-files:
 	@cp $(EXTRA_FILES) $(TARGET_OUT)
-	${LD} -o $(TARGET_OUT)${TARGET_BIN} ${LDFLAGS} ${OBJ_BIN} ${LIBS}
+	
+$(TARGET_JS): ${OBJ}
+	@mkdir -p $(TARGET_OUT)
+	${LD} -o $(TARGET_OUT)${TARGET_JS} ${LDFLAGS} ${OBJ} $(LIBS)
 
-pack: ${TARGET_BIN}
+pack: ${TARGET_JS}
 	@rm -f $(TARGET_OUT)$(PACK_FILENAME)
 	@tar -zcf $(PACK_FILENAME) -C $(TARGET_OUT) --exclude "./$(PACK_FILENAME)" .
 	@mv $(PACK_FILENAME) $(TARGET_OUT)$(PACK_FILENAME)

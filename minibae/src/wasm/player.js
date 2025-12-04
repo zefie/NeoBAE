@@ -1,0 +1,746 @@
+/**
+ * Beatnik Web SDK
+ *
+ * JavaScript API for playing MIDI and RMF files using the Beatnik Audio Engine
+ * compiled to WebAssembly.
+ */
+
+class BeatnikPlayer {
+    constructor() {
+        this._wasmModule = null;
+        this._audioContext = null;
+        this._workletNode = null;
+        this._isInitialized = false;
+        this._isPlaying = false;
+        this._soundbankLoaded = false;
+        this._songLoaded = false;
+        this._stopping = false;
+
+        // Event handlers
+        this.onReady = null;
+        this.onPlay = null;
+        this.onPause = null;
+        this.onEnd = null;
+        this.onError = null;
+        this.onTimeUpdate = null;
+
+        // Internal state
+        this._volume = 1.0;
+        this._tempo = 1.0;
+        this._transpose = 0;
+        this._reverbType = 3; // Acoustic Lab (Beatnik default)
+        this._outputGain = 0.5; // Default -6dB to reduce distortion on hot mixes
+
+        // Memory pointers that must stay alive
+        this._soundbankPtr = null;
+
+        // Time update interval
+        this._timeUpdateInterval = null;
+    }
+
+    /**
+     * Initialize the Beatnik engine
+     * @param {Object} options - Configuration options
+     * @param {number} [options.sampleRate=44100] - Audio sample rate
+     * @param {number} [options.maxVoices=64] - Maximum polyphony
+     * @param {string} [options.soundbankUrl] - URL to preload soundbank
+     * @returns {Promise<BeatnikPlayer>}
+     */
+    static async init(options = {}) {
+        const player = new BeatnikPlayer();
+        await player._init(options);
+        return player;
+    }
+
+    async _init(options) {
+        const {
+            sampleRate = 44100,
+            maxVoices = 64,
+            soundbankUrl = null,
+            wasmUrl = './minibae.wasm'
+        } = options;
+
+        try {
+            // Load WebAssembly module
+            console.log('Loading Beatnik WebAssembly module...');
+            this._wasmModule = await this._loadWasm(wasmUrl);
+
+            // Create AudioContext
+            this._audioContext = new (window.AudioContext || window.webkitAudioContext)({
+                sampleRate: sampleRate
+            });
+
+            // Initialize BAE in WASM
+            const result = this._wasmModule._BAE_WASM_Init(sampleRate, maxVoices);
+            if (result !== 0) {
+                throw new Error(`Failed to initialize Beatnik engine: error ${result}`);
+            }
+
+            // Set up audio processing
+            await this._setupAudioWorklet();
+
+            // Apply default output gain (reduces distortion on hot mixes)
+            this._wasmModule._BAE_WASM_SetOutputGain(Math.floor(this._outputGain * 256));
+
+            // Preload soundbank if specified
+            if (soundbankUrl) {
+                await this.loadSoundbank(soundbankUrl);
+            }
+
+            this._isInitialized = true;
+
+            if (this.onReady) {
+                this.onReady();
+            }
+
+        } catch (error) {
+            if (this.onError) {
+                this.onError(error);
+            }
+            throw error;
+        }
+    }
+
+    async _loadWasm(url) {
+        // BeatnikModule should be loaded from build/beatnik.js
+        // Wait for it to be available (it's loaded via script tag)
+        let attempts = 0;
+        while (typeof BeatnikModule === 'undefined' && attempts < 100) {
+            await new Promise(r => setTimeout(r, 50));
+            attempts++;
+        }
+
+        if (typeof BeatnikModule === 'undefined') {
+            throw new Error('BeatnikModule not loaded. Make sure minibae.js is included.');
+        }
+
+        // Initialize the Emscripten module
+        const module = await BeatnikModule();
+        return module;
+    }
+
+    async _setupAudioWorklet() {
+        // AudioWorklet path is stubbed; use ScriptProcessorNode for now
+        this._setupScriptProcessor();
+    }
+
+    _setupScriptProcessor() {
+        // Match the native mixer buffer (AUDIO_BUFFER_FRAMES) to avoid underruns/clicks
+        const bufferSize = 512;
+        const processor = this._audioContext.createScriptProcessor(bufferSize, 0, 2);
+
+        processor.onaudioprocess = (event) => {
+            if (!this._isPlaying || !this._wasmModule) {
+                return;
+            }
+
+            const left = event.outputBuffer.getChannelData(0);
+            const right = event.outputBuffer.getChannelData(1);
+            const frames = left.length;
+
+            // Generate audio in WASM
+            const bufferPtr = this._wasmModule._BAE_WASM_GenerateAudio(frames);
+
+            // Copy from WASM memory to output buffers
+            const wasmBuffer = new Int16Array(
+                this._wasmModule.HEAP16.buffer,
+                bufferPtr,
+                frames * 2
+            );
+
+            // Convert 16-bit samples to float and deinterleave
+            for (let i = 0; i < frames; i++) {
+                left[i] = wasmBuffer[i * 2] / 32768.0;
+                right[i] = wasmBuffer[i * 2 + 1] / 32768.0;
+            }
+        };
+
+        // Create analyser nodes for VU meter / audioscope
+        this._analyserLeft = this._audioContext.createAnalyser();
+        this._analyserRight = this._audioContext.createAnalyser();
+        this._analyserLeft.fftSize = 256;
+        this._analyserRight.fftSize = 256;
+        this._analyserLeft.smoothingTimeConstant = 0.8;
+        this._analyserRight.smoothingTimeConstant = 0.8;
+
+        // Create channel splitter to separate L/R for analysers
+        const splitter = this._audioContext.createChannelSplitter(2);
+
+        // Connect: processor -> splitter -> analysers (for monitoring)
+        //          processor -> destination (for playback)
+        processor.connect(splitter);
+        splitter.connect(this._analyserLeft, 0);
+        splitter.connect(this._analyserRight, 1);
+        processor.connect(this._audioContext.destination);
+
+        this._workletNode = processor;
+    }
+
+    /**
+     * Get the left channel analyser node for VU meter / audioscope
+     * @returns {AnalyserNode|null}
+     */
+    get analyserLeft() {
+        return this._analyserLeft || null;
+    }
+
+    /**
+     * Get the right channel analyser node for VU meter / audioscope
+     * @returns {AnalyserNode|null}
+     */
+    get analyserRight() {
+        return this._analyserRight || null;
+    }
+
+    /**
+     * Load a soundbank file
+     * @param {string|ArrayBuffer} source - URL or ArrayBuffer of HSB/GM file
+     * @returns {Promise<void>}
+     */
+    async loadSoundbank(source) {
+        if (!this._isInitialized) {
+            throw new Error('BeatnikPlayer not initialized');
+        }
+
+        let data;
+        if (typeof source === 'string') {
+            // Fetch from URL
+            const response = await fetch(source);
+            data = await response.arrayBuffer();
+        } else {
+            data = source;
+        }
+
+        // Free previous soundbank memory if exists
+        if (this._soundbankPtr) {
+            this._wasmModule._free(this._soundbankPtr);
+            this._soundbankPtr = null;
+        }
+
+        // Copy to WASM memory
+        const ptr = this._wasmModule._malloc(data.byteLength);
+        const heapBytes = new Uint8Array(this._wasmModule.HEAPU8.buffer, ptr, data.byteLength);
+        heapBytes.set(new Uint8Array(data));
+
+        // Load in WASM
+        const result = this._wasmModule._BAE_WASM_LoadSoundbank(ptr, data.byteLength);
+
+        if (result !== 0) {
+            this._wasmModule._free(ptr);
+            throw new Error(`Failed to load soundbank: error ${result}`);
+        }
+
+        // Keep soundbank memory alive - BAE doesn't copy it
+        this._soundbankPtr = ptr;
+        this._soundbankLoaded = true;
+    }
+
+    /**
+     * Load a MIDI or RMF file
+     * @param {string|ArrayBuffer} source - URL or ArrayBuffer
+     * @param {string} [type='auto'] - File type: 'midi', 'rmf', or 'auto'
+     * @returns {Promise<void>}
+     */
+    async load(source, type = 'auto') {
+        if (!this._soundbankLoaded) {
+            throw new Error('No soundbank loaded');
+        }
+
+        let data;
+        if (typeof source === 'string') {
+            const response = await fetch(source);
+            data = await response.arrayBuffer();
+        } else {
+            data = source;
+        }
+
+        // Copy to WASM memory
+        const ptr = this._wasmModule._malloc(data.byteLength);
+        const heapBytes = new Uint8Array(this._wasmModule.HEAPU8.buffer, ptr, data.byteLength);
+        heapBytes.set(new Uint8Array(data));
+
+        // Load in WASM
+        const result = this._wasmModule._BAE_WASM_LoadSong(ptr, data.byteLength);
+
+        this._wasmModule._free(ptr);
+
+        if (result !== 0) {
+            throw new Error(`Failed to load song: error ${result}`);
+        }
+
+        this._songLoaded = true;
+
+        // Apply current settings
+        this.volume = this._volume;
+        this.tempo = this._tempo;
+        this.transpose = this._transpose;
+        this.reverbType = this._reverbType;
+        this.outputGain = this._outputGain;
+    }
+
+    /**
+     * Start playback
+     */
+    play() {
+        if (!this._songLoaded) {
+            throw new Error('No song loaded');
+        }
+
+        // Resume audio context if suspended (browser autoplay policy)
+        if (this._audioContext.state === 'suspended') {
+            this._audioContext.resume();
+        }
+
+        const result = this._wasmModule._BAE_WASM_Play();
+        if (result !== 0) {
+            throw new Error(`Failed to start playback: error ${result}`);
+        }
+
+        this._isPlaying = true;
+        this._startTimeUpdates();
+
+        if (this.onPlay) {
+            this.onPlay();
+        }
+    }
+
+    /**
+     * Pause playback
+     */
+    pause() {
+        if (!this._isPlaying) return;
+
+        this._wasmModule._BAE_WASM_Pause();
+        this._isPlaying = false;
+        this._stopTimeUpdates();
+
+        if (this.onPause) {
+            this.onPause();
+        }
+    }
+
+    /**
+     * Resume playback
+     */
+    resume() {
+        if (this._isPlaying) return;
+
+        this._wasmModule._BAE_WASM_Resume();
+        this._isPlaying = true;
+        this._startTimeUpdates();
+
+        if (this.onPlay) {
+            this.onPlay();
+        }
+    }
+
+    /**
+     * Stop playback
+     */
+    stop() {
+        if (this._stopping) {
+            return;
+        }
+        this._stopping = true;
+        this._wasmModule._BAE_WASM_Stop();
+        this._isPlaying = false;
+        this._stopTimeUpdates();
+
+        if (this.onEnd) {
+            this.onEnd();
+        }
+        this._stopping = false;
+    }
+
+    /**
+     * Current playback position in milliseconds
+     */
+    get currentTime() {
+        if (!this._wasmModule) return 0;
+        return this._wasmModule._BAE_WASM_GetPosition();
+    }
+
+    set currentTime(ms) {
+        if (!this._wasmModule) return;
+        this._wasmModule._BAE_WASM_SetPosition(Math.floor(ms));
+    }
+
+    /**
+     * Duration in milliseconds
+     */
+    get duration() {
+        if (!this._wasmModule) return 0;
+        return this._wasmModule._BAE_WASM_GetDuration();
+    }
+
+    /**
+     * Is currently playing
+     */
+    get isPlaying() {
+        return this._isPlaying;
+    }
+
+    /**
+     * Volume (0.0 to 1.0)
+     */
+    get volume() {
+        return this._volume;
+    }
+
+    set volume(value) {
+        this._volume = Math.max(0, Math.min(1, value));
+        if (this._wasmModule) {
+            this._wasmModule._BAE_WASM_SetVolume(Math.floor(this._volume * 100));
+        }
+    }
+
+    /**
+     * Tempo multiplier (1.0 = normal)
+     */
+    get tempo() {
+        return this._tempo;
+    }
+
+    set tempo(value) {
+        this._tempo = Math.max(0.25, Math.min(4, value));
+        if (this._wasmModule) {
+            this._wasmModule._BAE_WASM_SetTempo(Math.floor(this._tempo * 100));
+        }
+    }
+
+    /**
+     * Transpose in semitones (-12 to +12)
+     */
+    get transpose() {
+        return this._transpose;
+    }
+
+    set transpose(value) {
+        this._transpose = Math.max(-12, Math.min(12, Math.floor(value)));
+        if (this._wasmModule) {
+            this._wasmModule._BAE_WASM_SetTranspose(this._transpose);
+        }
+    }
+
+    /**
+     * Reverb type (0-11)
+     */
+    get reverbType() {
+        return this._reverbType;
+    }
+
+    set reverbType(value) {
+        this._reverbType = Math.max(0, Math.min(11, Math.floor(value)));
+        if (this._wasmModule) {
+            this._wasmModule._BAE_WASM_SetReverbType(this._reverbType);
+        }
+    }
+
+    /**
+     * Output gain (0.0 to 2.0, where 1.0 = unity gain)
+     * Use values below 1.0 to reduce distortion on loud files
+     * Default is 0.75 (~-2.5dB) to prevent clipping
+     */
+    get outputGain() {
+        return this._outputGain;
+    }
+
+    set outputGain(value) {
+        this._outputGain = Math.max(0, Math.min(2, value));
+        if (this._wasmModule) {
+            // Convert 0-2 to 0-512 (256 = unity)
+            this._wasmModule._BAE_WASM_SetOutputGain(Math.floor(this._outputGain * 256));
+        }
+    }
+
+    /**
+     * Mute/unmute a MIDI channel
+     * @param {number} channel - Channel number (0-15)
+     * @param {boolean} muted - Mute state
+     */
+    muteChannel(channel, muted) {
+        if (this._wasmModule) {
+            this._wasmModule._BAE_WASM_MuteChannel(channel, muted ? 1 : 0);
+        }
+    }
+
+    /**
+     * Mute/unmute a MIDI track
+     * @param {number} track - Track number (1-based)
+     * @param {boolean} muted - Mute state
+     */
+    muteTrack(track, muted) {
+        if (this._wasmModule) {
+            this._wasmModule._BAE_WASM_MuteTrack(track, muted ? 1 : 0);
+        }
+    }
+
+    /**
+     * Solo/unsolo a MIDI track
+     * When a track is soloed, only soloed tracks produce sound
+     * @param {number} track - Track number (1-based)
+     * @param {boolean} soloed - Solo state
+     */
+    soloTrack(track, soloed) {
+        if (this._wasmModule) {
+            this._wasmModule._BAE_WASM_SoloTrack(track, soloed ? 1 : 0);
+        }
+    }
+
+    /**
+     * Get the mute status of a track
+     * @param {number} track - Track number (1-based)
+     * @returns {boolean} True if muted
+     */
+    isTrackMuted(track) {
+        if (!this._wasmModule) return false;
+        return this._wasmModule._BAE_WASM_GetTrackMuteStatus(track) === 1;
+    }
+
+    /**
+     * Get the solo status of a track
+     * @param {number} track - Track number (1-based)
+     * @returns {boolean} True if soloed
+     */
+    isTrackSoloed(track) {
+        if (!this._wasmModule) return false;
+        return this._wasmModule._BAE_WASM_GetTrackSoloStatus(track) === 1;
+    }
+
+    /**
+     * Change the program (instrument) on a MIDI channel
+     * @param {number} channel - Channel number (0-15)
+     * @param {number} program - General MIDI program number (0-127)
+     */
+    setProgram(channel, program) {
+        if (this._wasmModule) {
+            return this._wasmModule._BAE_WASM_ProgramChange(channel, program);
+        }
+        return -1;
+    }
+
+    /**
+     * Change the program (instrument) on a MIDI channel with bank selection
+     * @param {number} channel - Channel number (0-15)
+     * @param {number} bank - Bank number (0-127)
+     * @param {number} program - General MIDI program number (0-127)
+     * @returns {number} 0 on success, error code on failure
+     */
+    setProgramBank(channel, bank, program) {
+        if (this._wasmModule) {
+            return this._wasmModule._BAE_WASM_ProgramBankChange(channel, bank, program);
+        }
+        return -1;
+    }
+
+    /**
+     * Get the current program (instrument) on a MIDI channel
+     * @param {number} channel - Channel number (0-15)
+     * @returns {number} Program number (0-127), or -1 on error
+     */
+    getProgram(channel) {
+        if (this._wasmModule) {
+            return this._wasmModule._BAE_WASM_GetProgram(channel);
+        }
+        return -1;
+    }
+
+    /**
+     * Get song metadata
+     * @param {string} key - Info key: 'title', 'composer', 'copyright', etc.
+     * @returns {string}
+     */
+    getSongInfo(key) {
+        if (!this._wasmModule || !this._songLoaded) return '';
+
+        const infoTypes = {
+            'title': 0,
+            'composer': 1,
+            'copyright': 2,
+            'performer': 3,
+            'publisher': 4
+        };
+
+        const type = infoTypes[key.toLowerCase()] ?? 0;
+        const bufferSize = 256;
+        const ptr = this._wasmModule._malloc(bufferSize);
+
+        this._wasmModule._BAE_WASM_GetSongInfo(type, ptr, bufferSize);
+
+        const result = this._wasmModule.UTF8ToString(ptr);
+        this._wasmModule._free(ptr);
+
+        return result;
+    }
+
+    /**
+     * Load an RMF/MIDI as a sound effect (plays on top of main song)
+     * @param {ArrayBuffer} data - RMF or MIDI file data
+     * @returns {Promise<number>} 0 on success, error code on failure
+     */
+    async loadEffect(data) {
+        if (!this._wasmModule) return -1;
+
+        const uint8Array = new Uint8Array(data);
+        const ptr = this._wasmModule._malloc(uint8Array.length);
+        this._wasmModule.HEAPU8.set(uint8Array, ptr);
+
+        const result = this._wasmModule._BAE_WASM_LoadEffect(ptr, uint8Array.length);
+        this._wasmModule._free(ptr);
+
+        return result;
+    }
+
+    /**
+     * Play the loaded effect (overlaid on main song)
+     * @returns {number} 0 on success, error code on failure
+     */
+    playEffect() {
+        if (this._wasmModule) {
+            return this._wasmModule._BAE_WASM_PlayEffect();
+        }
+        return -1;
+    }
+
+    /**
+     * Stop the effect song
+     * @returns {number} 0 on success
+     */
+    stopEffect() {
+        if (this._wasmModule) {
+            return this._wasmModule._BAE_WASM_StopEffect();
+        }
+        return 0;
+    }
+
+    /**
+     * Check if effect is currently playing
+     * @returns {boolean}
+     */
+    isEffectPlaying() {
+        if (this._wasmModule) {
+            return this._wasmModule._BAE_WASM_IsEffectPlaying() !== 0;
+        }
+        return false;
+    }
+
+    /**
+     * Load an RMF as a sample bank (for voice/sample RMFs without MIDI)
+     * This allows RMF files containing only samples (like voice files) to be triggered
+     * @param {ArrayBuffer} data - RMF file data
+     * @returns {Promise<number>} 0 on success, error code on failure
+     */
+    async loadSampleBank(data) {
+        if (!this._wasmModule) return -1;
+
+        const uint8Array = new Uint8Array(data);
+        const ptr = this._wasmModule._malloc(uint8Array.length);
+        this._wasmModule.HEAPU8.set(uint8Array, ptr);
+
+        const result = this._wasmModule._BAE_WASM_LoadSampleBank(ptr, uint8Array.length);
+        this._wasmModule._free(ptr);
+
+        return result;
+    }
+
+    /**
+     * Trigger a sample from a loaded sample bank
+     * @param {number} bank - Bank number (usually 2 for RMF samples)
+     * @param {number} program - Program number (usually 0)
+     * @param {number} note - MIDI note number (60 = middle C is typical)
+     * @param {number} velocity - Velocity 0-127
+     * @returns {number} 0 on success, error code on failure
+     */
+    triggerSample(bank, program, note, velocity) {
+        if (this._wasmModule) {
+            return this._wasmModule._BAE_WASM_TriggerSample(bank, program, note, velocity);
+        }
+        return -1;
+    }
+
+    _startTimeUpdates() {
+        if (this._timeUpdateInterval) return;
+
+        this._timeUpdateInterval = setInterval(() => {
+            if (!this._isPlaying) return;
+
+            // Check if song ended
+            if (this._wasmModule._BAE_WASM_IsPlaying() === 0) {
+                this._isPlaying = false;
+                this._stopTimeUpdates();
+                if (this.onEnd) {
+                    this.onEnd();
+                }
+                return;
+            }
+
+            if (this.onTimeUpdate) {
+                this.onTimeUpdate(this.currentTime);
+            }
+        }, 100);
+    }
+
+    _stopTimeUpdates() {
+        if (this._timeUpdateInterval) {
+            clearInterval(this._timeUpdateInterval);
+            this._timeUpdateInterval = null;
+        }
+    }
+
+    /**
+     * Clean up resources
+     */
+    dispose() {
+        this._stopTimeUpdates();
+
+        if (this._workletNode) {
+            this._workletNode.disconnect();
+            this._workletNode = null;
+        }
+
+        if (this._audioContext) {
+            this._audioContext.close();
+            this._audioContext = null;
+        }
+
+        if (this._wasmModule) {
+            this._wasmModule._BAE_WASM_Shutdown();
+
+            // Free soundbank memory after shutdown
+            if (this._soundbankPtr) {
+                this._wasmModule._free(this._soundbankPtr);
+                this._soundbankPtr = null;
+            }
+
+            this._wasmModule = null;
+        }
+
+        this._isInitialized = false;
+        this._isPlaying = false;
+        this._songLoaded = false;
+        this._soundbankLoaded = false;
+    }
+}
+
+// Reverb type constants
+BeatnikPlayer.REVERB_NONE = 0;
+BeatnikPlayer.REVERB_CLOSET = 1;
+BeatnikPlayer.REVERB_GARAGE = 2;
+BeatnikPlayer.REVERB_ACOUSTIC_LAB = 3;
+BeatnikPlayer.REVERB_CAVERN = 4;
+BeatnikPlayer.REVERB_DUNGEON = 5;
+BeatnikPlayer.REVERB_SMALL_REFLECTIONS = 6;
+BeatnikPlayer.REVERB_EARLY_REFLECTIONS = 7;
+BeatnikPlayer.REVERB_BASEMENT = 8;
+BeatnikPlayer.REVERB_BANQUET_HALL = 9;
+BeatnikPlayer.REVERB_CATACOMBS = 10;
+
+// Export for module systems
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = BeatnikPlayer;
+}
+
+// Also attach to window for script tag usage
+if (typeof window !== 'undefined') {
+    window.BeatnikPlayer = BeatnikPlayer;
+}

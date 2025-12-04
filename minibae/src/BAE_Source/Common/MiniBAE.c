@@ -184,7 +184,7 @@ OPErr PV_WriteFromMemoryFLACFile(XFILENAME *file, GM_Waveform const *pAudioData,
 #endif
 #include "sha1mini.h" // hashing for friendly name resolution
 
-#ifdef WASM
+#ifdef __EMSCRIPTEN__
 #include <emscripten.h>
 
 void process_and_send_audio(int16_t *rawAudio, int length)
@@ -540,8 +540,8 @@ const char *BAE_GetCurrentCPUArchitecture()
     return "SPARC";
 #elif defined(__m68k__)
     return "M68K";
-#elif defined(WASM)
-    return "WASM";
+#elif defined(__EMSCRIPTEN__)
+    return "WebAssembly (Emscripten)";
 #else
     return "UNKNOWN";
 #endif
@@ -3808,6 +3808,28 @@ void BAEMixer_StopOutputToFile(void)
 #endif // #if USE_CREATION_API == TRUE
 }
 
+#ifdef __EMSCRIPTEN__
+BAEResult BAEMixer_ServiceAudioOutputToWebAudio(BAEMixer theMixer) {
+    int32_t sampleSize, channels;
+    OPErr theErr;
+
+    // begin block added for MiniBAE
+    BAEAudioModifiers theModifiers;
+    BAEMixer_GetModifiers(theMixer, &theModifiers);
+    // end block added for MiniBAE
+
+    theErr = NO_ERR;
+
+    channels = (theModifiers & BAE_USE_STEREO) ? 2 : 1;
+    sampleSize = (theModifiers /*iModifiers*/ & BAE_USE_16) ? 2 : 1;
+    uint32_t numSamples = (uint32_t)(mWritingDataBlockSize / sampleSize / channels);
+
+    BAE_BuildMixerSlice(NULL, mWritingDataBlock, mWritingDataBlockSize, numSamples);
+    process_and_send_audio(mWritingDataBlock, numSamples);
+    return BAE_TranslateOPErr(theErr);
+}
+#endif
+
 // ********************** BAEMixer_ServiceAudioOutputToFile   ************
 //
 // ********************** added from BAE 11/29/00 tom ********************
@@ -3831,16 +3853,6 @@ BAEResult BAEMixer_ServiceAudioOutputToFile(BAEMixer theMixer)
     // end block added for MiniBAE
 
     theErr = NO_ERR;
-
-#ifdef WASM
-    channels = (theModifiers & BAE_USE_STEREO) ? 2 : 1;
-    sampleSize = (theModifiers /*iModifiers*/ & BAE_USE_16) ? 2 : 1;
-    uint32_t numSamples = (uint32_t)(mWritingDataBlockSize / sampleSize / channels);
-
-    BAE_BuildMixerSlice(NULL, mWritingDataBlock, mWritingDataBlockSize, numSamples);
-    process_and_send_audio(mWritingDataBlock, numSamples);
-    return BAE_TranslateOPErr(theErr);
-#endif
 
     if (mWritingToFile && mWritingToFileReference)
     {

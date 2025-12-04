@@ -388,6 +388,8 @@
     #include "BAEBuildOptions_IOS.h"
 #elif X_PLATFORM == X_MACINTOSH
     #include "BAEBuildOptions_MacOSX.h"
+#elif X_PLATFORM == X_WASM
+    #include "BAEBuildOptions_WASM.h"
 #elif X_PLATFORM == X_NAVIO
     #include "BAEBuildOptions_Navio.h"
 #elif X_PLATFORM == X_WEBTV

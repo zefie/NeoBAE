@@ -163,6 +163,11 @@ ifeq ($(BAE_API),Ansi)
 	BAE_FLAGS += 	-DX_PLATFORM=X_ANSI
 	SRC       :=	src/BAE_Source/Platform/BAE_API_$(BAE_API).c
 endif
+ifeq ($(BAE_API),WASM)
+	BAE_FLAGS += 	-DX_PLATFORM=X_WASM
+	SRC       :=	src/BAE_Source/Platform/BAE_API_$(BAE_API).c \
+					src/BAE_Source/Platform/BAE_API_WASM_Export.c
+endif
 ifeq ($(BAE_API),WinOS)
 	BAE_FLAGS += 	-DX_PLATFORM=X_WIN95
 	SRC       :=	src/BAE_Source/Platform/BAE_API_$(BAE_API).c \

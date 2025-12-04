@@ -495,7 +495,11 @@ static void PV_Idle(BAEMixer theMixer, uint32_t time)
 
    if (gWriteToFile)
    {
+#ifdef WASM
+      BAEResult serr = BAEMixer_ServiceAudioOutputToWebAudio(theMixer);
+#else
       BAEResult serr = BAEMixer_ServiceAudioOutputToFile(theMixer);
+#endif            
       if (serr != BAE_NO_ERROR)
       {
          playbae_printf("MP3 export failed during servicing (BAE Error #%d: %s). Aborting.\n", serr, BAE_GetErrorString(serr));

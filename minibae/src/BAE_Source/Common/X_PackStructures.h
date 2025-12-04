@@ -72,7 +72,11 @@
 
 #ifndef X_PACK_FAST
 // controls to enable structure packing by 1 byte
-    #if (X_PLATFORM == X_MACINTOSH) || (X_PLATFORM == X_IOS) || (X_PLATFORM == X_ANDROID) || (X_PLATFORM == X_ANSI) || (X_PLATFORM == X_WIN95) || (X_PLATFORM == X_SDL2) || (X_PLATFORM == X_SDL3)
+    #if (X_PLATFORM == X_MACINTOSH) || (X_PLATFORM == X_IOS) || (X_PLATFORM == X_ANDROID) || (X_PLATFORM == X_ANSI) || (X_PLATFORM == X_WIN95) || (X_PLATFORM == X_SDL2) || (X_PLATFORM == X_SDL3) || (X_PLATFORM == X_WASM)
+        #pragma pack (1)
+
+        // This define is used when declaring the structures. Some compilers, like GCC
+        // need to use '__attribute__ ((packed))' at each structure to pack by a byte.
 	#if (COMPILER_TYPE == GCC_COMPILER) || (__MINGW32__)
 	    #define X_PACKBY1 __attribute__((packed,aligned(__alignof__(short))))
 	#else

@@ -125,8 +125,7 @@ if [ -z "${SKIPTO}" ] || [ "${SKIPTO}" -le 6 ]; then
 	export NOAUTO=1
 	export SF2_SUPPORT=0
 	export MP3_DEC=1
-	export WASM=1
-	echo "Building Enscripten WASM..."
+	echo "Building Enscripten WebAssembly..."
 	runcmd make clean
 	runcmd make -f Makefile.emcc "-j$(nproc)" all
 	runcmd make -f Makefile.emcc pack

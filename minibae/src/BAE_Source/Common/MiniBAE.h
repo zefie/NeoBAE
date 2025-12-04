@@ -1085,6 +1085,8 @@ extern "C"
     // Stop saving audio output to a file
     void BAEMixer_StopOutputToFile(void);
 
+    BAEResult BAEMixer_ServiceAudioOutputToWebAudio(BAEMixer mixer);
+
     // once started saving to a file, call this to continue saving to file
     BAEResult BAEMixer_ServiceAudioOutputToFile(BAEMixer mixer);
 

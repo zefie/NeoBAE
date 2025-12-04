@@ -572,6 +572,16 @@ uint32_t BAE_GetDeviceSamplesCapturedPosition();
 #define HAE_DestroyFrameThread              BAE_DestroyFrameThread
 #define HAE_SleepFrameThread                BAE_SleepFrameThread
 
+// WASM-specific audio simulation functions
+#ifdef __EMSCRIPTEN__
+// Simulate audio hardware by rendering and sending to JavaScript
+// This function should be called periodically to generate audio data
+void BAE_SimulateAudioHardware(void *threadContext);
+
+// Check if audio is engaged (for external polling)
+int BAE_IsAudioEngaged(void);
+#endif
+
 #ifdef __cplusplus
     }
 #endif
