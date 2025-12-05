@@ -30,6 +30,8 @@ ifneq ($(WASM),1)
 		PLAYLIST := 1
 		SF2_SUPPORT := 1
 		USE_FLUIDSYNTH := 1
+		EMBED_PATCHES := 1
+		EMBED_FONT := 1
 		XMF_SUPPORT := 0				# Experimental, disabled by default until ready
 		DISABLE_NOKIA := 0			    # Maps MSB5->MSB1 and MSG6->MSB2, relatively harmless, so patch is enabled by default, but optional in case
 		DISABLE_BEATNIK_SF2_NRPN := 0   # Also relatively harmless, it allows MIDIs to send certain commands in order to activate additional percussion channels while in SF2 mode
@@ -106,10 +108,6 @@ endif
 # X* MPEG helper functions needed across the codebase.
 ifeq ($(filter 1,$(MP3_ENC) $(MP3_DEC)),1)
 	SRC += src/BAE_MPEG_Source_II/XMPEG_BAE_API.c
-endif
-
-ifeq ($(BAE_BUILT_IN_PATCHES),1)
-INC_PATH	+= -Isrc/banks/patches111
 endif
 
 ifeq ($(MP3_DEC),1)
@@ -492,8 +490,13 @@ ifeq ($(BUILD_GUI),1)
 		src/gui/gui_panels.c \
 		src/gui/gui_main.c
 else
+ifeq ($(RMFINFO),1)
+	# libMiniBAE srcs + rmfinfo.c
+	SRC_BIN	:= $(SRC) src/rmfinfo/rmfinfo.c
+else
 	# playbae = libMiniBAE srcs + playbae.c
 	SRC_BIN	:= $(SRC) src/playbae/playbae.c
+endif
 endif
 
 ifeq ($(KARAOKE),1)
@@ -561,6 +564,7 @@ ifeq ($(BUILD_GUI),1)
 BAE_FLAGS += -D_ZEFI_GUI=1
 
 # If EMBED_TTF_FONT specified, generate embedded_font.h and define EMBED_TTF_FONT
+ifeq ($(EBMED_FONT),1)
 ifdef EMBED_TTF_FONT
 BAE_FLAGS += -DEMBED_TTF_FONT -I$(OBJ_DIR)
 
@@ -572,10 +576,12 @@ $(EMBED_FONT_HEADER): $(EMBED_TTF_FONT) ../scripts/create_embedded_font_h.py
 
 $(OBJ_DIR)gui_main.o: $(EMBED_FONT_HEADER)
 endif # EMBED_FONT_HEADER
+endif
 
 endif # BUILD_GUI
 
 # If EMBED_PATCH_FILE specified, generate BAEPatches.h that embeds the binary bank
+ifeq ($(EBMED_PATCHES),1)
 ifdef EMBED_PATCH_FILE
 BAE_FLAGS += -D_BUILT_IN_PATCHES=1 -I$(OBJ_DIR)
 
@@ -588,7 +594,7 @@ $(OBJ_DIR)MiniBAE.o: $(EMBED_PATCH_HEADER)
 
 # Ensure generated header is available to build when EMBED_PATCH_FILE is used
 endif # EMBED_PATCH_FILE
-
+endif
 
 # Rules for compiling source files to object files
 # Create a function to map source files to object files with unique names for conflicts

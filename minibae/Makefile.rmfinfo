@@ -1,0 +1,78 @@
+BAE_API := Ansi
+NOAUTO := 1
+EMBED_PATCHES := 0
+SF2_SUPPORT := 0
+MP3_DEC := 0
+MP3_ENC := 0
+OGG_SUPPORT := 0
+VORBIS_DEC := 0
+VORBIS_ENC := 0
+FLAC_DEC := 0
+FLAC_ENC := 0
+RMFINFO := 1
+include inc/Makefile.common
+
+TARGET_BIN := rmfinfo
+
+CC		:= gcc
+CXX		:= g++
+LD		:= $(CC)
+AR      	:= ar
+STRIP		:= strip
+
+OPTI            := -O2 -fPIC
+
+ifeq ($(DEBUG),1)
+    OPTI := -g -O0 -ggdb3 -fPIC
+endif
+
+CFLAGS  	:= $(ARCH) $(OPTI) $(INC_PATH) -D_THREAD_SAFE -Wno-unused-value
+
+ifneq ($(BAE_FLAGS),)
+	CFLAGS	+= $(BAE_FLAGS)
+endif
+
+include inc/Makefile.versioning
+CFLAGS		+= -D_VERSION=\""$(VERSION)"\"
+
+
+LDFLAGS		:= $(OPTI)
+ifneq ($(BAE_LD_FLAGS),)
+	LDFLAGS += $(BAE_LD_FLAGS)
+endif
+
+ifneq ($(DEBUG),1)
+	LDFLAGS += -s
+endif
+
+LIBS	= 	-lpthread -lm -ldl
+
+ifneq ($(BAE_LIBS),)
+	LIBS += $(BAE_LIBS)
+endif
+
+CXXFLAGS 	:= $(CFLAGS)
+# Use C++ linker if we have any C++ sources
+ifneq ($(filter %.cpp,$(SRC) $(SRC_BIN)),)
+    LD := $(CXX)
+    LIBS += -lstdc++
+endif
+
+all: $(TARGET_BIN)
+
+$(TARGET_BIN): ${OBJ_BIN}
+	@mkdir -p $(TARGET_OUT)
+	${LD} -o $(TARGET_OUT)${TARGET_BIN} ${LDFLAGS} ${OBJ_BIN} ${LIBS}
+
+# Generate rules for all unique source files
+ALL_SOURCES := $(sort $(SRC) $(SRC_BIN))
+$(foreach src,$(ALL_SOURCES),$(eval $(call make_obj_rule,$(src))))
+
+clean:
+	@rm -rf $(TARGET_OUT)
+	@rm -rf $(OBJ_DIR)
+	@rm -rf $(BUILD_DIR)
+	@rm -rf $(TEST_OUT_DIR)
+	@echo Cleaned!
+
+include inc/Makefile.tests
