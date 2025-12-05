@@ -2855,45 +2855,41 @@ BAEResult BAEMixer_GetRealtimeStatus(BAEMixer mixer, BAEAudioInfo *pStatus)
     {
         if (pStatus)
         {
+            GM_GetRealtimeAudioInformation(&status);
+            XSetMemory(pStatus, (int32_t)sizeof(BAEAudioInfo), 0);
+            pStatus->voicesActive = status.voicesActive;
+            for (count = 0; count < status.voicesActive; count++)
+            {
+                pStatus->voice[count] = status.voice[count];
+
+                voiceType = BAE_UNKNOWN;
+                switch (status.voiceType[count])
+                {
+                case MIDI_PCM_VOICE:
+                    voiceType = BAE_MIDI_PCM_VOICE;
+                    break;
+                case SOUND_PCM_VOICE:
+                    voiceType = BAE_SOUND_PCM_VOICE;
+                    break;
+                }
+                pStatus->voiceType[count] = voiceType;
+                pStatus->instrument[count] = status.patch[count];
+                pStatus->scaledVolume[count] = status.scaledVolume[count];
+                pStatus->midiVolume[count] = status.volume[count];
+                pStatus->channel[count] = status.channel[count];
+                pStatus->midiNote[count] = status.midiNote[count];
+                if (status.pSong[count])
+                {
+                    pStatus->userReference[count] = status.pSong[count]->userReference;
+                }
+            }
 #if USE_SF2_SUPPORT == TRUE            
             if (mixer->pMixer->isSF2)
             {
                 GM_GetRealtimeAudioInformation(&status);
-                XSetMemory(pStatus, (int32_t)sizeof(BAEAudioInfo), 0);
-                pStatus->voicesActive = GM_SF2_GetActiveVoiceCount();
+                pStatus->voicesActive += GM_SF2_GetActiveVoiceCount();
             }
-            else
 #endif            
-            {
-                GM_GetRealtimeAudioInformation(&status);
-                XSetMemory(pStatus, (int32_t)sizeof(BAEAudioInfo), 0);
-                pStatus->voicesActive = status.voicesActive;
-                for (count = 0; count < status.voicesActive; count++)
-                {
-                    pStatus->voice[count] = status.voice[count];
-
-                    voiceType = BAE_UNKNOWN;
-                    switch (status.voiceType[count])
-                    {
-                    case MIDI_PCM_VOICE:
-                        voiceType = BAE_MIDI_PCM_VOICE;
-                        break;
-                    case SOUND_PCM_VOICE:
-                        voiceType = BAE_SOUND_PCM_VOICE;
-                        break;
-                    }
-                    pStatus->voiceType[count] = voiceType;
-                    pStatus->instrument[count] = status.patch[count];
-                    pStatus->scaledVolume[count] = status.scaledVolume[count];
-                    pStatus->midiVolume[count] = status.volume[count];
-                    pStatus->channel[count] = status.channel[count];
-                    pStatus->midiNote[count] = status.midiNote[count];
-                    if (status.pSong[count])
-                    {
-                        pStatus->userReference[count] = status.pSong[count]->userReference;
-                    }
-                }
-            }
         }
     }
     else
