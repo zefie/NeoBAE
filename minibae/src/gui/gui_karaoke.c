@@ -106,10 +106,7 @@ void karaoke_add_fragment(const char *frag)
 // Reset lyric storage when loading / stopping song
 void karaoke_reset()
 {
-    if (!g_lyric_mutex)
-    {
-        g_lyric_mutex = SDL_CreateMutex();
-    }
+    BAE_PRINTF("DEBUG: karaoke_reset() called, clearing g_karaoke_have_meta_lyrics\n");
     if (g_lyric_mutex)
         SDL_LockMutex(g_lyric_mutex);
     g_lyric_count = 0;
@@ -168,6 +165,7 @@ void gui_meta_event_callback(void *threadContext, struct GM_Song *pSong, char ma
     if (g_karaoke_suspended)
         return; // ignore while suspended
     const char *text = (const char *)pMetaText;
+
     if (markerType == 0x05)
     {
         g_karaoke_have_meta_lyrics = true; // confirmed lyrics present
@@ -194,10 +192,14 @@ void gui_meta_event_callback(void *threadContext, struct GM_Song *pSong, char ma
             return;
         }
         if (!g_karaoke_have_meta_lyrics)
-        { /* allow non '@' generic text pre-lyric */
+        {
+            /* allow non '@' generic text only when no real lyrics are present */
         }
         else
+        {
+            /* filter out non-lyric 0x01 events when real lyrics (0x05) are present */
             return;
+        }
     }
     else
     {
@@ -259,12 +261,14 @@ void gui_lyric_callback(struct GM_Song *songPtr, const char *lyric, uint32_t t_u
     (void)ref;
     if (!lyric)
         return;
+        
     if (g_karaoke_suspended)
     {
         if (g_lyric_mutex)
             SDL_UnlockMutex(g_lyric_mutex);
         return;
     }
+
     // Use same logic as meta variant for lyric events (engine passes only Lyric meta)
     if (g_lyric_mutex)
         SDL_LockMutex(g_lyric_mutex);
@@ -310,7 +314,7 @@ void gui_lyric_callback(struct GM_Song *songPtr, const char *lyric, uint32_t t_u
 }
 
 // Karaoke panel rendering (two lines: current + next)
-void karaoke_render(SDL_Renderer *renderer, SDL_Rect karaokePanel, bool showKaraoke)
+void karaoke_render(SDL_Renderer *renderer, Rect karaokePanel, bool showKaraoke)
 {
     if (!showKaraoke)
         return;
@@ -388,6 +392,7 @@ void karaoke_init(void)
 // Cleanup karaoke subsystem
 void karaoke_cleanup(void)
 {
+    karaoke_reset();
     if (g_lyric_mutex)
     {
         SDL_DestroyMutex(g_lyric_mutex);

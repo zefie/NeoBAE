@@ -1121,6 +1121,11 @@ typedef int32_t UNIT_TYPE;
         // Karaoke / lyric support (separate from generic meta callback so GUI can opt-in without parsing every meta event)
         GM_SongLyricCallbackProcPtr lyricCallbackPtr;
         void *lyricCallbackReference;
+        
+        // Lyric processing state tracking (per-song)
+        XBOOL seenTrueLyric;
+        XBOOL seenGenericTextLyric;
+        XBOOL seenLyricMeta;
 
         // Optional raw MIDI event callback (mirroring/export). If set, this will be
         // called with the raw MIDI bytes for any MIDI event processed for this song.
@@ -1560,6 +1565,9 @@ typedef int32_t UNIT_TYPE;
     // Create Song with no midi data associated. Used for direct control of a synth object
     GM_Song *GM_CreateLiveSong(void *context, XShortResourceID songID);
     OPErr GM_StartLiveSong(GM_Song *pSong, XBOOL loadPatches, XBankToken bankToken);
+    
+    // Reset lyric processing state for the song (clears seen flags)
+    void GM_ResetSongLyricState(GM_Song *pSong);
 
     // return note offset in semi tones (12 is down an octave, -12 is up an octave)
     int32_t GM_GetSongPitchOffset(GM_Song *pSong);

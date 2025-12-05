@@ -1766,6 +1766,8 @@ extern "C"
     BAEResult BAESong_SetMetaEventCallback(BAESong song, GM_SongMetaCallbackProcPtr pCallback, void *callbackReference);
     // Register a dedicated lyric callback (fires only on LYRIC_TYPE meta 0x05) with microsecond timestamp.
     BAEResult BAESong_SetLyricCallback(BAESong song, GM_SongLyricCallbackProcPtr pCallback, void *callbackReference);
+    // Reset lyric processing state (clears seen lyric flags)
+    BAEResult BAESong_ResetLyricState(BAESong song);
     BAEResult BAESong_SetMidiEventCallback(BAESong song, GM_MidiEventCallbackPtr pCallback, void *callbackReference);
     BAEResult BAESong_GetControllerCallback(BAESong song, BAE_SongControllerCallbackPtr *pResult);
     BAEResult BAESong_SetControllerCallback(BAESong song, BAE_SongControllerCallbackPtr pCallback, void *callbackReference, int16_t controller);

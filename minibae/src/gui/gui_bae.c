@@ -600,6 +600,13 @@ bool bae_load_song(const char *path)
     if (g_bae.song)
     {
         BAESong_Stop(g_bae.song, FALSE);
+#ifdef SUPPORT_KARAOKE
+        // Clear any existing callbacks before deleting to prevent stale events
+        BAESong_SetMetaEventCallback(g_bae.song, NULL, NULL);
+        // Clear lyric callback if it exists
+        extern BAEResult BAESong_SetLyricCallback(BAESong song, GM_SongLyricCallbackProcPtr pCallback, void *callbackReference);
+        BAESong_SetLyricCallback(g_bae.song, NULL, NULL);
+#endif
         BAESong_Delete(g_bae.song);
         g_bae.song = NULL;
     }
@@ -615,6 +622,7 @@ bool bae_load_song(const char *path)
     g_bae.is_rmf_file = false;
     g_bae.song_length_us = 0;
     g_show_rmf_info_dialog = false;
+    karaoke_cleanup();
     rmf_info_reset();
     
 #if USE_SF2_SUPPORT == TRUE

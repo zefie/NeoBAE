@@ -8720,6 +8720,25 @@ BAEResult BAESong_SetLyricCallback(BAESong song, GM_SongLyricCallbackProcPtr pCa
     }
     return BAE_TranslateOPErr(err);
 }
+
+BAEResult BAESong_ResetLyricState(BAESong song)
+{
+    OPErr err = NO_ERR;
+    if ((song) && (song->mID == OBJECT_ID))
+    {
+        BAE_AcquireMutex(song->mLock);
+        if (song->pSong)
+        {
+            GM_ResetSongLyricState(song->pSong);
+        }
+        BAE_ReleaseMutex(song->mLock);
+    }
+    else
+    {
+        err = NULL_OBJECT;
+    }
+    return BAE_TranslateOPErr(err);
+}
 #endif
 
 static void PV_BAESong_SetCallback(BAESong song, BAE_SongCallbackPtr pCallback, void *callbackReference)

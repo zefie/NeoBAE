@@ -848,6 +848,17 @@ GM_Song *GM_CreateLiveSong(void *context, XShortResourceID songID)
     return pSong;
 }
 
+// Reset lyric processing state for the song (clears seen flags)
+void GM_ResetSongLyricState(GM_Song *pSong)
+{
+    if (pSong)
+    {
+        pSong->seenTrueLyric = FALSE;
+        pSong->seenGenericTextLyric = FALSE;
+        pSong->seenLyricMeta = FALSE;
+    }
+}
+
 OPErr GM_StartLiveSong(GM_Song *pSong, XBOOL loadPatches, XBankToken bankToken)
 {
     OPErr theErr;

@@ -2250,20 +2250,6 @@ void PV_ProcessController(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTrack,
             pSong->lastThreeControl[MIDIChannel][0].control = controler;
             pSong->lastThreeControl[MIDIChannel][0].value = (UINT16)value;
 
-            // DEBUG
-            if (pSong->lastThreeControl[MIDIChannel][0].control == 99 ||
-                pSong->lastThreeControl[MIDIChannel][0].control == 98 ||
-                pSong->lastThreeControl[MIDIChannel][0].control == 6)
-            {
-                BAE_PRINTF("Last three controls on channel %i: %i,%i; %i,%i; %i,%i\n", MIDIChannel,
-                           pSong->lastThreeControl[MIDIChannel][2].control,
-                           pSong->lastThreeControl[MIDIChannel][2].value,
-                           pSong->lastThreeControl[MIDIChannel][1].control,
-                           pSong->lastThreeControl[MIDIChannel][1].value,
-                           pSong->lastThreeControl[MIDIChannel][0].control,
-                           pSong->lastThreeControl[MIDIChannel][0].value);
-            }
-
             // check for Beatnik NRPN 
             if (pSong->lastThreeControl[MIDIChannel][2].control == 99 &&
                 pSong->lastThreeControl[MIDIChannel][2].value == 5 &&
@@ -3805,32 +3791,19 @@ OPErr PV_ProcessMidiSequencerSlice(void *threadContext, GM_Song *pSong)
                             cbPtr = allocated; // pass copy
                         }
                     }
-                    BAE_PRINTF("DEBUG: MIDI Event: Type=0x%02X, Data=%.*s, DataHex=", midi_byte, (int)value, (char *)cbPtr);
-                    for (int i = 0; i < value; i++)
-                    {
-                        BAE_PRINTF("%02X ", ((unsigned char *)cbPtr)[i]);
-                    }
-                    BAE_PRINTF("\n");
                     PV_CallSongMetaEventCallback(threadContext, pSong, midi_byte, cbPtr, value, (int16_t)currentTrack);
                     if (allocated)
                     {
                         XDisposePtr((XPTR)allocated);
                     }
-                    /* Dedicated lyric callback should only be invoked for true Lyric meta (0x05).
-                       Previous code called it for all meta 0x01..0x05 causing generic text, copyright,
-                       track names, etc. to appear as lyrics. This was undesirable and is now fixed.
-                    */
                     if (pSong->lyricCallbackPtr)
                     {
                         XBOOL invoke = FALSE;
                         const char *lyricStr = (const char *)cbPtr; /* NUL terminated */
-                        static XBOOL s_seenTrueLyric = FALSE;
-                        static XBOOL s_seenGenericTextLyric = FALSE;
-                        static XBOOL s_seenLyricMeta = FALSE;
-                        if (midi_byte == 0x05 && !s_seenGenericTextLyric)
+                        if (midi_byte == 0x05 && !pSong->seenGenericTextLyric)
                         {
-                            s_seenTrueLyric = TRUE;
-                            s_seenLyricMeta = TRUE;
+                            pSong->seenTrueLyric = TRUE;
+                            pSong->seenLyricMeta = TRUE;
                             if (lyricStr && lyricStr[0] && lyricStr[0] == '\r')
                             {
                                 /* Translate Carrage Return to newline by sending empty lyric */
@@ -3843,7 +3816,7 @@ OPErr PV_ProcessMidiSequencerSlice(void *threadContext, GM_Song *pSong)
                                 invoke = TRUE; /* real lyric */
                             }
                         }
-                        else if (midi_byte == 0x01 && !s_seenLyricMeta)
+                        else if (midi_byte == 0x01 && !pSong->seenLyricMeta)
                         {
                             /* Follow negated form: do NOT treat GenericText starting with '@' as lyric content. */
                             if (lyricStr && lyricStr[0] == '@')
@@ -3855,13 +3828,13 @@ OPErr PV_ProcessMidiSequencerSlice(void *threadContext, GM_Song *pSong)
                             }
                             else if (lyricStr && lyricStr[0] == '\\')
                             {
-                                s_seenGenericTextLyric = TRUE;
-                                s_seenTrueLyric = TRUE;
+                                pSong->seenGenericTextLyric = TRUE;
+                                pSong->seenTrueLyric = TRUE;
                                 invoke = TRUE;
                             }
                             else
                             {
-                                if (s_seenTrueLyric)
+                                if (pSong->seenTrueLyric)
                                 {
                                     invoke = TRUE;
                                 }

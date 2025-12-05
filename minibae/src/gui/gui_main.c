@@ -2269,7 +2269,7 @@ int main(int argc, char *argv[])
         // the transient current/previous buffers so the panel appears as soon
         // as any lyric text exists.
         bool showKaraoke = g_karaoke_enabled && !g_karaoke_suspended && !g_exporting &&
-                           (g_lyric_count > 0 || g_karaoke_line_current[0] || g_karaoke_line_previous[0]) &&
+                           (g_lyric_count > 0 || g_karaoke_line_current[0] != '\0' || g_karaoke_line_previous[0] != '\0') &&
                            g_bae.song_loaded && !g_bae.is_audio_file;
 #endif
         // Karaoke now appears after keyboard panel or waveform (for audio files)
@@ -4842,58 +4842,7 @@ int main(int argc, char *argv[])
 #endif
 
 #ifdef SUPPORT_KARAOKE
-        // Karaoke panel rendering (two lines: current + next)
-        if (showKaraoke)
-        {
-            draw_rect(R, karaokePanel, panelBg);
-            draw_frame(R, karaokePanel, panelBorder);
-            if (g_lyric_mutex)
-                SDL_LockMutex(g_lyric_mutex);
-            const char *current = g_karaoke_line_current;
-            const char *previous = g_karaoke_line_previous;
-            const char *lastFrag = g_karaoke_last_fragment;
-            int cw = 0, ch = 0, pw = 0, ph = 0;
-            measure_text(current, &cw, &ch);
-            measure_text(previous, &pw, &ph);
-            int prevY = karaokePanel.y + 4;
-            int curY = karaokePanel.y + karaokePanel.h / 2;
-            int prevX = karaokePanel.x + (karaokePanel.w - pw) / 2;
-            int curX = karaokePanel.x + (karaokePanel.w - cw) / 2;
-            SDL_Color prevCol = g_text_color;
-            prevCol.a = 180;
-            draw_text(R, prevX, prevY, previous, prevCol);
-            // Draw current line with only latest fragment highlighted
-            if (current[0])
-            {
-                size_t curLen = strlen(current);
-                size_t fragLen = lastFrag ? strlen(lastFrag) : 0;
-                bool suffixMatch = (fragLen > 0 && fragLen <= curLen && strncmp(current + (curLen - fragLen), lastFrag, fragLen) == 0);
-                if (suffixMatch && fragLen < curLen)
-                {
-                    size_t prefixLen = curLen - fragLen;
-                    if (prefixLen >= sizeof(g_karaoke_last_fragment))
-                        prefixLen = sizeof(g_karaoke_last_fragment) - 1; // reuse size cap
-                    char prefixBuf[256];
-                    if (prefixLen > sizeof(prefixBuf) - 1)
-                        prefixLen = sizeof(prefixBuf) - 1;
-                    memcpy(prefixBuf, current, prefixLen);
-                    prefixBuf[prefixLen] = '\0';
-                    int prefixW = 0, prefixH = 0;
-                    measure_text(prefixBuf, &prefixW, &prefixH);
-                    // Draw prefix in normal text color
-                    draw_text(R, curX, curY, prefixBuf, g_text_color);
-                    // Draw fragment highlighted
-                    draw_text(R, curX + prefixW, curY, lastFrag, g_highlight_color);
-                }
-                else
-                {
-                    // Fallback highlight whole line (e.g., cumulative extension or no fragment info)
-                    draw_text(R, curX, curY, current, g_highlight_color);
-                }
-            }
-            if (g_lyric_mutex)
-                SDL_UnlockMutex(g_lyric_mutex);
-        }
+        karaoke_render(R, karaokePanel, showKaraoke);
 #endif
 #if SUPPORT_PLAYLIST == TRUE
         // Playlist panel - sync with currently playing file first

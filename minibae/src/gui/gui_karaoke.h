@@ -50,7 +50,7 @@ void gui_meta_event_callback(void *threadContext, struct GM_Song *pSong, char ma
 void gui_lyric_callback(struct GM_Song *songPtr, const char *lyric, uint32_t t_us, void *ref);
 
 // Karaoke rendering
-void karaoke_render(SDL_Renderer *renderer, SDL_Rect karaokePanel, bool showKaraoke);
+void karaoke_render(SDL_Renderer *renderer, Rect karaokePanel, bool showKaraoke);
 
 #endif // SUPPORT_KARAOKE
 
