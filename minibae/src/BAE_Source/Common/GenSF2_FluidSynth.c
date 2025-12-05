@@ -1175,15 +1175,9 @@ void GM_SF2_SilenceSong(GM_Song* pSong)
     fluid_synth_reverb_on(g_fluidsynth_synth, -1, 0);  // Turn off reverb for all fx groups
     fluid_synth_chorus_on(g_fluidsynth_synth, -1, 0);  // Turn off chorus for all fx groups
     
-    // Perform system reset to clear voices and controllers
-    fluid_synth_system_reset(g_fluidsynth_synth);
-    
     // Re-enable effects (they'll start with clean buffers)
     fluid_synth_reverb_on(g_fluidsynth_synth, -1, 1);  // Turn reverb back on
     fluid_synth_chorus_on(g_fluidsynth_synth, -1, 1);  // Turn chorus back on
-    
-    // Restore default programs after reset
-    PV_SF2_SetValidDefaultProgramsForAllChannels();
     
     // Ensure any (legacy) voices allocated before FluidSynth activation enter release
     GM_EndSongNotes(pSong);
