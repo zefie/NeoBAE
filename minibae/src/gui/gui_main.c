@@ -2584,7 +2584,7 @@ int main(int argc, char *argv[])
             // Voice count VU meter - vertical meter aligned with channel VUs
             BAEAudioInfo audioInfo;
             int voiceCount = 0;
-            if (g_bae.mixer && BAEMixer_GetRealtimeStatus(g_bae.mixer, &audioInfo) == BAE_NO_ERROR)
+            if (g_bae.mixer && BAEMixer_GetRealtimeStatus(g_bae.mixer, &audioInfo) == BAE_NO_ERROR && playing)
             {
                 voiceCount = audioInfo.voicesActive;
             }
