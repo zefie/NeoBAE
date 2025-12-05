@@ -13,9 +13,3 @@
 [submodule "minibae/src/thirdparty/libvorbis"]
 	path = minibae/src/thirdparty/libvorbis
 	url = https://github.com/xiph/vorbis
-[submodule "minibae/src/thirdparty/libinstpatch"]
-	path = minibae/src/thirdparty/libinstpatch
-	url = https://github.com/zefie/libinstpatch
-[submodule "minibae/src/thirdparty/fluidsynth"]
-	path = minibae/src/thirdparty/fluidsynth
-	url = https://github.com/fluidsynth/fluidsynth
