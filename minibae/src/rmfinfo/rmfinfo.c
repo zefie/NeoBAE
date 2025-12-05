@@ -58,6 +58,26 @@ const char *rmf_info_label(BAEInfoType t)
     }
 }
 
+// Check if file has RMF magic header (IREZ)
+int is_rmf_file(const char *filename)
+{
+    FILE *file = fopen(filename, "rb");
+    if (!file) {
+        return 0;
+    }
+    
+    unsigned char header[4];
+    if (fread(header, 1, 4, file) != 4) {
+        fclose(file);
+        return 0;
+    }
+    fclose(file);
+    
+    // Check for RMF magic bytes "IREZ" (0x49524552A in big-endian)
+    return (header[0] == 0x49 && header[1] == 0x52 && 
+            header[2] == 0x45 && header[3] == 0x5A);
+}
+
 // Escape a string for JSON output
 void json_escape_string(const char *input, char *output, size_t output_size)
 {
@@ -203,6 +223,13 @@ int main(int argc, char *argv[])
         return 1;
     }
     fclose(test_file);
+    
+    // Validate that this is actually an RMF file
+    if (!is_rmf_file(filename)) {
+        fprintf(stderr, "Error: '%s' is not a valid RMF file (missing RMF magic header)\n", filename);
+        BAE_Cleanup();
+        return 1;
+    }
     
     // Extract RMF information
     char buf[512];

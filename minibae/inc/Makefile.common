@@ -564,7 +564,7 @@ ifeq ($(BUILD_GUI),1)
 BAE_FLAGS += -D_ZEFI_GUI=1
 
 # If EMBED_TTF_FONT specified, generate embedded_font.h and define EMBED_TTF_FONT
-ifeq ($(EBMED_FONT),1)
+ifeq ($(EMBED_FONT),1)
 ifdef EMBED_TTF_FONT
 BAE_FLAGS += -DEMBED_TTF_FONT -I$(OBJ_DIR)
 
@@ -581,7 +581,7 @@ endif
 endif # BUILD_GUI
 
 # If EMBED_PATCH_FILE specified, generate BAEPatches.h that embeds the binary bank
-ifeq ($(EBMED_PATCHES),1)
+ifeq ($(EMBED_PATCHES),1)
 ifdef EMBED_PATCH_FILE
 BAE_FLAGS += -D_BUILT_IN_PATCHES=1 -I$(OBJ_DIR)
 

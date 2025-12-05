@@ -80,7 +80,7 @@ if [ -z "${SKIPTO}" ] || [ "${SKIPTO}" -le 2 ]; then
 	runcmd make -f Makefile.mingw clean
 fi
 
-if [ -z "${SKIPTO}" ] || [ "${SKIPTO}" -le 4 ]; then
+if [ -z "${SKIPTO}" ] || [ "${SKIPTO}" -le 3 ]; then
 	export USE_SDL3=1
 	export BITS=64
 	echo "Building MingW32 SDL3 x64..."
@@ -94,7 +94,7 @@ if [ -z "${SKIPTO}" ] || [ "${SKIPTO}" -le 4 ]; then
 	runcmd make -f Makefile.mingw clean
 fi
 
-if [ -z "${SKIPTO}" ] || [ "${SKIPTO}" -le 5 ]; then
+if [ -z "${SKIPTO}" ] || [ "${SKIPTO}" -le 4 ]; then
 	export USE_SDL3=1
 	export BITS=32
 	echo "Building MingW32 SDL3 GUI x32..."
@@ -131,6 +131,26 @@ if [ -z "${SKIPTO}" ] || [ "${SKIPTO}" -le 6 ]; then
 	runcmd make -f Makefile.emcc pack
 	install_file "${BDIR}/miniBAE_WASM.tar.gz" "${ODIR}/miniBAE_WASM.tar.gz"
 	runcmd make -f Makefile.emcc clean
+fi
+
+if [ -z "${SKIPTO}" ] || [ "${SKIPTO}" -le 7 ]; then
+	export BITS=32
+	echo "Building RMFInfo (x32)..."
+	runcmd make clean
+	runcmd make -f Makefile.rmfinfo-mingw "-j$(nproc)" all
+	runcmd cd "${BDIR}" || exit 1 && runcmd zip -9 "${ODIR}/rmfinfo_x32.zip" -- rmfinfo.exe
+	runcmd cd "${RDIR}" || exit 1
+	runcmd make -f Makefile.rmfinfo-mingw clean
+fi
+
+if [ -z "${SKIPTO}" ] || [ "${SKIPTO}" -le 8 ]; then
+	export BITS=64
+	echo "Building RMFInfo (x64)..."
+	runcmd make clean
+	runcmd make -f Makefile.rmfinfo-mingw "-j$(nproc)" all
+	runcmd cd "${BDIR}" || exit 1 && runcmd zip -9 "${ODIR}/rmfinfo_x64.zip" -- rmfinfo.exe
+	runcmd cd "${RDIR}" || exit 1
+	runcmd make -f Makefile.rmfinfo-mingw clean
 fi
 
 cd "${RDIR}" || exit 1
