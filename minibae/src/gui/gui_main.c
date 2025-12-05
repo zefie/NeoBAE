@@ -2944,8 +2944,6 @@ int main(int argc, char *argv[])
                 progress = new_progress;
                 last_drag_progress = new_progress;
                 bae_seek_ms(progress);
-                // User-initiated seek -> set total-play timer to the new position
-                g_total_play_ms = progress;
                 g_last_engine_pos_ms = progress;
                 // When the user seeks, ensure any sounding notes on the virtual
                 // keyboard are silenced and UI-held state cleared so keys don't
