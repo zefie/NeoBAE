@@ -2432,7 +2432,7 @@ int main(int argc, char *argv[])
             // the previous activity-driven heuristic (incoming MIDI or engine active notes).
 
             // Immediately clear VU meters when not playing, regardless of other state
-            if (!playing)
+            if (!playing || g_bae.is_audio_file)
             {
                 g_channel_vu[i] = 0.0f;
                 // Also clear peaks when stopped
@@ -2584,7 +2584,7 @@ int main(int argc, char *argv[])
             // Voice count VU meter - vertical meter aligned with channel VUs
             BAEAudioInfo audioInfo;
             int voiceCount = 0;
-            if (g_bae.mixer && BAEMixer_GetRealtimeStatus(g_bae.mixer, &audioInfo) == BAE_NO_ERROR && playing)
+            if (g_bae.mixer && BAEMixer_GetRealtimeStatus(g_bae.mixer, &audioInfo) == BAE_NO_ERROR && playing && !g_bae.is_audio_file)
             {
                 voiceCount = audioInfo.voicesActive;
             }
