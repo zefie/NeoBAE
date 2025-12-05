@@ -2886,7 +2886,6 @@ BAEResult BAEMixer_GetRealtimeStatus(BAEMixer mixer, BAEAudioInfo *pStatus)
 #if USE_SF2_SUPPORT == TRUE            
             if (mixer->pMixer->isSF2)
             {
-                GM_GetRealtimeAudioInformation(&status);
                 pStatus->voicesActive += GM_SF2_GetActiveVoiceCount();
             }
 #endif            
