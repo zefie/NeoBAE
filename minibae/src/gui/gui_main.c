@@ -2366,7 +2366,7 @@ int main(int argc, char *argv[])
             snprintf(buf, sizeof(buf), "%d", i + 1);
             // Handle toggle and clear VU when channel is muted
             // Disable channel toggles when playing audio files (sounds, not songs)
-            bool channel_toggle_enabled = !(playing && g_bae.is_audio_file && g_bae.sound);
+            bool channel_toggle_enabled = !(g_bae.is_audio_file && g_bae.sound);
             bool toggled = ui_toggle(R, r, &ch_enable[i], NULL,
                                      channel_toggle_enabled ? ui_mx : -1,
                                      channel_toggle_enabled ? ui_my : -1,
@@ -2563,7 +2563,7 @@ int main(int argc, char *argv[])
 
         // Channel control buttons in a row
         int btnY = chStartY + 75;
-        bool channel_controls_enabled = !(playing && g_bae.is_audio_file && g_bae.sound);
+        bool channel_controls_enabled = !(g_bae.is_audio_file && g_bae.sound);
         if (ui_button(R, (Rect){20, btnY, 80, 26}, "Invert", channel_controls_enabled ? ui_mx : -1, channel_controls_enabled ? ui_my : -1, channel_controls_enabled ? ui_mdown : false) && ui_mclick && !modal_block && channel_controls_enabled)
         {
             for (int i = 0; i < 16; i++)
@@ -2641,7 +2641,7 @@ int main(int argc, char *argv[])
             }
 
             // Handle tooltip for Voice VU meter
-            if (point_in(ui_mx, ui_my, vuBg) && !modal_block)
+            if (point_in(ui_mx, ui_my, vuBg) && !modal_block && !g_bae.is_audio_file)
             {
                 char tooltip_text[64];
                 snprintf(tooltip_text, sizeof(tooltip_text), "Active Voices: %d", voiceCount);
@@ -2673,7 +2673,7 @@ int main(int argc, char *argv[])
         }
         
         // If playing an audio file (sound, not song), dim the MIDI channels panel
-        if (playing && g_bae.is_audio_file && g_bae.sound)
+        if (g_bae.is_audio_file && g_bae.sound)
         {
             SDL_Color dim = g_is_dark_mode ? (SDL_Color){0, 0, 0, 160} : (SDL_Color){255, 255, 255, 160};
             draw_rect(R, channelPanel, dim);
@@ -2686,9 +2686,9 @@ int main(int argc, char *argv[])
 
 #ifdef SUPPORT_MIDI_HW
         // When external MIDI input is active or playing audio files, dim and disable most playback controls
-        bool playback_controls_enabled = !g_midi_input_enabled && !(playing && g_bae.is_audio_file && g_bae.sound);
+        bool playback_controls_enabled = !g_midi_input_enabled && !(g_bae.is_audio_file && g_bae.sound);
 #else
-        bool playback_controls_enabled = !(playing && g_bae.is_audio_file && g_bae.sound);
+        bool playback_controls_enabled = !(g_bae.is_audio_file && g_bae.sound);
 #endif
 
         // Transpose control
@@ -2756,7 +2756,7 @@ int main(int argc, char *argv[])
         SDL_Color dd_frame = g_button_border;
         bool overMain = point_in(ui_mx, ui_my, ddRect);
         // Disable reverb dropdown when playing audio files (sounds, not songs)
-        bool reverb_enabled = !(playing && g_bae.is_audio_file && g_bae.sound);
+        bool reverb_enabled = !(g_bae.is_audio_file && g_bae.sound);
         if (overMain && reverb_enabled)
             dd_bg = g_button_hover;
         if (!reverb_enabled)
@@ -2819,7 +2819,7 @@ int main(int argc, char *argv[])
         }
 #endif
         // If playing an audio file (sound, not song), dim the control panel except volume-related controls
-        if (playing && g_bae.is_audio_file && g_bae.sound)
+        if (g_bae.is_audio_file && g_bae.sound)
         {
             SDL_Color dim = g_is_dark_mode ? (SDL_Color){0, 0, 0, 160} : (SDL_Color){255, 255, 255, 160};
             draw_rect(R, controlPanel, dim);
@@ -2833,7 +2833,7 @@ int main(int argc, char *argv[])
                       audio_volume_enabled ? ui_mdown : false, audio_volume_enabled ? ui_mclick : false);
             draw_text(R, vtxt_x, vtxt_y, vbuf, labelCol);
             // Draw a notice in the bottom-right of the control panel
-            const char *notice = "Audio File Playing";
+            const char *notice = "Audio File";
             int n_w = 0, n_h = 0;
             measure_text(notice, &n_w, &n_h);
             int n_x = controlPanel.x + controlPanel.w - n_w - 8;
@@ -3023,10 +3023,8 @@ int main(int argc, char *argv[])
         draw_text(R, slash_x + 10, time_y, dbuf, labelCol);
 
         // Update session total-played time using engine position deltas so it
-        // doesn't reset when the song loops. We only update while actively
-        // playing a MIDI/RMF song (not raw audio files) because audio files
-        // use frame-based positions and their seeking behavior differs.
-        if (playing && g_bae.song_loaded && !g_bae.is_audio_file)
+        // doesn't reset when the song loops.
+        if (playing)
         {
             int curPos = bae_get_pos_ms();
             if (g_last_engine_pos_ms == 0)
@@ -3341,8 +3339,6 @@ int main(int argc, char *argv[])
                             target_ms = waveform_preview_ms;
                         bae_seek_ms(target_ms);
                         progress = target_ms;
-                        // User-initiated seek -> set total-play timer to the new position
-                        g_total_play_ms = target_ms;
                         g_last_engine_pos_ms = target_ms;
                         // Clear any sounding virtual keyboard notes on user-initiated seek
                         if (g_show_virtual_keyboard)
