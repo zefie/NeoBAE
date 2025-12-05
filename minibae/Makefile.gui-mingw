@@ -74,29 +74,9 @@ LIBS = \
 	-lmingw32 \
 	-lSDL3.dll \
 	-lSDL3_ttf.dll \
-	-lusp10 \
-	-lrpcrt4 \
-	-lsetupapi \
-	-lcfgmgr32 \
-	-lversion \
-	-limm32 \
 	-lwinmm \
 	-lole32 \
-	-loleaut32 \
-	-ladvapi32 \
-	-luser32 \
-	-lgdi32 \
-	-lshell32 \
-	-lshlwapi \
-	-ldxguid \
-	-ldsound \
-	-luuid \
-	-lkernel32 \
 	-lcomdlg32 \
-	-lwinspool \
-	-lwinpthread \
-	-lodbc32 \
-	-lodbccp32 \
 	-lz
 
 ifneq ($(BAE_LIBS),)

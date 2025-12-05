@@ -2255,7 +2255,6 @@ uint32_t BAE_GetDeviceSamplesPlayedPosition(void)
         }
     }
     else
-#endif  // USE_DIRECTSOUND
     {   // waveOut
         if (g_pDirectSoundBuffer)
         {
@@ -2267,6 +2266,7 @@ uint32_t BAE_GetDeviceSamplesPlayedPosition(void)
             pos = audioStatus.u.cb / frameSize;
         }
     }
+#endif  // USE_DIRECTSOUND
     return pos;
 }
 

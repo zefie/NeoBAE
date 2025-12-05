@@ -47,7 +47,7 @@ ifneq ($(BAE_FLAGS),)
 endif
 
 include inc/Makefile.versioning
-CFLAGS		+= -D_VERSION=\""$(VERSION)"\"
+CFLAGS		+= -D_VERSION=\""$(VERSION)"\" -DUSE_DIRECTSOUND=0 -DWIN32_EXTRA_LEAN=1
 
 
 LDFLAGS		:= $(OPTI)
@@ -60,20 +60,7 @@ ifneq ($(DEBUG),1)
 endif
 
 LIBS   = \
-    -ldxguid \
-    -ldsound \
-    -lole32 \
-    -lwinmm \
-    -lkernel32 \
-    -luser32 \
-    -loleaut32 \
-    -lwinspool \
-    -lcomdlg32 \
-    -ladvapi32 \
-    -loleaut32 \
-    -lodbc32 \
-    -lodbccp32
-
+    -lwinmm
 
 ifneq ($(BAE_LIBS),)
 	LIBS += $(BAE_LIBS)
