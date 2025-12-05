@@ -2999,7 +2999,6 @@ int main(int argc, char *argv[])
         {
             progress = 0;
             bae_seek_ms(0);
-            g_total_play_ms = progress;
             g_last_engine_pos_ms = progress;
             // Clear any sounding virtual keyboard notes on user-initiated seek
             if (g_show_virtual_keyboard)
