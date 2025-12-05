@@ -450,6 +450,7 @@ char const usageStringExtra[] =
         "                 -a  {Play a AIF file}\n"
         "                 -r  {Play a RMF file}\n"
         "                 -m  {Play a MID file}\n"
+        "                 -i  {Show RMF file info}\n"
 #if defined(USE_MPEG_DECODER) && (USE_MPEG_DECODER != 0)
         "                 -mp {Play an MPEG audio file (MP2/MP3)}\n"
 #endif
@@ -955,6 +956,61 @@ static BAEResult PlayMidi(BAEMixer theMixer, char *fileName, BAE_UNSIGNED_FIXED 
    return (err);
 }
 
+
+const char *rmf_info_label(BAEInfoType t)
+{
+    switch (t)
+    {
+    case TITLE_INFO:
+        return "Title";
+    case PERFORMED_BY_INFO:
+        return "Performed By";
+    case COMPOSER_INFO:
+        return "Composer";
+    case COPYRIGHT_INFO:
+        return "Copyright";
+    case PUBLISHER_CONTACT_INFO:
+        return "Publisher";
+    case USE_OF_LICENSE_INFO:
+        return "Use Of License";
+    case LICENSED_TO_URL_INFO:
+        return "Licensed URL";
+    case LICENSE_TERM_INFO:
+        return "License Term";
+    case EXPIRATION_DATE_INFO:
+        return "Expiration";
+    case COMPOSER_NOTES_INFO:
+        return "Composer Notes";
+    case INDEX_NUMBER_INFO:
+        return "Index Number";
+    case GENRE_INFO:
+        return "Genre";
+    case SUB_GENRE_INFO:
+        return "Sub-Genre";
+    case TEMPO_DESCRIPTION_INFO:
+        return "Tempo";
+    case ORIGINAL_SOURCE_INFO:
+        return "Source";
+    default:
+        return "Unknown";
+    }
+}
+
+static void playbae_print_rmf_info(BAEPathName song)
+{
+   char buf[256];
+   BAEInfoType it;
+
+   playbae_printf("RMF Metadata Info:\n");
+   for (it = TITLE_INFO; it <= ORIGINAL_SOURCE_INFO; it = (BAEInfoType)(it + 1))
+   {
+      if (BAEUtil_GetRmfSongInfoFromFile(song, 0, it, buf, sizeof(buf) - 1) == BAE_NO_ERROR)
+      {
+         playbae_printf("  %s: %s\n", rmf_info_label(it), buf);
+      }
+   }
+}
+
 // PlayRMF()
 // ---------------------------------------------------------------------
 //
@@ -985,6 +1041,7 @@ static BAEResult PlayRMF(BAEMixer theMixer, char *fileName, BAE_UNSIGNED_FIXED v
 #if _DEBUG
          BAESong_SetCallback(theSong, (BAE_SongCallbackPtr)PV_SongCallback, (void *)0x1234);
 #endif
+         playbae_print_rmf_info((BAEPathName)fileName);
 #ifdef SUPPORT_KARAOKE
          if (!gWriteToFile && gEnableKaraoke)
          {
