@@ -22,5 +22,8 @@ extern int g_keyboard_msb;
 // Function declarations
 void gui_panic_all_notes(BAESong s);
 void gui_panic_channel_notes(BAESong s, int ch);
+void gui_clear_virtual_keyboard_channel(int ch);
+void gui_clear_virtual_keyboard_all_channels(void);
+void gui_refresh_virtual_keyboard_channel_from_engine(int ch);
 
 #endif // GUI_MIDI_VKBD_H

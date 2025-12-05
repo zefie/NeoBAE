@@ -2375,6 +2375,8 @@ int main(int argc, char *argv[])
             {
                 // Muted -> immediately empty visible VU
                 g_channel_vu[i] = 0.0f;
+                // Clear virtual keyboard highlights for this channel
+                gui_clear_virtual_keyboard_channel(i);
                 // If MIDI-in is active, proactively send NoteOff for any active notes on this channel
                 // to prevent stuck notes from live input. Use the current target song (loaded or live).
 #ifdef SUPPORT_MIDI_HW
@@ -2398,11 +2400,14 @@ int main(int argc, char *argv[])
                             }
                         }
                     }
-                    // Clear UI bookkeeping for that channel regardless
-                    for (int n = 0; n < 128; ++n)
-                        g_keyboard_active_notes_by_channel[i][n] = 0;
                 }
 #endif
+            }
+            else if (toggled && ch_enable[i])
+            {
+                // Unmuted -> refresh virtual keyboard state from current engine state
+                // to avoid showing stale highlights from before the channel was muted
+                gui_refresh_virtual_keyboard_channel_from_engine(i);
             }
             int tw = 0, th = 0;
             measure_text(buf, &tw, &th);
@@ -2567,17 +2572,36 @@ int main(int argc, char *argv[])
         if (ui_button(R, (Rect){20, btnY, 80, 26}, "Invert", channel_controls_enabled ? ui_mx : -1, channel_controls_enabled ? ui_my : -1, channel_controls_enabled ? ui_mdown : false) && ui_mclick && !modal_block && channel_controls_enabled)
         {
             for (int i = 0; i < 16; i++)
+            {
+                bool was_enabled = ch_enable[i];
                 ch_enable[i] = !ch_enable[i];
+                // If channel was enabled and is now muted, clear its virtual keyboard highlights
+                if (was_enabled && !ch_enable[i])
+                {
+                    gui_clear_virtual_keyboard_channel(i);
+                }
+                // If channel was muted and is now enabled, refresh from engine state
+                else if (!was_enabled && ch_enable[i])
+                {
+                    gui_refresh_virtual_keyboard_channel_from_engine(i);
+                }
+            }
         }
         if (ui_button(R, (Rect){110, btnY, 80, 26}, "Mute All", channel_controls_enabled ? ui_mx : -1, channel_controls_enabled ? ui_my : -1, channel_controls_enabled ? ui_mdown : false) && ui_mclick && !modal_block && channel_controls_enabled)
         {
             for (int i = 0; i < 16; i++)
                 ch_enable[i] = false;
+            // Clear all virtual keyboard highlights when muting all channels
+            gui_clear_virtual_keyboard_all_channels();
         }
         if (ui_button(R, (Rect){200, btnY, 90, 26}, "Unmute All", channel_controls_enabled ? ui_mx : -1, channel_controls_enabled ? ui_my : -1, channel_controls_enabled ? ui_mdown : false) && ui_mclick && !modal_block && channel_controls_enabled)
         {
             for (int i = 0; i < 16; i++)
+            {
                 ch_enable[i] = true;
+                // Refresh virtual keyboard state from engine for all channels
+                gui_refresh_virtual_keyboard_channel_from_engine(i);
+            }
         }
 
         if (!g_exporting) {
@@ -3546,25 +3570,32 @@ int main(int argc, char *argv[])
                             // the 'All' option is enabled.
                             for (int ch = 0; ch < 16; ++ch)
                             {
-                                unsigned char ch_notes[128];
-                                memset(ch_notes, 0, sizeof(ch_notes));
-                                BAESong_GetActiveNotes(target, (unsigned char)ch, ch_notes);
-                                for (int i = 0; i < 128; i++)
-                                    merged_notes[i] |= ch_notes[i];
+                                // Only include notes from enabled (non-muted) channels
+                                if (ch_enable[ch])
+                                {
+                                    unsigned char ch_notes[128];
+                                    memset(ch_notes, 0, sizeof(ch_notes));
+                                    BAESong_GetActiveNotes(target, (unsigned char)ch, ch_notes);
+                                    for (int i = 0; i < 128; i++)
+                                        merged_notes[i] |= ch_notes[i];
+                                }
                             }
                         }
                         else
                         {
-                            unsigned char engine_notes[128];
-                            memset(engine_notes, 0, sizeof(engine_notes));
-                            BAESong_GetActiveNotes(target, (unsigned char)g_keyboard_channel, engine_notes);
-                            for (int i = 0; i < 128; i++)
-                                merged_notes[i] |= engine_notes[i];
+                            // Only show the currently selected channel if it's enabled
+                            if (ch_enable[g_keyboard_channel])
+                            {
+                                unsigned char engine_notes[128];
+                                memset(engine_notes, 0, sizeof(engine_notes));
+                                BAESong_GetActiveNotes(target, (unsigned char)g_keyboard_channel, engine_notes);
+                                for (int i = 0; i < 128; i++)
+                                    merged_notes[i] |= engine_notes[i];
+                            }
                         }
                     }
                 }
             }
-            // Copy merged result back into the UI array used for drawing/interaction.
             memcpy(g_keyboard_active_notes, merged_notes, sizeof(g_keyboard_active_notes));
             // Build a quick lookup of notes triggered by typed (qwerty) keys so
             // we can render them with the highlight color instead of the

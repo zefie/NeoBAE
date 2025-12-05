@@ -1,6 +1,7 @@
 // gui_midi_vkbd.c - Virtual MIDI keyboard
 
 #include "gui_midi_vkbd.h"
+#include "gui_bae.h" // for BAEGUI type and g_bae, g_live_song
 #if USE_SF2_SUPPORT == TRUE
     #if _USING_FLUIDSYNTH == TRUE
         #include "GenSF2_FluidSynth.h"
@@ -27,13 +28,13 @@ void gui_panic_all_notes(BAESong s)
 {
     if (!s)
         return;
-    for (int ch = 0; ch < 16; ++ch)
+    for (int ch = 0; ch < BAE_MAX_MIDI_CHANNELS; ++ch)
     {
         BAESong_ControlChange(s, (unsigned char)ch, 64, 0, 0);  // Sustain Off
         BAESong_ControlChange(s, (unsigned char)ch, 120, 0, 0); // All Sound Off
         BAESong_ControlChange(s, (unsigned char)ch, 123, 0, 0); // All Notes Off
     }
-    for (int ch = 0; ch < 16; ++ch)
+    for (int ch = 0; ch < BAE_MAX_MIDI_CHANNELS; ++ch)
     {
 #if USE_SF2_SUPPORT == TRUE
         GM_SF2_KillChannelNotes(ch);
@@ -52,7 +53,7 @@ void gui_panic_channel_notes(BAESong s, int ch)
 {
     if (!s)
         return;
-    if (ch < 0 || ch >= 16)
+    if (ch < 0 || ch >= BAE_MAX_MIDI_CHANNELS)
         return;
     // Safety controls first
     BAESong_ControlChange(s, (unsigned char)ch, 64, 0, 0);  // Sustain Off
@@ -70,3 +71,66 @@ void gui_panic_channel_notes(BAESong s, int ch)
         }
     }
 }
+
+void gui_clear_virtual_keyboard_channel(int ch)
+{
+    if (ch < 0 || ch >= BAE_MAX_MIDI_CHANNELS)
+        return;
+       
+    // Clear UI bookkeeping for highlighted keys on this channel
+    memset(g_keyboard_active_notes_by_channel[ch], 0, sizeof(g_keyboard_active_notes_by_channel[ch]));
+    if (ch == g_keyboard_channel || g_keyboard_show_all_channels)
+    {
+        memset(g_keyboard_active_notes, 0, sizeof(g_keyboard_active_notes));
+        if (g_keyboard_show_all_channels) {
+            // Rebuild overall active notes array from other channels
+            memset(g_keyboard_active_notes, 0, sizeof(g_keyboard_active_notes));
+            for (int c = 0; c < BAE_MAX_MIDI_CHANNELS; ++c)
+            {
+                if (c == ch)
+                    continue;
+                for (int n = 0; n < 128; ++n)
+                {
+                    if (g_keyboard_active_notes_by_channel[c][n])
+                    {
+                        g_keyboard_active_notes[n] = true;
+                    }
+                }
+            }
+        }
+    }
+}
+
+void gui_clear_virtual_keyboard_all_channels(void)
+{
+    // Send NoteOff to audio engine for all active notes on all channels
+    BAESong target = g_bae.song ? g_bae.song : g_live_song;
+    if (target)
+    {
+        for (int ch = 0; ch < BAE_MAX_MIDI_CHANNELS; ++ch)
+        {
+            gui_clear_virtual_keyboard_channel(ch);
+        }
+        memset(g_keyboard_active_notes, 0, sizeof(g_keyboard_active_notes));
+    }
+}
+
+void gui_refresh_virtual_keyboard_channel_from_engine(int ch)
+{
+    if (ch < 0 || ch >= BAE_MAX_MIDI_CHANNELS)
+        return;
+    
+    // Query current engine state and update UI bookkeeping to match
+    BAESong target = g_bae.song ? g_bae.song : g_live_song;
+    if (target)
+    {
+        unsigned char engine_notes[128];
+        memset(engine_notes, 0, sizeof(engine_notes));
+        BAESong_GetActiveNotes(target, (unsigned char)ch, engine_notes);
+        
+        // Update UI bookkeeping to match current engine state
+        for (int n = 0; n < 128; ++n)
+            g_keyboard_active_notes_by_channel[ch][n] = (engine_notes[n] != 0);
+    }
+}
+

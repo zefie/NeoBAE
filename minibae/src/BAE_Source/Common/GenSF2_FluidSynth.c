@@ -507,7 +507,7 @@ void sf2_get_channel_amplitudes(float channelAmplitudes[16][2])
     
     // Method 1: Voice-based amplitude monitoring (more accurate)
     // Get list of active voices from FluidSynth
-    const int maxVoices = 1024;  // FluidSynth default max polyphony
+    const int maxVoices = BAE_MAX_VOICES;  // FluidSynth default max polyphony
     fluid_voice_t* voiceList[maxVoices];
     
     // Get all active voices

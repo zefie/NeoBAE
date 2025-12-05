@@ -1124,11 +1124,9 @@ void GM_GetRealtimeChannelLevels(float left[16], float right[16])
             float sf2Levels[16][2];
             sf2_get_channel_amplitudes(sf2Levels);
 
-            // SF2 levels are typically much lower than legacy levels, so boost them
             // Only overwrite channels that actually have SF2 activity
             for (int ch = 0; ch < 16; ++ch) {
                 if (sf2Levels[ch][0] > 0.0f || sf2Levels[ch][1] > 0.0f) {
-                    // Boost SF2 levels by 10x to make them visible in VU meters
                     left[ch] = sf2Levels[ch][0];
                     right[ch] = sf2Levels[ch][1];
                 }

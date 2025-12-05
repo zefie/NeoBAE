@@ -7723,6 +7723,7 @@ BAEResult BAESong_MuteChannel(BAESong song, uint16_t channel)
     {
         BAE_AcquireMutex(song->mLock);
         GM_MuteChannel(song->pSong, channel);
+        memset(song->pSong->channelActiveNotes[channel], 0, sizeof(song->pSong->channelActiveNotes[channel]));
         BAE_ReleaseMutex(song->mLock);
     }
     else
