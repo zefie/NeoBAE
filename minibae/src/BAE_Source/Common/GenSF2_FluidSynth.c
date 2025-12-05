@@ -460,7 +460,7 @@ OPErr GM_LoadSF2Soundfont(const char* sf2_path)
     
     // Set Ch 10 to percussion by default
     PV_SF2_SetValidDefaultProgramsForAllChannels();
-    
+    GM_SetMixerSF2Mode(TRUE);
     return NO_ERR;
 }
 

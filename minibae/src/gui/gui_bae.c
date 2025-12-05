@@ -139,7 +139,7 @@ bool load_bank(const char *path, bool current_playing_state, int transpose, int 
         BAEMixer_UnloadBanks(g_bae.mixer);
         g_bae.bank_loaded = false;
 #if USE_SF2_SUPPORT == TRUE
-        if (GM_SF2_IsActive()) {
+        if (GM_SF2_IsActive()) {            
             GM_UnloadSF2Soundfont();
         }
 #endif
@@ -535,6 +535,7 @@ bool bae_load_bank(const char *bank_path)
     const char *ext = strrchr(bank_path, '.');
 #if USE_SF2_SUPPORT == TRUE
     GM_UnloadSF2Soundfont();
+    GM_SetMixerSF2Mode(FALSE);
     // Check if this is an SF2 file
     if (ext && (strcasecmp(ext, ".sf2") == 0    
 #if _USING_FLUIDSYNTH == TRUE
