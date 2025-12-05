@@ -43,6 +43,9 @@ void gui_panic_all_notes(BAESong s)
             BAESong_NoteOff(s, (unsigned char)ch, (unsigned char)n, 0, 0);
         }
     }
+#if USE_SF2_SUPPORT == TRUE
+    GM_ResetSF2();
+#endif
 }
 
 void gui_panic_channel_notes(BAESong s, int ch)

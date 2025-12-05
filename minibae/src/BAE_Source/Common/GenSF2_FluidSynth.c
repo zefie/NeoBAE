@@ -969,26 +969,19 @@ void GM_SF2_UnmuteChannel(GM_Song* pSong, int16_t channel)
 void GM_SF2_KillChannelNotes(int16_t channel)
 {
     if (!g_fluidsynth_synth)
-        return;
-        
-    // Turn off all notes on the specified channel
-    for (int note = 0; note < 128; note++)
-    {
-        fluid_synth_noteoff(g_fluidsynth_synth, channel, note);
-    }
+        return;        
+
+    fluid_synth_all_notes_off(g_fluidsynth_synth, channel);
+    fluid_synth_all_sounds_off(g_fluidsynth_synth, channel);
 }
 
 void GM_SF2_AllNotesOff(GM_Song* pSong)
 {
     if (!g_fluidsynth_synth)
-    {
         return;
-    }
     
     for (int i = 0; i < 16; i++) 
-    {
         GM_SF2_KillChannelNotes(i);
-    }
 }
 
 // FluidSynth configuration
@@ -1174,6 +1167,23 @@ void GM_SF2_SilenceSong(GM_Song* pSong)
     
     // Stop all notes immediately
     GM_SF2_AllNotesOff(pSong);
+    
+    // Clear FluidSynth's internal effects buffers that can cause lingering audio.
+    // This is much lighter than full reinitialization but should clear reverb/chorus tails.
+    
+    // Temporarily disable effects to clear their buffers
+    fluid_synth_reverb_on(g_fluidsynth_synth, -1, 0);  // Turn off reverb for all fx groups
+    fluid_synth_chorus_on(g_fluidsynth_synth, -1, 0);  // Turn off chorus for all fx groups
+    
+    // Perform system reset to clear voices and controllers
+    fluid_synth_system_reset(g_fluidsynth_synth);
+    
+    // Re-enable effects (they'll start with clean buffers)
+    fluid_synth_reverb_on(g_fluidsynth_synth, -1, 1);  // Turn reverb back on
+    fluid_synth_chorus_on(g_fluidsynth_synth, -1, 1);  // Turn chorus back on
+    
+    // Restore default programs after reset
+    PV_SF2_SetValidDefaultProgramsForAllChannels();
     
     // Ensure any (legacy) voices allocated before FluidSynth activation enter release
     GM_EndSongNotes(pSong);
