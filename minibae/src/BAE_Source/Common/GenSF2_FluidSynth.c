@@ -478,7 +478,7 @@ void GM_UnloadSF2Soundfont(void)
         g_fluidsynth_unloading = TRUE;
         
         // Kill all notes and reset
-        GM_SF2_KillAllNotes();
+        GM_ResetSF2();
 
         while (GM_SF2_GetActiveVoiceCount() > 0)
         {
