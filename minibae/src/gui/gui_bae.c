@@ -1170,8 +1170,6 @@ bool bae_play(bool *playing)
                     BAE_PRINTF("Resume with preserved position %u us for '%s'\n", startPosUs, g_bae.loaded_path);
                 }
 
-                bae_set_reverb(g_bae.current_reverb_type);
-
                 if (startPosUs == 0)
                 {
                     // Standard start from beginning: position then preroll
@@ -1266,7 +1264,7 @@ bool bae_play(bool *playing)
                 }
             }
 
-            BAEMixer_SetDefaultReverb(g_bae.mixer, (BAEReverbType)load_settings().reverb_type);
+            bae_set_reverb(g_bae.current_reverb_type);
 
             // Give mixer a few idle cycles to prime buffers (helps avoid initial stall)
             if (g_bae.mixer)
