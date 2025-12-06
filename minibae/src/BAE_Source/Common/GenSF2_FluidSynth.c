@@ -54,6 +54,8 @@ static XBOOL g_temp_sf_is_tempfile = FALSE;
 // When loading DLS banks, FluidSynth will emit an error log
 // "Not a SoundFont file". This is expected; ignore it.
 static XBOOL g_suppress_not_sf2_error = FALSE;
+// Flag to prevent audio thread from accessing synth during unload (prevents race condition crashes)
+static volatile XBOOL g_fluidsynth_unloading = FALSE;
 
 // Minimal FluidSynth log filter used for DLS loads to suppress the expected error
 static void pv_fluidsynth_log_filter(int level, const char* message, void* data)
@@ -233,11 +235,14 @@ void GM_CleanupSF2(void)
     g_fluidsynth_initialized = FALSE;
 }
 
+
 void GM_ResetSF2(void) 
 {
     if (!g_fluidsynth_synth)
         return;
 
+    // Kill all notes currently playing
+    GM_SF2_KillAllNotes();
     // Reset all channels and voices
     fluid_synth_system_reset(g_fluidsynth_synth);
     // Pick valid defaults again after reset
@@ -468,9 +473,25 @@ void GM_UnloadSF2Soundfont(void)
 {
     if (g_fluidsynth_synth && g_fluidsynth_soundfont_id >= 0)
     {
-        GM_ResetSF2();
+        // Set flag to prevent audio thread from rendering during unload
+        // This prevents race conditions between rendering and unloading
+        g_fluidsynth_unloading = TRUE;
+        
+        // Kill all notes and reset
+        GM_SF2_KillAllNotes();
+
+        while (GM_SF2_GetActiveVoiceCount() > 0)
+        {
+            // Wait for voices to finish
+            fluid_synth_process(g_fluidsynth_synth, SAMPLE_BLOCK_SIZE, NULL, 0, 0, NULL);
+        }
+        
+        // Now safe to unload
         fluid_synth_sfunload(g_fluidsynth_synth, g_fluidsynth_soundfont_id, TRUE);
         g_fluidsynth_soundfont_id = -1;
+        
+        // Clear the unloading flag
+        g_fluidsynth_unloading = FALSE;
     }
     g_fluidsynth_sf2_path[0] = '\0';
     if (g_temp_sf_is_tempfile) {
@@ -897,6 +918,13 @@ void GM_SF2_RenderAudioSlice(GM_Song* pSong, int32_t* mixBuffer, int32_t frameCo
         return;
     }
     
+    // CRITICAL: Do not render if we're in the process of unloading the soundfont
+    // This prevents race condition crashes when switching soundfonts
+    if (g_fluidsynth_unloading)
+    {
+        return;
+    }
+    
     // Update channel activity decay
     PV_SF2_DecayChannelActivity();
     
@@ -1066,8 +1094,11 @@ void GM_SF2_KillAllNotes(void)
     {
         return;
     }
-    
-    for (int i = 0; i < 16; i++) 
+
+    fluid_synth_reverb_on(g_fluidsynth_synth, -1, 0);  // Turn off reverb for all fx groups
+    fluid_synth_chorus_on(g_fluidsynth_synth, -1, 0);  // Turn off chorus for all fx groups
+
+    for (int i = 0; i < BAE_MAX_MIDI_CHANNELS; i++) 
     {
         GM_SF2_KillChannelNotes(i);
     }
