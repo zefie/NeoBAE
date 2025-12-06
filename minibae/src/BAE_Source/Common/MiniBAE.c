@@ -2214,7 +2214,7 @@ BAEResult BAEMixer_UnloadBanks(BAEMixer mixer)
                 break;
         }
 #if USE_SF2_SUPPORT == TRUE
-        if (mixer->pMixer->isSF2) {
+        if (mixer->pMixer && mixer->pMixer->isSF2) {
             mixer->pMixer->isSF2 = false;
         }
 #endif        
