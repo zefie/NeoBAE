@@ -59,7 +59,7 @@
     #endif
 #endif
 
-int g_thread_ch_enabled[16] = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
+int g_thread_ch_enabled[BAE_MAX_MIDI_CHANNELS] = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
 /* Forward-declare dialog renderer from gui_dialogs.c to avoid including the
     full header (which defines globals that conflict with this file's statics). */
 void render_about_dialog(SDL_Renderer *R, int mx, int my, bool mclick);
@@ -85,16 +85,17 @@ typedef short XSWORD; // 16-bit signed used by engine for track index
 
 // Forward declarations for functions
 bool bae_load_song(const char *path);
-bool bae_load_song_with_settings(const char *path, int transpose, int tempo, int volume, bool loop_enabled, int reverb_type, bool ch_enable[16]);
+bool bae_load_song_with_settings(const char *path, int transpose, int tempo, int volume, bool loop_enabled, int reverb_type, bool ch_enable[BAE_MAX_MIDI_CHANNELS]);
 void bae_seek_ms(int ms);
 int bae_get_pos_ms(void);
 bool bae_play(bool *playing);
-void bae_apply_current_settings(int transpose, int tempo, int volume, bool loop_enabled, int reverb_type, bool ch_enable[16]);
+void bae_apply_current_settings(int transpose, int tempo, int volume, bool loop_enabled, int reverb_type, bool ch_enable[BAE_MAX_MIDI_CHANNELS]);
 bool recreate_mixer_and_restore(int sampleRateHz, bool stereo, int reverbType,
                                 int transpose, int tempo, int volume, bool loopPlay,
-                                bool ch_enable[16]);
-bool load_bank(const char *path, bool current_playing_state, int transpose, int tempo, int volume, bool loop_enabled, int reverb_type, bool ch_enable[16], bool save_to_settings);
+                                bool ch_enable[BAE_MAX_MIDI_CHANNELS]);
+bool load_bank(const char *path, bool current_playing_state, int transpose, int tempo, int volume, bool loop_enabled, int reverb_type, bool ch_enable[BAE_MAX_MIDI_CHANNELS], bool save_to_settings);
 bool load_bank_simple(const char *path, bool save_to_settings, int reverb_type, bool loop_enabled);
+int g_max_vu_channels = 16;
 
 void safe_strncpy(char *dst, const char *src, size_t size) {
     strncpy(dst, src, size - 1);
@@ -448,7 +449,7 @@ static BAERate map_rate_from_hz(int hz)
 // Recreate mixer with new sample rate / stereo setting preserving current playback state where possible.
 bool recreate_mixer_and_restore(int sampleRateHz, bool stereo, int reverbType,
                                 int transpose, int tempo, int volume, bool loopPlay,
-                                bool ch_enable[16])
+                                bool ch_enable[BAE_MAX_MIDI_CHANNELS])
 {
 #ifdef SUPPORT_MIDI_HW
     // If MIDI service is active, stop it before tearing down mixer/songs to avoid races.
@@ -770,8 +771,8 @@ int main(int argc, char *argv[])
     detect_windows_theme();
 
     // Preload settings BEFORE creating mixer so we can open with desired format
-    bool ch_enable[16];
-    for (int i = 0; i < 16; i++)
+    bool ch_enable[BAE_MAX_MIDI_CHANNELS];
+    for (int i = 0; i < BAE_MAX_MIDI_CHANNELS; i++)
         ch_enable[i] = true; // need early for recreate helper fallback
     int transpose = 0;
     int tempo = 100;
@@ -1848,7 +1849,7 @@ int main(int argc, char *argv[])
         }
 #ifdef SUPPORT_MIDI_HW
         // Publish current channel enables to the MIDI thread (plain byte store is fine)
-        for (int _ci = 0; _ci < 16; ++_ci)
+        for (int _ci = 0; _ci < BAE_MAX_MIDI_CHANNELS; ++_ci)
         {
             g_thread_ch_enabled[_ci] = ch_enable[_ci] ? 1 : 0;
         }
@@ -2005,7 +2006,7 @@ int main(int argc, char *argv[])
                             if (target)
                                 BAESong_AllNotesOff(target, 0);
                             // Also clear our active-note book-keeping for that channel
-                            for (int n = 0; n < 128; n++)
+                            for (int n = 0; n < BAE_MAX_NOTES; n++)
                                 g_keyboard_active_notes_by_channel[mch][n] = 0;
                         }
                     }
@@ -2328,8 +2329,8 @@ int main(int argc, char *argv[])
         }
         int chStartX = 20, chStartY = 40;
         // Precompute estimated per-channel levels from mixer realtime info when available.
-        float realtime_channel_level[16];
-        for (int _i = 0; _i < 16; ++_i)
+        float realtime_channel_level[BAE_MAX_MIDI_CHANNELS];
+        for (int _i = 0; _i < BAE_MAX_MIDI_CHANNELS; ++_i)
             realtime_channel_level[_i] = 0.0f;
         bool have_realtime_levels = false;
 #ifdef SUPPORT_MIDI_HW
@@ -2340,10 +2341,10 @@ int main(int argc, char *argv[])
         {
             // Get realtime levels when playing files or when MIDI input is active
             // Prefer PCM-derived per-channel estimates when available from the engine.
-            float chL[16], chR[16];
+            float chL[BAE_MAX_MIDI_CHANNELS], chR[BAE_MAX_MIDI_CHANNELS];
             GM_GetRealtimeChannelLevels(chL, chR);
             // Merge stereo channels into a single mono level per MIDI channel
-            for (int ch = 0; ch < 16; ++ch)
+            for (int ch = 0; ch < BAE_MAX_MIDI_CHANNELS; ++ch)
             {
                 float lvl = (chL[ch] + chR[ch]) * 0.5f;
                 realtime_channel_level[ch] = lvl;
@@ -2352,7 +2353,7 @@ int main(int argc, char *argv[])
             have_realtime_levels = true;
         }
 
-        for (int i = 0; i < 16; i++)
+        for (int i = 0; i < g_max_vu_channels; i++)
         {
             int col = i % 8;
             int row = i / 8;
@@ -2390,7 +2391,7 @@ int main(int argc, char *argv[])
                         // Also mirror NoteOff to external MIDI out if enabled
                         if (g_midi_output_enabled)
                         {
-                            for (int n = 0; n < 128; ++n)
+                            for (int n = 0; n < BAE_MAX_NOTES; ++n)
                             {
                                 if (g_keyboard_active_notes_by_channel[i][n])
                                 {
@@ -2467,7 +2468,7 @@ int main(int argc, char *argv[])
                 // (from incoming MIDI UI array or engine active notes), otherwise decay.
                 bool active = false;
                 // Check per-channel incoming MIDI UI state
-                for (int n = 0; n < 128 && !active; n++)
+                for (int n = 0; n < BAE_MAX_NOTES && !active; n++)
                 {
                     if (g_keyboard_active_notes_by_channel[i][n])
                         active = true;
@@ -2484,10 +2485,10 @@ int main(int argc, char *argv[])
                     BAESong target = g_bae.song ? g_bae.song : g_live_song;
                     if (target)
                     {
-                        unsigned char ch_notes[128];
+                        unsigned char ch_notes[BAE_MAX_NOTES];
                         memset(ch_notes, 0, sizeof(ch_notes));
                         BAESong_GetActiveNotes(target, (unsigned char)i, ch_notes);
-                        for (int n = 0; n < 128; n++)
+                        for (int n = 0; n < BAE_MAX_NOTES; n++)
                         {
                             if (ch_notes[n])
                             {
@@ -2571,7 +2572,7 @@ int main(int argc, char *argv[])
         bool channel_controls_enabled = !(g_bae.is_audio_file && g_bae.sound);
         if (ui_button(R, (Rect){20, btnY, 80, 26}, "Invert", channel_controls_enabled ? ui_mx : -1, channel_controls_enabled ? ui_my : -1, channel_controls_enabled ? ui_mdown : false) && ui_mclick && !modal_block && channel_controls_enabled)
         {
-            for (int i = 0; i < 16; i++)
+            for (int i = 0; i < BAE_MAX_MIDI_CHANNELS; i++)
             {
                 bool was_enabled = ch_enable[i];
                 ch_enable[i] = !ch_enable[i];
@@ -2589,14 +2590,14 @@ int main(int argc, char *argv[])
         }
         if (ui_button(R, (Rect){110, btnY, 80, 26}, "Mute All", channel_controls_enabled ? ui_mx : -1, channel_controls_enabled ? ui_my : -1, channel_controls_enabled ? ui_mdown : false) && ui_mclick && !modal_block && channel_controls_enabled)
         {
-            for (int i = 0; i < 16; i++)
+            for (int i = 0; i < BAE_MAX_MIDI_CHANNELS; i++)
                 ch_enable[i] = false;
             // Clear all virtual keyboard highlights when muting all channels
             gui_clear_virtual_keyboard_all_channels();
         }
         if (ui_button(R, (Rect){200, btnY, 90, 26}, "Unmute All", channel_controls_enabled ? ui_mx : -1, channel_controls_enabled ? ui_my : -1, channel_controls_enabled ? ui_mdown : false) && ui_mclick && !modal_block && channel_controls_enabled)
         {
-            for (int i = 0; i < 16; i++)
+            for (int i = 0; i < BAE_MAX_MIDI_CHANNELS; i++)
             {
                 ch_enable[i] = true;
                 // Refresh virtual keyboard state from engine for all channels
@@ -2977,7 +2978,7 @@ int main(int argc, char *argv[])
                     BAESong target = g_bae.song ? g_bae.song : g_live_song;
                     if (target)
                     {
-                        for (int n = 0; n < 128; n++)
+                        for (int n = 0; n < BAE_MAX_NOTES; n++)
                         {
                             BAESong_NoteOff(target, (unsigned char)g_keyboard_channel, (unsigned char)n, 0, 0);
                         }
@@ -3030,7 +3031,7 @@ int main(int argc, char *argv[])
                 BAESong target = g_bae.song ? g_bae.song : g_live_song;
                 if (target)
                 {
-                    for (int n = 0; n < 128; n++)
+                    for (int n = 0; n < BAE_MAX_NOTES; n++)
                     {
                         BAESong_NoteOff(target, (unsigned char)g_keyboard_channel, (unsigned char)n, 0, 0);
                     }
@@ -3146,9 +3147,9 @@ int main(int argc, char *argv[])
                 if (target)
                 {
                     // Send NoteOff for every channel/note to be extra-safe
-                    for (int ch = 0; ch < 16; ++ch)
+                    for (int ch = 0; ch < BAE_MAX_MIDI_CHANNELS; ++ch)
                     {
-                        for (int n = 0; n < 128; ++n)
+                        for (int n = 0; n < BAE_MAX_NOTES; ++n)
                         {
                             BAESong_NoteOff(target, (unsigned char)ch, (unsigned char)n, 0, 0);
                         }
@@ -3169,7 +3170,7 @@ int main(int argc, char *argv[])
                 BAESong target = g_bae.song ? g_bae.song : g_live_song;
                 if (target)
                 {
-                    for (int n = 0; n < 128; n++)
+                    for (int n = 0; n < BAE_MAX_NOTES; n++)
                     {
                         BAESong_NoteOff(target, (unsigned char)g_keyboard_channel, (unsigned char)n, 0, 0);
                     }
@@ -3370,7 +3371,7 @@ int main(int argc, char *argv[])
                             BAESong target = g_bae.song ? g_bae.song : g_live_song;
                             if (target)
                             {
-                                for (int n = 0; n < 128; n++)
+                                for (int n = 0; n < BAE_MAX_NOTES; n++)
                                 {
                                     BAESong_NoteOff(target, (unsigned char)g_keyboard_channel, (unsigned char)n, 0, 0);
                                 }
@@ -3418,9 +3419,9 @@ int main(int argc, char *argv[])
             if (!(g_bae.is_audio_file && g_bae.sound))
             {
                 // Channel dropdown
-                const char *chanItems[16];
-                char chanBuf[16][8];
-                for (int i = 0; i < 16; i++)
+                const char *chanItems[BAE_MAX_MIDI_CHANNELS];
+                char chanBuf[BAE_MAX_MIDI_CHANNELS][8];
+                for (int i = 0; i < BAE_MAX_MIDI_CHANNELS; i++)
                 {
                     snprintf(chanBuf[i], sizeof(chanBuf[i]), "Ch %d", i + 1);
                     chanItems[i] = chanBuf[i];
@@ -3531,7 +3532,7 @@ int main(int argc, char *argv[])
             // Merge engine-driven active notes with notes coming from external
             // MIDI input so incoming MIDI lights the virtual keys even when
             // playback is stopped or when using the live fallback song.
-            unsigned char merged_notes[128];
+            unsigned char merged_notes[BAE_MAX_NOTES];
             memset(merged_notes, 0, sizeof(merged_notes));
 #ifdef SUPPORT_MIDI_HW
             // If MIDI input is enabled, fill merged_notes from per-channel state
@@ -3540,16 +3541,16 @@ int main(int argc, char *argv[])
                 if (g_keyboard_show_all_channels)
                 {
                     // OR all channels together
-                    for (int ch = 0; ch < 16; ++ch)
+                    for (int ch = 0; ch < BAE_MAX_MIDI_CHANNELS; ++ch)
                     {
-                        for (int n = 0; n < 128; ++n)
+                        for (int n = 0; n < BAE_MAX_NOTES; ++n)
                             merged_notes[n] |= g_keyboard_active_notes_by_channel[ch][n];
                     }
                 }
                 else
                 {
                     // Only show the currently selected channel
-                    for (int n = 0; n < 128; ++n)
+                    for (int n = 0; n < BAE_MAX_NOTES; ++n)
                         merged_notes[n] |= g_keyboard_active_notes_by_channel[g_keyboard_channel][n];
                 }
             }
@@ -3568,15 +3569,15 @@ int main(int argc, char *argv[])
                             // Query each channel and OR them together so engine-driven
                             // activity on any channel lights the virtual keyboard when
                             // the 'All' option is enabled.
-                            for (int ch = 0; ch < 16; ++ch)
+                            for (int ch = 0; ch < BAE_MAX_MIDI_CHANNELS; ++ch)
                             {
                                 // Only include notes from enabled (non-muted) channels
                                 if (ch_enable[ch])
                                 {
-                                    unsigned char ch_notes[128];
+                                    unsigned char ch_notes[BAE_MAX_NOTES];
                                     memset(ch_notes, 0, sizeof(ch_notes));
                                     BAESong_GetActiveNotes(target, (unsigned char)ch, ch_notes);
-                                    for (int i = 0; i < 128; i++)
+                                    for (int i = 0; i < BAE_MAX_NOTES; i++)
                                         merged_notes[i] |= ch_notes[i];
                                 }
                             }
@@ -3586,10 +3587,10 @@ int main(int argc, char *argv[])
                             // Only show the currently selected channel if it's enabled
                             if (ch_enable[g_keyboard_channel])
                             {
-                                unsigned char engine_notes[128];
+                                unsigned char engine_notes[BAE_MAX_NOTES];
                                 memset(engine_notes, 0, sizeof(engine_notes));
                                 BAESong_GetActiveNotes(target, (unsigned char)g_keyboard_channel, engine_notes);
-                                for (int i = 0; i < 128; i++)
+                                for (int i = 0; i < BAE_MAX_NOTES; i++)
                                     merged_notes[i] |= engine_notes[i];
                             }
                         }
@@ -3600,12 +3601,12 @@ int main(int argc, char *argv[])
             // Build a quick lookup of notes triggered by typed (qwerty) keys so
             // we can render them with the highlight color instead of the
             // accent color used for incoming MIDI/engine activity.
-            unsigned char typed_notes[128];
+            unsigned char typed_notes[BAE_MAX_NOTES];
             memset(typed_notes, 0, sizeof(typed_notes));
             for (int sc = 0; sc < 512; ++sc)
             {
                 int mn = g_keyboard_pressed_note[sc];
-                if (mn >= 0 && mn < 128)
+                if (mn >= 0 && mn < BAE_MAX_NOTES)
                     typed_notes[mn] = 1;
             }
             // Keyboard drawing region
@@ -4283,7 +4284,7 @@ int main(int argc, char *argv[])
                     BAESong target = g_bae.song ? g_bae.song : g_live_song;
                     if (target)
                     {
-                        for (int n = 0; n < 128; n++)
+                        for (int n = 0; n < BAE_MAX_NOTES; n++)
                         {
                             BAESong_NoteOff(target, (unsigned char)g_keyboard_channel, (unsigned char)n, 0, 0);
                         }
@@ -5697,12 +5698,12 @@ int main(int argc, char *argv[])
             }
             draw_rect(R, box, g_panel_bg);
             draw_frame(R, box, g_panel_border);
-            char chanBuf[16][8];
-            for (int i = 0; i < 16; i++)
+            char chanBuf[BAE_MAX_MIDI_CHANNELS][8];
+            for (int i = 0; i < BAE_MAX_MIDI_CHANNELS; i++)
             {
                 snprintf(chanBuf[i], sizeof(chanBuf[i]), "Ch %d", i + 1);
             }
-            for (int i = 0; i < 16; i++)
+            for (int i = 0; i < BAE_MAX_MIDI_CHANNELS; i++)
             {
                 int col = i / rows; // 0 or 1
                 int row = i % rows;
@@ -5845,7 +5846,7 @@ int main(int argc, char *argv[])
                 BAESong target = g_bae.song ? g_bae.song : g_live_song;
                 if (target)
                 {
-                    for (int n = 0; n < 128; n++)
+                    for (int n = 0; n < BAE_MAX_NOTES; n++)
                     {
                         if (g_keyboard_active_notes[n]) {
                             BAESong_NoteOff(target, (unsigned char)g_keyboard_channel, (unsigned char)n, 0, 0);

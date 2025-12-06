@@ -359,8 +359,9 @@ extern "C"
         BAE_MAX_SONGS = 2,
         BAE_MAX_OVERDRIVE_PCT = 524188,
         BAE_MAX_MIDI_VOLUME = 127,
-        BAE_MAX_MIDI_TRACKS = 65, // 64 midi tracks, plus 1 tempo track
-        BAE_MAX_MIDI_CHANNELS = 16,
+        BAE_MAX_MIDI_TRACKS = MAX_TRACKS, // 64 midi tracks, plus 1 tempo track
+        BAE_MAX_MIDI_CHANNELS = MAX_CHANNELS - 1,
+        BAE_MAX_NOTES = MAX_INSTRUMENTS, // per bank
 
         BAE_DEFAULT_PROGRAM = 0,
         BAE_DEFAULT_BANK = 0,

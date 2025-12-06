@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include "MiniBAE.h"
 
 #include "rtmidi_c.h"
 
@@ -86,7 +87,7 @@ void midi_output_send_all_notes_off(void)
 {
     // Send Control Change 123 (All Notes Off) and 120 (All Sound Off) to all channels
     unsigned char msg[3];
-    for (int ch = 0; ch < 16; ++ch)
+    for (int ch = 0; ch < BAE_MAX_MIDI_CHANNELS; ++ch)
     {
         // All Sound Off: controller 120
         msg[0] = (unsigned char)(0xB0 | (ch & 0x0F));

@@ -80,7 +80,6 @@ void GM_SF2_SilenceSong(GM_Song* pSong);
 // FluidSynth configuration
 void GM_SF2_SetMasterVolume(XFIXED volume);
 XFIXED GM_SF2_GetMasterVolume(void);
-void GM_SF2_SetMaxVoices(int16_t maxVoices);
 int16_t GM_SF2_GetMaxVoices(void);
 void GM_SF2_SetStereoMode(XBOOL stereo, XBOOL applyNow);
 void GM_SF2_SetSampleRate(int32_t sampleRate);

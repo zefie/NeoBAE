@@ -35,9 +35,9 @@ double g_last_applied_sound_volume = 1.0;
 
 // Global state variables (from main)
 BAESong g_live_song = NULL;
-float g_channel_vu[16] = {0.0f};
-float g_channel_peak_level[16] = {0.0f};
-uint32_t g_channel_peak_hold_until[16] = {0};
+float g_channel_vu[BAE_MAX_MIDI_CHANNELS] = {0.0f};
+float g_channel_peak_level[BAE_MAX_MIDI_CHANNELS] = {0.0f};
+uint32_t g_channel_peak_hold_until[BAE_MAX_MIDI_CHANNELS] = {0};
 uint32_t g_channel_peak_hold_ms = 600; // how long to hold peak in ms
 
 // Bank info
@@ -103,7 +103,7 @@ void load_bankinfo()
     BAE_PRINTF("Loaded info about %d banks\n", bank_count);
 }
 
-bool load_bank(const char *path, bool current_playing_state, int transpose, int tempo, int volume, bool loop_enabled, int reverb_type, bool ch_enable[16], bool save_to_settings)
+bool load_bank(const char *path, bool current_playing_state, int transpose, int tempo, int volume, bool loop_enabled, int reverb_type, bool ch_enable[BAE_MAX_MIDI_CHANNELS], bool save_to_settings)
 {
     if (!g_bae.mixer)
         return false;
@@ -318,8 +318,8 @@ bool load_bank(const char *path, bool current_playing_state, int transpose, int 
 
 bool load_bank_simple(const char *path, bool save_to_settings, int reverb_type, bool loop_enabled)
 {
-    bool dummy_ch[16];
-    for (int i = 0; i < 16; i++)
+    bool dummy_ch[BAE_MAX_MIDI_CHANNELS];
+    for (int i = 0; i < BAE_MAX_MIDI_CHANNELS; i++)
         dummy_ch[i] = true;
 
     // If no specific path provided, do fallback discovery
@@ -818,7 +818,7 @@ bool bae_load_song(const char *path)
     return true;
 }
 
-bool bae_load_song_with_settings(const char *path, int transpose, int tempo, int volume, bool loop_enabled, int reverb_type, bool ch_enable[16])
+bool bae_load_song_with_settings(const char *path, int transpose, int tempo, int volume, bool loop_enabled, int reverb_type, bool ch_enable[BAE_MAX_MIDI_CHANNELS])
 {
     if (!bae_load_song(path))
         return false;
@@ -1075,12 +1075,12 @@ void bae_set_reverb(int idx)
     }
 }
 
-void bae_update_channel_mutes(bool ch_enable[16])
+void bae_update_channel_mutes(bool ch_enable[BAE_MAX_MIDI_CHANNELS])
 {
     if (g_bae.is_audio_file || !g_bae.song)
         return; // Only works with MIDI/RMF
 
-    for (int i = 0; i < 16; i++)
+    for (int i = 0; i < BAE_MAX_MIDI_CHANNELS; i++)
     {
         if (ch_enable[i])
             BAESong_UnmuteChannel(g_bae.song, (uint16_t)i);
@@ -1089,7 +1089,7 @@ void bae_update_channel_mutes(bool ch_enable[16])
     }
 }
 
-void bae_apply_current_settings(int transpose, int tempo, int volume, bool loop_enabled, int reverb_type, bool ch_enable[16])
+void bae_apply_current_settings(int transpose, int tempo, int volume, bool loop_enabled, int reverb_type, bool ch_enable[BAE_MAX_MIDI_CHANNELS])
 {
     if (!g_bae.song)
         return;
@@ -1298,7 +1298,7 @@ bool bae_play(bool *playing)
                 BAESong target = g_bae.song ? g_bae.song : g_live_song;
                 if (target)
                 {
-                    for (int n = 0; n < 128; n++)
+                    for (int n = 0; n < BAE_MAX_NOTES; n++)
                     {
                         if (g_keyboard_active_notes[n]) {
                             BAESong_NoteOff(target, (unsigned char)g_keyboard_channel, (unsigned char)n, 0, 0);
@@ -1315,7 +1315,7 @@ bool bae_play(bool *playing)
             g_bae.is_playing = false;
 
             // Clear per-channel VU meters and peaks so UI shows empty levels immediately when stopped
-            for (int i = 0; i < 16; ++i)
+            for (int i = 0; i < BAE_MAX_MIDI_CHANNELS; ++i)
             {
                 g_channel_vu[i] = 0.0f;
                 g_channel_peak_level[i] = 0.0f;
@@ -1383,7 +1383,7 @@ void bae_stop(bool *playing, int *progress)
         BAESong target = g_bae.song ? g_bae.song : g_live_song;
         if (target)
         {
-            for (int n = 0; n < 128; n++)
+            for (int n = 0; n < BAE_MAX_NOTES; n++)
             {
                 BAESong_NoteOff(target, (unsigned char)g_keyboard_channel, (unsigned char)n, 0, 0);
             }
@@ -1395,7 +1395,7 @@ void bae_stop(bool *playing, int *progress)
     }
 
     // Clear per-channel VU meters and peaks so UI shows empty levels immediately when stopped
-    for (int i = 0; i < 16; ++i)
+    for (int i = 0; i < BAE_MAX_MIDI_CHANNELS; ++i)
     {
         g_channel_vu[i] = 0.0f;
         g_channel_peak_level[i] = 0.0f;

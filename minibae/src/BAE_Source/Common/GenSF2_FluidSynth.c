@@ -44,8 +44,7 @@ static fluid_synth_t* g_fluidsynth_synth = NULL;
 static int g_fluidsynth_soundfont_id = -1;
 static XBOOL g_fluidsynth_initialized = FALSE;
 static XBOOL g_fluidsynth_mono_mode = FALSE;
-static XFIXED g_fluidsynth_master_volume = round((XFIXED_1 / 256) * 5);
-static int16_t g_fluidsynth_max_voices = MAX_VOICES;
+static XFIXED g_fluidsynth_master_volume = (XFIXED)((XFIXED_1 / 256) * 5);
 static uint16_t g_fluidsynth_sample_rate = 44100;
 static char g_fluidsynth_sf2_path[256] = {0};
 // Track a temp file we create for DLS fallback so we can remove it on unload
@@ -74,7 +73,7 @@ static void pv_fluidsynth_log_filter(int level, const char* message, void* data)
 }
 
 // Channel activity tracking
-static ChannelActivity g_channel_activity[16];
+static ChannelActivity g_channel_activity[BAE_MAX_MIDI_CHANNELS];
 static int g_activity_frame_counter = 0;
 
 // Audio mixing buffer for FluidSynth output
@@ -169,7 +168,8 @@ OPErr GM_InitializeSF2(void)
     
     // Configure FluidSynth settings
     fluid_settings_setnum(g_fluidsynth_settings, "synth.sample-rate", g_fluidsynth_sample_rate);
-    fluid_settings_setint(g_fluidsynth_settings, "synth.polyphony", g_fluidsynth_max_voices);
+    fluid_settings_setint(g_fluidsynth_settings, "synth.polyphony", BAE_MAX_VOICES);
+    fluid_settings_setint(g_fluidsynth_settings, "synth.midi-channels", BAE_MAX_MIDI_CHANNELS);
     fluid_settings_setnum(g_fluidsynth_settings, "synth.gain", XFIXED_TO_FLOAT(g_fluidsynth_master_volume));
     fluid_settings_setint(g_fluidsynth_settings, "synth.audio-channels", 2);  // Always stereo - we simulate mono in conversion
     
@@ -512,10 +512,10 @@ XBOOL GM_IsSF2Song(GM_Song* pSong)
     return pSong->isSF2Song;
 }
 
-void sf2_get_channel_amplitudes(float channelAmplitudes[16][2])
+void sf2_get_channel_amplitudes(float channelAmplitudes[BAE_MAX_MIDI_CHANNELS][2])
 {
     // Always zero-out destination first
-    for (int ch = 0; ch < 16; ch++)
+    for (int ch = 0; ch < BAE_MAX_MIDI_CHANNELS; ch++)
     {
         channelAmplitudes[ch][0] = 0.0f;
         channelAmplitudes[ch][1] = 0.0f;
@@ -526,17 +526,16 @@ void sf2_get_channel_amplitudes(float channelAmplitudes[16][2])
         return;
     }
     
-    // Method 1: Voice-based amplitude monitoring (more accurate)
     // Get list of active voices from FluidSynth
-    const int maxVoices = BAE_MAX_VOICES;  // FluidSynth default max polyphony
+    const int maxVoices = BAE_MAX_VOICES;
     fluid_voice_t* voiceList[maxVoices];
     
     // Get all active voices
     fluid_synth_get_voicelist(g_fluidsynth_synth, voiceList, maxVoices, -1);
     
-    // Accumulate amplitude estimates per channel based on active voices
-    float channelVoiceCounts[16] = {0};
-    float channelVelocitySum[16] = {0};
+    // Accumulate velocities per channel
+    float channelVelocitySum[BAE_MAX_MIDI_CHANNELS] = {0};
+    int channelVoiceCounts[BAE_MAX_MIDI_CHANNELS] = {0};
     
     for (int i = 0; i < maxVoices && voiceList[i] != NULL; i++)
     {
@@ -547,97 +546,42 @@ void sf2_get_channel_amplitudes(float channelAmplitudes[16][2])
             continue;
             
         int channel = fluid_voice_get_channel(voice);
-        if (channel < 0 || channel >= 16)
+        if (channel < 0 || channel >= BAE_MAX_MIDI_CHANNELS)
             continue;
             
+        // Get velocity and accumulate for averaging
         int velocity = fluid_voice_get_actual_velocity(voice);
-        
-        // Accumulate voice information per channel
-        channelVoiceCounts[channel] += 1.0f;
-        channelVelocitySum[channel] += velocity;
-        
-        // Get voice envelope/amplitude level (if available)
-        // Note: FluidSynth doesn't directly expose voice amplitude,
-        // so we estimate based on velocity and voice state
-        float voiceAmplitude = 0.0f;
-        
-        if (fluid_voice_is_on(voice))
-        {
-            // Voice is in attack/sustain phase
-            voiceAmplitude = (float)velocity / 127.0f * 0.8f;
-        }
-        else
-        {
-            // Voice is in release phase - assume lower amplitude
-            voiceAmplitude = (float)velocity / 127.0f * 0.3f;
-        }
-        
-        // Add to channel amplitude (simplified stereo assumption)
-        channelAmplitudes[channel][0] += voiceAmplitude * 0.1f; // Scale down for multiple voices
-        channelAmplitudes[channel][1] += voiceAmplitude * 0.1f;
+        channelVelocitySum[channel] += (float)velocity;
+        channelVoiceCounts[channel]++;
     }
     
-    // Method 2: Fallback to note tracking for channels with no voice data
-    for (int ch = 0; ch < 16; ch++)
+    // Calculate average velocity per channel and scale to 0.0-1.0
+    for (int ch = 0; ch < BAE_MAX_MIDI_CHANNELS; ch++)
     {
-        if (channelVoiceCounts[ch] == 0.0f)
+        if (channelVoiceCounts[ch] > 0)
         {
-            // No voices found, use our note tracking as fallback
-            ChannelActivity* activity = &g_channel_activity[ch];
+            // Average velocity normalized to BAE_MAX_MIDI_VOLUME (127)
+            float avgVelocity = channelVelocitySum[ch] / (float)channelVoiceCounts[ch];
+            float normalizedLevel = avgVelocity / (float)BAE_MAX_MIDI_VOLUME;
             
-            if (activity->activeNotes > 0)
-            {
-                // Calculate amplitude based on active notes and velocity
-                float baseLevel = (float)activity->activeNotes / 8.0f; // Normalize to typical polyphony
-                float velocityFactor = activity->noteVelocity / 127.0f;
-                float amplitude = baseLevel * velocityFactor * 0.3f; // Scale for reasonable display levels
-                
-                // Apply decay based on time since last activity
-                float decayFactor = 1.0f;
-                if (activity->lastActivity > 0)
-                {
-                    // Decay over roughly 1 second (assuming 44.1kHz, 512 frame slices = ~86 frames/sec)
-                    float decayTime = (float)activity->lastActivity / 86.0f;
-                    decayFactor = expf(-decayTime * 2.0f); // Exponential decay
-                }
-                
-                amplitude *= decayFactor;
-                
-                if (g_fluidsynth_mono_mode)
-                {
-                    // Mono mode: same level for both channels
-                    channelAmplitudes[ch][0] = amplitude;
-                    channelAmplitudes[ch][1] = amplitude;
-                }
-                else
-                {
-                    // Stereo mode: use tracked left/right levels if available
-                    channelAmplitudes[ch][0] = activity->leftLevel * amplitude;
-                    channelAmplitudes[ch][1] = activity->rightLevel * amplitude;
-                    
-                    // If no specific left/right tracking, distribute evenly
-                    if (activity->leftLevel == 0.0f && activity->rightLevel == 0.0f)
-                    {
-                        channelAmplitudes[ch][0] = amplitude;
-                        channelAmplitudes[ch][1] = amplitude;
-                    }
-                }
-            }
+            // Apply to both channels (stereo separation handled by FluidSynth internally)
+            channelAmplitudes[ch][0] = normalizedLevel;
+            channelAmplitudes[ch][1] = normalizedLevel;
         }
-        else
+    }
+    
+    // Calculate average velocity per channel and scale to 0.0-1.0
+    for (int ch = 0; ch < BAE_MAX_MIDI_CHANNELS; ch++)
+    {
+        if (channelVoiceCounts[ch] > 0)
         {
-            // Apply mono/stereo mode to voice-based amplitudes
-            if (g_fluidsynth_mono_mode)
-            {
-                // Convert stereo to mono
-                float mono = (channelAmplitudes[ch][0] + channelAmplitudes[ch][1]) * 0.5f;
-                channelAmplitudes[ch][0] = mono;
-                channelAmplitudes[ch][1] = mono;
-            }
+            // Average velocity normalized to BAE_MAX_MIDI_VOLUME (127)
+            float avgVelocity = channelVelocitySum[ch] / (float)channelVoiceCounts[ch];
+            float normalizedLevel = avgVelocity / (float)BAE_MAX_MIDI_VOLUME;
             
-            // Clamp to reasonable display ranges
-            if (channelAmplitudes[ch][0] > 1.0f) channelAmplitudes[ch][0] = 1.0f;
-            if (channelAmplitudes[ch][1] > 1.0f) channelAmplitudes[ch][1] = 1.0f;
+            // Apply to both channels (stereo separation handled by FluidSynth internally)
+            channelAmplitudes[ch][0] = normalizedLevel;
+            channelAmplitudes[ch][1] = normalizedLevel;
         }
     }
 }
@@ -675,7 +619,7 @@ OPErr GM_EnableSF2ForSong(GM_Song* pSong, XBOOL enable)
         sf2Info->sf2_soundfont_id = enable ? g_fluidsynth_soundfont_id : -1;
         sf2Info->sf2_master_volume = g_fluidsynth_master_volume;
         sf2Info->sf2_sample_rate = g_fluidsynth_sample_rate;
-        sf2Info->sf2_max_voices = g_fluidsynth_max_voices;
+        sf2Info->sf2_max_voices = BAE_MAX_VOICES;
         
         // Verify the synth pointer is valid before using
         if (enable && !g_fluidsynth_synth)
@@ -687,7 +631,7 @@ OPErr GM_EnableSF2ForSong(GM_Song* pSong, XBOOL enable)
         }
         
         // Init per-channel volume/expression defaults (GM defaults: volume 127, expression 127)
-        for (int i = 0; i < 16; i++) 
+        for (int i = 0; i < BAE_MAX_MIDI_CHANNELS; i++) 
         { 
             sf2Info->channelVolume[i] = 127;
             sf2Info->channelExpression[i] = 127;
@@ -796,7 +740,7 @@ void GM_SF2_ProcessProgramChange(GM_Song* pSong, int16_t channel, int16_t progra
         // midiProgram stays as-is for melodic instruments
     }
     // hack for dumb midis
-    if (midiBank == 0 && channel == 9) {
+    if (midiBank == 0 && channel == BAE_PERCUSSION_CHANNEL) {
         // ch 10, percussions
         midiBank = 128;
     }
@@ -827,7 +771,7 @@ void GM_SF2_ProcessProgramChange(GM_Song* pSong, int16_t channel, int16_t progra
                 useProg = altProg;
             } else {
                 // If percussion intent, try bank 128; else try bank 0; finally pick any preset
-                XBOOL percIntent = (channel == 9) || (useBank == 128);
+                XBOOL percIntent = (channel == BAE_PERCUSSION_CHANNEL) || (useBank == 128);
                 int fbBank = -1, fbProg = 0;
                 if (percIntent && PV_SF2_FindFirstPresetInBank(128, &fbProg)) {
                     fbBank = 128;
@@ -956,9 +900,9 @@ void GM_SF2_RenderAudioSlice(GM_Song* pSong, int32_t* mixBuffer, int32_t frameCo
     }
     
     // Apply per-channel volume/expression: we post-scale the rendered buffer per frame
-    float channelScales[16];
+    float channelScales[BAE_MAX_MIDI_CHANNELS];
     GM_SF2Info* info = (GM_SF2Info*)pSong->sf2Info;
-    for(int c = 0; c < 16; c++)
+    for(int c = 0; c < BAE_MAX_MIDI_CHANNELS; c++)
     {
         float vol = 1.0f;
         if (info)
@@ -1008,7 +952,7 @@ void GM_SF2_AllNotesOff(GM_Song* pSong)
     if (!g_fluidsynth_synth)
         return;
     
-    for (int i = 0; i < 16; i++) 
+    for (int i = 0; i < BAE_MAX_MIDI_CHANNELS; i++) 
         GM_SF2_KillChannelNotes(i);
 }
 
@@ -1027,18 +971,9 @@ XFIXED GM_SF2_GetMasterVolume(void)
     return g_fluidsynth_master_volume;
 }
 
-void GM_SF2_SetMaxVoices(int16_t maxVoices)
-{
-    g_fluidsynth_max_voices = maxVoices;
-    if (g_fluidsynth_settings)
-    {
-        fluid_settings_setint(g_fluidsynth_settings, "synth.polyphony", maxVoices);
-    }
-}
-
 int16_t GM_SF2_GetMaxVoices(void)
 {
-    return g_fluidsynth_max_voices;
+    return BAE_MAX_VOICES;
 }
 
 void GM_SF2_SetStereoMode(XBOOL stereo, XBOOL applyNow)
@@ -1234,7 +1169,7 @@ static void PV_SF2_ConvertFloatToInt32(float* input, int32_t* output, int32_t fr
     
     // Average the channel scales for a rough approximation
     float avgChannelScale = 0.0f;
-    for (int c = 0; c < 16; c++)
+    for (int c = 0; c < BAE_MAX_MIDI_CHANNELS; c++)
     {
         avgChannelScale += channelScales[c];
     }
@@ -1315,7 +1250,7 @@ static void PV_SF2_FreeMixBuffer(void)
 
 static void PV_SF2_InitializeChannelActivity(void)
 {
-    for (int ch = 0; ch < 16; ch++)
+    for (int ch = 0; ch < BAE_MAX_MIDI_CHANNELS; ch++)
     {
         g_channel_activity[ch].leftLevel = 0.0f;
         g_channel_activity[ch].rightLevel = 0.0f;
@@ -1328,7 +1263,7 @@ static void PV_SF2_InitializeChannelActivity(void)
 
 static void PV_SF2_UpdateChannelActivity(int16_t channel, int16_t velocity, XBOOL noteOn)
 {
-    if (channel < 0 || channel >= 16)
+    if (channel < 0 || channel >= BAE_MAX_MIDI_CHANNELS)
         return;
         
     ChannelActivity* activity = &g_channel_activity[channel];
@@ -1374,7 +1309,7 @@ static void PV_SF2_DecayChannelActivity(void)
 {
     g_activity_frame_counter++;
     
-    for (int ch = 0; ch < 16; ch++)
+    for (int ch = 0; ch < BAE_MAX_MIDI_CHANNELS; ch++)
     {
         ChannelActivity* activity = &g_channel_activity[ch];
         
@@ -1402,7 +1337,7 @@ static void PV_SF2_SetValidDefaultProgramsForAllChannels(void)
         return;
 
     // Controller defaults first
-    for (int ch = 0; ch < 16; ch++) {
+    for (int ch = 0; ch < BAE_MAX_MIDI_CHANNELS; ch++) {
         fluid_synth_cc(g_fluidsynth_synth, ch, 7, 80);
         fluid_synth_cc(g_fluidsynth_synth, ch, 10, 64);
         fluid_synth_cc(g_fluidsynth_synth, ch, 11, 100);
@@ -1445,8 +1380,8 @@ static void PV_SF2_SetValidDefaultProgramsForAllChannels(void)
                foundMelodicBank, foundMelodicProg, foundDrumBank, foundDrumProg, firstBank, firstProg);
 
     // Apply per-channel defaults
-    for (int ch = 0; ch < 16; ch++) {
-        if (ch == 9) {
+    for (int ch = 0; ch < BAE_MAX_MIDI_CHANNELS; ch++) {
+        if (ch == BAE_PERCUSSION_CHANNEL) {
             if (foundDrumBank >= 0) {
                 fluid_synth_bank_select(g_fluidsynth_synth, ch, foundDrumBank);
                 fluid_synth_program_change(g_fluidsynth_synth, ch, foundDrumProg);
