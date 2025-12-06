@@ -10,6 +10,12 @@
 #include "GenSF2_FluidSynth.h"
 
 #if USE_SF2_SUPPORT == TRUE && _USING_FLUIDSYNTH == TRUE
+#ifdef _WIN32
+#include <windows.h>
+#include <psapi.h>
+#else
+#include <link.h>
+#endif
 
 #include "fluidsynth.h"
 #include "GenSnd.h"
@@ -327,6 +333,39 @@ static int fs_mem_close(void *handle) {
     return FLUID_OK;
 }
 
+bool is_libinstpatch_loaded(void) {
+#ifdef _WIN32
+    HMODULE hMods[1024];
+    DWORD cbNeeded;
+
+    if (EnumProcessModules(GetCurrentProcess(), hMods, sizeof(hMods), &cbNeeded)) {
+        for (unsigned i = 0; i < (cbNeeded / sizeof(HMODULE)); i++) {
+            char szModName[MAX_PATH];
+            if (GetModuleFileNameA(hMods[i], szModName, sizeof(szModName))) {
+                if (strstr(szModName, "libinstpatch")) {
+                    return true; // Found
+                }
+            }
+        }
+    }
+    return false;
+#else
+    struct ctx { int found; } context = {0};
+
+    int callback(struct dl_phdr_info *info, size_t size, void *data) {
+        struct ctx *ctx = (struct ctx *)data;
+        if (info->dlpi_name && strstr(info->dlpi_name, "libinstpatch")) {
+            ctx->found = 1;
+            return true; // stop iteration
+        }
+        return false;
+    }
+
+    dl_iterate_phdr(callback, &context);
+    return context.found != 0 ? true : false;
+#endif
+}
+
 OPErr GM_LoadSF2SoundfontFromMemory(const unsigned char *data, size_t size) {
     if (!g_fluidsynth_initialized) {
         OPErr err = GM_InitializeSF2();
@@ -347,7 +386,7 @@ OPErr GM_LoadSF2SoundfontFromMemory(const unsigned char *data, size_t size) {
         isSF2 = (type[0]=='s' && type[1]=='f' && type[2]=='b' && type[3]=='k');
         isDLS = (type[0]=='D' && type[1]=='L' && type[2]=='S' && type[3]==' ');
     }
-    if (isDLS && fluid_has_feature("instpatch")) {
+    if (isDLS && is_libinstpatch_loaded()) {
         // libinstpatch requires a path-based load for DLS files
         GM_UnloadSF2Soundfont();
         char tmpl[] = "/tmp/minibae_dls_XXXXXX.dls"; // keep .dls suffix

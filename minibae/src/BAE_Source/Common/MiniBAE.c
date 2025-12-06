@@ -372,7 +372,12 @@ const char *BAE_GetFeatureString()
 
     // SF2 support
 #if _USING_FLUIDSYNTH == TRUE
-    char *sf2supp = "SF2/SF3/SFO/DLS Support";
+    char *sf2supp = NULL;
+    if (is_libinstpatch_loaded()) {
+        sf2supp = (char *)"SF2/SF3/SFO/DLS (libinstpatch) Support";
+    } else {
+        sf2supp = (char *)"SF2/SF3/SFO/DLS Support";
+    }
 #elif USE_SF2_SUPPORT == TRUE && USE_VORBIS_DECODER == TRUE
     char *sf2supp = "SF2/SF3/SFO Support";
 #elif USE_SF2_SUPPORT == TRUE
@@ -386,7 +391,7 @@ const char *BAE_GetFeatureString()
     // FluidSynth
     if (sf2supp && sf2supp[0]) {
         static char sf2supp_buf[64];
-        snprintf(sf2supp_buf, sizeof(sf2supp_buf), "%s (FluidSynth v%s)", sf2supp, FLUIDSYNTH_VERSION);
+        snprintf(sf2supp_buf, sizeof(sf2supp_buf), "%s (FluidSynth v%s)", sf2supp, fluid_version_str());
         sf2supp = sf2supp_buf;
     }
 #endif

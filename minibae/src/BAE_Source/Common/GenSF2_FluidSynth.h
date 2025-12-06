@@ -53,6 +53,8 @@ OPErr GM_LoadSF2SoundfontFromMemory(const unsigned char *data, size_t size);
 OPErr GM_LoadSF2Soundfont(const char* sf2_path);
 void GM_UnloadSF2Soundfont(void);
 
+bool is_libinstpatch_loaded(void);
+
 // Check if a song should use FluidSynth rendering
 XBOOL GM_IsSF2Song(GM_Song* pSong);
 
