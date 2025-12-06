@@ -27,6 +27,7 @@ typedef struct
     bool loop_was_enabled_before_export; // store loop state for export restore
     uint32_t position_us_before_export;  // to restore playback position
     bool audio_engaged_before_export;    // track hardware engagement
+    int current_reverb_type;             // current reverb type index
     char loaded_path[1024];
     // Preserve position across bank reloads
     bool preserve_position_on_next_start;
