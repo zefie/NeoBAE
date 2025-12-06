@@ -113,7 +113,7 @@ The GUI provides an intuitive interface for:
   - Utilitizes [RtMidi](https://github.com/thestk/rtmidi) for ultra low latency input
   - Record incoming MIDI events - to MIDI! (or WAV/FLAC/MP3)
   - Also supports MIDI Output
-- Cross-platform: Runs on any device SDL2 does
+- Cross-platform: Runs on any device SDL3 does
 - Dark mode support (Default for Linux, on Windows it will default to your theme settings (10/11))
 
 ### WebAssembly
