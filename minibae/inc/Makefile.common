@@ -494,8 +494,13 @@ ifeq ($(RMFINFO),1)
 	# libMiniBAE srcs + rmfinfo.c
 	SRC_BIN	:= $(SRC) src/rmfinfo/rmfinfo.c
 else
+ifeq ($(RMF2MID),1)
+	# libMiniBAE srcs + rmf2mid.c
+	SRC_BIN	:= $(SRC) src/rmf2mid/rmf2mid.c
+else
 	# playbae = libMiniBAE srcs + playbae.c
 	SRC_BIN	:= $(SRC) src/playbae/playbae.c
+endif
 endif
 endif
 
