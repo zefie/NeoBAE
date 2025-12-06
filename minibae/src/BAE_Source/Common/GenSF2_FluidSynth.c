@@ -526,16 +526,17 @@ void sf2_get_channel_amplitudes(float channelAmplitudes[BAE_MAX_MIDI_CHANNELS][2
         return;
     }
     
+    // Method 1: Voice-based amplitude monitoring (more accurate)
     // Get list of active voices from FluidSynth
-    const int maxVoices = BAE_MAX_VOICES;
+    const int maxVoices = BAE_MAX_VOICES;  // FluidSynth default max polyphony
     fluid_voice_t* voiceList[maxVoices];
     
     // Get all active voices
     fluid_synth_get_voicelist(g_fluidsynth_synth, voiceList, maxVoices, -1);
     
-    // Accumulate velocities per channel
+    // Accumulate amplitude estimates per channel based on active voices
+    float channelVoiceCounts[BAE_MAX_MIDI_CHANNELS] = {0};
     float channelVelocitySum[BAE_MAX_MIDI_CHANNELS] = {0};
-    int channelVoiceCounts[BAE_MAX_MIDI_CHANNELS] = {0};
     
     for (int i = 0; i < maxVoices && voiceList[i] != NULL; i++)
     {
@@ -549,39 +550,94 @@ void sf2_get_channel_amplitudes(float channelAmplitudes[BAE_MAX_MIDI_CHANNELS][2
         if (channel < 0 || channel >= BAE_MAX_MIDI_CHANNELS)
             continue;
             
-        // Get velocity and accumulate for averaging
         int velocity = fluid_voice_get_actual_velocity(voice);
-        channelVelocitySum[channel] += (float)velocity;
-        channelVoiceCounts[channel]++;
-    }
-    
-    // Calculate average velocity per channel and scale to 0.0-1.0
-    for (int ch = 0; ch < BAE_MAX_MIDI_CHANNELS; ch++)
-    {
-        if (channelVoiceCounts[ch] > 0)
+        
+        // Accumulate voice information per channel
+        channelVoiceCounts[channel] += 1.0f;
+        channelVelocitySum[channel] += velocity;
+        
+        // Get voice envelope/amplitude level (if available)
+        // Note: FluidSynth doesn't directly expose voice amplitude,
+        // so we estimate based on velocity and voice state
+        float voiceAmplitude = 0.0f;
+        
+        if (fluid_voice_is_on(voice))
         {
-            // Average velocity normalized to BAE_MAX_MIDI_VOLUME (127)
-            float avgVelocity = channelVelocitySum[ch] / (float)channelVoiceCounts[ch];
-            float normalizedLevel = avgVelocity / (float)BAE_MAX_MIDI_VOLUME;
-            
-            // Apply to both channels (stereo separation handled by FluidSynth internally)
-            channelAmplitudes[ch][0] = normalizedLevel;
-            channelAmplitudes[ch][1] = normalizedLevel;
+            // Voice is in attack/sustain phase
+            voiceAmplitude = (float)velocity / 127.0f * 0.8f;
         }
+        else
+        {
+            // Voice is in release phase - assume lower amplitude
+            voiceAmplitude = (float)velocity / 127.0f * 0.3f;
+        }
+        
+        // Add to channel amplitude (simplified stereo assumption)
+        channelAmplitudes[channel][0] += voiceAmplitude * 0.1f; // Scale down for multiple voices
+        channelAmplitudes[channel][1] += voiceAmplitude * 0.1f;
     }
     
-    // Calculate average velocity per channel and scale to 0.0-1.0
+    // Method 2: Fallback to note tracking for channels with no voice data
     for (int ch = 0; ch < BAE_MAX_MIDI_CHANNELS; ch++)
     {
-        if (channelVoiceCounts[ch] > 0)
+        if (channelVoiceCounts[ch] == 0.0f)
         {
-            // Average velocity normalized to BAE_MAX_MIDI_VOLUME (127)
-            float avgVelocity = channelVelocitySum[ch] / (float)channelVoiceCounts[ch];
-            float normalizedLevel = avgVelocity / (float)BAE_MAX_MIDI_VOLUME;
+            // No voices found, use our note tracking as fallback
+            ChannelActivity* activity = &g_channel_activity[ch];
             
-            // Apply to both channels (stereo separation handled by FluidSynth internally)
-            channelAmplitudes[ch][0] = normalizedLevel;
-            channelAmplitudes[ch][1] = normalizedLevel;
+            if (activity->activeNotes > 0)
+            {
+                // Calculate amplitude based on active notes and velocity
+                float baseLevel = (float)activity->activeNotes / 8.0f; // Normalize to typical polyphony
+                float velocityFactor = activity->noteVelocity / 127.0f;
+                float amplitude = baseLevel * velocityFactor * 0.3f; // Scale for reasonable display levels
+                
+                // Apply decay based on time since last activity
+                float decayFactor = 1.0f;
+                if (activity->lastActivity > 0)
+                {
+                    // Decay over roughly 1 second (assuming 44.1kHz, 512 frame slices = ~86 frames/sec)
+                    float decayTime = (float)activity->lastActivity / 86.0f;
+                    decayFactor = expf(-decayTime * 2.0f); // Exponential decay
+                }
+                
+                amplitude *= decayFactor;
+                
+                if (g_fluidsynth_mono_mode)
+                {
+                    // Mono mode: same level for both channels
+                    channelAmplitudes[ch][0] = amplitude;
+                    channelAmplitudes[ch][1] = amplitude;
+                }
+                else
+                {
+                    // Stereo mode: use tracked left/right levels if available
+                    channelAmplitudes[ch][0] = activity->leftLevel * amplitude;
+                    channelAmplitudes[ch][1] = activity->rightLevel * amplitude;
+                    
+                    // If no specific left/right tracking, distribute evenly
+                    if (activity->leftLevel == 0.0f && activity->rightLevel == 0.0f)
+                    {
+                        channelAmplitudes[ch][0] = amplitude;
+                        channelAmplitudes[ch][1] = amplitude;
+                    }
+                }
+            }
+        }
+        else
+        {
+            // Apply mono/stereo mode to voice-based amplitudes
+            if (g_fluidsynth_mono_mode)
+            {
+                // Convert stereo to mono
+                float mono = (channelAmplitudes[ch][0] + channelAmplitudes[ch][1]) * 0.5f;
+                channelAmplitudes[ch][0] = mono;
+                channelAmplitudes[ch][1] = mono;
+            }
+            
+            // Clamp to reasonable display ranges
+            if (channelAmplitudes[ch][0] > 1.0f) channelAmplitudes[ch][0] = 1.0f;
+            if (channelAmplitudes[ch][1] > 1.0f) channelAmplitudes[ch][1] = 1.0f;
         }
     }
 }
