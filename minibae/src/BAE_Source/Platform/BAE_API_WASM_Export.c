@@ -621,6 +621,36 @@ int BAE_WASM_GetBufferFrames(void) {
 }
 
 /*
+ * Get library version
+ * Returns: version encoded as (major << 16) | (minor << 8) | subminor
+ * Example: version 1.6.0 returns 0x010600 (65536)
+ */
+EMSCRIPTEN_KEEPALIVE
+int BAE_WASM_GetVersion(void) {
+    return (BAE_VERSION_MAJOR << 16) | (BAE_VERSION_MINOR << 8) | BAE_VERSION_SUB_MINOR;
+}
+
+/*
+ * Get detailed library version string (uses BAE_GetVersion from MiniBAE.c)
+ * Returns: pointer to version string (e.g., "1.6.0" or "built on Dec  7 2025")
+ * Note: String is allocated by BAE_GetVersion and should be freed by caller
+ */
+EMSCRIPTEN_KEEPALIVE
+const char* BAE_WASM_GetVersionString(void) {
+    return BAE_GetVersion();
+}
+
+EMSCRIPTEN_KEEPALIVE
+const char *BAE_WASM_GetCompileInfo(void) {
+    return BAE_GetCompileInfo();
+}
+
+EMSCRIPTEN_KEEPALIVE
+const char *BAE_WASM_GetFeatureString(void) {
+    return BAE_GetFeatureString();
+}
+
+/*
  * Cleanup
  */
 EMSCRIPTEN_KEEPALIVE
