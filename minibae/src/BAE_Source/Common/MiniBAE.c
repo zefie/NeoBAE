@@ -2595,8 +2595,6 @@ BAEResult BAEMixer_SetAudioLatency(BAEMixer mixer, uint32_t requestedLatency)
         }
 #else
         {
-            mixer = mixer;
-            requestedLatency = requestedLatency;
             error = BAE_NOT_SETUP;
         }
 #endif
@@ -4810,8 +4808,6 @@ BAEResult BAESound_Start(BAESound sound,
     OPErr theErr = NO_ERR;
     int32_t volume;
 
-    priority = priority; // NEED TO IMPLEMENT PRIORITY FOR SOUNDS IN ENGINE.
-
     if ((sound) && (sound->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(sound->mLock);
@@ -5897,7 +5893,7 @@ BAEResult BAEStream_GetInfo(BAEStream stream,
         }
         else
         {
-            BAE_PARAM_ERR;
+            err = BAE_PARAM_ERR;
         }
     }
     else
@@ -8241,11 +8237,6 @@ BAEResult BAESong_KeyPressure(BAESong song,
                               unsigned char pressure,
                               uint32_t time)
 {
-    song = song;
-    time = time;
-    pressure = pressure;
-    channel = channel;
-    note = note;
     return BAE_NO_ERROR;
 }
 
@@ -8352,10 +8343,6 @@ BAEResult BAESong_ChannelPressure(BAESong song,
                                   unsigned char pressure,
                                   uint32_t time)
 {
-    song = song;
-    time = time;
-    channel = channel;
-    pressure = pressure;
     return BAE_NO_ERROR;
 }
 
@@ -8433,7 +8420,6 @@ BAEResult BAESong_ParseMidiData(BAESong song, unsigned char commandByte, unsigne
     {
         BAE_AcquireMutex(song->mLock);
         channel = commandByte & 0x0F;
-        data3Byte = data3Byte;
         switch (commandByte & 0xF0)
         {
         case NOTE_OFF: // Note off

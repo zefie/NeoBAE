@@ -3681,8 +3681,6 @@ void PV_StopMIDINote(GM_Song *pSong, XSWORD the_instrument, XSWORD the_channel, 
     GM_Voice *pNoteToKill;
 
     pMixer = GM_GetCurrentMixer();
-    the_track = the_track;
-    the_instrument = the_instrument;
     // BAE_PRINTF("NoteOff i %d c %d p %d\n", the_instrument, the_channel, notePitch);
     pNoteToKill = NULL;
     youngestTime = 0; // min time

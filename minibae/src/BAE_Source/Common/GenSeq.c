@@ -1904,9 +1904,6 @@ static void PV_ProcessNoteOff(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTr
 {
     register INT16 thePatch = 0;
 
-    volume = volume; // not used
-    currentTrack = currentTrack;
-
     if (PV_IsMuted(pSong, MIDIChannel, currentTrack) == FALSE)
     {
         if (MIDIChannel >= 0 && MIDIChannel < 16 && note >= 0 && note < 128)
@@ -3401,7 +3398,6 @@ static void PV_SetSampleIntoCache(GM_Song *pSong,
     GM_Mixer *pMixer;
 
     pMixer = GM_GetCurrentMixer();
-    pSong;
     //  First, if there is no entry in the cache for this ID, create it.
     //  Next, increment refcount and grab it's pointer.
     if (GMCache_IsIDInCache(pMixer, theID, bankToken) != TRUE)

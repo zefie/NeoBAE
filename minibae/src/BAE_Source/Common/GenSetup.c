@@ -517,7 +517,6 @@ OPErr GM_InitGeneralSound(void *threadContext, Rate theRate, TerpMode theTerp, A
     register INT32      count;
     OPErr               theErr;
 
-    threadContext = threadContext;
     theErr = NO_ERR;
 
 // Check out parameter
@@ -856,7 +855,6 @@ OPErr GM_ChangeAudioModes(void *threadContext,
 
 void GM_FinisGeneralSound(void *threadContext, GM_Mixer *mixer)
 {
-    threadContext = threadContext;
     BAE_ASSERT(mixer == MusicGlobals);
     if (mixer)
     {

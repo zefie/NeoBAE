@@ -1606,10 +1606,7 @@ XSoundFormat1*      header;
     BAE_ASSERT(srcWave);
     BAE_ASSERT(srcWave->theWaveform);
     BAE_ASSERT(srcWave->waveSize > 0);
-#if USE_MPEG_ENCODER == 0
-    proc;           // suppress unreferenced parameter warning
-    procData;       // suppress unreferenced parameter warning
-#endif
+
 
     *dst = NULL;
 

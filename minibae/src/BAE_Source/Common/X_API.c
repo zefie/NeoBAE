@@ -1404,7 +1404,6 @@ XFILE XFileOpenResourceFromMemory(XPTR pResource, uint32_t resourceLength, XBOOL
     XFILERESOURCEMAP    map;
     int16_t           err;
 
-    allowCopy;
     err = 0;
     pReference = (XFILENAME *)XNewPtr((int32_t)sizeof(XFILENAME));
     if (pReference)

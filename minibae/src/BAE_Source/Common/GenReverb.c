@@ -397,7 +397,7 @@ static void PV_RunMonoFixedReverb(ReverbMode which)
 #else
 static void PV_RunMonoFixedReverb(ReverbMode which)
 {
-    which = which;
+    return;
 }
 #endif  // USE_MONO_OUTPUT
 
@@ -719,7 +719,6 @@ static void PV_RunStereoFixedReverb(ReverbMode which)
 #if USE_NEW_EFFECTS == TRUE
 static void PV_RunStereoNewReverb(ReverbMode which)
 {
-    which = which;
     CheckReverbType();
     RunNewReverb(MusicGlobals->songBufferReverb, MusicGlobals->songBufferDry, MusicGlobals->One_Loop);
 }

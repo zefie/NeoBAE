@@ -620,8 +620,6 @@ static void PV_AudioBufferCallback(void *context, XPTR pWhichBufferFinished, INT
     GM_AudioStreamFileInfo  *pASInfo;
 
 //#pragma unused (pWhichBufferFinished)
-    pWhichBufferFinished = pWhichBufferFinished;
-
     pStream = (GM_AudioStream *)context;
 
 // This is the same thing as the above line, just faster.
@@ -1023,7 +1021,6 @@ static OPErr PV_FileStreamCallback(void *context, GM_StreamMessage message, GM_S
     static int              pv_count2 = 0;
 #endif
 
-    context = context;
     error = NO_ERR;
     switch (message)
     {
@@ -1448,7 +1445,7 @@ STREAM_REFERENCE GM_AudioStreamSetup(void *threadContext, void *userReference, G
     {
 //      if (bufferSize >= 10000L)
         {
-            if ( (pProc) && ( (channelSize >= 1) || (channelSize <= 2) ) && ( (dataBitSize == 8) || (dataBitSize == 16) ) )
+            if ( (pProc) && ( (dataBitSize == 8) || (dataBitSize == 16) ) )
             {
                 reference = PV_GetEmptyAudioStream();
                 if (reference)
@@ -1886,7 +1883,6 @@ OPErr GM_AudioStreamStop(void *threadContext, STREAM_REFERENCE reference)
 
     GM_AudioStream      *pStream;
 
-    threadContext;
     pStream = PV_AudioStreamGetFromReference(reference);
 
     if (pStream)

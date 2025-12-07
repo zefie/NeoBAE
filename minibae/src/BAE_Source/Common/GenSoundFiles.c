@@ -4257,8 +4257,6 @@ OPErr GM_WriteFileFromMemory(XFILENAME *file, GM_Waveform const* pAudioData, Aud
 #if USE_CREATION_API == TRUE
     OPErr   err;
 
-    file;
-    pAudioData;
     err = NO_ERR;
     switch (fileType)
     {

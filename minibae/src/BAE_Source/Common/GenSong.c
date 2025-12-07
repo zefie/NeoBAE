@@ -1378,7 +1378,6 @@ void PV_TrackNameCallback(void *threadContext, GM_Song *pSong, char markerType, 
 {
     XBYTE **tnArray, *str;
 
-    threadContext;
     if (markerType == 0x03)
     { // track name
         if (currentTrack != -1)

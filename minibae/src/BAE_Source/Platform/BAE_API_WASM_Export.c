@@ -10,6 +10,8 @@
 #include <string.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <unistd.h>
+
 
 #if USE_SF2_SUPPORT
     #if _USING_FLUIDSYNTH
@@ -34,7 +36,7 @@ static BAESong gCurrentSong = NULL;
 static BAESong gEffectSong = NULL;  // Second song for sound effects (plays on top)
 
 // Audio buffer for JS interop
-#define AUDIO_BUFFER_FRAMES 4096
+#define AUDIO_BUFFER_FRAMES 512
 static int16_t gAudioBuffer[AUDIO_BUFFER_FRAMES * 2];  // Stereo
 
 // External function from GenSynth.c
@@ -163,7 +165,7 @@ int BAE_WASM_LoadSoundbank(const uint8_t* data, int length) {
         
         // WASM workaround: Write to temp file and load from file
         // FluidSynth's memory loader seems to have issues in WASM
-        const char *tmpfile = "/tmp/soundbank.sf2";
+        const char *tmpfile = "/tmp/soundbank";
         FILE *fp = fopen(tmpfile, "wb");
         if (!fp) {
             BAE_PRINTF("[BAE] LoadSoundbank: Failed to create temp file\n");
@@ -183,7 +185,9 @@ int BAE_WASM_LoadSoundbank(const uint8_t* data, int length) {
         // Load from file instead
         OPErr sfErr = GM_LoadSF2Soundfont(tmpfile);
         BAE_PRINTF("[BAE] LoadSoundbank: GM_LoadSF2Soundfont returned %d\n", sfErr);
-        
+
+        unlink(tmpfile);  // Clean up temp file
+
         if (sfErr != NO_ERR)
         {
             BAE_PRINTF("[BAE] LoadSoundbank: SF2/DLS bank load failed: %d\n", sfErr);
@@ -378,7 +382,7 @@ int BAE_WASM_GetPosition(void) {
     }
 
     unsigned long pos = 0;
-    BAESong_GetMicrosecondPosition(gCurrentSong, &pos);
+    BAESong_GetMicrosecondPosition(gCurrentSong, (uint32_t*)&pos);
     return (int)(pos / 1000);  // Convert to milliseconds
 }
 
@@ -405,7 +409,7 @@ int BAE_WASM_GetDuration(void) {
     }
 
     unsigned long duration = 0;
-    BAESong_GetMicrosecondLength(gCurrentSong, &duration);
+    BAESong_GetMicrosecondLength(gCurrentSong, (uint32_t*)&duration);
     return (int)(duration / 1000);
 }
 
