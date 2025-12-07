@@ -268,23 +268,25 @@ ifeq ($(SF2_SUPPORT),1)
 				BAE_LIBS := ../deps/win/FluidSynth/x86_64-w64-mingw32/lib/libfluidsynth-3.lib -Wl,-rpath,'$$ORIGIN'
 			endif			
 		else
-			UNAME_S:=$(shell uname -s 2>/dev/null)
-			# System FluidSynth for Linux (dynamic) if pkg-config available
-			ifneq (,$(findstring Linux,$(UNAME_S)))
-				FLUIDSYNTH_CFLAGS := $(shell pkg-config --cflags fluidsynth 2>/dev/null)
-				FLUIDSYNTH_LIBS   := $(shell pkg-config --libs fluidsynth 2>/dev/null)
-				ifneq ($(FLUIDSYNTH_LIBS),)
-					BAE_FLAGS += $(FLUIDSYNTH_CFLAGS)
-					# Prepend pkg-config libs; they already have -lfluidsynth and any needed deps
-					BAE_LIBS := $(FLUIDSYNTH_LIBS) $(filter-out -lfluidsynth,$(BAE_LIBS))
-					ifneq (,$(findstring -static,$(ARCH)))
-						ARCH := $(filter-out -static,$(ARCH))
-						LDFLAGS := $(filter-out -static,$(LDFLAGS))
+			ifeq ($(WASM),0)
+				UNAME_S:=$(shell uname -s 2>/dev/null)
+				# System FluidSynth for Linux (dynamic) if pkg-config available
+				ifneq (,$(findstring Linux,$(UNAME_S)))
+					FLUIDSYNTH_CFLAGS := $(shell pkg-config --cflags fluidsynth 2>/dev/null)
+					FLUIDSYNTH_LIBS   := $(shell pkg-config --libs fluidsynth 2>/dev/null)
+					ifneq ($(FLUIDSYNTH_LIBS),)
+						BAE_FLAGS += $(FLUIDSYNTH_CFLAGS)
+						# Prepend pkg-config libs; they already have -lfluidsynth and any needed deps
+						BAE_LIBS := $(FLUIDSYNTH_LIBS) $(filter-out -lfluidsynth,$(BAE_LIBS))
+						ifneq (,$(findstring -static,$(ARCH)))
+							ARCH := $(filter-out -static,$(ARCH))
+							LDFLAGS := $(filter-out -static,$(LDFLAGS))
+						endif
+					else
+						# Fallback minimal guess
+						BAE_FLAGS += -I/usr/include/fluidsynth
+						BAE_LIBS := -lfluidsynth $(BAE_LIBS)
 					endif
-				else
-					# Fallback minimal guess
-					BAE_FLAGS += -I/usr/include/fluidsynth
-					BAE_LIBS := -lfluidsynth $(BAE_LIBS)
 				endif
 			endif
 		endif
@@ -547,6 +549,11 @@ ifeq ($(KARAOKE),1)
 	BAE_FLAGS += -DSUPPORT_KARAOKE=1
 endif
 
+
+ifeq ($(WASM),1)
+	INC_PATH	+= -I../deps/wasm/include
+	BAE_LIBS	:= -L../deps/wasm/lib
+endif
 
 OBJ_DIR 	:= $(BUILD_DIR)obj/
 # Create unique object names by including source directory info for conflicting files

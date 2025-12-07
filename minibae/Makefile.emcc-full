@@ -49,7 +49,7 @@ LDFLAGS		:= $(ARCH) $(OPTI) -O3 -DNDEBUG -s WASM=1 -s ALLOW_MEMORY_GROWTH=1 -s I
 
 
 #/usr/share/emscripten/cache/sysroot/lib
-LIBS	= -L../deps/wasm -lpthread -lfluidsynth -lsndfile -logg -lvorbis -lvorbisenc -lFLAC -lspeex -lmpg123 -lmp3lame -lopus
+LIBS	:= $(BAE_LIBS) -lpthread -lfluidsynth -lsndfile -logg -lvorbis -lvorbisenc -lFLAC -lspeex -lmpg123 -lmp3lame -lopus
 
 all: ${TARGET_JS} extra-files
 
