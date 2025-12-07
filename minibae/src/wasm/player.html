@@ -630,10 +630,28 @@
                 this.initChannels();
                 this.initKeyboard();
                 this.bindEvents();
+
+
                 
                 // Start loading immediately
                 if (fileName) {
                     this.initPlayer().then(() => {
+                        if (this.player && this.player._wasmModule) {
+                            const versionPtr = this.player._wasmModule._BAE_WASM_GetVersionString();
+                            if (versionPtr) {
+                                const version = this.player._wasmModule.UTF8ToString(versionPtr);
+                                document.querySelector('.title-bar').textContent = `zefidi web player - ${version}`;
+                                // Add click handler for title bar to show features
+                                document.querySelector('.title-bar').style.cursor = 'pointer';
+                                document.querySelector('.title-bar').addEventListener('click', () => {
+                                    const featuresPtr = this.player._wasmModule._BAE_WASM_GetFeatureString();
+                                    if (featuresPtr) {
+                                        const features = this.player._wasmModule.UTF8ToString(featuresPtr);
+                                        this.showFeaturesModal(version, features);
+                                    }
+                                });
+                            }
+                        }                        
                         this.load(fileName, this.bank).then(() => {
                             // After loading, wait for audio context if needed, then optionally autostart
                             this.waitForAudioContext().then(() => {
@@ -1227,6 +1245,88 @@
 
             updateStatus(message) {
                 this.elements.statusText.textContent = message;
+            }
+
+            showFeaturesModal(version, features) {
+                // Create modal overlay
+                const overlay = document.createElement('div');
+                overlay.style.cssText = `
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    width: 100%;
+                    height: 100%;
+                    background: rgba(0, 0, 0, 0.8);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    z-index: 10000;
+                    padding: 20px;
+                `;
+
+                // Create modal content
+                const modal = document.createElement('div');
+                modal.style.cssText = `
+                    background: #2d2d30;
+                    border: 2px solid #007acc;
+                    border-radius: 8px;
+                    max-width: 600px;
+                    max-height: 80vh;
+                    overflow-y: auto;
+                    color: #cccccc;
+                `;
+
+                // Parse features into readable format
+                const featureLines = features.split(',').map(f => f.trim());
+                const featureList = featureLines.map(f => `<li style="margin: 4px 0;">${f}</li>`).join('');
+
+                modal.innerHTML = `
+                    <div style="padding: 20px;">
+                        <h2 style="font-size: 20px; margin-bottom: 16px; color: #9cdcfe; border-bottom: 1px solid #555; padding-bottom: 8px;">
+                            miniBAE Build Information
+                        </h2>
+                        <div style="margin-bottom: 16px;">
+                            <strong style="color: #dcdcaa;">Version:</strong>
+                            <span style="margin-left: 8px;">${version}</span>
+                        </div>
+                        <div>
+                            <strong style="color: #dcdcaa;">Compiled Features:</strong>
+                            <ul style="margin: 8px 0 0 20px; padding: 0; list-style-type: disc;">
+                                ${featureList}
+                            </ul>
+                        </div>
+                        <div style="margin-top: 20px; text-align: right;">
+                            <button id="closeModal" style="
+                                padding: 6px 16px;
+                                border: 1px solid #555;
+                                border-radius: 3px;
+                                background: #3c3c3c;
+                                color: #cccccc;
+                                font-size: 12px;
+                                cursor: pointer;
+                            ">Close</button>
+                        </div>
+                    </div>
+                `;
+
+                overlay.appendChild(modal);
+                document.body.appendChild(overlay);
+
+                // Close handlers
+                const closeModal = () => overlay.remove();
+                modal.querySelector('#closeModal').addEventListener('click', closeModal);
+                overlay.addEventListener('click', (e) => {
+                    if (e.target === overlay) closeModal();
+                });
+
+                // Escape key to close
+                const handleEscape = (e) => {
+                    if (e.key === 'Escape') {
+                        closeModal();
+                        document.removeEventListener('keydown', handleEscape);
+                    }
+                };
+                document.addEventListener('keydown', handleEscape);
             }
         }
 
