@@ -551,8 +551,8 @@ endif
 
 
 ifeq ($(WASM),1)
-	INC_PATH	+= -I../deps/wasm/include
-	BAE_LIBS	:= -L../deps/wasm/lib
+	INC_PATH	+= -I/usr/share/emscripten/cache/sysroot/include
+	BAE_LIBS	:= -L/usr/share/emscripten/cache/sysroot/lib
 endif
 
 OBJ_DIR 	:= $(BUILD_DIR)obj/
