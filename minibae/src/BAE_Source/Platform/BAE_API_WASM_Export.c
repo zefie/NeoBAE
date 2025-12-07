@@ -12,7 +12,7 @@
 #include <stdio.h>
 
 // Debug output control - set to 0 to disable all console logging
-#define BAE_DEBUG 0
+#define BAE_DEBUG 1
 
 #if BAE_DEBUG
 #define BAE_LOG(...) printf(__VA_ARGS__)

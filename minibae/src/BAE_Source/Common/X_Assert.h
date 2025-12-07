@@ -133,6 +133,9 @@
         }                               \
     } while (0)
     #define BAE_STDERR         BAE_STDOUT
+#elif __EMSCRIPTEN__
+    #include <emscripten/emscripten.h>
+    #define BAE_STDERR(...) emscripten_log(EM_LOG_ERROR, __VA_ARGS__)
 #else 
     #define BAE_STDOUT		printf
     #define BAE_STDERR(...)         fprintf (stderr, __VA_ARGS__)
@@ -142,6 +145,8 @@
     #if (X_PLATFORM == X_WIN95) || (X_PLATFORM == X_WIN_HARDWARE) || (X_PLATFORM == X_MACINTOSH) || (X_PLATFORM == X_IOS) || (X_PLATFORM == X_ANSI) || (X_PLATFORM == X_SDL2) || (X_PLATFORM == X_SDL3)
         #define BAE_PRINTF
     #elif __ANDROID__
+        #define BAE_PRINTF(...)
+    #elif __EMSCRIPTEN__
         #define BAE_PRINTF(...)
     #else
         #define BAE_PRINTF(...)
@@ -159,6 +164,11 @@
             #define BAE_ASSERT(exp)     assert(exp)
             #define BAE_VERIFY(exp)     assert(exp)
         #endif
+    #elif __EMSCRIPTEN__
+        #define BAE_PRINTF(...) emscripten_log(EM_LOG_CONSOLE, __VA_ARGS__)
+        #include <assert.h>
+        #define BAE_ASSERT(exp)     assert(exp)
+        #define BAE_VERIFY(exp)     assert(exp)                   
     #else
         #ifdef  __ANDROID__
             #define BAE_STDOUT(...) __android_log_print(ANDROID_LOG_INFO, "miniBAE", __VA_ARGS__)

@@ -362,6 +362,7 @@ extern "C"
         BAE_MAX_MIDI_TRACKS = MAX_TRACKS, // 64 midi tracks, plus 1 tempo track
         BAE_MAX_MIDI_CHANNELS = MAX_CHANNELS - 1,
         BAE_MAX_NOTES = MAX_INSTRUMENTS, // per bank
+        BAE_DEFAULT_SAMPLE_RATE = BAE_RATE_44K,
 
         BAE_DEFAULT_PROGRAM = 0,
         BAE_DEFAULT_BANK = 0,

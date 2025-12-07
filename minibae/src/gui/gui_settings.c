@@ -398,7 +398,7 @@ void render_settings_dialog(SDL_Renderer *R, int mx, int my, bool mclick, bool m
     // Left column controls (stacked)
     // Volume Curve selector
     draw_text(R, leftX, dlg.y + 36, "Vol. Curve (HSB):", g_text_color);
-    const char *volumeCurveNames[] = {"Default S Curve", "Peaky S Curve", "WebTV Curve", "2x Exponential", "2x Linear"};
+    const char *volumeCurveNames[] = {"miniBAE S Curve", "Peaky S Curve", "WebTV Curve", "2x Exponential", "2x Linear"};
     int vcCount = 5;
     bool volumeCurveEnabled = !g_midiRecordFormatDropdownOpen;
     SDL_Color dd_bg = g_button_base;
@@ -433,7 +433,7 @@ void render_settings_dialog(SDL_Renderer *R, int mx, int my, bool mclick, bool m
 
     // Sample Rate selector
     draw_text(R, leftX, dlg.y + 72, "Sample Rate:", g_text_color);
-    const int sampleRates[] = {8000, 11025, 16000, 22050, 32000, 44100, 48000};
+    const int sampleRates[] = {BAE_RATE_8K, BAE_RATE_11K, BAE_RATE_16K, BAE_RATE_22K, BAE_RATE_32K, BAE_RATE_44K, BAE_RATE_48K};
     const int sampleRateCount = (int)(sizeof(sampleRates) / sizeof(sampleRates[0]));
     int curR = g_sample_rate_hz;
     int best = sampleRates[0];

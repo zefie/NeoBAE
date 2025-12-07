@@ -979,15 +979,15 @@ static OPErr PV_ReadSunAUFile(  int32_t encoding,
             break;
 
         case SUN_AUDIO_FILE_ENCODING_ADPCM_G721:
-            dec_routine = g721_decoder;
+            dec_routine = bae_g721_decoder;
             dec_bits = 4;
             goto decode_adpcm;
         case SUN_AUDIO_FILE_ENCODING_ADPCM_G723_3:
-            dec_routine = g723_24_decoder;
+            dec_routine = bae_g723_24_decoder;
             dec_bits = 3;
             goto decode_adpcm;
         case SUN_AUDIO_FILE_ENCODING_ADPCM_G723_5:
-            dec_routine = g723_40_decoder;
+            dec_routine = bae_g723_40_decoder;
             dec_bits = 5;
 
 decode_adpcm:

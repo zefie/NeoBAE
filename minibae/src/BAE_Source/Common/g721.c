@@ -131,7 +131,7 @@ g721_encoder(
  * return -1 for unknown out_coding value.
  */
 int
-g721_decoder(
+bae_g721_decoder(
     int     i,
     int     out_coding,
     struct g72x_state *state_ptr)
@@ -143,20 +143,20 @@ g721_decoder(
     int16_t       dqsez;
 
     i &= 0x0f;          /* mask to get proper bits */
-    sezi = predictor_zero(state_ptr);
+    sezi = bae_predictor_zero(state_ptr);
     sez = sezi >> 1;
-    sei = sezi + predictor_pole(state_ptr);
+    sei = sezi + bae_predictor_pole(state_ptr);
     se = sei >> 1;          /* se = estimated signal */
 
-    y = step_size(state_ptr);   /* dynamic quantizer step size */
+    y = bae_step_size(state_ptr);   /* dynamic quantizer step size */
 
-    dq = reconstruct(i & 0x08, _dqlntab[i], y); /* quantized diff. */
+    dq = bae_reconstruct(i & 0x08, _dqlntab[i], y); /* quantized diff. */
 
     sr = (dq < 0) ? (se - (dq & 0x3FFF)) : se + dq; /* reconst. signal */
 
     dqsez = sr - se + sez;          /* pole prediction diff. */
 
-    update(4, y, _witab[i] << 5, _fitab[i], dq, sr, dqsez, state_ptr);
+    bae_update(4, y, _witab[i] << 5, _fitab[i], dq, sr, dqsez, state_ptr);
 
     switch (out_coding) {
     case AUDIO_ENCODING_ALAW:

@@ -51,7 +51,7 @@ static int g_fluidsynth_soundfont_id = -1;
 static XBOOL g_fluidsynth_initialized = FALSE;
 static XBOOL g_fluidsynth_mono_mode = FALSE;
 static XFIXED g_fluidsynth_master_volume = (XFIXED)((XFIXED_1 / 256) * 5);
-static uint16_t g_fluidsynth_sample_rate = 44100;
+static uint16_t g_fluidsynth_sample_rate = BAE_DEFAULT_SAMPLE_RATE;
 static char g_fluidsynth_sf2_path[256] = {0};
 // Track a temp file we create for DLS fallback so we can remove it on unload
 static char g_temp_sf_path[256] = {0};
@@ -158,7 +158,7 @@ OPErr GM_InitializeSF2(void)
         g_fluidsynth_sample_rate = (uint16_t)GM_ConvertFromOutputRateToRate(pMixer->outputRate);
         if (g_fluidsynth_sample_rate <= 0)
         {
-            g_fluidsynth_sample_rate = 44100; // fallback
+            g_fluidsynth_sample_rate = BAE_DEFAULT_SAMPLE_RATE; // fallback
         }
         
         // Sync our mono flag with the mixer's stereo setting
@@ -177,7 +177,7 @@ OPErr GM_InitializeSF2(void)
     fluid_settings_setint(g_fluidsynth_settings, "synth.polyphony", BAE_MAX_VOICES);
     fluid_settings_setint(g_fluidsynth_settings, "synth.midi-channels", BAE_MAX_MIDI_CHANNELS);
     fluid_settings_setnum(g_fluidsynth_settings, "synth.gain", XFIXED_TO_FLOAT(g_fluidsynth_master_volume));
-    fluid_settings_setint(g_fluidsynth_settings, "synth.audio-channels", 2);  // Always stereo - we simulate mono in conversion
+    fluid_settings_setint(g_fluidsynth_settings, "synth.audio-channels", 1);  // Sets the number of stereo channel pairs. So 1 is actually 2 channels (a stereo pair).
     
     // Create FluidSynth synthesizer
     g_fluidsynth_synth = new_fluid_synth(g_fluidsynth_settings);
@@ -350,6 +350,9 @@ bool is_libinstpatch_loaded(void) {
     }
     return false;
 #else
+#ifdef __EMSCRIPTEN__
+    return false; // dl_iterate_phdr not supported in Emscripten
+#else
     struct ctx { int found; } context = {0};
 
     int callback(struct dl_phdr_info *info, size_t size, void *data) {
@@ -363,6 +366,7 @@ bool is_libinstpatch_loaded(void) {
 
     dl_iterate_phdr(callback, &context);
     return context.found != 0 ? true : false;
+#endif
 #endif
 }
 
@@ -520,7 +524,7 @@ void GM_UnloadSF2Soundfont(void)
         while (GM_SF2_GetActiveVoiceCount() > 0)
         {
             // Wait for voices to finish
-            fluid_synth_process(g_fluidsynth_synth, SAMPLE_BLOCK_SIZE, NULL, 0, 0, NULL);
+            fluid_synth_process(g_fluidsynth_synth, SAMPLE_BLOCK_SIZE, 0, 0, 0, NULL);
         }
         
         // Now safe to unload

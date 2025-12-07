@@ -8,9 +8,9 @@
 #include "gui_karaoke.h" // For karaoke functions
 #include "X_API.h"
 #if USE_SF2_SUPPORT
-    #if _USING_FLUIDSYNTH == TRUE
+    #if _USING_FLUIDSYNTH
         #include "GenSF2_FluidSynth.h"
-        #if USE_XMF_SUPPORT == TRUE
+        #if USE_XMF_SUPPORT
             #include "GenXMF.h"
         #endif
     #endif
@@ -451,11 +451,6 @@ void get_audio_total_frames(void)
     }
 }
 
-// Karaoke callbacks - now just call the external functions
-// (These are defined in gui_karaoke.c but implemented here for BAE integration)
-
-// API Implementation
-
 bool bae_init(int sampleRateHz, bool stereo)
 {
     // Initialize BAE mixer
@@ -572,9 +567,7 @@ bool bae_load_bank(const char *bank_path)
     return true;
 }
 
-// Load a bank from memory. The BAEMixer API expects a void*, but callers
-// commonly provide const data blobs; cast here to satisfy the API while
-// keeping the caller's const contract.
+// Load a bank from memory
 bool bae_load_bank_from_memory(const char *bankdata, int banksize)
 {
     if (!g_bae.mixer || !bankdata || banksize <= 0)

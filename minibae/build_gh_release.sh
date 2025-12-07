@@ -153,6 +153,26 @@ if [ -z "${SKIPTO}" ] || [ "${SKIPTO}" -le 8 ]; then
 	runcmd make -f Makefile.rmfinfo-mingw clean
 fi
 
+if [ -z "${SKIPTO}" ] || [ "${SKIPTO}" -le 9 ]; then
+	export BITS=32
+	echo "Building RMF2MID (x32)..."
+	runcmd make clean
+	runcmd make -f Makefile.rmf2mid-mingw "-j$(nproc)" all
+	runcmd cd "${BDIR}" || exit 1 && runcmd zip -9 "${ODIR}/rmf2mid_x32.zip" -- rmf2mid.exe
+	runcmd cd "${RDIR}" || exit 1
+	runcmd make -f Makefile.rmf2mid-mingw clean
+fi
+
+if [ -z "${SKIPTO}" ] || [ "${SKIPTO}" -le 10 ]; then
+	export BITS=64
+	echo "Building RMF2MID (x64)..."
+	runcmd make clean
+	runcmd make -f Makefile.rmf2mid-mingw "-j$(nproc)" all
+	runcmd cd "${BDIR}" || exit 1 && runcmd zip -9 "${ODIR}/rmf2mid_x64.zip" -- rmf2mid.exe
+	runcmd cd "${RDIR}" || exit 1
+	runcmd make -f Makefile.rmf2mid-mingw clean
+fi
+
 cd "${RDIR}" || exit 1
 ls -l "${ODIR}"
 
