@@ -429,7 +429,15 @@ int BAE_WASM_SetVolume(int volume) {
     // Convert to BAE 16.16 fixed point format where BAE_FIXED_1 (0x10000 = 65536) = 1.0
     // volume 100% -> 0x10000, volume 50% -> 0x8000, volume 0% -> 0
     BAE_UNSIGNED_FIXED fixedVol = (BAE_UNSIGNED_FIXED)((volume * 0x10000L) / 100);
+    
+    // Set mixer master volume
     BAEMixer_SetMasterVolume(gMixer, fixedVol);
+    
+    // Also set song volume if a song is loaded
+    if (gCurrentSong != NULL) {
+        BAESong_SetVolume(gCurrentSong, fixedVol);
+    }
+    
     return 0;
 }
 
@@ -462,6 +470,20 @@ int BAE_WASM_SetTranspose(int semitones) {
     if (semitones > 12) semitones = 12;
 
     BAESong_SetTranspose(gCurrentSong, (long)semitones);
+    return 0;
+}
+
+/*
+ * Set loop count (0 = no loop, -1 or high value like 32767 = infinite loop)
+ */
+EMSCRIPTEN_KEEPALIVE
+int BAE_WASM_SetLoops(int loopCount) {
+    if (gCurrentSong == NULL) {
+        return -1;
+    }
+
+    // Follow GUI convention: 0 = no loop, 32767 = infinite loop
+    BAESong_SetLoops(gCurrentSong, (short)loopCount);
     return 0;
 }
 
@@ -1060,6 +1082,33 @@ int BAE_WASM_GetChannelActivity(int channel) {
 }
 
 /*
+ * Get active notes for a specific channel
+ * channel: 0-15 (MIDI channel)
+ * outNotes: pointer to 128-byte buffer that will receive note velocities (0 = off, 1-127 = velocity)
+ * Returns 0 on success, -1 on error
+ */
+EMSCRIPTEN_KEEPALIVE
+int BAE_WASM_GetActiveNotesForChannel(int channel, uint8_t* outNotes) {
+    if (gCurrentSong == NULL || channel < 0 || channel > 15 || outNotes == NULL) {
+        return -1;
+    }
+
+    unsigned char notes[128];
+    BAEResult err = BAESong_GetActiveNotes(gCurrentSong, (unsigned char)channel, notes);
+    if (err != BAE_NO_ERROR) {
+        memset(outNotes, 0, 128);
+        return -1;
+    }
+
+    // Copy note velocities to output buffer
+    for (int i = 0; i < 128; i++) {
+        outNotes[i] = notes[i];
+    }
+
+    return 0;
+}
+
+/*
  * Get activity levels for all 16 MIDI channels at once
  * outActivities: pointer to 16-byte buffer that will receive activity levels (0-255 each)
  * Returns 0 on success, -1 on error
@@ -1092,3 +1141,45 @@ int BAE_WASM_GetAllChannelActivities(uint8_t* outActivities) {
 
     return 0;
 }
+
+/*
+ * Send a MIDI NoteOn event
+ * channel: 0-15 (MIDI channel)
+ * note: 0-127 (MIDI note number)
+ * velocity: 1-127 (note velocity, 0 is treated as NoteOff)
+ */
+EMSCRIPTEN_KEEPALIVE
+int BAE_WASM_NoteOn(int channel, int note, int velocity) {
+    if (gCurrentSong == NULL || channel < 0 || channel > 15 ||
+        note < 0 || note > 127 || velocity < 0 || velocity > 127) {
+        return -1;
+    }
+
+    BAEResult err = BAESong_NoteOnWithLoad(gCurrentSong,
+                                            (unsigned char)channel,
+                                            (unsigned char)note,
+                                            (unsigned char)velocity,
+                                            0);  // time = 0 for immediate
+    return (int)err;
+}
+
+/*
+ * Send a MIDI NoteOff event
+ * channel: 0-15 (MIDI channel)
+ * note: 0-127 (MIDI note number)
+ */
+EMSCRIPTEN_KEEPALIVE
+int BAE_WASM_NoteOff(int channel, int note) {
+    if (gCurrentSong == NULL || channel < 0 || channel > 15 ||
+        note < 0 || note > 127) {
+        return -1;
+    }
+
+    BAEResult err = BAESong_NoteOff(gCurrentSong,
+                                     (unsigned char)channel,
+                                     (unsigned char)note,
+                                     0,   // velocity (unused for NoteOff)
+                                     0);  // time = 0 for immediate
+    return (int)err;
+}
+

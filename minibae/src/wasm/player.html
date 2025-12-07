@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>miniBAE Player</title>
+    <title>zefidi web player</title>
     <style>
         * {
             box-sizing: border-box;
@@ -12,9 +12,9 @@
         }
 
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #1a0033, #2d1b4e, #4a2c7a);
-            color: #ffffff;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+            background: #2b2b2b;
+            color: #d4d4d4;
             min-height: 100vh;
             display: flex;
             align-items: center;
@@ -23,289 +23,580 @@
         }
 
         .player-container {
-            background: rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(10px);
-            border-radius: 20px;
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            padding: 30px;
+            background: #3c3c3c;
+            border: 1px solid #555;
+            border-radius: 8px;
             width: 100%;
-            max-width: 600px;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            max-width: 840px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
         }
 
-        .player-title {
-            text-align: center;
-            font-size: 28px;
+        .title-bar {
+            background: #2d2d30;
+            padding: 8px 12px;
+            border-bottom: 1px solid #555;
+            font-size: 13px;
+            color: #cccccc;
+            border-radius: 8px 8px 0 0;
+        }
+
+        .content {
+            padding: 15px;
+        }
+
+        .section {
+            background: #2d2d30;
+            border: 1px solid #555;
+            border-radius: 4px;
+            padding: 12px;
+            margin-bottom: 12px;
+        }
+
+        .section-title {
+            font-size: 11px;
             font-weight: 600;
-            margin-bottom: 30px;
-            background: linear-gradient(45deg, #a855f7, #ec4899, #f59e0b);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
+            color: #9cdcfe;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
 
-        .controls-section {
+        /* MIDI Channels */
+        .channels-grid {
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            gap: 8px;
+        }
+
+        .channel {
             display: flex;
             flex-direction: column;
-            gap: 20px;
-            margin-bottom: 25px;
-        }
-
-        .playback-controls {
-            display: flex;
             align-items: center;
-            justify-content: center;
-            gap: 15px;
-            margin-bottom: 20px;
+            gap: 4px;
         }
 
-        .btn {
-            padding: 12px 20px;
-            border: none;
-            border-radius: 10px;
-            background: linear-gradient(45deg, #a855f7, #8b5cf6);
-            color: white;
-            font-weight: 600;
+        .channel-checkbox {
+            width: 16px;
+            height: 16px;
             cursor: pointer;
-            transition: all 0.3s ease;
-            min-width: 100px;
+            accent-color: #007acc;
         }
 
-        .btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 15px rgba(168, 85, 247, 0.4);
+        .channel-number {
+            font-size: 11px;
+            color: #cccccc;
         }
 
-        .btn:active {
-            transform: translateY(0);
-        }
-
-        .btn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-            transform: none;
-        }
-
-        .seek-container {
-            display: flex;
-            align-items: center;
-            gap: 15px;
-            margin-bottom: 15px;
-        }
-
-        .time-display {
-            font-family: 'Courier New', monospace;
-            font-size: 14px;
-            min-width: 60px;
-            text-align: center;
-            background: rgba(0, 0, 0, 0.3);
-            padding: 5px 8px;
-            border-radius: 5px;
-        }
-
-        .seek-bar {
-            flex: 1;
-            height: 8px;
-            border-radius: 4px;
-            background: rgba(255, 255, 255, 0.2);
-            cursor: pointer;
-            position: relative;
-            overflow: hidden;
-        }
-
-        .seek-progress {
-            height: 100%;
-            background: linear-gradient(90deg, #a855f7, #ec4899);
-            border-radius: 4px;
-            transition: width 0.1s ease;
-            width: 0%;
-        }
-
-        .volume-container {
-            display: flex;
-            align-items: center;
-            gap: 15px;
-        }
-
-        .volume-label {
-            font-size: 14px;
-            font-weight: 500;
-            min-width: 60px;
-        }
-
-        .volume-slider {
-            flex: 1;
+        .vu-meter {
+            width: 40px;
             height: 6px;
+            background: #1e1e1e;
+            border: 1px solid #3c3c3c;
+            border-radius: 2px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .vu-meter-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #00ff00 0%, #ffff00 60%, #ff0000 100%);
+            width: 0%;
+            transition: width 0.05s ease-out;
+        }
+
+        .channel-controls {
+            display: flex;
+            gap: 8px;
+            margin-top: 8px;
+        }
+
+        .btn-small {
+            padding: 4px 12px;
+            border: 1px solid #555;
             border-radius: 3px;
-            background: rgba(255, 255, 255, 0.2);
+            background: #3c3c3c;
+            color: #cccccc;
+            font-size: 11px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-small:hover {
+            background: #505050;
+            border-color: #007acc;
+        }
+
+        .btn-small:active {
+            background: #2d2d30;
+        }
+
+        /* Playback Controls */
+        .controls-row {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 10px;
+        }
+
+        .control-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex: 1;
+        }
+
+        .control-label {
+            font-size: 12px;
+            color: #cccccc;
+            min-width: 70px;
+        }
+
+        .slider-container {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex: 1;
+        }
+
+        .slider {
+            flex: 1;
+            height: 4px;
+            border-radius: 2px;
+            background: #1e1e1e;
             outline: none;
             cursor: pointer;
             -webkit-appearance: none;
         }
 
-        .volume-slider::-webkit-slider-thumb {
+        .slider::-webkit-slider-thumb {
             -webkit-appearance: none;
-            width: 18px;
-            height: 18px;
-            border-radius: 50%;
-            background: #a855f7;
-            cursor: pointer;
-            border: 2px solid white;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-        }
-
-        .volume-slider::-moz-range-thumb {
-            width: 18px;
-            height: 18px;
-            border-radius: 50%;
-            background: #a855f7;
-            cursor: pointer;
-            border: 2px solid white;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-        }
-
-        .loop-container {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            justify-content: center;
-        }
-
-        .loop-checkbox {
-            width: 18px;
-            height: 18px;
-            accent-color: #a855f7;
+            width: 14px;
+            height: 14px;
+            border-radius: 2px;
+            background: #007acc;
             cursor: pointer;
         }
 
-        .loop-label {
-            font-size: 14px;
-            font-weight: 500;
+        .slider::-moz-range-thumb {
+            width: 14px;
+            height: 14px;
+            border-radius: 2px;
+            background: #007acc;
             cursor: pointer;
+            border: none;
         }
 
-        .vu-meters {
+        .slider-value {
+            font-size: 11px;
+            color: #cccccc;
+            min-width: 45px;
+            text-align: right;
+        }
+
+        .btn-reset {
+            padding: 3px 10px;
+            border: 1px solid #555;
+            border-radius: 3px;
+            background: #3c3c3c;
+            color: #cccccc;
+            font-size: 11px;
+            cursor: pointer;
+            min-width: 50px;
+        }
+
+        .btn-reset:hover {
+            background: #505050;
+            border-color: #007acc;
+        }
+
+        select {
+            padding: 4px 8px;
+            border: 1px solid #555;
+            border-radius: 3px;
+            background: #3c3c3c;
+            color: #cccccc;
+            font-size: 11px;
+            cursor: pointer;
+            outline: none;
+        }
+
+        select:hover {
+            border-color: #007acc;
+        }
+
+        /* Transport Controls */
+        .transport-section {
             display: flex;
             flex-direction: column;
             gap: 10px;
-            margin-top: 20px;
-            padding: 15px 20px;
-            background: rgba(0, 0, 0, 0.2);
-            border-radius: 15px;
         }
 
-        .vu-meter {
+        .transport-controls {
             display: flex;
             align-items: center;
-            gap: 12px;
+            gap: 10px;
         }
 
-        .vu-label {
+        .btn-transport {
+            padding: 6px 16px;
+            border: 1px solid #555;
+            border-radius: 3px;
+            background: #3c3c3c;
+            color: #cccccc;
             font-size: 12px;
-            font-weight: 600;
-            color: #e0e7ff;
-            min-width: 15px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
         }
 
-        .vu-bar {
+        .btn-transport:hover:not(:disabled) {
+            background: #505050;
+            border-color: #007acc;
+        }
+
+        .btn-transport:active:not(:disabled) {
+            background: #2d2d30;
+        }
+
+        .btn-transport:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .loop-control {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-left: auto;
+        }
+
+        .loop-checkbox {
+            width: 16px;
+            height: 16px;
+            cursor: pointer;
+            accent-color: #007acc;
+        }
+
+        .loop-label {
+            font-size: 12px;
+            color: #cccccc;
+            cursor: pointer;
+        }
+
+        .progress-section {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .time-display {
+            font-family: 'Courier New', monospace;
+            font-size: 11px;
+            min-width: 72px;
+            text-align: center;
+            color: #cccccc;
+        }
+
+        .progress-bar {
             flex: 1;
-            height: 20px;
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 10px;
+            height: 6px;
+            border-radius: 3px;
+            background: #1e1e1e;
+            cursor: pointer;
             position: relative;
             overflow: hidden;
         }
 
-        .vu-level {
-            position: absolute;
-            left: 0;
+        .progress-fill {
             height: 100%;
-            background: linear-gradient(to right, 
-                #10b981 0%, 
-                #10b981 50%, 
-                #f59e0b 70%, 
-                #ef4444 90%);
-            border-radius: 10px;
+            background: #007acc;
+            border-radius: 3px;
             transition: width 0.1s ease;
             width: 0%;
         }
 
-        .status {
-            text-align: center;
-            margin-top: 20px;
+        /* Virtual Keyboard */
+        .keyboard {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .keyboard-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .keyboard-select {
+            flex: 1;
+        }
+
+        .velocity-display {
+            font-size: 11px;
+            color: #cccccc;
+        }
+
+        .keys-container {
+            background: #1e1e1e;
+            border: 1px solid #555;
+            border-radius: 3px;
             padding: 10px;
-            background: rgba(0, 0, 0, 0.2);
-            border-radius: 10px;
-            font-size: 14px;
-            color: #e0e7ff;
+            display: flex;
+            align-items: flex-end;
+            gap: 1px;
+            height: 120px;
+            overflow-x: auto;
         }
 
-        .error {
-            background: rgba(239, 68, 68, 0.2);
-            border: 1px solid rgba(239, 68, 68, 0.3);
-            color: #fca5a5;
+        .key {
+            position: relative;
+            cursor: default;
+            user-select: none;
         }
 
-        .loading {
-            background: rgba(251, 191, 36, 0.2);
-            border: 1px solid rgba(251, 191, 36, 0.3);
-            color: #fcd34d;
+        .white-key {
+            width: 30px;
+            height: 95px;
+            background: linear-gradient(to bottom, #ffffff 0%, #f5f5f5 50%, #e8e8e8 100%);
+            border: 1px solid #3c3c3c;
+            border-radius: 0 0 3px 3px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
+            transition: all 0.05s ease;
         }
 
-        .success {
-            background: rgba(16, 185, 129, 0.2);
-            border: 1px solid rgba(16, 185, 129, 0.3);
-            color: #6ee7b7;
+        .white-key:hover {
+            background: linear-gradient(to bottom, #f5f5f5 0%, #e8e8e8 50%, #d8d8d8 100%);
+        }
+
+        .white-key.active {
+            background: linear-gradient(to bottom, #007acc 0%, #005a9e 50%, #004578 100%);
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5), 0 0 8px rgba(0, 122, 204, 0.6);
+            transform: translateY(1px);
+        }
+
+        .white-key.from-playback {
+            background: linear-gradient(to bottom, #00cc88 0%, #009e6e 50%, #007855 100%);
+            box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.3), 0 0 6px rgba(0, 204, 136, 0.5);
+        }
+
+        .black-key {
+            width: 20px;
+            height: 60px;
+            background: linear-gradient(to bottom, #2a2a2a 0%, #1a1a1a 50%, #000000 100%);
+            border: 1px solid #000;
+            border-radius: 0 0 2px 2px;
+            position: absolute;
+            right: -10px;
+            z-index: 1;
+            box-shadow: 0 3px 5px rgba(0, 0, 0, 0.6);
+            transition: all 0.05s ease;
+        }
+
+        .black-key:hover {
+            background: linear-gradient(to bottom, #3a3a3a 0%, #2a2a2a 50%, #1a1a1a 100%);
+        }
+
+        .black-key.active {
+            background: linear-gradient(to bottom, #0077cc 0%, #0055aa 50%, #003388 100%);
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.6), 0 0 8px rgba(0, 122, 204, 0.7);
+            transform: translateY(1px);
+        }
+
+        .black-key.from-playback {
+            background: linear-gradient(to bottom, #00aa77 0%, #008855 50%, #006644 100%);
+            box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.4), 0 0 6px rgba(0, 204, 136, 0.6);
+        }
+
+        .octave-label {
+            position: absolute;
+            bottom: 4px;
+            left: 0;
+            right: 0;
+            text-align: center;
+            font-size: 9px;
+            color: #888;
+            font-weight: 500;
+            pointer-events: none;
+        }
+
+        .white-key.active .octave-label,
+        .white-key.from-playback .octave-label {
+            color: rgba(255, 255, 255, 0.8);
+        }
+
+        /* Status Bar */
+        .status-bar {
+            background: #252526;
+            border-top: 1px solid #555;
+            padding: 6px 12px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            font-size: 11px;
+            color: #cccccc;
+            border-radius: 0 0 8px 8px;
+        }
+
+        .status-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .status-label {
+            color: #9cdcfe;
+        }
+
+        .status-separator {
+            width: 1px;
+            height: 16px;
+            background: #555;
+        }
+
+        .status-indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #666;
+        }
+
+        .status-indicator.stopped {
+            background: #d16969;
+        }
+
+        .status-indicator.playing {
+            background: #4ec9b0;
+        }
+
+        .status-indicator.paused {
+            background: #dcdcaa;
         }
     </style>
 </head>
 <body>
     <div class="player-container">
-        <h1 class="player-title">miniBAE Player</h1>
-
-        <div class="controls-section">
-            <div class="playback-controls">
-                <button id="playBtn" class="btn" disabled>Play</button>
-                <button id="pauseBtn" class="btn" disabled>Pause</button>
-                <button id="stopBtn" class="btn" disabled>Stop</button>
-            </div>
-
-            <div class="seek-container">
-                <div id="currentTime" class="time-display">0:00</div>
-                <div id="seekBar" class="seek-bar">
-                    <div id="seekProgress" class="seek-progress"></div>
+        <div class="title-bar">zefidi web player</div>
+        
+        <div class="content">
+            <!-- MIDI Channels -->
+            <div class="section">
+                <div class="section-title">MIDI Channels</div>
+                <div class="channels-grid" id="channelsGrid"></div>
+                <div class="channel-controls">
+                    <button class="btn-small" id="invertBtn">Invert</button>
+                    <button class="btn-small" id="muteAllBtn">Mute All</button>
+                    <button class="btn-small" id="unmuteAllBtn">Unmute All</button>
                 </div>
-                <div id="duration" class="time-display">0:00</div>
             </div>
 
-            <div class="volume-container">
-                <label class="volume-label">Volume:</label>
-                <input type="range" id="volumeSlider" class="volume-slider" 
-                       min="0" max="100" value="75">
+            <!-- Playback Controls -->
+            <div class="section">
+                <div class="section-title">Playback Controls</div>
+                <div class="controls-row">
+                    <div class="control-group">
+                        <label class="control-label">Transpose:</label>
+                        <div class="slider-container">
+                            <input type="range" id="transposeSlider" class="slider" 
+                                   min="-12" max="12" value="0" step="1">
+                            <span class="slider-value" id="transposeValue">+0</span>
+                            <button class="btn-reset" id="transposeReset">Reset</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="controls-row">
+                    <div class="control-group">
+                        <label class="control-label">Tempo:</label>
+                        <div class="slider-container">
+                            <input type="range" id="tempoSlider" class="slider" 
+                                   min="50" max="200" value="100" step="1">
+                            <span class="slider-value" id="tempoValue">100%</span>
+                            <button class="btn-reset" id="tempoReset">Reset</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="controls-row">
+                    <div class="control-group">
+                        <label class="control-label">Reverb:</label>
+                        <select id="reverbSelect">
+                            <option value="0">No Reverb</option>
+                            <option value="1">Closet</option>
+                            <option value="2">Garage</option>
+                            <option value="3">Acoustic Lab</option>
+                            <option value="4">Cavern</option>
+                            <option value="5">Dungeon</option>
+                            <option value="6">Small Reflections</option>
+                            <option value="7" selected>Early Reflections</option>
+                            <option value="8">Basement</option>
+                            <option value="9">Banquet Hall</option>
+                            <option value="10">Catacombs</option>
+                        </select>
+                    </div>
+                    <div class="control-group">
+                        <label class="control-label">Volume:</label>
+                        <div class="slider-container">
+                            <input type="range" id="volumeSlider" class="slider" 
+                                   min="0" max="100" value="100" step="1">
+                            <span class="slider-value" id="volumeValue">100%</span>
+                        </div>
+                    </div>
+                </div>
             </div>
 
-            <div class="loop-container">
-                <input type="checkbox" id="loopCheckbox" class="loop-checkbox">
-                <label for="loopCheckbox" class="loop-label">Loop</label>
+            <!-- Transport & Progress -->
+            <div class="section">
+                <div class="section-title">Transport & Progress</div>
+                <div class="transport-section">
+                    <div class="transport-controls">
+                        <button id="playBtn" class="btn-transport" disabled>Play</button>
+                        <button id="stopBtn" class="btn-transport" disabled>Stop</button>
+                        <div class="loop-control">
+                            <input type="checkbox" id="loopCheckbox" class="loop-checkbox" checked>
+                            <label for="loopCheckbox" class="loop-label">BAE Loop</label>
+                        </div>
+                    </div>
+                    <div class="progress-section">
+                        <div class="time-display" id="currentTime">00:00.000</div>
+                        <div class="progress-bar" id="progressBar">
+                            <div class="progress-fill" id="progressFill"></div>
+                        </div>
+                        <div class="time-display" id="duration">00:00.000</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Virtual Keyboard -->
+            <div class="section">
+                <div class="section-title">Virtual MIDI Keyboard</div>
+                <div class="keyboard">
+                    <div class="keyboard-controls">
+                        <select class="keyboard-select" id="channelSelect">
+                            <option value="0">Ch 1</option>
+                        </select>
+                        <input type="checkbox" id="allChannelsCheckbox" class="loop-checkbox">
+                        <label for="allChannelsCheckbox" class="loop-label">All Ch.</label>
+                    </div>
+                    <div class="keys-container" id="keysContainer"></div>
+                </div>
             </div>
         </div>
 
-        <div class="vu-meters">
-            <div class="vu-meter">
-                <div class="vu-label">L</div>
-                <div class="vu-bar">
-                    <div id="vuLeft" class="vu-level"></div>
-                </div>
+        <div class="status-bar">
+            <div class="status-item">
+                <span class="status-label">File:</span>
+                <span id="fileStatus">-</span>
             </div>
-            <div class="vu-meter">
-                <div class="vu-label">R</div>
-                <div class="vu-bar">
-                    <div id="vuRight" class="vu-level"></div>
-                </div>
+            <div class="status-separator"></div>
+            <div class="status-item">
+                <span class="status-label">Bank:</span>
+                <span id="bankStatus">-</span>
+            </div>
+            <div class="status-separator"></div>
+            <div class="status-item">
+                <div class="status-indicator stopped" id="statusIndicator"></div>
+                <span id="statusText">Stopped</span>
             </div>
         </div>
-
-        <div id="status" class="status">Ready...</div>
     </div>
 
     <script src="./player.js"></script>
@@ -314,14 +605,19 @@
         class MiniBAEPlayer {
             constructor() {
                 this.player = null;
-                this.isLooping = false;
-				this.default_bank_mid = "/content/PatchBanks/SF3/GeneralUser-GS.sf3"
+                this.isLooping = true;
+                this.isPaused = false;
+                this.channelMutes = new Array(16).fill(false);
+                this.transpose = 0;
+                this.tempo = 100;
+                this.default_bank_mid = "/content/PatchBanks/SF3/GeneralUser-GS.sf3"
                 this.default_bank_rmf = "/content/PatchBanks/HSB/patchesp.hsb"
 
                 // Get file parameter from URL
                 const urlParams = new URLSearchParams(window.location.search);
                 const fileName = urlParams.get('file');
                 const customBank = urlParams.get('bank');
+                this.autostart = urlParams.get('autostart') === '1';
 
                 // Detect file type and set appropriate bank
                 if (fileName && fileName.toLowerCase().endsWith('.rmf')) {
@@ -331,21 +627,31 @@
                 }
 
                 this.initElements();
+                this.initChannels();
+                this.initKeyboard();
                 this.bindEvents();
-                this.waitForAudioContext().then(() => {
+                
+                // Start loading immediately
+                if (fileName) {
                     this.initPlayer().then(() => {
-                        if (fileName) {
-                            this.load(fileName, this.bank);
-                        } else {
-                            this.updateStatus('No file specified in URL. Please provide a "file" parameter.', 'error');
-                        }
-                        this.startVUMeterUpdates();
+                        this.load(fileName, this.bank).then(() => {
+                            // After loading, wait for audio context if needed, then optionally autostart
+                            this.waitForAudioContext().then(() => {
+                                if (this.autostart) {
+                                    this.play();
+                                }
+                            });
+                        });
                     });
-                });
+                } else {
+                    this.updateStatus('No file specified in URL. Please provide a "file" parameter.');
+                    // Still need to wait for context even if no file
+                    if (this.player._audioContext.state === 'suspended')
+                        this.waitForAudioContext();
+                }
             }
             
-           async waitForAudioContext() {
-                // Create overlay elements
+            async waitForAudioContext() {
                 const overlay = document.createElement('div');
                 overlay.style.cssText = `
                     position: fixed;
@@ -353,7 +659,7 @@
                     left: 0;
                     width: 100%;
                     height: 100%;
-                    background: rgba(0, 0, 0, 0.9);
+                    background: rgba(0, 0, 0, 0.95);
                     display: flex;
                     align-items: center;
                     justify-content: center;
@@ -365,16 +671,16 @@
                 message.style.cssText = `
                     text-align: center;
                     padding: 40px;
-                    background: rgba(168, 85, 247, 0.2);
-                    border: 2px solid rgba(168, 85, 247, 0.5);
-                    border-radius: 20px;
-                    backdrop-filter: blur(10px);
+                    background: #2d2d30;
+                    border: 2px solid #007acc;
+                    border-radius: 8px;
+                    color: #cccccc;
                 `;
                 message.innerHTML = `
-                    <h2 style="font-size: 32px; margin-bottom: 20px; background: linear-gradient(45deg, #a855f7, #ec4899); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">
-                        Click to Start
+                    <h2 style="font-size: 24px; margin-bottom: 16px; color: #9cdcfe;">
+                        Click to Start Audio
                     </h2>
-                    <p style="font-size: 18px; color: #e0e7ff;">
+                    <p style="font-size: 14px;">
                         Click anywhere to enable audio playback
                     </p>
                 `;
@@ -383,116 +689,423 @@
                 document.body.appendChild(overlay);
 
                 return new Promise((resolve) => {
-                    const handleClick = () => {
+                    // Check if audio context is already available and not suspended
+                    const checkAudioContext = () => {
+                        if (this.player && this.player._audioContext) {
+                            if (this.player._audioContext.state === 'running') {
+                                overlay.remove();
+                                resolve();
+                                return true;
+                            }
+                        }
+                        return false;
+                    };
+                    
+                    // Check immediately
+                    if (checkAudioContext()) return;
+                    
+                    // Also check periodically in case context becomes available
+                    const interval = setInterval(() => {
+                        if (checkAudioContext()) {
+                            clearInterval(interval);
+                        }
+                    }, 100);
+                    
+                    const handleClick = async () => {
+                        clearInterval(interval);
+                        
+                        // Try to resume audio context if it exists but is suspended
+                        if (this.player && this.player._audioContext && this.player._audioContext.state === 'suspended') {
+                            try {
+                                await this.player._audioContext.resume();
+                            } catch (e) {
+                                console.warn('Failed to resume audio context:', e);
+                            }
+                        }
+                        
                         overlay.remove();
                         resolve();
                     };
-
                     overlay.addEventListener('click', handleClick, { once: true });
                 });
             }
+
             async load(fileName, bank) {
                 const displayFileName = fileName.split('/').pop();
                 const displayBank = bank.split('/').pop();
-                this.updateStatus(`Loading ${displayBank}...`, 'loading');
+                
+                this.elements.fileStatus.textContent = displayFileName;
+                this.elements.bankStatus.textContent = 'Loading...';
+                this.updateStatus('Loading bank...');
 
-                this.player.loadSoundbank(bank).then(() => {
-                    this.updateStatus(`${displayBank} loaded successfully`, 'success');
-                    this.player.load(fileName).then(() => {
-                        this.elements.playBtn.disabled = false;
-                        this.updateStatus(`${displayFileName} loaded successfully`, 'success');
-                    }).catch((error) => {
-                        this.updateStatus(`Failed to load ${displayFileName}: ${error.message}`, 'error');
-                        console.error('Load error:', error);
-                    });
-                }).catch((error) => {
-                    this.updateStatus(`Failed to load ${displayBank}: ${error.message}`, 'error');
+                try {
+                    await this.player.loadSoundbank(bank);
+                    this.elements.bankStatus.textContent = displayBank;
+                    this.updateStatus('Loading file...');
+                    
+                    await this.player.load(fileName);
+                    this.elements.playBtn.disabled = false;
+                    
+                    // Apply current channel mute states
+                    for (let i = 0; i < 16; i++) {
+                        if (this.channelMutes[i]) {
+                            this.player.muteChannel(i, true);
+                        }
+                    }
+                    
+                    // Apply current loop setting
+                    if (this.player._wasmModule) {
+                        this.player._wasmModule._BAE_WASM_SetLoops(this.isLooping ? 32767 : 0);
+                    }
+                    
+                    this.updateStatus('Ready');
+                } catch (error) {
+                    this.updateStatus(`Failed to load: ${error.message}`);
                     console.error('Load error:', error);
-                });                
+                    throw error;
+                }
+            }            initChannels() {
+                const grid = this.elements.channelsGrid;
+                for (let i = 0; i < 16; i++) {
+                    const channel = document.createElement('div');
+                    channel.className = 'channel';
+                    
+                    const checkbox = document.createElement('input');
+                    checkbox.type = 'checkbox';
+                    checkbox.className = 'channel-checkbox';
+                    checkbox.checked = true;
+                    checkbox.dataset.channel = i;
+                    checkbox.addEventListener('change', (e) => {
+                        this.channelMutes[i] = !e.target.checked;
+                        if (this.player && this.player._songLoaded) {
+                            this.player.muteChannel(i, this.channelMutes[i]);
+                        }
+                    });
+                    
+                    const label = document.createElement('div');
+                    label.className = 'channel-number';
+                    label.textContent = i + 1;
+                    
+                    // VU Meter
+                    const vuMeter = document.createElement('div');
+                    vuMeter.className = 'vu-meter';
+                    const vuFill = document.createElement('div');
+                    vuFill.className = 'vu-meter-fill';
+                    vuFill.id = `vu-${i}`;
+                    vuMeter.appendChild(vuFill);
+                    
+                    channel.appendChild(checkbox);
+                    channel.appendChild(label);
+                    channel.appendChild(vuMeter);
+                    grid.appendChild(channel);
+                }
+                
+                // Start VU meter animation
+                this.updateVUMeters();
+            }
+
+            initKeyboard() {
+                const container = this.elements.keysContainer;
+                const octaves = 7;
+                const startOctave = 0;
+                
+                // Populate channel selector
+                for (let i = 1; i < 16; i++) {
+                    const option = document.createElement('option');
+                    option.value = i;
+                    option.textContent = `Ch ${i + 1}`;
+                    this.elements.channelSelect.appendChild(option);
+                }
+                
+                for (let octave = startOctave; octave < startOctave + octaves; octave++) {
+                    const notes = ['C', 'D', 'E', 'F', 'G', 'A', 'B'];
+                    
+                    for (let i = 0; i < notes.length; i++) {
+                        const note = notes[i];
+                        const midiNote = (octave + 1) * 12 + [0, 2, 4, 5, 7, 9, 11][i];
+                        
+                        const whiteKey = document.createElement('div');
+                        whiteKey.className = 'key white-key';
+                        whiteKey.dataset.note = midiNote;
+                        
+                        if (i === 0) {
+                            const label = document.createElement('div');
+                            label.className = 'octave-label';
+                            label.textContent = `C${octave + 1}`;
+                            whiteKey.appendChild(label);
+                        }
+                        
+                        container.appendChild(whiteKey);
+                        
+                        // Add black keys
+                        if ([0, 1, 3, 4, 5].includes(i)) {
+                            const blackKey = document.createElement('div');
+                            blackKey.className = 'key black-key';
+                            const blackMidiNote = midiNote + 1;
+                            blackKey.dataset.note = blackMidiNote;
+                            
+                            whiteKey.appendChild(blackKey);
+                        }
+                    }
+                }
+            }
+
+            updateVUMeters() {
+                if (this.player && this.player._wasmModule && this.player._songLoaded) {
+                    // Update VU meters
+                    for (let i = 0; i < 16; i++) {
+                        const activity = this.player._wasmModule._BAE_WASM_GetChannelActivity(i);
+                        const percent = (activity / 255) * 100;
+                        const vuFill = document.getElementById(`vu-${i}`);
+                        if (vuFill) {
+                            vuFill.style.width = `${percent}%`;
+                        }
+                    }
+                    
+                    // Update keyboard highlighting from playback only when playing
+                    if (this.player._isPlaying) {
+                        this.updateKeyboardHighlighting();
+                    }
+                }
+                requestAnimationFrame(() => this.updateVUMeters());
+            }
+
+            updateKeyboardHighlighting() {
+                if (!this.player || !this.player._wasmModule || !this.player._songLoaded) return;
+                
+                const selectedChannel = parseInt(this.elements.channelSelect.value);
+                const showAllChannels = this.elements.allChannelsCheckbox.checked;
+                
+                // Create a buffer for note data (128 bytes for 128 MIDI notes)
+                const Module = this.player._wasmModule;
+                const notesBuffer = Module._malloc(128);
+                if (!notesBuffer) return;
+                
+                try {
+                    // Collect active notes from selected channel(s)
+                    const activeNotes = new Set();
+                    
+                    if (showAllChannels) {
+                        // Show notes from all channels
+                        for (let ch = 0; ch < 16; ch++) {
+                            const result = Module._BAE_WASM_GetActiveNotesForChannel(ch, notesBuffer);
+                            if (result === 0) {
+                                const notes = new Uint8Array(Module.HEAPU8.buffer, notesBuffer, 128);
+                                for (let n = 0; n < 128; n++) {
+                                    if (notes[n] > 0) activeNotes.add(n);
+                                }
+                            }
+                        }
+                    } else {
+                        // Show notes from selected channel only
+                        const result = Module._BAE_WASM_GetActiveNotesForChannel(selectedChannel, notesBuffer);
+                        if (result === 0) {
+                            const notes = new Uint8Array(Module.HEAPU8.buffer, notesBuffer, 128);
+                            for (let n = 0; n < 128; n++) {
+                                if (notes[n] > 0) activeNotes.add(n);
+                            }
+                        }
+                    }
+                    
+                    // Update visual state of all keys
+                    const allKeys = document.querySelectorAll('.key');
+                    allKeys.forEach(key => {
+                        const note = parseInt(key.dataset.note);
+                        const isActive = activeNotes.has(note);
+                        
+                        // Show only playback highlighting (read-only)
+                        if (isActive) {
+                            key.classList.add('from-playback');
+                        } else {
+                            key.classList.remove('from-playback');
+                        }
+                    });
+                } finally {
+                    // Always free the buffer
+                    Module._free(notesBuffer);
+                }
             }
             
 
             initElements() {
                 this.elements = {
+                    // Transport
                     playBtn: document.getElementById('playBtn'),
-                    pauseBtn: document.getElementById('pauseBtn'),
                     stopBtn: document.getElementById('stopBtn'),
-                    seekBar: document.getElementById('seekBar'),
-                    seekProgress: document.getElementById('seekProgress'),
+                    loopCheckbox: document.getElementById('loopCheckbox'),
+                    
+                    // Progress
+                    progressBar: document.getElementById('progressBar'),
+                    progressFill: document.getElementById('progressFill'),
                     currentTime: document.getElementById('currentTime'),
                     duration: document.getElementById('duration'),
+                    
+                    // Controls
+                    transposeSlider: document.getElementById('transposeSlider'),
+                    transposeValue: document.getElementById('transposeValue'),
+                    transposeReset: document.getElementById('transposeReset'),
+                    tempoSlider: document.getElementById('tempoSlider'),
+                    tempoValue: document.getElementById('tempoValue'),
+                    tempoReset: document.getElementById('tempoReset'),
+                    reverbSelect: document.getElementById('reverbSelect'),
                     volumeSlider: document.getElementById('volumeSlider'),
-                    loopCheckbox: document.getElementById('loopCheckbox'),
-                    vuLeft: document.getElementById('vuLeft'),
-                    vuRight: document.getElementById('vuRight'),
-                    status: document.getElementById('status')
+                    volumeValue: document.getElementById('volumeValue'),
+                    
+                    // Channels
+                    channelsGrid: document.getElementById('channelsGrid'),
+                    invertBtn: document.getElementById('invertBtn'),
+                    muteAllBtn: document.getElementById('muteAllBtn'),
+                    unmuteAllBtn: document.getElementById('unmuteAllBtn'),
+                    
+                    // Keyboard
+                    keysContainer: document.getElementById('keysContainer'),
+                    channelSelect: document.getElementById('channelSelect'),
+                    velocityDisplay: document.getElementById('velocityDisplay'),
+                    allChannelsCheckbox: document.getElementById('allChannelsCheckbox'),
+                    
+                    // Status
+                    fileStatus: document.getElementById('fileStatus'),
+                    bankStatus: document.getElementById('bankStatus'),
+                    statusIndicator: document.getElementById('statusIndicator'),
+                    statusText: document.getElementById('statusText')
                 };
             }
 
             bindEvents() {
-                this.elements.playBtn.addEventListener('click', () => this.play());
-                this.elements.pauseBtn.addEventListener('click', () => this.pause());
+                // Transport controls
+                this.elements.playBtn.addEventListener('click', () => this.togglePlayPause());
                 this.elements.stopBtn.addEventListener('click', () => this.stop());
+                this.elements.loopCheckbox.addEventListener('change', (e) => {
+                    this.isLooping = e.target.checked;
+                    // Set BAESong loop count like the GUI does
+                    if (this.player && this.player._wasmModule && this.player._songLoaded) {
+                        this.player._wasmModule._BAE_WASM_SetLoops(this.isLooping ? 32767 : 0);
+                    }
+                });
 
-                this.elements.seekBar.addEventListener('click', (e) => {
+                // Progress bar
+                this.elements.progressBar.addEventListener('click', (e) => {
                     if (this.player && this.player.duration > 0) {
-                        const rect = this.elements.seekBar.getBoundingClientRect();
+                        const rect = this.elements.progressBar.getBoundingClientRect();
                         const percent = (e.clientX - rect.left) / rect.width;
                         const time = percent * this.player.duration;
                         this.player.currentTime = time;
                     }
                 });
 
-                this.elements.volumeSlider.addEventListener('input', (e) => {
+                // Transpose
+                this.elements.transposeSlider.addEventListener('input', (e) => {
+                    this.transpose = parseInt(e.target.value);
+                    this.elements.transposeValue.textContent = this.transpose >= 0 ? `+${this.transpose}` : this.transpose;
                     if (this.player) {
-                        this.player.volume = e.target.value / 100;
+                        this.player.transpose = this.transpose;
+                    }
+                });
+                this.elements.transposeReset.addEventListener('click', () => {
+                    this.elements.transposeSlider.value = 0;
+                    this.elements.transposeSlider.dispatchEvent(new Event('input'));
+                });
+
+                // Tempo
+                this.elements.tempoSlider.addEventListener('input', (e) => {
+                    this.tempo = parseInt(e.target.value);
+                    this.elements.tempoValue.textContent = `${this.tempo}%`;
+                    if (this.player) {
+                        this.player.tempo = this.tempo / 100;
+                    }
+                });
+                this.elements.tempoReset.addEventListener('click', () => {
+                    this.elements.tempoSlider.value = 100;
+                    this.elements.tempoSlider.dispatchEvent(new Event('input'));
+                });
+
+                // Reverb
+                this.elements.reverbSelect.addEventListener('change', (e) => {
+                    const reverbType = parseInt(e.target.value);
+                    if (this.player) {
+                        this.player.reverbType = reverbType;
                     }
                 });
 
-                this.elements.loopCheckbox.addEventListener('change', (e) => {
-                    this.isLooping = e.target.checked;
+                // Volume
+                this.elements.volumeSlider.addEventListener('input', (e) => {
+                    const volume = parseInt(e.target.value);
+                    this.elements.volumeValue.textContent = `${volume}%`;
+                    if (this.player) {
+                        this.player.volume = volume / 100;
+                    }
+                });
+
+                // Channel controls
+                this.elements.invertBtn.addEventListener('click', () => {
+                    const checkboxes = this.elements.channelsGrid.querySelectorAll('input[type="checkbox"]');
+                    checkboxes.forEach((cb, i) => {
+                        cb.checked = !cb.checked;
+                        this.channelMutes[i] = !cb.checked;
+                        if (this.player && this.player._songLoaded) {
+                            this.player.muteChannel(i, this.channelMutes[i]);
+                        }
+                    });
+                });
+
+                this.elements.muteAllBtn.addEventListener('click', () => {
+                    const checkboxes = this.elements.channelsGrid.querySelectorAll('input[type="checkbox"]');
+                    checkboxes.forEach((cb, i) => {
+                        cb.checked = false;
+                        this.channelMutes[i] = true;
+                        if (this.player && this.player._songLoaded) {
+                            this.player.muteChannel(i, true);
+                        }
+                    });
+                });
+
+                this.elements.unmuteAllBtn.addEventListener('click', () => {
+                    const checkboxes = this.elements.channelsGrid.querySelectorAll('input[type="checkbox"]');
+                    checkboxes.forEach((cb, i) => {
+                        cb.checked = true;
+                        this.channelMutes[i] = false;
+                        if (this.player && this.player._songLoaded) {
+                            this.player.muteChannel(i, false);
+                        }
+                    });
                 });
             }
 
             async initPlayer() {
                 try {
-                    this.updateStatus('Initializing audio engine...', 'loading');
+                    this.updateStatus('Initializing audio engine...');
                     
-                    // Create player instance first
                     this.player = new BeatnikPlayer();
 
-                    // Add event handlers BEFORE initialization
                     this.player.addEventListener('ready', () => {
-                        this.updateStatus('Audio engine ready.', 'success');
+                        this.updateStatus('Ready');
                     });
 
                     this.player.addEventListener('play', () => {
                         this.updateButtonStates(true);
-                        this.updateStatus('Playing...', 'success');
+                        this.updateStatus('Playing');
                     });
 
                     this.player.addEventListener('pause', () => {
                         this.updateButtonStates(false);
-                        this.updateStatus('Paused', 'success');
+                        this.updateStatus('Paused');
                     });
 
                     this.player.addEventListener('stop', () => {
                         this.updateButtonStates(false);
-                        this.updateStatus('Stopped', 'success');
+                        this.updateStatus('Stopped');
                     });
 
                     this.player.addEventListener('end', () => {
-                        if (this.isLooping) {
-                            this.player.currentTime = 0;
-                            this.player.play();
-                        } else {
+                        // BAESong_SetLoops handles looping internally, so just update status when truly finished
+                        if (!this.isLooping) {
                             this.updateButtonStates(false);
-                            this.updateStatus('Finished', 'success');
+                            this.updateStatus('Finished');
                         }
                     });
 
                     this.player.addEventListener('error', (error) => {
-                        this.updateStatus(`Error: ${error.message}`, 'error');
+                        this.updateStatus(`Error: ${error.message}`);
                         console.error('Player error:', error);
                     });
 
@@ -500,7 +1113,6 @@
                         this.updateTimeDisplay(time);
                     });
 
-                    // Now initialize the player
                     await this.player._init({
                         sampleRate: 44100,
                         maxVoices: 64
@@ -509,8 +1121,23 @@
                     this.player.volume = this.elements.volumeSlider.value / 100;
 
                 } catch (error) {
-                    this.updateStatus(`Failed to initialize: ${error.message}`, 'error');
+                    this.updateStatus(`Failed to initialize: ${error.message}`);
                     console.error('Init error:', error);
+                }
+            }
+
+            togglePlayPause() {
+                if (!this.player) return;
+                
+                if (this.player._isPlaying) {
+                    this.pause();
+                } else {
+                    // Use resume if we're paused, otherwise play from start
+                    if (this.isPaused) {
+                        this.resume();
+                    } else {
+                        this.play();
+                    }
                 }
             }
 
@@ -518,86 +1145,88 @@
                 if (this.player) {
                     try {
                         this.player.play();
+                        this.isPaused = false;
                     } catch (error) {
-                        this.updateStatus(`Play error: ${error.message}`, 'error');
+                        this.updateStatus(`Play error: ${error.message}`);
                     }
                 }
             }
 
             pause() {
                 if (this.player) {
-                    this.player.pause();
+                    try {
+                        this.player.pause();
+                        this.isPaused = true;
+                        this.clearActiveKeyboardNotes();
+                    } catch (error) {
+                        this.updateStatus(`Pause error: ${error.message}`);
+                    }
+                }
+            }
+
+            resume() {
+                if (this.player) {
+                    try {
+                        this.player.resume();
+                        this.isPaused = false;
+                    } catch (error) {
+                        this.updateStatus(`Resume error: ${error.message}`);
+                    }
                 }
             }
 
             stop() {
                 if (this.player) {
                     this.player.stop();
+                    this.isPaused = false;
+                    this.clearActiveKeyboardNotes();
                     this.updateTimeDisplay(0);
                 }
             }
 
+            clearActiveKeyboardNotes() {
+                // Clear all active keyboard highlights
+                const allKeys = document.querySelectorAll('.key');
+                allKeys.forEach(key => {
+                    key.classList.remove('active', 'from-playback');
+                });
+            }
+
             updateButtonStates(playing) {
-                this.elements.playBtn.disabled = playing;
-                this.elements.pauseBtn.disabled = !playing;
+                this.elements.playBtn.textContent = playing ? 'Pause' : 'Play';
+                this.elements.playBtn.disabled = false;
                 this.elements.stopBtn.disabled = !playing;
+                
+                this.elements.statusIndicator.className = playing ? 'status-indicator playing' : 'status-indicator stopped';
             }
 
             updateTimeDisplay(currentTime) {
                 const duration = this.player ? this.player.duration : 0;
                 
                 this.elements.currentTime.textContent = this.formatTime(currentTime);
-                this.elements.duration.textContent = this.formatTime(duration);
+                this.elements.duration.innerHTML = this.formatTime(duration);
                 
                 if (duration > 0) {
                     const percent = (currentTime / duration) * 100;
-                    this.elements.seekProgress.style.width = `${percent}%`;
+                    this.elements.progressFill.style.width = `${percent}%`;
                 }
             }
 
-            formatTime(ms) {
-                const seconds = Math.floor(ms / 1000);
-                const minutes = Math.floor(seconds / 60);
-                const remainingSeconds = seconds % 60;
-                return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
-            }
-
-            updateStatus(message, type = '') {
-                this.elements.status.textContent = message;
-                this.elements.status.className = `status ${type}`;
-            }
-
-            startVUMeterUpdates() {
-                const updateVU = () => {
-                    if (this.player && this.player.analyserLeft && this.player.analyserRight) {
-                        const leftData = new Uint8Array(this.player.analyserLeft.frequencyBinCount);
-                        const rightData = new Uint8Array(this.player.analyserRight.frequencyBinCount);
-                        
-                        this.player.analyserLeft.getByteFrequencyData(leftData);
-                        this.player.analyserRight.getByteFrequencyData(rightData);
-                        
-                        // Calculate RMS levels
-                        const leftLevel = this.calculateRMS(leftData);
-                        const rightLevel = this.calculateRMS(rightData);
-                        
-                        // Update VU meters
-                        this.elements.vuLeft.style.width = `${leftLevel}%`;
-                        this.elements.vuRight.style.width = `${rightLevel}%`;
-                    }
-                    
-                    requestAnimationFrame(updateVU);
-                };
+            formatTime(ms, includeMs = true) {
+                const totalSeconds = Math.floor(ms / 1000);
+                const minutes = Math.floor(totalSeconds / 60);
+                const seconds = totalSeconds % 60;
+                const milliseconds = Math.floor((ms % 1000));
                 
-                updateVU();
+                if (includeMs) {
+                    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${milliseconds.toString().padStart(3, '0')}`;
+                } else {
+                    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+                }
             }
 
-            calculateRMS(data) {
-                let sum = 0;
-                for (let i = 0; i < data.length; i++) {
-                    sum += data[i] * data[i];
-                }
-                const rms = Math.sqrt(sum / data.length);
-                return Math.min(100, (rms / 255) * 100);
+            updateStatus(message) {
+                this.elements.statusText.textContent = message;
             }
         }
 
