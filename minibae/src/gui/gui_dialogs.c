@@ -172,7 +172,7 @@ void rmf_info_load_if_needed(void)
         BAEInfoType it = (BAEInfoType)i;
         char buf[512];
         buf[0] = '\0';
-        if (BAEUtil_GetRmfSongInfoFromFile((BAEPathName)g_bae.loaded_path, 0, it, buf, sizeof(buf) - 1) == BAE_NO_ERROR)
+        if (BAEUtil_GetRmfSongInfoFromFile((BAEPathName)g_bae.loaded_path, 0, it, buf, sizeof(buf)) == BAE_NO_ERROR)
         {
             // Only store if non-empty and printable
             if (buf[0] != '\0')

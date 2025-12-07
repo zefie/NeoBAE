@@ -718,13 +718,13 @@ bool bae_load_song(const char *path)
         return false;
 
     BAEResult r;
-    if (le && (strcmp(ext, ".mid") == 0 || strcmp(ext, ".midi") == 0 || strcmp(ext, ".kar") == 0))
+    if (le && (stricmp(ext, ".rmf") == 0))
     {
-        r = BAESong_LoadMidiFromFile(g_bae.song, (BAEPathName)path, TRUE);
-        g_bae.is_rmf_file = false;
+        r = BAESong_LoadRmfFromFile(g_bae.song, (BAEPathName)path, 0, TRUE);
+        g_bae.is_rmf_file = true;
     }
 #if USE_XMF_SUPPORT == TRUE    
-    else if (le && (strcmp(ext, ".xmf") == 0 || strcmp(ext, ".mxmf") == 0))
+    else if (le && (stricmp(ext, ".xmf") == 0 || stricmp(ext, ".mxmf") == 0))
     {
         r = BAESong_LoadXmfFromFile(g_bae.song, (BAEPathName)path, TRUE);
         g_bae.is_rmf_file = false;
@@ -732,8 +732,8 @@ bool bae_load_song(const char *path)
 #endif    
     else
     {
-        r = BAESong_LoadRmfFromFile(g_bae.song, (BAEPathName)path, 0, TRUE);
-        g_bae.is_rmf_file = true;
+        r = BAESong_LoadMidiFromFile(g_bae.song, (BAEPathName)path, TRUE);
+        g_bae.is_rmf_file = false;
     }
 
     if (r != BAE_NO_ERROR)
