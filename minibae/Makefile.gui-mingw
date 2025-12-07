@@ -61,13 +61,13 @@ ifneq ($(LDEBUG),1)
 	LDFLAGS += -s
 endif
 ifeq ($(BITS),32)
-CFLAGS  += -I../windeps/SDL3/i686-w64-mingw32/include -I../windeps/SDL3/i686-w64-mingw32/include/SDL3 -I../windeps/SDL3_ttf/i686-w64-mingw32/include
-CXXFLAGS  += -I../windeps/SDL3/i686-w64-mingw32/include -I../windeps/SDL3/i686-w64-mingw32/include/SDL3 -I../windeps/SDL3_ttf/i686-w64-mingw32/include
-LDFLAGS += -L../windeps/SDL3/i686-w64-mingw32/lib -L../windeps/SDL3_ttf/i686-w64-mingw32/lib
+CFLAGS  += -I../deps/win/SDL3/i686-w64-mingw32/include -I../deps/win/SDL3/i686-w64-mingw32/include/SDL3 -I../deps/win/SDL3_ttf/i686-w64-mingw32/include
+CXXFLAGS  += -I../deps/win/SDL3/i686-w64-mingw32/include -I../deps/win/SDL3/i686-w64-mingw32/include/SDL3 -I../deps/win/SDL3_ttf/i686-w64-mingw32/include
+LDFLAGS += -L../deps/win/SDL3/i686-w64-mingw32/lib -L../deps/win/SDL3_ttf/i686-w64-mingw32/lib
 else
-CFLAGS  += -I../windeps/SDL3/x86_64-w64-mingw32/include -I../windeps/SDL3/x86_64-w64-mingw32/include/SDL3 -I../windeps/SDL3_ttf/x86_64-w64-mingw32/include
-CXXFLAGS  += -I../windeps/SDL3/x86_64-w64-mingw32/include -I../windeps/SDL3/x86_64-w64-mingw32/include/SDL3 -I../windeps/SDL3_ttf/x86_64-w64-mingw32/include
-LDFLAGS += -L../windeps/SDL3/x86_64-w64-mingw32/lib -L../windeps/SDL3_ttf/x86_64-w64-mingw32/lib
+CFLAGS  += -I../deps/win/SDL3/x86_64-w64-mingw32/include -I../deps/win/SDL3/x86_64-w64-mingw32/include/SDL3 -I../deps/win/SDL3_ttf/x86_64-w64-mingw32/include
+CXXFLAGS  += -I../deps/win/SDL3/x86_64-w64-mingw32/include -I../deps/win/SDL3/x86_64-w64-mingw32/include/SDL3 -I../deps/win/SDL3_ttf/x86_64-w64-mingw32/include
+LDFLAGS += -L../deps/win/SDL3/x86_64-w64-mingw32/lib -L../deps/win/SDL3_ttf/x86_64-w64-mingw32/lib
 endif
 
 LIBS = \
@@ -98,9 +98,9 @@ $(TARGET_LIB).dll: ${OBJ}
 	@$(DLLTOOL) -e $(OBJ_DIR)exports.o -d $(OBJ_DIR)$(TARGET_LIB).def -l $(TARGET_OUT)$(TARGET_LIB).lib $(OBJ)
 	${LD} -shared $(LDFLAGS) ${OBJ} $(OBJ_DIR)exports.o -Wl,--subsystem,windows -o $(TARGET_OUT)${TARGET_LIB}.dll ${LIBS}
 ifeq ($(BITS),32)
-	@$(shell cp ../windeps/SDL3_ttf/i686-w64-mingw32/bin/SDL3_ttf.dll ../windeps/SDL3/i686-w64-mingw32/bin/SDL3.dll $(TARGET_OUT) 2>/dev/null || true)
+	@$(shell cp ../deps/win/SDL3_ttf/i686-w64-mingw32/bin/SDL3_ttf.dll ../deps/win/SDL3/i686-w64-mingw32/bin/SDL3.dll $(TARGET_OUT) 2>/dev/null || true)
 else
-	@$(shell cp ../windeps/SDL3_ttf/x86_64-w64-mingw32/bin/SDL3_ttf.dll ../windeps/SDL3/x86_64-w64-mingw32/bin/SDL3.dll $(TARGET_OUT) 2>/dev/null || true)
+	@$(shell cp ../deps/win/SDL3_ttf/x86_64-w64-mingw32/bin/SDL3_ttf.dll ../deps/win/SDL3/x86_64-w64-mingw32/bin/SDL3.dll $(TARGET_OUT) 2>/dev/null || true)
 endif
 
 ifeq ($(USE_BASSMIDI),1)
@@ -113,20 +113,20 @@ endif
 
 ifeq ($(USE_FLUIDSYNTH),1)
 ifeq ($(BITS),32)
-	@$(shell cp ../windeps/FluidSynth/i686-w64-mingw32/bin/libfluidsynth-3.dll $(TARGET_OUT) 2>/dev/null || true)
-	@$(shell cp ../windeps/FluidSynth/i686-w64-mingw32/bin/sndfile.dll $(TARGET_OUT) 2>/dev/null || true)
+	@$(shell cp ../deps/win/FluidSynth/i686-w64-mingw32/bin/libfluidsynth-3.dll $(TARGET_OUT) 2>/dev/null || true)
+	@$(shell cp ../deps/win/FluidSynth/i686-w64-mingw32/bin/sndfile.dll $(TARGET_OUT) 2>/dev/null || true)
 else
-	@$(shell cp ../windeps/FluidSynth/x86_64-w64-mingw32/bin/libfluidsynth-3.dll $(TARGET_OUT) 2>/dev/null || true)
-	@$(shell cp ../windeps/FluidSynth/x86_64-w64-mingw32/bin/sndfile.dll $(TARGET_OUT) 2>/dev/null || true)
+	@$(shell cp ../deps/win/FluidSynth/x86_64-w64-mingw32/bin/libfluidsynth-3.dll $(TARGET_OUT) 2>/dev/null || true)
+	@$(shell cp ../deps/win/FluidSynth/x86_64-w64-mingw32/bin/sndfile.dll $(TARGET_OUT) 2>/dev/null || true)
 endif
 endif
 
 ifeq ($(BITS),32)
-	@$(shell cp ../windeps/SDL3/i686-w64-mingw32/bin/SDL3.dll $(TARGET_OUT) 2>/dev/null || true)
-	@$(shell cp ../windeps/SDL3_ttf/i686-w64-mingw32/bin/SDL3_ttf.dll $(TARGET_OUT) 2>/dev/null || true)
+	@$(shell cp ../deps/win/SDL3/i686-w64-mingw32/bin/SDL3.dll $(TARGET_OUT) 2>/dev/null || true)
+	@$(shell cp ../deps/win/SDL3_ttf/i686-w64-mingw32/bin/SDL3_ttf.dll $(TARGET_OUT) 2>/dev/null || true)
 else
-	@$(shell cp ../windeps/SDL3_ttf/x86_64-w64-mingw32/bin/SDL3.dll $(TARGET_OUT) 2>/dev/null || true)
-	@$(shell cp ../windeps/SDL3_ttf/x86_64-w64-mingw32/bin/SDL3_ttf.dll $(TARGET_OUT) 2>/dev/null || true)
+	@$(shell cp ../deps/win/SDL3_ttf/x86_64-w64-mingw32/bin/SDL3.dll $(TARGET_OUT) 2>/dev/null || true)
+	@$(shell cp ../deps/win/SDL3_ttf/x86_64-w64-mingw32/bin/SDL3_ttf.dll $(TARGET_OUT) 2>/dev/null || true)
 endif
 
 

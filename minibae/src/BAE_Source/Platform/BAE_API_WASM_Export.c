@@ -11,18 +11,19 @@
 #include <stdint.h>
 #include <stdio.h>
 
-// Debug output control - set to 0 to disable all console logging
-#define BAE_DEBUG 1
-
-#if BAE_DEBUG
-#define BAE_LOG(...) printf(__VA_ARGS__)
-#else
-#define BAE_LOG(...) ((void)0)
+#if USE_SF2_SUPPORT
+    #if _USING_FLUIDSYNTH
+        #include "GenSF2_FluidSynth.h"
+        #if USE_XMF_SUPPORT
+            #include "GenXMF.h"
+        #endif
+    #endif
 #endif
 
 // Include miniBAE headers
 #include "MiniBAE.h"
 #include "X_API.h"
+#include "X_Assert.h"
 #include "GenSnd.h"
 #include "GenPriv.h"  // for MusicGlobals (mixer cache)
 #include "GenPriv.h"
@@ -33,7 +34,7 @@ static BAESong gCurrentSong = NULL;
 static BAESong gEffectSong = NULL;  // Second song for sound effects (plays on top)
 
 // Audio buffer for JS interop
-#define AUDIO_BUFFER_FRAMES 512
+#define AUDIO_BUFFER_FRAMES 4096
 static int16_t gAudioBuffer[AUDIO_BUFFER_FRAMES * 2];  // Stereo
 
 // External function from GenSynth.c
@@ -113,25 +114,95 @@ int BAE_WASM_LoadSoundbank(const uint8_t* data, int length) {
     BAEResult err;
     BAEBankToken token = NULL;
 
-    BAE_LOG("[BAE] LoadSoundbank: data=%p, length=%d\n", (void*)data, length);
-    BAE_LOG("[BAE] LoadSoundbank: Header bytes: %02X %02X %02X %02X\n",
+    BAE_PRINTF("[BAE] LoadSoundbank: data=%p, length=%d\n", (void*)data, length);
+    BAE_PRINTF("[BAE] LoadSoundbank: Header bytes: %02X %02X %02X %02X\n",
            data[0], data[1], data[2], data[3]);
 
     if (gMixer == NULL) {
-        BAE_LOG("[BAE] LoadSoundbank: ERROR - gMixer is NULL\n");
+        BAE_PRINTF("[BAE] LoadSoundbank: ERROR - gMixer is NULL\n");
         return -1;  // Not initialized
     }
 
     // Unload existing banks
-    BAE_LOG("[BAE] LoadSoundbank: Unloading existing banks...\n");
+    BAE_PRINTF("[BAE] LoadSoundbank: Unloading existing banks...\n");
     BAEMixer_UnloadBanks(gMixer);
 
+#if USE_SF2_SUPPORT == TRUE
+    GM_UnloadSF2Soundfont();
+    GM_SetMixerSF2Mode(FALSE);
+    
+    // Detect soundbank type by header
+    // RIFF format: bytes 0-3 = "RIFF", bytes 8-11 = format identifier
+    // SF2: "RIFF" + "sfbk" at offset 8
+    // DLS: "RIFF" + "DLS " at offset 8
+    int isSF2 = 0;
+    int isDLS = 0;
+    
+    if (length >= 12 && 
+        data[0] == 'R' && data[1] == 'I' && data[2] == 'F' && data[3] == 'F') {
+        // Check format identifier at offset 8
+        if (data[8] == 's' && data[9] == 'f' && data[10] == 'b' && data[11] == 'k') {
+            isSF2 = 1;
+            BAE_PRINTF("[BAE] LoadSoundbank: Detected SF2 format\n");
+        }
+#if _USING_FLUIDSYNTH == TRUE
+        else if (data[8] == 'D' && data[9] == 'L' && data[10] == 'S' && data[11] == ' ') {
+            isDLS = 1;
+            BAE_PRINTF("[BAE] LoadSoundbank: Detected DLS format\n");
+        }
+#endif
+    }
+    
+    if (isSF2
+#if _USING_FLUIDSYNTH == TRUE
+        || isDLS
+#endif
+       )
+    {
+        BAE_PRINTF("[BAE] LoadSoundbank: Loading SF2/DLS via temp file (WASM workaround)...\n");
+        
+        // WASM workaround: Write to temp file and load from file
+        // FluidSynth's memory loader seems to have issues in WASM
+        const char *tmpfile = "/tmp/soundbank.sf2";
+        FILE *fp = fopen(tmpfile, "wb");
+        if (!fp) {
+            BAE_PRINTF("[BAE] LoadSoundbank: Failed to create temp file\n");
+            return -1;
+        }
+        
+        size_t written = fwrite(data, 1, (size_t)length, fp);
+        fclose(fp);
+        
+        if (written != (size_t)length) {
+            BAE_PRINTF("[BAE] LoadSoundbank: Failed to write complete data (%zu/%d)\n", written, length);
+            return -1;
+        }
+        
+        BAE_PRINTF("[BAE] LoadSoundbank: Wrote %zu bytes to %s\n", written, tmpfile);
+        
+        // Load from file instead
+        OPErr sfErr = GM_LoadSF2Soundfont(tmpfile);
+        BAE_PRINTF("[BAE] LoadSoundbank: GM_LoadSF2Soundfont returned %d\n", sfErr);
+        
+        if (sfErr != NO_ERR)
+        {
+            BAE_PRINTF("[BAE] LoadSoundbank: SF2/DLS bank load failed: %d\n", sfErr);
+            return (int)sfErr;
+        }
+
+        // Enable SF2 mode for the mixer (GM_LoadSF2Soundfont already does this, but just to be sure)
+        GM_SetMixerSF2Mode(TRUE);
+        BAE_PRINTF("[BAE] LoadSoundbank: SF2/DLS SUCCESS\n");
+        return 0;
+    }
+#endif
+
     // Add bank from memory
-    BAE_LOG("[BAE] LoadSoundbank: Adding bank from memory...\n");
+    BAE_PRINTF("[BAE] LoadSoundbank: Adding bank from memory...\n");
     err = BAEMixer_AddBankFromMemory(gMixer, (void*)data, (unsigned long)length, &token);
-    BAE_LOG("[BAE] LoadSoundbank: AddBankFromMemory result=%d\n", (int)err);
+    BAE_PRINTF("[BAE] LoadSoundbank: AddBankFromMemory result=%d\n", (int)err);
     if (err != BAE_NO_ERROR) {
-        BAE_LOG("[BAE] LoadSoundbank: ERROR - AddBankFromMemory failed with code %d\n", (int)err);
+        BAE_PRINTF("[BAE] LoadSoundbank: ERROR - AddBankFromMemory failed with code %d\n", (int)err);
         return (int)err;
     }
 
@@ -141,7 +212,7 @@ int BAE_WASM_LoadSoundbank(const uint8_t* data, int length) {
         XFileUseThisResourceFile((XFILE)token);
     }
 
-    BAE_LOG("[BAE] LoadSoundbank: SUCCESS\n");
+    BAE_PRINTF("[BAE] LoadSoundbank: SUCCESS\n");
     return 0;
 }
 
@@ -162,64 +233,64 @@ EMSCRIPTEN_KEEPALIVE
 int BAE_WASM_LoadSong(const uint8_t* data, int length) {
     BAEResult err;
 
-    BAE_LOG("[BAE] LoadSong: data=%p, length=%d\n", (void*)data, length);
+    BAE_PRINTF("[BAE] LoadSong: data=%p, length=%d\n", (void*)data, length);
 
     if (gMixer == NULL) {
-        BAE_LOG("[BAE] LoadSong: ERROR - gMixer is NULL\n");
+        BAE_PRINTF("[BAE] LoadSong: ERROR - gMixer is NULL\n");
         return -1;
     }
-    BAE_LOG("[BAE] LoadSong: gMixer=%p\n", (void*)gMixer);
+    BAE_PRINTF("[BAE] LoadSong: gMixer=%p\n", (void*)gMixer);
 
     // Stop and delete existing song
     if (gCurrentSong != NULL) {
-        BAE_LOG("[BAE] LoadSong: Stopping/deleting existing song\n");
+        BAE_PRINTF("[BAE] LoadSong: Stopping/deleting existing song\n");
         BAESong_Stop(gCurrentSong, FALSE);
         BAESong_Delete(gCurrentSong);
         gCurrentSong = NULL;
     }
 
     // Create new song
-    BAE_LOG("[BAE] LoadSong: Creating new BAESong...\n");
+    BAE_PRINTF("[BAE] LoadSong: Creating new BAESong...\n");
     gCurrentSong = BAESong_New(gMixer);
     if (gCurrentSong == NULL) {
-        BAE_LOG("[BAE] LoadSong: ERROR - BAESong_New returned NULL\n");
+        BAE_PRINTF("[BAE] LoadSong: ERROR - BAESong_New returned NULL\n");
         return -2;
     }
-    BAE_LOG("[BAE] LoadSong: BAESong created=%p\n", (void*)gCurrentSong);
+    BAE_PRINTF("[BAE] LoadSong: BAESong created=%p\n", (void*)gCurrentSong);
 
     // Load from memory - detect file type
     if (isRmfFile(data, length)) {
-        BAE_LOG("[BAE] LoadSong: Detected RMF file, loading...\n");
+        BAE_PRINTF("[BAE] LoadSong: Detected RMF file, loading...\n");
         // RMF: song, data, size, songIndex, ignoreBadInstruments
         err = BAESong_LoadRmfFromMemory(gCurrentSong, (void*)data, (unsigned long)length, 0, TRUE);
     } else {
-        BAE_LOG("[BAE] LoadSong: Detected MIDI file (magic: %02X %02X %02X %02X), loading...\n",
+        BAE_PRINTF("[BAE] LoadSong: Detected MIDI file (magic: %02X %02X %02X %02X), loading...\n",
                data[0], data[1], data[2], data[3]);
         // MIDI: song, data, size, ignoreBadInstruments
         err = BAESong_LoadMidiFromMemory(gCurrentSong, (void*)data, (unsigned long)length, TRUE);
     }
 
-    BAE_LOG("[BAE] LoadSong: Load result=%d\n", (int)err);
+    BAE_PRINTF("[BAE] LoadSong: Load result=%d\n", (int)err);
 
     if (err != BAE_NO_ERROR) {
-        BAE_LOG("[BAE] LoadSong: ERROR - Load failed with code %d\n", (int)err);
+        BAE_PRINTF("[BAE] LoadSong: ERROR - Load failed with code %d\n", (int)err);
         BAESong_Delete(gCurrentSong);
         gCurrentSong = NULL;
         return (int)err;
     }
 
     // Preroll (load instruments)
-    BAE_LOG("[BAE] LoadSong: Prerolling...\n");
+    BAE_PRINTF("[BAE] LoadSong: Prerolling...\n");
     err = BAESong_Preroll(gCurrentSong);
-    BAE_LOG("[BAE] LoadSong: Preroll result=%d\n", (int)err);
+    BAE_PRINTF("[BAE] LoadSong: Preroll result=%d\n", (int)err);
     if (err != BAE_NO_ERROR) {
-        BAE_LOG("[BAE] LoadSong: ERROR - Preroll failed with code %d\n", (int)err);
+        BAE_PRINTF("[BAE] LoadSong: ERROR - Preroll failed with code %d\n", (int)err);
         BAESong_Delete(gCurrentSong);
         gCurrentSong = NULL;
         return (int)err;
     }
 
-    BAE_LOG("[BAE] LoadSong: SUCCESS\n");
+    BAE_PRINTF("[BAE] LoadSong: SUCCESS\n");
     return 0;
 }
 
@@ -228,9 +299,9 @@ int BAE_WASM_LoadSong(const uint8_t* data, int length) {
  */
 EMSCRIPTEN_KEEPALIVE
 int BAE_WASM_Play(void) {
-    BAE_LOG("[BAE] Play: gCurrentSong=%p\n", (void*)gCurrentSong);
+    BAE_PRINTF("[BAE] Play: gCurrentSong=%p\n", (void*)gCurrentSong);
     if (gCurrentSong == NULL) {
-        BAE_LOG("[BAE] Play: ERROR - no song loaded\n");
+        BAE_PRINTF("[BAE] Play: ERROR - no song loaded\n");
         return -1;
     }
 
@@ -238,7 +309,7 @@ int BAE_WASM_Play(void) {
     GM_ResumeGeneralSound(NULL);
 
     BAEResult err = BAESong_Start(gCurrentSong, 0);
-    BAE_LOG("[BAE] Play: BAESong_Start returned %d\n", (int)err);
+    BAE_PRINTF("[BAE] Play: BAESong_Start returned %d\n", (int)err);
     return (int)err;
 }
 
@@ -462,8 +533,8 @@ int16_t* BAE_WASM_GenerateAudio(int frames) {
     gGenerateAudioCallCount++;
 
     // Log every 100 calls to avoid spam
-    if (BAE_DEBUG && (gGenerateAudioCallCount <= 5 || (gGenerateAudioCallCount % 100) == 0)) {
-        BAE_LOG("[BAE] GenerateAudio: call #%d, frames=%d, gMixer=%p\n",
+    if ((gGenerateAudioCallCount <= 5 || (gGenerateAudioCallCount % 100) == 0)) {
+        BAE_PRINTF("[BAE] GenerateAudio: call #%d, frames=%d, gMixer=%p\n",
                gGenerateAudioCallCount, frames, (void*)gMixer);
     }
 
@@ -499,8 +570,8 @@ int16_t* BAE_WASM_GenerateAudio(int frames) {
     }
 
     // Log first few samples for debugging (only first 5 calls)
-    if (BAE_DEBUG && gGenerateAudioCallCount <= 5) {
-        BAE_LOG("[BAE] GenerateAudio: first samples: %d %d %d %d\n",
+    if (gGenerateAudioCallCount <= 5) {
+        BAE_PRINTF("[BAE] GenerateAudio: first samples: %d %d %d %d\n",
                gAudioBuffer[0], gAudioBuffer[1], gAudioBuffer[2], gAudioBuffer[3]);
     }
 
@@ -650,9 +721,9 @@ int BAE_WASM_GetTrackSoloStatus(int track) {
  */
 EMSCRIPTEN_KEEPALIVE
 int BAE_WASM_ProgramChange(int channel, int program) {
-    BAE_LOG("[BAE] ProgramChange: channel=%d program=%d song=%p\n", channel, program, (void*)gCurrentSong);
+    BAE_PRINTF("[BAE] ProgramChange: channel=%d program=%d song=%p\n", channel, program, (void*)gCurrentSong);
     if (gCurrentSong == NULL || channel < 0 || channel > 15 || program < 0 || program > 127) {
-        BAE_LOG("[BAE] ProgramChange: INVALID - returning -1\n");
+        BAE_PRINTF("[BAE] ProgramChange: INVALID - returning -1\n");
         return -1;
     }
 
@@ -662,18 +733,18 @@ int BAE_WASM_ProgramChange(int channel, int program) {
 
     // First do the program change
     err = BAESong_ProgramChange(gCurrentSong, baeChannel, (unsigned char)program, 0);
-    BAE_LOG("[BAE] ProgramChange: ProgramChange result=%d\n", (int)err);
+    BAE_PRINTF("[BAE] ProgramChange: ProgramChange result=%d\n", (int)err);
 
     // Now use NoteOnWithLoad to force the instrument to load
     // Use middle C (note 60) with velocity 0 - this loads but doesn't play
     // Actually, velocity 0 is treated as NoteOff, so use velocity 1 then NoteOff
     err = BAESong_NoteOnWithLoad(gCurrentSong, baeChannel, 60, 1, 0);
-    BAE_LOG("[BAE] ProgramChange: NoteOnWithLoad result=%d\n", (int)err);
+    BAE_PRINTF("[BAE] ProgramChange: NoteOnWithLoad result=%d\n", (int)err);
 
     // Immediately send NoteOff so we don't hear a blip
     // NoteOff takes: song, channel, note, velocity, time
     err = BAESong_NoteOff(gCurrentSong, baeChannel, 60, 0, 0);
-    BAE_LOG("[BAE] ProgramChange: NoteOff result=%d\n", (int)err);
+    BAE_PRINTF("[BAE] ProgramChange: NoteOff result=%d\n", (int)err);
 
     return 0;  // Return success if we got this far
 }
@@ -686,10 +757,10 @@ int BAE_WASM_ProgramChange(int channel, int program) {
  */
 EMSCRIPTEN_KEEPALIVE
 int BAE_WASM_ProgramBankChange(int channel, int bank, int program) {
-    BAE_LOG("[BAE] ProgramBankChange: channel=%d bank=%d program=%d song=%p\n", channel, bank, program, (void*)gCurrentSong);
+    BAE_PRINTF("[BAE] ProgramBankChange: channel=%d bank=%d program=%d song=%p\n", channel, bank, program, (void*)gCurrentSong);
     if (gCurrentSong == NULL || channel < 0 || channel > 15 ||
         bank < 0 || bank > 127 || program < 0 || program > 127) {
-        BAE_LOG("[BAE] ProgramBankChange: INVALID - returning -1\n");
+        BAE_PRINTF("[BAE] ProgramBankChange: INVALID - returning -1\n");
         return -1;
     }
 
@@ -700,7 +771,7 @@ int BAE_WASM_ProgramBankChange(int channel, int bank, int program) {
                                                (unsigned char)program,
                                                (unsigned char)bank,
                                                0);  // time = 0 for immediate
-    BAE_LOG("[BAE] ProgramBankChange: result=%d\n", (int)err);
+    BAE_PRINTF("[BAE] ProgramBankChange: result=%d\n", (int)err);
     return (int)err;
 }
 
@@ -723,11 +794,11 @@ int BAE_WASM_LoadEffect(const uint8_t* data, int length) {
     BAEResult err;
 
     if (gMixer == NULL) {
-        BAE_LOG("[BAE] LoadEffect: ERROR - mixer not initialized\n");
+        BAE_PRINTF("[BAE] LoadEffect: ERROR - mixer not initialized\n");
         return -1;
     }
 
-    BAE_LOG("[BAE] LoadEffect: data=%p, length=%d\n", (void*)data, length);
+    BAE_PRINTF("[BAE] LoadEffect: data=%p, length=%d\n", (void*)data, length);
 
     // Clean up any previous effect
     if (gEffectSong != NULL) {
@@ -742,35 +813,35 @@ int BAE_WASM_LoadEffect(const uint8_t* data, int length) {
 
     // For RMF files, first add as a bank so embedded samples can be found
     if (length >= 4 && data[0] == 'I' && data[1] == 'R' && data[2] == 'E' && data[3] == 'Z') {
-        BAE_LOG("[BAE] LoadEffect: Adding RMF as bank for embedded samples...\n");
+        BAE_PRINTF("[BAE] LoadEffect: Adding RMF as bank for embedded samples...\n");
         err = BAEMixer_AddBankFromMemory(gMixer, (void*)data, (unsigned long)length, &gEffectBankToken);
         if (err != BAE_NO_ERROR) {
-            BAE_LOG("[BAE] LoadEffect: AddBankFromMemory warning=%d (continuing anyway)\n", (int)err);
+            BAE_PRINTF("[BAE] LoadEffect: AddBankFromMemory warning=%d (continuing anyway)\n", (int)err);
         } else {
             // Bring to front so it's searched first
             BAEMixer_BringBankToFront(gMixer, gEffectBankToken);
-            BAE_LOG("[BAE] LoadEffect: Bank added and brought to front\n");
+            BAE_PRINTF("[BAE] LoadEffect: Bank added and brought to front\n");
         }
     }
 
     // Create new effect song
     gEffectSong = BAESong_New(gMixer);
     if (gEffectSong == NULL) {
-        BAE_LOG("[BAE] LoadEffect: ERROR - failed to create BAESong\n");
+        BAE_PRINTF("[BAE] LoadEffect: ERROR - failed to create BAESong\n");
         return -2;
     }
 
     // Detect format and load (use TRUE for ignoreBadInstruments like main song)
     if (length >= 4 && data[0] == 'I' && data[1] == 'R' && data[2] == 'E' && data[3] == 'Z') {
-        BAE_LOG("[BAE] LoadEffect: Loading RMF song...\n");
+        BAE_PRINTF("[BAE] LoadEffect: Loading RMF song...\n");
         err = BAESong_LoadRmfFromMemory(gEffectSong, (void*)data, (unsigned long)length, 0, TRUE);
     } else {
-        BAE_LOG("[BAE] LoadEffect: Loading MIDI song...\n");
+        BAE_PRINTF("[BAE] LoadEffect: Loading MIDI song...\n");
         err = BAESong_LoadMidiFromMemory(gEffectSong, (void*)data, (unsigned long)length, TRUE);
     }
 
     if (err != BAE_NO_ERROR) {
-        BAE_LOG("[BAE] LoadEffect: Load error=%d\n", (int)err);
+        BAE_PRINTF("[BAE] LoadEffect: Load error=%d\n", (int)err);
         BAESong_Delete(gEffectSong);
         gEffectSong = NULL;
         return (int)err;
@@ -779,10 +850,10 @@ int BAE_WASM_LoadEffect(const uint8_t* data, int length) {
     // Preroll to prepare for playback
     err = BAESong_Preroll(gEffectSong);
     if (err != BAE_NO_ERROR) {
-        BAE_LOG("[BAE] LoadEffect: Preroll warning=%d (continuing anyway)\n", (int)err);
+        BAE_PRINTF("[BAE] LoadEffect: Preroll warning=%d (continuing anyway)\n", (int)err);
     }
 
-    BAE_LOG("[BAE] LoadEffect: SUCCESS\n");
+    BAE_PRINTF("[BAE] LoadEffect: SUCCESS\n");
     return 0;
 }
 
@@ -792,13 +863,13 @@ int BAE_WASM_LoadEffect(const uint8_t* data, int length) {
 EMSCRIPTEN_KEEPALIVE
 int BAE_WASM_PlayEffect(void) {
     if (gEffectSong == NULL) {
-        BAE_LOG("[BAE] PlayEffect: ERROR - no effect loaded\n");
+        BAE_PRINTF("[BAE] PlayEffect: ERROR - no effect loaded\n");
         return -1;
     }
 
-    BAE_LOG("[BAE] PlayEffect: Starting effect song\n");
+    BAE_PRINTF("[BAE] PlayEffect: Starting effect song\n");
     BAEResult err = BAESong_Start(gEffectSong, 0);
-    BAE_LOG("[BAE] PlayEffect: result=%d\n", (int)err);
+    BAE_PRINTF("[BAE] PlayEffect: result=%d\n", (int)err);
     return (int)err;
 }
 
@@ -811,7 +882,7 @@ int BAE_WASM_StopEffect(void) {
         return 0;  // Nothing to stop
     }
 
-    BAE_LOG("[BAE] StopEffect: Stopping effect song\n");
+    BAE_PRINTF("[BAE] StopEffect: Stopping effect song\n");
     BAEResult err = BAESong_Stop(gEffectSong, FALSE);
     return (int)err;
 }
@@ -849,7 +920,7 @@ int BAE_WASM_GetProgram(int channel) {
         return -1;
     }
 
-    BAE_LOG("[BAE] GetProgram: channel=%d program=%d bank=%d\n", channel, program, bank);
+    BAE_PRINTF("[BAE] GetProgram: channel=%d program=%d bank=%d\n", channel, program, bank);
     return (int)program;
 }
 
@@ -874,11 +945,11 @@ int BAE_WASM_LoadSampleBank(const uint8_t* data, int length) {
     BAEResult err;
 
     if (gMixer == NULL) {
-        BAE_LOG("[BAE] LoadSampleBank: ERROR - mixer not initialized\n");
+        BAE_PRINTF("[BAE] LoadSampleBank: ERROR - mixer not initialized\n");
         return -1;
     }
 
-    BAE_LOG("[BAE] LoadSampleBank: data=%p, length=%d\n", (void*)data, length);
+    BAE_PRINTF("[BAE] LoadSampleBank: data=%p, length=%d\n", (void*)data, length);
 
     // Unload previous sample bank if any
     if (gSampleBankToken != NULL) {
@@ -889,7 +960,7 @@ int BAE_WASM_LoadSampleBank(const uint8_t* data, int length) {
     // Add this RMF as a bank
     err = BAEMixer_AddBankFromMemory(gMixer, (void*)data, (unsigned long)length, &gSampleBankToken);
     if (err != BAE_NO_ERROR) {
-        BAE_LOG("[BAE] LoadSampleBank: AddBankFromMemory failed with error %d\n", (int)err);
+        BAE_PRINTF("[BAE] LoadSampleBank: AddBankFromMemory failed with error %d\n", (int)err);
         return (int)err;
     }
 
@@ -898,7 +969,7 @@ int BAE_WASM_LoadSampleBank(const uint8_t* data, int length) {
         BAEMixer_BringBankToFront(gMixer, gSampleBankToken);
     }
 
-    BAE_LOG("[BAE] LoadSampleBank: SUCCESS, token=%p\n", (void*)gSampleBankToken);
+    BAE_PRINTF("[BAE] LoadSampleBank: SUCCESS, token=%p\n", (void*)gSampleBankToken);
     return 0;
 }
 
@@ -918,19 +989,19 @@ int BAE_WASM_TriggerSample(int bank, int program, int note, int velocity) {
     BAEResult err;
 
     if (gMixer == NULL) {
-        BAE_LOG("[BAE] TriggerSample: ERROR - mixer not initialized\n");
+        BAE_PRINTF("[BAE] TriggerSample: ERROR - mixer not initialized\n");
         return -1;
     }
 
-    BAE_LOG("[BAE] TriggerSample: bank=%d program=%d note=%d velocity=%d\n",
+    BAE_PRINTF("[BAE] TriggerSample: bank=%d program=%d note=%d velocity=%d\n",
            bank, program, note, velocity);
 
     // Create a dedicated song for sample triggering if needed
     if (gSampleTriggerSong == NULL) {
-        BAE_LOG("[BAE] TriggerSample: Creating dedicated sample trigger song\n");
+        BAE_PRINTF("[BAE] TriggerSample: Creating dedicated sample trigger song\n");
         gSampleTriggerSong = BAESong_New(gMixer);
         if (gSampleTriggerSong == NULL) {
-            BAE_LOG("[BAE] TriggerSample: ERROR - failed to create trigger song\n");
+            BAE_PRINTF("[BAE] TriggerSample: ERROR - failed to create trigger song\n");
             return -2;
         }
         // Start the song so it can process MIDI events
@@ -942,15 +1013,15 @@ int BAE_WASM_TriggerSample(int bank, int program, int note, int velocity) {
 
     // Set bank select (CC 0 = bank MSB)
     err = BAESong_ControlChange(gSampleTriggerSong, channel, 0, (unsigned char)bank, 0);
-    BAE_LOG("[BAE] TriggerSample: Bank select result=%d\n", (int)err);
+    BAE_PRINTF("[BAE] TriggerSample: Bank select result=%d\n", (int)err);
 
     // Program change
     err = BAESong_ProgramChange(gSampleTriggerSong, channel, (unsigned char)program, 0);
-    BAE_LOG("[BAE] TriggerSample: Program change result=%d\n", (int)err);
+    BAE_PRINTF("[BAE] TriggerSample: Program change result=%d\n", (int)err);
 
     // Send NoteOn with load (will load instrument if needed)
     err = BAESong_NoteOnWithLoad(gSampleTriggerSong, channel, (unsigned char)note, (unsigned char)velocity, 0);
-    BAE_LOG("[BAE] TriggerSample: NoteOnWithLoad result=%d\n", (int)err);
+    BAE_PRINTF("[BAE] TriggerSample: NoteOnWithLoad result=%d\n", (int)err);
 
     return (int)err;
 }

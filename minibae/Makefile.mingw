@@ -65,12 +65,12 @@ LIBS   = \
 
 ifeq ($(USE_SDL3),1)
     ifeq ($(BITS),32)
-        CFLAGS   += -I../windeps/SDL3/i686-w64-mingw32/include
-        LDFLAGS  += -L../windeps/SDL3/i686-w64-mingw32/lib
+        CFLAGS   += -I../deps/win/SDL3/i686-w64-mingw32/include
+        LDFLAGS  += -L../deps/win/SDL3/i686-w64-mingw32/lib
         TARGET_NAME := playbae_sdl2_x32
     else
-        CFLAGS    += -I../windeps/SDL3/x86_64-w64-mingw32/include
-        LDFLAGS   += -L../windeps/SDL3/x86_64-w64-mingw32/lib
+        CFLAGS    += -I../deps/win/SDL3/x86_64-w64-mingw32/include
+        LDFLAGS   += -L../deps/win/SDL3/x86_64-w64-mingw32/lib
         TARGET_NAME := playbae_sdl2_x64
     endif
     # Override LIBS completely for SDL build to enforce correct ordering
@@ -119,13 +119,13 @@ endif
 
 ifeq ($(USE_FLUIDSYNTH),1)
 ifeq ($(BITS),32)
-	@$(shell cp ../windeps/FluidSynth/i686-w64-mingw32/bin/libfluidsynth-3.dll $(TARGET_OUT) 2>/dev/null || true)
-	@$(shell cp ../windeps/FluidSynth/i686-w64-mingw32/bin/sndfile.dll $(TARGET_OUT) 2>/dev/null || true)
-	@cp ../windeps/SDL3/i686-w64-mingw32/bin/SDL3.dll $(TARGET_OUT)
+	@$(shell cp ../deps/win/FluidSynth/i686-w64-mingw32/bin/libfluidsynth-3.dll $(TARGET_OUT) 2>/dev/null || true)
+	@$(shell cp ../deps/win/FluidSynth/i686-w64-mingw32/bin/sndfile.dll $(TARGET_OUT) 2>/dev/null || true)
+	@cp ../deps/win/SDL3/i686-w64-mingw32/bin/SDL3.dll $(TARGET_OUT)
 else
-	@$(shell cp ../windeps/FluidSynth/x86_64-w64-mingw32/bin/libfluidsynth-3.dll $(TARGET_OUT) 2>/dev/null || true)
-	@$(shell cp ../windeps/FluidSynth/x86_64-w64-mingw32/bin/sndfile.dll $(TARGET_OUT) 2>/dev/null || true)
-	@cp ../windeps/SDL3/x86_64-w64-mingw32/bin/SDL3.dll $(TARGET_OUT)
+	@$(shell cp ../deps/win/FluidSynth/x86_64-w64-mingw32/bin/libfluidsynth-3.dll $(TARGET_OUT) 2>/dev/null || true)
+	@$(shell cp ../deps/win/FluidSynth/x86_64-w64-mingw32/bin/sndfile.dll $(TARGET_OUT) 2>/dev/null || true)
+	@cp ../deps/win/SDL3/x86_64-w64-mingw32/bin/SDL3.dll $(TARGET_OUT)
 endif
 endif
 

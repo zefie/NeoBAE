@@ -44,39 +44,6 @@
             background-clip: text;
         }
 
-        .preset-section {
-            margin-bottom: 25px;
-        }
-
-        .preset-label {
-            font-size: 16px;
-            font-weight: 500;
-            margin-bottom: 8px;
-            color: #e0e7ff;
-        }
-
-        .preset-select {
-            width: 100%;
-            padding: 12px 16px;
-            border-radius: 10px;
-            border: 1px solid rgba(168, 85, 247, 0.3);
-            background: rgba(0, 0, 0, 0.2);
-            color: #ffffff;
-            font-size: 16px;
-            transition: all 0.3s ease;
-        }
-
-        .preset-select:focus {
-            outline: none;
-            border-color: #a855f7;
-            box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.2);
-        }
-
-        .preset-select option {
-            background: #2d1b4e;
-            color: #ffffff;
-        }
-
         .controls-section {
             display: flex;
             flex-direction: column;
@@ -219,31 +186,30 @@
 
         .vu-meters {
             display: flex;
-            gap: 15px;
-            justify-content: center;
-            align-items: center;
+            flex-direction: column;
+            gap: 10px;
             margin-top: 20px;
-            padding: 20px;
+            padding: 15px 20px;
             background: rgba(0, 0, 0, 0.2);
             border-radius: 15px;
         }
 
         .vu-meter {
             display: flex;
-            flex-direction: column;
             align-items: center;
-            gap: 10px;
+            gap: 12px;
         }
 
         .vu-label {
             font-size: 12px;
             font-weight: 600;
             color: #e0e7ff;
+            min-width: 15px;
         }
 
         .vu-bar {
-            width: 20px;
-            height: 120px;
+            flex: 1;
+            height: 20px;
             background: rgba(255, 255, 255, 0.1);
             border-radius: 10px;
             position: relative;
@@ -252,16 +218,16 @@
 
         .vu-level {
             position: absolute;
-            bottom: 0;
-            width: 100%;
-            background: linear-gradient(to top, 
+            left: 0;
+            height: 100%;
+            background: linear-gradient(to right, 
                 #10b981 0%, 
                 #10b981 50%, 
                 #f59e0b 70%, 
                 #ef4444 90%);
             border-radius: 10px;
-            transition: height 0.1s ease;
-            height: 0%;
+            transition: width 0.1s ease;
+            width: 0%;
         }
 
         .status {
@@ -296,16 +262,6 @@
 <body>
     <div class="player-container">
         <h1 class="player-title">miniBAE Player</h1>
-
-        <div class="preset-section">
-            <label class="preset-label" for="presetSelect">Select Preset:</label>
-            <select id="presetSelect" class="preset-select">
-                <option value="">-- Choose a preset --</option>
-                <option value="preset1">world1.mid (WebTV Classic)</option>
-                <option value="preset2">royal.mid (WebTV Plus)</option>
-                <option value="preset3">hyperactive.rmf (Beatnik Pro)</option>
-            </select>
-        </div>
 
         <div class="controls-section">
             <div class="playback-controls">
@@ -349,7 +305,7 @@
             </div>
         </div>
 
-        <div id="status" class="status">Ready to load preset...</div>
+        <div id="status" class="status">Ready...</div>
     </div>
 
     <script src="./player.js"></script>
@@ -359,33 +315,105 @@
             constructor() {
                 this.player = null;
                 this.isLooping = false;
-                this.presets = {
-                    preset1: {
-                        name: "world1.mid (WebTV Classic)",
-                        bank: "./content/minibae-wtv.hsb",
-                        media: "./content/world1.mid"
-                    },
-                    preset2: {
-                        name: "royal.mid (WebTV Plus)", 
-                        bank: "./content/patches-wtv-uncompressed.hsb",
-                        media: "./content/royal.mid"
-                    },
-                    preset3: {
-                        name: "hyperactive.rmf (Beatnik Pro)",
-                        bank: "./content/patchesp.hsb", 
-                        media: "./content/hyperactive.rmf"
-                    }
-                };
+				this.default_bank_mid = "/content/PatchBanks/SF3/GeneralUser-GS.sf3"
+                this.default_bank_rmf = "/content/PatchBanks/HSB/patchesp.hsb"
+
+                // Get file parameter from URL
+                const urlParams = new URLSearchParams(window.location.search);
+                const fileName = urlParams.get('file');
+                const customBank = urlParams.get('bank');
+
+                // Detect file type and set appropriate bank
+                if (fileName && fileName.toLowerCase().endsWith('.rmf')) {
+                    this.bank = customBank || this.default_bank_rmf;
+                } else {
+                    this.bank = customBank || this.default_bank_mid;
+                }
 
                 this.initElements();
                 this.bindEvents();
-                this.initPlayer();
-                this.startVUMeterUpdates();
+                this.waitForAudioContext().then(() => {
+                    this.initPlayer().then(() => {
+                        if (fileName) {
+                            this.load(fileName, this.bank);
+                        } else {
+                            this.updateStatus('No file specified in URL. Please provide a "file" parameter.', 'error');
+                        }
+                        this.startVUMeterUpdates();
+                    });
+                });
             }
+            
+           async waitForAudioContext() {
+                // Create overlay elements
+                const overlay = document.createElement('div');
+                overlay.style.cssText = `
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    width: 100%;
+                    height: 100%;
+                    background: rgba(0, 0, 0, 0.9);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    z-index: 9999;
+                    cursor: pointer;
+                `;
+
+                const message = document.createElement('div');
+                message.style.cssText = `
+                    text-align: center;
+                    padding: 40px;
+                    background: rgba(168, 85, 247, 0.2);
+                    border: 2px solid rgba(168, 85, 247, 0.5);
+                    border-radius: 20px;
+                    backdrop-filter: blur(10px);
+                `;
+                message.innerHTML = `
+                    <h2 style="font-size: 32px; margin-bottom: 20px; background: linear-gradient(45deg, #a855f7, #ec4899); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">
+                        Click to Start
+                    </h2>
+                    <p style="font-size: 18px; color: #e0e7ff;">
+                        Click anywhere to enable audio playback
+                    </p>
+                `;
+
+                overlay.appendChild(message);
+                document.body.appendChild(overlay);
+
+                return new Promise((resolve) => {
+                    const handleClick = () => {
+                        overlay.remove();
+                        resolve();
+                    };
+
+                    overlay.addEventListener('click', handleClick, { once: true });
+                });
+            }
+            async load(fileName, bank) {
+                const displayFileName = fileName.split('/').pop();
+                const displayBank = bank.split('/').pop();
+                this.updateStatus(`Loading ${displayBank}...`, 'loading');
+
+                this.player.loadSoundbank(bank).then(() => {
+                    this.updateStatus(`${displayBank} loaded successfully`, 'success');
+                    this.player.load(fileName).then(() => {
+                        this.elements.playBtn.disabled = false;
+                        this.updateStatus(`${displayFileName} loaded successfully`, 'success');
+                    }).catch((error) => {
+                        this.updateStatus(`Failed to load ${displayFileName}: ${error.message}`, 'error');
+                        console.error('Load error:', error);
+                    });
+                }).catch((error) => {
+                    this.updateStatus(`Failed to load ${displayBank}: ${error.message}`, 'error');
+                    console.error('Load error:', error);
+                });                
+            }
+            
 
             initElements() {
                 this.elements = {
-                    presetSelect: document.getElementById('presetSelect'),
                     playBtn: document.getElementById('playBtn'),
                     pauseBtn: document.getElementById('pauseBtn'),
                     stopBtn: document.getElementById('stopBtn'),
@@ -402,12 +430,6 @@
             }
 
             bindEvents() {
-                this.elements.presetSelect.addEventListener('change', (e) => {
-                    if (e.target.value) {
-                        this.loadPreset(e.target.value);
-                    }
-                });
-
                 this.elements.playBtn.addEventListener('click', () => this.play());
                 this.elements.pauseBtn.addEventListener('click', () => this.pause());
                 this.elements.stopBtn.addEventListener('click', () => this.stop());
@@ -441,7 +463,7 @@
 
                     // Add event handlers BEFORE initialization
                     this.player.addEventListener('ready', () => {
-                        this.updateStatus('Audio engine ready. Please select a preset.', 'success');
+                        this.updateStatus('Audio engine ready.', 'success');
                     });
 
                     this.player.addEventListener('play', () => {
@@ -489,28 +511,6 @@
                 } catch (error) {
                     this.updateStatus(`Failed to initialize: ${error.message}`, 'error');
                     console.error('Init error:', error);
-                }
-            }
-
-            async loadPreset(presetId) {
-                const preset = this.presets[presetId];
-                if (!preset) return;
-
-                try {
-                    this.updateStatus(`Loading ${preset.name}...`, 'loading');
-                    
-                    // Load soundbank first
-                    await this.player.loadSoundbank(preset.bank);
-                    
-                    // Then load the media
-                    await this.player.load(preset.media);
-                    
-                    this.elements.playBtn.disabled = false;
-                    this.updateStatus(`${preset.name} loaded successfully`, 'success');
-                    
-                } catch (error) {
-                    this.updateStatus(`Failed to load ${preset.name}: ${error.message}`, 'error');
-                    console.error('Load error:', error);
                 }
             }
 
@@ -581,8 +581,8 @@
                         const rightLevel = this.calculateRMS(rightData);
                         
                         // Update VU meters
-                        this.elements.vuLeft.style.height = `${leftLevel}%`;
-                        this.elements.vuRight.style.height = `${rightLevel}%`;
+                        this.elements.vuLeft.style.width = `${leftLevel}%`;
+                        this.elements.vuRight.style.width = `${rightLevel}%`;
                     }
                     
                     requestAnimationFrame(updateVU);
