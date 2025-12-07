@@ -6,6 +6,7 @@
 #include "gui_text.h"
 #include "gui_theme.h"
 #include "gui_panels.h"
+#include "gui_bae.h"
 #include "MiniBAE.h"
 #include "BAE_API.h"
 #include <stdio.h>
@@ -33,34 +34,6 @@ int g_about_page = 0;
 #include "rtmidi_c.h"
 #include "gui_midi_hw.h"
 #endif
-
-// Forward declare the BAEGUI structure (defined in gui_main.old.c)
-typedef struct
-{
-    BAEMixer mixer;
-    BAESong song;
-    BAESound sound;
-    uint32_t song_length_us;
-    bool song_loaded;
-    bool is_audio_file;
-    bool is_rmf_file;
-    bool paused;
-    bool is_playing;
-    bool was_playing_before_export;
-    bool loop_enabled_gui;
-    bool loop_was_enabled_before_export;
-    uint32_t position_us_before_export;
-    bool audio_engaged_before_export;
-    char loaded_path[1024];
-    bool preserve_position_on_next_start;
-    uint32_t preserved_start_position_us;
-    bool song_finished;
-    BAEBankToken bank_token;
-    char bank_name[256];
-    bool bank_loaded;
-    char status_message[256];
-    Uint32 status_message_time;
-} BAEGUI;
 
 // External globals
 extern BAEGUI g_bae;
