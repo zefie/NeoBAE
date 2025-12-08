@@ -162,7 +162,7 @@ char *open_file_dialog(void)
 {
 #ifdef _WIN32
 /* Compile-time built extension list, Windows Style*/
-static const char AUDIO_EXT_FILTER[] =
+static const char AUDIO_EXT_FILTER[] =    
 #if USE_FLAC_DECODER == TRUE
     "*.flac;"
 #else
@@ -203,11 +203,11 @@ static const char AUDIO_EXT_FILTER[] =
     {
         char pattern[512];
         /* include the always-available patterns plus the compiled-in ones */
-        snprintf(pattern, sizeof(pattern), "*.mid;*.midi;*.kar;*.rmf;%s", AUDIO_EXT_FILTER);
+        snprintf(pattern, sizeof(pattern), "*.mid;*.midi;*.kar;*.rmi;*.rmf;%s", AUDIO_EXT_FILTER);
         /* Remove possible duplicate separators if AUDIO_EXT_FILTER is empty */
         APPEND_STR(pattern);
     }
-    APPEND_STR("MIDI Files"); APPEND_STR("*.mid;*.midi;*.kar");
+    APPEND_STR("MIDI Files"); APPEND_STR("*.mid;*.midi;*.kar;*.rmi");
 #if USE_XMF_SUPPORT == TRUE && _USING_FLUIDSYNTH == TRUE
     APPEND_STR("XMF Files"); APPEND_STR("*.xmf;*.mxmf");
 #endif
@@ -240,6 +240,7 @@ static const char AUDIO_EXT_FILTER[] =
 #else
 /* Compile-time built extension list, Linux Style */
 static const char AUDIO_EXT_FILTER[] =
+    "*.mid *.midi *.kar *.rmi *.rmf "
 #if USE_FLAC_DECODER == TRUE
     "*.flac "
 #else
@@ -266,8 +267,8 @@ static const char AUDIO_EXT_FILTER[] =
          AUDIO_EXT_FILTER on Unix is a space-separated list like "*.flac *.mp3 ...". */
      char cmd_zenity[1024];
      char cmd_kdialog[1024];
-     snprintf(cmd_zenity, sizeof(cmd_zenity), "zenity --file-selection --title='Open Media File' --file-filter='Supported Files | *.mid *.midi *.kar *.rmf %s' --file-filter='All Files | *' 2>/dev/null", AUDIO_EXT_FILTER);
-     snprintf(cmd_kdialog, sizeof(cmd_kdialog), "kdialog --getopenfilename . '*.mid *.midi *.kar *.rmf %s' 2>/dev/null", AUDIO_EXT_FILTER);
+     snprintf(cmd_zenity, sizeof(cmd_zenity), "zenity --file-selection --title='Open Media File' --file-filter='Supported Files | %s' --file-filter='All Files | *' 2>/dev/null", AUDIO_EXT_FILTER);
+     snprintf(cmd_kdialog, sizeof(cmd_kdialog), "kdialog --getopenfilename . '%s' 2>/dev/null", AUDIO_EXT_FILTER);
      const char *cmds[] = { cmd_zenity, cmd_kdialog, "yad --file-selection --title='Open Media File' 2>/dev/null", NULL };
     for (int i = 0; cmds[i]; ++i)
     {

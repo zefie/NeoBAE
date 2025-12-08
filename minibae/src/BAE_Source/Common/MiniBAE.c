@@ -155,6 +155,7 @@
 #include "X_API.h"
 #include "GenSnd.h"
 #include "GenPriv.h"
+#include "GenRMI.h"
 #include "X_Formats.h"
 #include "BAE_API.h"
 #include "X_Assert.h"
@@ -7015,12 +7016,42 @@ BAEResult BAESong_LoadMidiFromMemory(BAESong song, void const *pMidiData, uint32
     GM_Song *pSong;
     short soundVoices, midiVoices, mixLevel;
     char *title;
+    unsigned char *extractedMidi = NULL;
+    uint32_t extractedMidiLen = 0;
+    XBOOL wasRMI = FALSE;
 
     theErr = NO_ERR;
     if ((song) && (song->mID == OBJECT_ID))
     {
         BAE_AcquireMutex(song->mLock);
-        pMidiData = XDuplicateMemory((XPTRC)pMidiData, (XDWORD)midiSize);
+        
+#if USE_FULL_RMF_SUPPORT == TRUE || USE_CREATION_API == TRUE
+        // Check if this is an RMI file and extract MIDI + DLS
+        if (GM_IsRMIFile((const unsigned char *)pMidiData, midiSize))
+        {
+            BAE_PRINTF("[BAE] Detected RMI file format\n");
+            theErr = GM_LoadRMIFromMemory((const unsigned char *)pMidiData, midiSize,
+                                          &extractedMidi, &extractedMidiLen, TRUE);
+            if (theErr == NO_ERR && extractedMidi)
+            {
+                wasRMI = TRUE;
+                pMidiData = extractedMidi;
+                midiSize = extractedMidiLen;
+            }
+            else
+            {
+                BAE_PRINTF("[BAE] Failed to parse RMI file (error %d)\n", theErr);
+                BAE_ReleaseMutex(song->mLock);
+                return BAE_TranslateOPErr(theErr);
+            }
+        }
+        else
+#endif
+        {
+            pMidiData = XDuplicateMemory((XPTRC)pMidiData, (XDWORD)midiSize);
+        }
+        
+        // Note: extractedMidi is already allocated, don't duplicate again
         if (pMidiData && midiSize)
         {
             theID = midiSongCount++; // runtime midi ID
@@ -7100,6 +7131,13 @@ BAEResult BAESong_LoadMidiFromMemory(BAESong song, void const *pMidiData, uint32
         {
             theErr = PARAM_ERR;
         }
+        
+        // Clean up RMI extraction if it was used
+        if (wasRMI && extractedMidi && theErr != NO_ERR)
+        {
+            XDisposePtr(extractedMidi);
+        }
+        
         BAE_ReleaseMutex(song->mLock);
     }
     else
@@ -7130,6 +7168,29 @@ BAEResult BAESong_LoadMidiFromFile(BAESong song, BAEPathName filePath, BAE_BOOL 
         BAE_AcquireMutex(song->mLock);
         XConvertPathToXFILENAME(filePath, &name);
         pMidiData = PV_GetFileAsData(&name, &midiSize);
+        
+#if USE_FULL_RMF_SUPPORT == TRUE || USE_CREATION_API == TRUE
+        // Check if this is an RMI file and extract MIDI + DLS
+        if (pMidiData && GM_IsRMIFile((const unsigned char *)pMidiData, midiSize))
+        {
+            unsigned char *extractedMidi = NULL;
+            uint32_t extractedMidiLen = 0;
+            BAE_PRINTF("[BAE] Detected RMI file format in file\n");
+            theErr = GM_LoadRMIFromMemory((const unsigned char *)pMidiData, midiSize,
+                                          &extractedMidi, &extractedMidiLen, TRUE);
+            XDisposePtr(pMidiData); // Free original file data
+            if (theErr == NO_ERR && extractedMidi)
+            {
+                pMidiData = extractedMidi;
+                midiSize = extractedMidiLen;
+            }
+            else
+            {
+                BAE_PRINTF("[BAE] Failed to parse RMI file from disk (error %d)\n", theErr);
+                pMidiData = NULL;
+            }
+        }
+#endif
         if (pMidiData)
         {
             theID = midiSongCount++; // runtime midi ID
