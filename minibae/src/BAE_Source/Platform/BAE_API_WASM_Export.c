@@ -39,9 +39,21 @@ static BAESong gEffectSong = NULL;  // Second song for sound effects (plays on t
 #define AUDIO_BUFFER_FRAMES 512
 static int16_t gAudioBuffer[AUDIO_BUFFER_FRAMES * 2];  // Stereo
 
+// Ring buffer for smooth streaming (prevent clicks/pops)
+#define RING_BUFFER_SLICES 8  // Number of slices to buffer (8 * 512 frames = 4096 frames ~ 93ms @ 44.1kHz)
+#define SLICE_FRAMES AUDIO_BUFFER_FRAMES
+static int16_t gRingBuffer[RING_BUFFER_SLICES * SLICE_FRAMES * 2];  // Stereo
+static int gRingWritePos = 0;   // Write position in samples (not frames)
+static int gRingReadPos = 0;    // Read position in samples
+static int gRingAvailable = 0;  // Available samples in ring buffer
+
 // External function from GenSynth.c
 extern void BAE_BuildMixerSlice(void *threadContext, void *pAudioBuffer,
                                 int32_t bufferByteLength, int32_t sampleFrames);
+
+// Forward declarations for internal helper functions
+static void PV_ResetRingBuffer(void);
+static void PV_FillRingBufferSlice(void);
 
 /*
  * Initialize the Beatnik Audio Engine
@@ -294,6 +306,9 @@ int BAE_WASM_LoadSong(const uint8_t* data, int length) {
         return (int)err;
     }
 
+    // Clear ring buffer to prevent stale audio from previous song
+    PV_ResetRingBuffer();
+
     BAE_PRINTF("[BAE] LoadSong: SUCCESS\n");
     return 0;
 }
@@ -355,6 +370,10 @@ int BAE_WASM_Stop(void) {
     }
 
     BAESong_Stop(gCurrentSong, TRUE);
+    
+    // Clear ring buffer to prevent stale audio
+    PV_ResetRingBuffer();
+    
     return 0;
 }
 
@@ -550,8 +569,67 @@ int BAE_WASM_GetOutputGain(void) {
 }
 
 /*
+ * Reset the ring buffer (clears buffered audio)
+ * Internal helper - call when stopping/loading songs to prevent stale audio
+ */
+static void PV_ResetRingBuffer(void) {
+    gRingWritePos = 0;
+    gRingReadPos = 0;
+    gRingAvailable = 0;
+    // Optionally zero the buffer to ensure silence
+    memset(gRingBuffer, 0, sizeof(gRingBuffer));
+}
+
+/*
+ * Fill the ring buffer with one slice of audio
+ * Internal helper function - generates audio and adds to ring buffer
+ */
+static void PV_FillRingBufferSlice(void) {
+    if (gMixer == NULL) {
+        return;
+    }
+
+    const int totalSamples = RING_BUFFER_SLICES * SLICE_FRAMES * 2;  // Total ring buffer size in samples
+    
+    // Check if we have room for another slice
+    if (gRingAvailable + (SLICE_FRAMES * 2) > totalSamples) {
+        // Ring buffer is full, skip generation
+        return;
+    }
+
+    // Generate one slice directly into a temp buffer
+    int16_t tempSlice[SLICE_FRAMES * 2];
+    long bufferByteLength = SLICE_FRAMES * 2 * sizeof(int16_t);
+    
+    // Generate audio using BAE's mixer
+    BAE_BuildMixerSlice(NULL, (void*)tempSlice, bufferByteLength, SLICE_FRAMES);
+
+    // Apply output gain and soft limiting
+    if (gOutputGain != 256) {
+        int sliceSamples = SLICE_FRAMES * 2;
+        for (int i = 0; i < sliceSamples; i++) {
+            int32_t sample = tempSlice[i];
+            sample = (sample * gOutputGain) >> 8;
+            if (sample > 32767) sample = 32767;
+            else if (sample < -32768) sample = -32768;
+            tempSlice[i] = (int16_t)sample;
+        }
+    }
+
+    // Copy to ring buffer (handle wrap-around)
+    int sliceSamples = SLICE_FRAMES * 2;
+    for (int i = 0; i < sliceSamples; i++) {
+        gRingBuffer[gRingWritePos] = tempSlice[i];
+        gRingWritePos = (gRingWritePos + 1) % totalSamples;
+    }
+    
+    gRingAvailable += sliceSamples;
+}
+
+/*
  * Generate audio samples into buffer
  * Called from AudioWorklet
+ * Uses ring buffer for smooth streaming (prevents clicks/pops)
  * Returns: pointer to audio buffer (interleaved stereo 16-bit)
  */
 EMSCRIPTEN_KEEPALIVE
@@ -560,8 +638,8 @@ int16_t* BAE_WASM_GenerateAudio(int frames) {
 
     // Log every 100 calls to avoid spam
     if ((gGenerateAudioCallCount <= 5 || (gGenerateAudioCallCount % 100) == 0)) {
-        BAE_PRINTF("[BAE] GenerateAudio: call #%d, frames=%d, gMixer=%p\n",
-               gGenerateAudioCallCount, frames, (void*)gMixer);
+        BAE_PRINTF("[BAE] GenerateAudio: call #%d, frames=%d, gMixer=%p, buffered=%d samples\n",
+               gGenerateAudioCallCount, frames, (void*)gMixer, gRingAvailable);
     }
 
     if (gMixer == NULL) {
@@ -575,23 +653,39 @@ int16_t* BAE_WASM_GenerateAudio(int frames) {
         frames = AUDIO_BUFFER_FRAMES;
     }
 
-    // Calculate buffer byte length (stereo 16-bit)
-    long bufferByteLength = frames * 2 * sizeof(int16_t);
+    const int totalSamples = RING_BUFFER_SLICES * SLICE_FRAMES * 2;
+    int samplesNeeded = frames * 2;  // Stereo
 
-    // Generate audio using BAE's mixer slice function
-    BAE_BuildMixerSlice(NULL, (void*)gAudioBuffer, bufferByteLength, frames);
+    // Fill ring buffer if we're running low (maintain at least 2 slices buffered)
+    while (gRingAvailable < (SLICE_FRAMES * 2 * 2)) {  // Less than 2 slices? Fill more
+        PV_FillRingBufferSlice();
+    }
 
-    // Apply output gain and soft limiting to prevent harsh clipping
-    if (gOutputGain != 256) {
-        int totalSamples = frames * 2;  // Stereo
-        for (int i = 0; i < totalSamples; i++) {
-            int32_t sample = gAudioBuffer[i];
-            // Apply gain
-            sample = (sample * gOutputGain) >> 8;
-            // Soft clip to prevent harsh distortion
-            if (sample > 32767) sample = 32767;
-            else if (sample < -32768) sample = -32768;
-            gAudioBuffer[i] = (int16_t)sample;
+    // Read from ring buffer
+    if (gRingAvailable >= samplesNeeded) {
+        // Enough data available - copy from ring buffer
+        for (int i = 0; i < samplesNeeded; i++) {
+            gAudioBuffer[i] = gRingBuffer[gRingReadPos];
+            gRingReadPos = (gRingReadPos + 1) % totalSamples;
+        }
+        gRingAvailable -= samplesNeeded;
+    } else {
+        // Not enough data - copy what we have and fill rest with silence
+        int availableSamples = gRingAvailable;
+        int i;
+        for (i = 0; i < availableSamples; i++) {
+            gAudioBuffer[i] = gRingBuffer[gRingReadPos];
+            gRingReadPos = (gRingReadPos + 1) % totalSamples;
+        }
+        // Fill remaining with silence
+        for (; i < samplesNeeded; i++) {
+            gAudioBuffer[i] = 0;
+        }
+        gRingAvailable = 0;
+        
+        if (gGenerateAudioCallCount <= 10 || (gGenerateAudioCallCount % 100) == 0) {
+            BAE_PRINTF("[BAE] GenerateAudio: UNDERRUN - only had %d/%d samples\n",
+                   availableSamples, samplesNeeded);
         }
     }
 
