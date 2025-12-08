@@ -1059,6 +1059,7 @@ int main(int argc, char *argv[])
             }
 #endif
             duration = bae_get_len_ms();
+            g_bae.loop_enabled_gui = loopPlay;
             playing = false;    // Ensure we start from stopped state
             bae_play(&playing); // Auto-start playback
         }
