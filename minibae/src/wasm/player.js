@@ -1,961 +1,1041 @@
-/**
- * Beatnik Web SDK
- *
- * JavaScript API for playing MIDI and RMF files using the Beatnik Audio Engine
- * compiled to WebAssembly.
- */
-
-class BeatnikPlayer {
+class MiniBAEPlayer {
     constructor() {
-        this._wasmModule = null;
-        this._audioContext = null;
-        this._workletNode = null;
-        this._isInitialized = false;
-        this._isPlaying = false;
-        this._soundbankLoaded = false;
-        this._songLoaded = false;
-        this._stopping = false;
+        this.player = null;
+        this.isLooping = true;
+        this.isPaused = false;
+        this.channelMutes = new Array(16).fill(false);
+        this.transpose = 0;
+        this.tempo = 100;
+        this.default_media_file = "/content/RMF/Other/trance.rmf";
+        this.default_bank_mid = "/content/PatchBanks/SF3/GeneralUser-GS.sf3";
+        this.default_bank_rmf = "/content/PatchBanks/HSB/patchesp.hsb";
+        this.default_reverb = 7; // Early Reflections
 
-        // Event handlers
-        this._eventListeners = {
-            ready: [],
-            play: [],
-            pause: [],
-            stop: [],
-            end: [],
-            error: [],
-            timeupdate: []
-        };
-
-        // Internal state
-        this._volume = 1.0;
-        this._tempo = 1.0;
-        this._transpose = 0;
-        this._reverbType = 3; // Acoustic Lab (Beatnik default)
-        this._outputGain = 0.5; // Default -6dB to reduce distortion on hot mixes
-
-        // Memory pointers that must stay alive
-        this._soundbankPtr = null;
-
-        // Song data for export
-        this._songData = null;
-
-        // Time update interval
-        this._timeUpdateInterval = null;
-    }
-
-    /**
-     * Initialize the Beatnik engine
-     * @param {Object} options - Configuration options
-     * @param {number} [options.sampleRate=44100] - Audio sample rate
-     * @param {number} [options.maxVoices=64] - Maximum polyphony
-     * @param {string} [options.soundbankUrl] - URL to preload soundbank
-     * @returns {Promise<BeatnikPlayer>}
-     */
-    static async init(options = {}) {
-        const player = new BeatnikPlayer();
-        await player._init(options);
-        return player;
-    }
-
-    async _init(options) {
-        const {
-            sampleRate = 44100,
-            maxVoices = 64,
-            soundbankUrl = null
-        } = options;
-
-        try {
-            // Load WebAssembly module
-            console.log('Waiting for Beatnik WebAssembly module (engine.js)...');
-            this._wasmModule = await this._waitForWasm();
-
-            // Create AudioContext
-            this._audioContext = new (window.AudioContext || window.webkitAudioContext)({
-                sampleRate: sampleRate
-            });
-
-            // Initialize BAE in WASM
-            const result = this._wasmModule._BAE_WASM_Init(sampleRate, maxVoices);
-            if (result !== 0) {
-                throw new Error(`Failed to initialize Beatnik engine: error ${result}`);
-            }
-
-            console.log("Beatnik engine initialized");
-
-            // Set up audio processing
-            await this._setupAudioWorklet();
-
-            // Apply default output gain (reduces distortion on hot mixes)
-            this._wasmModule._BAE_WASM_SetOutputGain(Math.floor(this._outputGain * 256));
-
-            // Preload soundbank if specified
-            if (soundbankUrl) {
-                await this.loadSoundbank(soundbankUrl);
-            }
-
-            this._isInitialized = true;
-
-            this._dispatchEvent('ready');
-
-        } catch (error) {
-            this._dispatchEvent('error', error);
-            throw error;
-        }
-    }
-
-    async _waitForWasm() {
-        // BeatnikModule should be loaded from engine.js
-        // Wait for it to be available (it's loaded via script tag)
-        let attempts = 0;
-        while (typeof BeatnikModule === 'undefined' && attempts < 100) {
-            await new Promise(r => setTimeout(r, 50));
-            attempts++;
-        }
-
-        if (typeof BeatnikModule === 'undefined') {
-            throw new Error('BeatnikModule not loaded. Make sure minibae.js is included.');
-        }
-
-        // Initialize the Emscripten module
-        const module = await BeatnikModule();
-        return module;
-    }
-
-    async _setupAudioWorklet() {
-        // AudioWorklet path is stubbed; use ScriptProcessorNode for now
-        this._setupScriptProcessor();
-    }
-
-    _setupScriptProcessor() {
-        // Match the native mixer buffer (AUDIO_BUFFER_FRAMES) to avoid underruns/clicks
-        const bufferSize = 512;
-        const processor = this._audioContext.createScriptProcessor(bufferSize, 0, 2);
-
-        processor.onaudioprocess = (event) => {
-            if (!this._isPlaying || !this._wasmModule) {
-                return;
-            }
-
-            const left = event.outputBuffer.getChannelData(0);
-            const right = event.outputBuffer.getChannelData(1);
-            const frames = left.length;
-
-            // Generate audio in WASM
-            const bufferPtr = this._wasmModule._BAE_WASM_GenerateAudio(frames);
-
-            // Copy from WASM memory to output buffers
-            const wasmBuffer = new Int16Array(
-                this._wasmModule.HEAP16.buffer,
-                bufferPtr,
-                frames * 2
-            );
-
-            // Convert 16-bit samples to float and deinterleave
-            for (let i = 0; i < frames; i++) {
-                left[i] = wasmBuffer[i * 2] / 32768.0;
-                right[i] = wasmBuffer[i * 2 + 1] / 32768.0;
-            }
-        };
-
-        // Create analyser nodes for VU meter / audioscope
-        this._analyserLeft = this._audioContext.createAnalyser();
-        this._analyserRight = this._audioContext.createAnalyser();
-        this._analyserLeft.fftSize = 256;
-        this._analyserRight.fftSize = 256;
-        this._analyserLeft.smoothingTimeConstant = 0.8;
-        this._analyserRight.smoothingTimeConstant = 0.8;
-
-        // Create channel splitter to separate L/R for analysers
-        const splitter = this._audioContext.createChannelSplitter(2);
-
-        // Connect: processor -> splitter -> analysers (for monitoring)
-        //          processor -> destination (for playback)
-        processor.connect(splitter);
-        splitter.connect(this._analyserLeft, 0);
-        splitter.connect(this._analyserRight, 1);
-        processor.connect(this._audioContext.destination);
-
-        this._workletNode = processor;
-    }
-
-    /**
-     * Get the left channel analyser node for VU meter / audioscope
-     * @returns {AnalyserNode|null}
-     */
-    get analyserLeft() {
-        return this._analyserLeft || null;
-    }
-
-    /**
-     * Get the right channel analyser node for VU meter / audioscope
-     * @returns {AnalyserNode|null}
-     */
-    get analyserRight() {
-        return this._analyserRight || null;
-    }
-
-    /**
-     * Load a soundbank file
-     * @param {string|ArrayBuffer} source - URL or ArrayBuffer of HSB/GM file
-     * @returns {Promise<void>}
-     */
-    async loadSoundbank(source) {
-        if (!this._isInitialized) {
-            const error = new Error('BeatnikPlayer not initialized');
-            this._dispatchEvent('error', error);
-            throw error;
-        }
+        // Get file parameter from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const fileName = urlParams.get('file') !== null ? urlParams.get('file') : this.default_media_file;
+        const customBank = urlParams.get('bank') !== null ? urlParams.get('bank') : this.default_bank_rmf;
         
-        try {
-            let data;
-            if (typeof source === 'string') {
-                // Fetch from URL
-                const response = await fetch(source);
-                if (!response.ok) {
-                    throw new Error(`Failed to fetch soundbank: ${response.status} ${response.statusText}`);
-                }
-                data = await response.arrayBuffer();
-            } else {
-                data = source;
-            }
-
-            // Free previous soundbank memory if exists
-            if (this._soundbankPtr) {
-                this._wasmModule._free(this._soundbankPtr);
-                this._soundbankPtr = null;
-            }
-
-            // Copy to WASM memory
-            const ptr = this._wasmModule._malloc(data.byteLength);
-            const heapBytes = new Uint8Array(this._wasmModule.HEAPU8.buffer, ptr, data.byteLength);
-            heapBytes.set(new Uint8Array(data));
-
-            // Load in WASM
-            const result = this._wasmModule._BAE_WASM_LoadSoundbank(ptr, data.byteLength);
-
-            if (result !== 0) {
-                this._wasmModule._free(ptr);
-                const error = new Error(`Failed to load soundbank: error ${result}`);
-                this._dispatchEvent('error', error);
-                throw error;
-            }
-
-            // Keep soundbank memory alive - BAE doesn't copy it
-            this._soundbankPtr = ptr;
-            this._soundbankLoaded = true;
-        } catch (error) {
-            this._dispatchEvent('error', error);
-            throw error;
-        }
-    }
-
-    /**
-     * Load a MIDI or RMF file
-     * @param {string|ArrayBuffer} source - URL or ArrayBuffer
-     * @param {string} [type='auto'] - File type: 'midi', 'rmf', or 'auto'
-     * @returns {Promise<void>}
-     */
-    async load(source, type = 'auto') {
-        if (!this._soundbankLoaded) {
-            const error = new Error('No soundbank loaded');
-            this._dispatchEvent('error', error);
-            throw error;
-        }
-
-        try {
-            let data;
-            if (typeof source === 'string') {
-                const response = await fetch(source);
-                if (!response.ok) {
-                    throw new Error(`Failed to fetch song: ${response.status} ${response.statusText}`);
-                }
-                data = await response.arrayBuffer();
-            } else {
-                data = source;
-            }
-
-            // Copy to WASM memory
-            const ptr = this._wasmModule._malloc(data.byteLength);
-            const heapBytes = new Uint8Array(this._wasmModule.HEAPU8.buffer, ptr, data.byteLength);
-            heapBytes.set(new Uint8Array(data));
-
-            // Store song data for export
-            this._songData = new Uint8Array(data);
-
-            // Load in WASM
-            const result = this._wasmModule._BAE_WASM_LoadSong(ptr, data.byteLength);
-
-            this._wasmModule._free(ptr);
-
-            if (result !== 0) {
-                const error = new Error(`Failed to load song: error ${result}`);
-                this._dispatchEvent('error', error);
-                throw error;
-            }
-
-            this._songLoaded = true;
-
-            // Apply current settings
-            this.volume = this._volume;
-            this.tempo = this._tempo;
-            this.transpose = this._transpose;
-            this.reverbType = this._reverbType;
-            this.outputGain = this._outputGain;
-        } catch (error) {
-            this._dispatchEvent('error', error);
-            throw error;
-        }
-    }
-
-    /**
-     * Start playback
-     */
-    play() {
-        try {
-            if (!this._songLoaded) {
-                const error = new Error('No song loaded');
-                this._dispatchEvent('error', error);
-                throw error;
-            }
-
-            // Resume audio context if suspended (browser autoplay policy)
-            if (this._audioContext.state === 'suspended') {
-                this._audioContext.resume();
-            }
-
-            const result = this._wasmModule._BAE_WASM_Play();
-            if (result !== 0) {
-                const error = new Error(`Failed to start playback: error ${result}`);
-                this._dispatchEvent('error', error);
-                throw error;
-            }
-
-            this._isPlaying = true;
-            this._startTimeUpdates();
-
-            this._dispatchEvent('play');
-        } catch (error) {
-            this._dispatchEvent('error', error);
-            throw error;
-        }
-    }
-
-    /**
-     * Pause playback
-     */
-    pause() {
-        if (!this._isPlaying) return;
-
-        this._wasmModule._BAE_WASM_Pause();
-        this._isPlaying = false;
-        this._stopTimeUpdates();
-
-        this._dispatchEvent('pause');
-    }
-
-    /**
-     * Resume playback
-     */
-    resume() {
-        if (this._isPlaying) return;
-
-        this._wasmModule._BAE_WASM_Resume();
-        this._isPlaying = true;
-        this._startTimeUpdates();
-
-        this._dispatchEvent('play');
-    }
-
-    /**
-     * Stop playback
-     */
-    stop() {
-        if (this._stopping) {
-            return;
-        }
-        this._stopping = true;
-        this._wasmModule._BAE_WASM_Stop();
-        this._isPlaying = false;
-        this._stopTimeUpdates();
-
-        this._dispatchEvent('stop');
-        this._stopping = false;
-    }
-
-    /**
-     * Current playback position in milliseconds
-     */
-    get currentTime() {
-        if (!this._wasmModule) return 0;
-        return this._wasmModule._BAE_WASM_GetPosition();
-    }
-
-    set currentTime(ms) {
-        if (!this._wasmModule) return;
-        this._wasmModule._BAE_WASM_SetPosition(Math.floor(ms));
-    }
-
-    /**
-     * Duration in milliseconds
-     */
-    get duration() {
-        if (!this._wasmModule) return 0;
-        return this._wasmModule._BAE_WASM_GetDuration();
-    }
-
-    /**
-     * Is currently playing
-     */
-    get isPlaying() {
-        return this._isPlaying;
-    }
-
-    /**
-     * Volume (0.0 to 1.0)
-     */
-    get volume() {
-        return this._volume;
-    }
-
-    set volume(value) {
-        this._volume = Math.max(0, Math.min(1, value));
-        if (this._wasmModule) {
-            this._wasmModule._BAE_WASM_SetVolume(Math.floor(this._volume * 100));
-        }
-    }
-
-    /**
-     * Tempo multiplier (1.0 = normal)
-     */
-    get tempo() {
-        return this._tempo;
-    }
-
-    set tempo(value) {
-        this._tempo = Math.max(0.25, Math.min(4, value));
-        if (this._wasmModule) {
-            this._wasmModule._BAE_WASM_SetTempo(Math.floor(this._tempo * 100));
-        }
-    }
-
-    /**
-     * Transpose in semitones (-12 to +12)
-     */
-    get transpose() {
-        return this._transpose;
-    }
-
-    set transpose(value) {
-        this._transpose = Math.max(-12, Math.min(12, Math.floor(value)));
-        if (this._wasmModule) {
-            this._wasmModule._BAE_WASM_SetTranspose(this._transpose);
-        }
-    }
-
-    /**
-     * Reverb type (0-11)
-     */
-    get reverbType() {
-        return this._reverbType;
-    }
-
-    set reverbType(value) {
-        this._reverbType = Math.max(0, Math.min(11, Math.floor(value)));
-        if (this._wasmModule) {
-            this._wasmModule._BAE_WASM_SetReverbType(this._reverbType);
-        }
-    }
-
-    /**
-     * Output gain (0.0 to 2.0, where 1.0 = unity gain)
-     * Use values below 1.0 to reduce distortion on loud files
-     * Default is 0.75 (~-2.5dB) to prevent clipping
-     */
-    get outputGain() {
-        return this._outputGain;
-    }
-
-    set outputGain(value) {
-        this._outputGain = Math.max(0, Math.min(2, value));
-        if (this._wasmModule) {
-            // Convert 0-2 to 0-512 (256 = unity)
-            this._wasmModule._BAE_WASM_SetOutputGain(Math.floor(this._outputGain * 256));
-        }
-    }
-
-    /**
-     * Mute/unmute a MIDI channel
-     * @param {number} channel - Channel number (0-15)
-     * @param {boolean} muted - Mute state
-     */
-    muteChannel(channel, muted) {
-        if (this._wasmModule) {
-            this._wasmModule._BAE_WASM_MuteChannel(channel, muted ? 1 : 0);
-        }
-    }
-
-    /**
-     * Mute/unmute a MIDI track
-     * @param {number} track - Track number (1-based)
-     * @param {boolean} muted - Mute state
-     */
-    muteTrack(track, muted) {
-        if (this._wasmModule) {
-            this._wasmModule._BAE_WASM_MuteTrack(track, muted ? 1 : 0);
-        }
-    }
-
-    /**
-     * Solo/unsolo a MIDI track
-     * When a track is soloed, only soloed tracks produce sound
-     * @param {number} track - Track number (1-based)
-     * @param {boolean} soloed - Solo state
-     */
-    soloTrack(track, soloed) {
-        if (this._wasmModule) {
-            this._wasmModule._BAE_WASM_SoloTrack(track, soloed ? 1 : 0);
-        }
-    }
-
-    /**
-     * Get the mute status of a track
-     * @param {number} track - Track number (1-based)
-     * @returns {boolean} True if muted
-     */
-    isTrackMuted(track) {
-        if (!this._wasmModule) return false;
-        return this._wasmModule._BAE_WASM_GetTrackMuteStatus(track) === 1;
-    }
-
-    /**
-     * Get the solo status of a track
-     * @param {number} track - Track number (1-based)
-     * @returns {boolean} True if soloed
-     */
-    isTrackSoloed(track) {
-        if (!this._wasmModule) return false;
-        return this._wasmModule._BAE_WASM_GetTrackSoloStatus(track) === 1;
-    }
-
-    /**
-     * Change the program (instrument) on a MIDI channel
-     * @param {number} channel - Channel number (0-15)
-     * @param {number} program - General MIDI program number (0-127)
-     */
-    setProgram(channel, program) {
-        if (this._wasmModule) {
-            return this._wasmModule._BAE_WASM_ProgramChange(channel, program);
-        }
-        return -1;
-    }
-
-    /**
-     * Change the program (instrument) on a MIDI channel with bank selection
-     * @param {number} channel - Channel number (0-15)
-     * @param {number} bank - Bank number (0-127)
-     * @param {number} program - General MIDI program number (0-127)
-     * @returns {number} 0 on success, error code on failure
-     */
-    setProgramBank(channel, bank, program) {
-        if (this._wasmModule) {
-            return this._wasmModule._BAE_WASM_ProgramBankChange(channel, bank, program);
-        }
-        return -1;
-    }
-
-    /**
-     * Get the current program (instrument) on a MIDI channel
-     * @param {number} channel - Channel number (0-15)
-     * @returns {number} Program number (0-127), or -1 on error
-     */
-    getProgram(channel) {
-        if (this._wasmModule) {
-            return this._wasmModule._BAE_WASM_GetProgram(channel);
-        }
-        return -1;
-    }
-
-    /**
-     * Get song metadata
-     * @param {string} key - Info key: 'title', 'composer', 'copyright', etc.
-     * @returns {string}
-     */
-    getSongInfo(key) {
-        if (!this._wasmModule || !this._songLoaded) return '';
-
-        const infoTypes = {
-            'title': 0,
-            'composer': 1,
-            'copyright': 2,
-            'performer': 3,
-            'publisher': 4
-        };
-
-        const type = infoTypes[key.toLowerCase()] ?? 0;
-        const bufferSize = 256;
-        const ptr = this._wasmModule._malloc(bufferSize);
-
-        this._wasmModule._BAE_WASM_GetSongInfo(type, ptr, bufferSize);
-
-        const result = this._wasmModule.UTF8ToString(ptr);
-        this._wasmModule._free(ptr);
-
-        return result;
-    }
-
-    /**
-     * Load an RMF/MIDI as a sound effect (plays on top of main song)
-     * @param {ArrayBuffer} data - RMF or MIDI file data
-     * @returns {Promise<number>} 0 on success, error code on failure
-     */
-    async loadEffect(data) {
-        if (!this._wasmModule) return -1;
-
-        const uint8Array = new Uint8Array(data);
-        const ptr = this._wasmModule._malloc(uint8Array.length);
-        this._wasmModule.HEAPU8.set(uint8Array, ptr);
-
-        const result = this._wasmModule._BAE_WASM_LoadEffect(ptr, uint8Array.length);
-        this._wasmModule._free(ptr);
-
-        return result;
-    }
-
-    /**
-     * Play the loaded effect (overlaid on main song)
-     * @returns {number} 0 on success, error code on failure
-     */
-    playEffect() {
-        if (this._wasmModule) {
-            return this._wasmModule._BAE_WASM_PlayEffect();
-        }
-        return -1;
-    }
-
-    /**
-     * Stop the effect song
-     * @returns {number} 0 on success
-     */
-    stopEffect() {
-        if (this._wasmModule) {
-            return this._wasmModule._BAE_WASM_StopEffect();
-        }
-        return 0;
-    }
-
-    /**
-     * Check if effect is currently playing
-     * @returns {boolean}
-     */
-    isEffectPlaying() {
-        if (this._wasmModule) {
-            return this._wasmModule._BAE_WASM_IsEffectPlaying() !== 0;
-        }
-        return false;
-    }
-
-    /**
-     * Load an RMF as a sample bank (for voice/sample RMFs without MIDI)
-     * This allows RMF files containing only samples (like voice files) to be triggered
-     * @param {ArrayBuffer} data - RMF file data
-     * @returns {Promise<number>} 0 on success, error code on failure
-     */
-    async loadSampleBank(data) {
-        if (!this._wasmModule) return -1;
-
-        const uint8Array = new Uint8Array(data);
-        const ptr = this._wasmModule._malloc(uint8Array.length);
-        this._wasmModule.HEAPU8.set(uint8Array, ptr);
-
-        const result = this._wasmModule._BAE_WASM_LoadSampleBank(ptr, uint8Array.length);
-        this._wasmModule._free(ptr);
-
-        return result;
-    }
-
-    /**
-     * Trigger a sample from a loaded sample bank
-     * @param {number} bank - Bank number (usually 2 for RMF samples)
-     * @param {number} program - Program number (usually 0)
-     * @param {number} note - MIDI note number (60 = middle C is typical)
-     * @param {number} velocity - Velocity 0-127
-     * @returns {number} 0 on success, error code on failure
-     */
-    triggerSample(bank, program, note, velocity) {
-        if (this._wasmModule) {
-            return this._wasmModule._BAE_WASM_TriggerSample(bank, program, note, velocity);
-        }
-        return -1;
-    }
-
-    _startTimeUpdates() {
-        if (this._timeUpdateInterval) return;
-
-        this._timeUpdateInterval = setInterval(() => {
-            if (!this._isPlaying) return;
-
-            // Check if song ended
-            if (this._wasmModule._BAE_WASM_IsPlaying() === 0) {
-                this._isPlaying = false;
-                this._stopTimeUpdates();
-                this._dispatchEvent('end');
-                return;
-            }
-
-            this._dispatchEvent('timeupdate', this.currentTime);
-        }, 100);
-    }
-
-    _stopTimeUpdates() {
-        if (this._timeUpdateInterval) {
-            clearInterval(this._timeUpdateInterval);
-            this._timeUpdateInterval = null;
-        }
-    }
-
-    /**
-     * Add event listener
-     * @param {string} event - Event type: 'ready', 'play', 'pause', 'stop', 'end', 'error', 'timeupdate'
-     * @param {function} listener - Event listener function
-     */
-    addEventListener(event, listener) {
-        if (this._eventListeners[event]) {
-            this._eventListeners[event].push(listener);
-        }
-    }
-
-    /**
-     * Remove event listener
-     * @param {string} event - Event type
-     * @param {function} listener - Event listener function to remove
-     */
-    removeEventListener(event, listener) {
-        if (this._eventListeners[event]) {
-            const index = this._eventListeners[event].indexOf(listener);
-            if (index > -1) {
-                this._eventListeners[event].splice(index, 1);
-            }
-        }
-    }
-
-    /**
-     * Dispatch event to all listeners
-     * @private
-     * @param {string} event - Event type
-     * @param {...any} args - Arguments to pass to listeners
-     */
-    _dispatchEvent(event, ...args) {
-        if (this._eventListeners[event]) {
-            this._eventListeners[event].forEach(listener => {
-                try {
-                    listener(...args);
-                } catch (error) {
-                    console.error(`Error in ${event} event listener:`, error);
+        // Parse and sanity check reverb (0-11 based on available types)
+        const customReverb = urlParams.get('reverb') !== null ? parseInt(urlParams.get('reverb')) : this.default_reverb;
+        
+        // Parse and sanity check transpose (-12 to 12 semitones)
+        let customTranspose = urlParams.get('transpose') !== null ? parseInt(urlParams.get('transpose')) : 0;
+        customTranspose = Math.max(-12, Math.min(12, customTranspose));
+        
+        // Parse and sanity check tempo (50 to 200%)
+        let customTempo = urlParams.get('tempo') !== null ? parseInt(urlParams.get('tempo')) : 100;
+        customTempo = Math.max(50, Math.min(200, customTempo));
+        
+        // Parse and sanity check volume (0 to 100%)
+        let customVolume = urlParams.get('volume') !== null ? parseInt(urlParams.get('volume')) : 100;
+        customVolume = Math.max(0, Math.min(100, customVolume));
+        
+        // Parse muted channels (1-indexed, comma-separated or single value)
+        const mutedParam = urlParams.get('muted');
+        const mutedChannels = new Set();
+        if (mutedParam) {
+            const channels = mutedParam.includes(',') ? mutedParam.split(',') : [mutedParam];
+            channels.forEach(ch => {
+                const channelNum = parseInt(ch.trim());
+                // Convert 1-indexed to 0-indexed and validate range (1-16)
+                if (channelNum >= 1 && channelNum <= 16) {
+                    mutedChannels.add(channelNum - 1);
                 }
             });
         }
-    }
-
-    /**
-     * Export the current song to raw audio data
-     * @param {function} onProgress - Progress callback (0.0 to 1.0)
-     * @param {number|null} duration - Duration in milliseconds to export (null = full song)
-     * @returns {Promise<{leftChannel: Float32Array, rightChannel: Float32Array, sampleRate: number}>}
-     */
-    async exportToRawAudio(onProgress, duration = null) {
-        if (!this._songLoaded) {
-            throw new Error('No song loaded');
-        }
-
-        const wasPlaying = this._isPlaying;
-        if (wasPlaying) {
-            this.stop();
-        }
-
-        // Reload the song for a clean export
-        const songData = this._songData;
-        if (!songData) {
-            throw new Error('Song data not available');
-        }
-
-        const ptr = this._wasmModule._malloc(songData.byteLength);
-        const heapBytes = new Uint8Array(this._wasmModule.HEAPU8.buffer, ptr, songData.byteLength);
-        heapBytes.set(songData);
-        this._wasmModule._BAE_WASM_LoadSong(ptr, songData.byteLength);
-        this._wasmModule._free(ptr);
-
-        // Apply current settings
-        this._wasmModule._BAE_WASM_SetVolume(Math.floor(this._volume * 100));
-        this._wasmModule._BAE_WASM_SetTempo(Math.floor(this._tempo * 100));
-        this._wasmModule._BAE_WASM_SetTranspose(this._transpose);
-        this._wasmModule._BAE_WASM_SetReverbType(this._reverbType);
-        this._wasmModule._BAE_WASM_SetOutputGain(Math.floor(this._outputGain * 256));
-
-        // Start playback for rendering
-        this._wasmModule._BAE_WASM_Play();
-
-        // Warmup frames
-        const warmupFrames = 16;
-        this._wasmModule._BAE_WASM_GenerateAudio(warmupFrames);
-
-        const sampleRate = this._audioContext.sampleRate;
-        const durationValue = duration !== null ? duration : this._wasmModule._BAE_WASM_GetDuration();
-        const totalFrames = Math.ceil(((durationValue / 1000) - 1) * sampleRate) + sampleRate;
-        const chunkSize = 512;
-
-        const leftChannel = new Float32Array(totalFrames);
-        const rightChannel = new Float32Array(totalFrames);
-
-        let framesRendered = 0;
-        while (framesRendered < totalFrames) {
-            const framesToRender = Math.min(chunkSize, totalFrames - framesRendered);
-
-            const bufferPtr = this._wasmModule._BAE_WASM_GenerateAudio(framesToRender);
-            const wasmBuffer = new Int16Array(
-                this._wasmModule.HEAP16.buffer,
-                bufferPtr,
-                framesToRender * 2
-            );
-
-            for (let i = 0; i < framesToRender; i++) {
-                leftChannel[framesRendered + i] = wasmBuffer[i * 2] / 32768.0;
-                rightChannel[framesRendered + i] = wasmBuffer[i * 2 + 1] / 32768.0;
-            }
-
-            framesRendered += framesToRender;
-            if (onProgress) {
-                onProgress(framesRendered / totalFrames);
-            }
-
-            // Yield to event loop periodically
-            if (framesRendered % (chunkSize * 20) === 0) {
-                await new Promise(r => setTimeout(r, 0));
-            }
-        }
-
-        this._wasmModule._BAE_WASM_Stop();
-
-        return { leftChannel, rightChannel, sampleRate };
-    }
-
-    /**
-     * Create a WAV file from audio data
-     * @param {Float32Array} leftChannel - Left channel audio data
-     * @param {Float32Array} rightChannel - Right channel audio data
-     * @param {number} sampleRate - Sample rate in Hz
-     * @returns {ArrayBuffer} WAV file data
-     */
-    createWavFile(leftChannel, rightChannel, sampleRate) {
-        const numChannels = 2;
-        const bitsPerSample = 16;
-        const bytesPerSample = bitsPerSample / 8;
-        const numSamples = leftChannel.length;
-        const dataSize = numSamples * numChannels * bytesPerSample;
-        const fileSize = 44 + dataSize;
-
-        const buffer = new ArrayBuffer(fileSize);
-        const view = new DataView(buffer);
-
-        const writeString = (offset, string) => {
-            for (let i = 0; i < string.length; i++) {
-                view.setUint8(offset + i, string.charCodeAt(i));
-            }
-        };
-
-        // RIFF header
-        writeString(0, 'RIFF');
-        view.setUint32(4, fileSize - 8, true);
-        writeString(8, 'WAVE');
         
-        // fmt chunk
-        writeString(12, 'fmt ');
-        view.setUint32(16, 16, true); // fmt chunk size
-        view.setUint16(20, 1, true); // audio format (PCM)
-        view.setUint16(22, numChannels, true);
-        view.setUint32(24, sampleRate, true);
-        view.setUint32(28, sampleRate * numChannels * bytesPerSample, true); // byte rate
-        view.setUint16(32, numChannels * bytesPerSample, true); // block align
-        view.setUint16(34, bitsPerSample, true);
+        // Parse loop parameter (default: enabled)
+        const customLoop = urlParams.get('loop') !== null ? urlParams.get('loop') !== '0' : true;
         
-        // data chunk
-        writeString(36, 'data');
-        view.setUint32(40, dataSize, true);
+        // Parse seek parameter (in seconds, will be validated after load)
+        const customSeek = urlParams.get('seek') !== null ? parseFloat(urlParams.get('seek')) : null;
+        
+        // Parse virtual keyboard channel (1-16, default to 1)
+        let customVkbdChannel = urlParams.get('vkbd') !== null ? parseInt(urlParams.get('vkbd')) : 1;
+        // Validate and convert to 0-indexed (0-15)
+        if (isNaN(customVkbdChannel) || customVkbdChannel < 1 || customVkbdChannel > 16) {
+            customVkbdChannel = 1; // default to channel 1
+        }
+        customVkbdChannel = customVkbdChannel - 1; // Convert to 0-indexed
+        
+        this.autostart = urlParams.get('autostart') === '1';
 
-        // Write interleaved audio data
-        let offset = 44;
-        for (let i = 0; i < numSamples; i++) {
-            // Clamp and convert to 16-bit PCM
-            const leftSample = Math.max(-1, Math.min(1, leftChannel[i]));
-            const rightSample = Math.max(-1, Math.min(1, rightChannel[i]));
+        // Detect file type and set appropriate bank
+        if (fileName && fileName.toLowerCase().endsWith('.rmf')) {
+            this.bank = customBank || this.default_bank_rmf;
+        } else {
+            this.bank = customBank || this.default_bank_mid;
+        }
+
+        this.initElements();
+        this.initChannels();
+        this.initKeyboard();
+        this.bindEvents();
+
+
+        
+        // Start loading immediately
+        if (fileName) {
+            this.initPlayer().then(() => {
+                if (this.player && this.player._wasmModule) {
+                    const versionPtr = this.player._wasmModule._BAE_WASM_GetVersionString();
+                    if (versionPtr) {
+                        const version = this.player._wasmModule.UTF8ToString(versionPtr);
+                        document.querySelector('.title-bar-text').textContent = `zefidi web player - ${version}`;
+                        // Add click handler for title bar to show features
+                        document.querySelector('.title-bar-text').style.cursor = 'pointer';
+                        document.querySelector('.title-bar-text').addEventListener('click', () => {
+                            const featuresPtr = this.player._wasmModule._BAE_WASM_GetFeatureString();
+                            if (featuresPtr) {
+                                const features = this.player._wasmModule.UTF8ToString(featuresPtr);
+                                this.showFeaturesModal(version, features);
+                            }
+                        });
+                        
+                        // Add click handler for help icon
+                        document.getElementById('helpIcon').addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            this.showHelpModal();
+                        });
+                    }                            
+                }                        
+                this.load(fileName, this.bank).then(() => {
+                    // After loading, wait for audio context if needed, then optionally autostart
+                    this.waitForAudioContext().then(() => {
+                        this.player._wasmModule._BAE_WASM_SetReverbType(customReverb);
+                        // Update dropdown to match the custom reverb setting
+                        this.elements.reverbSelect.value = customReverb.toString();
+                        
+                        // Apply custom transpose
+                        this.elements.transposeSlider.value = customTranspose;
+                        this.elements.transposeSlider.dispatchEvent(new Event('input'));
+                        
+                        // Apply custom tempo
+                        this.elements.tempoSlider.value = customTempo;
+                        this.elements.tempoSlider.dispatchEvent(new Event('input'));
+                        
+                        // Apply custom volume
+                        this.elements.volumeSlider.value = customVolume;
+                        this.elements.volumeSlider.dispatchEvent(new Event('input'));
+                        
+                        // Apply muted channels
+                        if (mutedChannels.size > 0) {
+                            const checkboxes = this.elements.channelsGrid.querySelectorAll('input[type="checkbox"]');
+                            mutedChannels.forEach(channelIndex => {
+                                if (checkboxes[channelIndex]) {
+                                    checkboxes[channelIndex].checked = false;
+                                    this.channelMutes[channelIndex] = true;
+                                    if (this.player && this.player._songLoaded) {
+                                        this.player.muteChannel(channelIndex, true);
+                                    }
+                                }
+                            });
+                        }
+                        
+                        // Apply loop setting
+                        this.isLooping = customLoop;
+                        this.elements.loopCheckbox.checked = customLoop;
+                        if (this.player && this.player._songLoaded) {
+                            this.player._wasmModule._BAE_WASM_SetLoops(this.isLooping ? 32767 : 0);
+                        }
+                        
+                        // Apply seek position with sanity checks
+                        if (customSeek !== null && this.player && this.player.duration > 0) {
+                            // Convert seconds to milliseconds and validate
+                            const seekMs = customSeek * 1000;
+                            if (!isNaN(seekMs) && seekMs >= 0 && seekMs <= this.player.duration) {
+                                this.player.currentTime = seekMs;
+                            }
+                        }
+                        
+                        // Apply virtual keyboard channel
+                        this.elements.channelSelect.value = customVkbdChannel.toString();
+                        
+                        if (this.autostart) {
+                            this.play();
+                        }
+                    });
+                });
+            });
+        } else {
+            this.updateStatus('No file specified in URL. Please provide a "file" parameter.');
+            // Still need to wait for context even if no file
+            if (this.player._audioContext.state === 'suspended')
+                this.waitForAudioContext();
+        }
+    }
+    
+    async waitForAudioContext() {
+        const overlay = document.createElement('div');
+        overlay.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.95);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            cursor: pointer;
+        `;
+
+        const message = document.createElement('div');
+        message.style.cssText = `
+            text-align: center;
+            padding: 40px;
+            background: #2d2d30;
+            border: 2px solid #007acc;
+            border-radius: 8px;
+            color: #cccccc;
+        `;
+        message.innerHTML = `
+            <h2 style="font-size: 24px; margin-bottom: 16px; color: #9cdcfe;">
+                Click to Start Audio
+            </h2>
+            <p style="font-size: 14px;">
+                Click anywhere to enable audio playback
+            </p>
+        `;
+
+        overlay.appendChild(message);
+        document.body.appendChild(overlay);
+
+        return new Promise((resolve) => {
+            // Check if audio context is already available and not suspended
+            const checkAudioContext = () => {
+                if (this.player && this.player._audioContext) {
+                    if (this.player._audioContext.state === 'running') {
+                        overlay.remove();
+                        resolve();
+                        return true;
+                    }
+                }
+                return false;
+            };
             
-            view.setInt16(offset, Math.floor(leftSample * 32767), true);
-            view.setInt16(offset + 2, Math.floor(rightSample * 32767), true);
-            offset += 4;
-        }
-
-        return buffer;
-    }
-
-    /**
-     * Clean up resources
-     */
-    dispose() {
-        this._stopTimeUpdates();
-
-        if (this._workletNode) {
-            this._workletNode.disconnect();
-            this._workletNode = null;
-        }
-
-        if (this._audioContext) {
-            this._audioContext.close();
-            this._audioContext = null;
-        }
-
-        if (this._wasmModule) {
-            this._wasmModule._BAE_WASM_Shutdown();
-
-            // Free soundbank memory after shutdown
-            if (this._soundbankPtr) {
-                this._wasmModule._free(this._soundbankPtr);
-                this._soundbankPtr = null;
-            }
-
-            this._wasmModule = null;
-        }
-
-        this._isInitialized = false;
-        this._isPlaying = false;
-        this._songLoaded = false;
-        this._soundbankLoaded = false;
-        
-        // Clear all event listeners
-        Object.keys(this._eventListeners).forEach(event => {
-            this._eventListeners[event] = [];
+            // Check immediately
+            if (checkAudioContext()) return;
+            
+            // Also check periodically in case context becomes available
+            const interval = setInterval(() => {
+                if (checkAudioContext()) {
+                    clearInterval(interval);
+                }
+            }, 100);
+            
+            const handleClick = async () => {
+                clearInterval(interval);
+                
+                // Try to resume audio context if it exists but is suspended
+                if (this.player && this.player._audioContext && this.player._audioContext.state === 'suspended') {
+                    try {
+                        await this.player._audioContext.resume();
+                    } catch (e) {
+                        console.warn('Failed to resume audio context:', e);
+                    }
+                }
+                
+                overlay.remove();
+                resolve();
+            };
+            overlay.addEventListener('click', handleClick, { once: true });
         });
     }
+
+    async load(fileName, bank) {
+        const displayFileName = fileName.split('/').pop();
+        const displayBank = bank.split('/').pop();
+        
+        this.elements.fileStatus.textContent = displayFileName;
+        this.elements.bankStatus.textContent = 'Loading...';
+        this.updateStatus('Loading bank...');
+
+        try {
+            await this.player.loadSoundbank(bank);
+            this.elements.bankStatus.textContent = displayBank;
+            this.updateStatus('Loading file...');
+            
+            await this.player.load(fileName);
+            this.elements.playBtn.disabled = false;
+            this.elements.exportBtn.disabled = false;
+            
+            // Apply current channel mute states
+            for (let i = 0; i < 16; i++) {
+                if (this.channelMutes[i]) {
+                    this.player.muteChannel(i, true);
+                }
+            }
+            
+            // Apply current loop setting
+            if (this.player._wasmModule) {
+                this.player._wasmModule._BAE_WASM_SetLoops(this.isLooping ? 32767 : 0);
+            }
+            
+            this.updateStatus('Ready');
+        } catch (error) {
+            this.updateStatus(`Failed to load: ${error.message}`);
+            console.error('Load error:', error);
+            throw error;
+        }
+    }            initChannels() {
+        const grid = this.elements.channelsGrid;
+        for (let i = 0; i < 16; i++) {
+            const channel = document.createElement('div');
+            channel.className = 'channel';
+            
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.className = 'channel-checkbox';
+            checkbox.checked = true;
+            checkbox.dataset.channel = i;
+            checkbox.addEventListener('change', (e) => {
+                this.channelMutes[i] = !e.target.checked;
+                if (this.player && this.player._songLoaded) {
+                    this.player.muteChannel(i, this.channelMutes[i]);
+                }
+            });
+            
+            const label = document.createElement('div');
+            label.className = 'channel-number';
+            label.textContent = i + 1;
+            
+            // VU Meter
+            const vuMeter = document.createElement('div');
+            vuMeter.className = 'vu-meter';
+            const vuFill = document.createElement('div');
+            vuFill.className = 'vu-meter-fill';
+            vuFill.id = `vu-${i}`;
+            vuMeter.appendChild(vuFill);
+            
+            channel.appendChild(checkbox);
+            channel.appendChild(label);
+            channel.appendChild(vuMeter);
+            grid.appendChild(channel);
+        }
+        
+        // Start VU meter animation
+        this.updateVUMeters();
+    }
+
+    initKeyboard() {
+        const container = this.elements.keysContainer;
+        const octaves = 7;
+        const startOctave = 0;
+        
+        // Populate channel selector
+        for (let i = 1; i < 16; i++) {
+            const option = document.createElement('option');
+            option.value = i;
+            option.textContent = `Ch ${i + 1}`;
+            this.elements.channelSelect.appendChild(option);
+        }
+        
+        for (let octave = startOctave; octave < startOctave + octaves; octave++) {
+            const notes = ['C', 'D', 'E', 'F', 'G', 'A', 'B'];
+            
+            for (let i = 0; i < notes.length; i++) {
+                const note = notes[i];
+                const midiNote = (octave + 1) * 12 + [0, 2, 4, 5, 7, 9, 11][i];
+                
+                const whiteKey = document.createElement('div');
+                whiteKey.className = 'key white-key';
+                whiteKey.dataset.note = midiNote;
+                
+                if (i === 0) {
+                    const label = document.createElement('div');
+                    label.className = 'octave-label';
+                    label.textContent = `C${octave + 1}`;
+                    whiteKey.appendChild(label);
+                }
+                
+                container.appendChild(whiteKey);
+                
+                // Add black keys
+                if ([0, 1, 3, 4, 5].includes(i)) {
+                    const blackKey = document.createElement('div');
+                    blackKey.className = 'key black-key';
+                    const blackMidiNote = midiNote + 1;
+                    blackKey.dataset.note = blackMidiNote;
+                    
+                    whiteKey.appendChild(blackKey);
+                }
+            }
+        }
+    }
+
+    updateVUMeters() {
+        if (this.player && this.player._wasmModule && this.player._songLoaded) {
+            // Update VU meters
+            for (let i = 0; i < 16; i++) {
+                const activity = this.player._wasmModule._BAE_WASM_GetChannelActivity(i);
+                const percent = (activity / 255) * 100;
+                const vuFill = document.getElementById(`vu-${i}`);
+                if (vuFill) {
+                    vuFill.style.width = `${percent}%`;
+                }
+            }
+            
+            // Update keyboard highlighting from playback only when playing
+            if (this.player._isPlaying) {
+                this.updateKeyboardHighlighting();
+            }
+        }
+        requestAnimationFrame(() => this.updateVUMeters());
+    }
+
+    updateKeyboardHighlighting() {
+        if (!this.player || !this.player._wasmModule || !this.player._songLoaded) return;
+        
+        const selectedChannel = parseInt(this.elements.channelSelect.value);
+        const showAllChannels = this.elements.allChannelsCheckbox.checked;
+        
+        // Create a buffer for note data (128 bytes for 128 MIDI notes)
+        const Module = this.player._wasmModule;
+        const notesBuffer = Module._malloc(128);
+        if (!notesBuffer) return;
+        
+        try {
+            // Collect active notes from selected channel(s)
+            const activeNotes = new Set();
+            
+            if (showAllChannels) {
+                // Show notes from all channels
+                for (let ch = 0; ch < 16; ch++) {
+                    const result = Module._BAE_WASM_GetActiveNotesForChannel(ch, notesBuffer);
+                    if (result === 0) {
+                        const notes = new Uint8Array(Module.HEAPU8.buffer, notesBuffer, 128);
+                        for (let n = 0; n < 128; n++) {
+                            if (notes[n] > 0) activeNotes.add(n);
+                        }
+                    }
+                }
+            } else {
+                // Show notes from selected channel only
+                const result = Module._BAE_WASM_GetActiveNotesForChannel(selectedChannel, notesBuffer);
+                if (result === 0) {
+                    const notes = new Uint8Array(Module.HEAPU8.buffer, notesBuffer, 128);
+                    for (let n = 0; n < 128; n++) {
+                        if (notes[n] > 0) activeNotes.add(n);
+                    }
+                }
+            }
+            
+            // Update visual state of all keys
+            const allKeys = document.querySelectorAll('.key');
+            allKeys.forEach(key => {
+                const note = parseInt(key.dataset.note);
+                const isActive = activeNotes.has(note);
+                
+                // Show only playback highlighting (read-only)
+                if (isActive) {
+                    key.classList.add('from-playback');
+                } else {
+                    key.classList.remove('from-playback');
+                }
+            });
+        } finally {
+            // Always free the buffer
+            Module._free(notesBuffer);
+        }
+    }
+    
+
+    initElements() {
+        this.elements = {
+            // Transport
+            playBtn: document.getElementById('playBtn'),
+            stopBtn: document.getElementById('stopBtn'),
+            exportBtn: document.getElementById('exportBtn'),
+            loopCheckbox: document.getElementById('loopCheckbox'),
+            
+            // Export Progress
+            exportProgress: document.getElementById('exportProgress'),
+            exportStatus: document.getElementById('exportStatus'),
+            exportProgressFill: document.getElementById('exportProgressFill'),
+            
+            // Progress
+            progressBar: document.getElementById('progressBar'),
+            progressFill: document.getElementById('progressFill'),
+            currentTime: document.getElementById('currentTime'),
+            duration: document.getElementById('duration'),
+            
+            // Controls
+            transposeSlider: document.getElementById('transposeSlider'),
+            transposeValue: document.getElementById('transposeValue'),
+            transposeReset: document.getElementById('transposeReset'),
+            tempoSlider: document.getElementById('tempoSlider'),
+            tempoValue: document.getElementById('tempoValue'),
+            tempoReset: document.getElementById('tempoReset'),
+            reverbSelect: document.getElementById('reverbSelect'),
+            volumeSlider: document.getElementById('volumeSlider'),
+            volumeValue: document.getElementById('volumeValue'),
+            
+            // Channels
+            channelsGrid: document.getElementById('channelsGrid'),
+            invertBtn: document.getElementById('invertBtn'),
+            muteAllBtn: document.getElementById('muteAllBtn'),
+            unmuteAllBtn: document.getElementById('unmuteAllBtn'),
+            
+            // Keyboard
+            keysContainer: document.getElementById('keysContainer'),
+            channelSelect: document.getElementById('channelSelect'),
+            velocityDisplay: document.getElementById('velocityDisplay'),
+            allChannelsCheckbox: document.getElementById('allChannelsCheckbox'),
+            
+            // Status
+            fileStatus: document.getElementById('fileStatus'),
+            bankStatus: document.getElementById('bankStatus'),
+            statusIndicator: document.getElementById('statusIndicator'),
+            statusText: document.getElementById('statusText')
+        };
+    }
+
+    bindEvents() {
+        // Transport controls
+        this.elements.playBtn.addEventListener('click', () => this.togglePlayPause());
+        this.elements.stopBtn.addEventListener('click', () => this.stop());
+        
+        // Export WAV
+        this.elements.exportBtn.addEventListener('click', async () => {
+            if (!this.player || !this.player._songLoaded) return;
+            
+            this.elements.exportBtn.disabled = true;
+            this.elements.exportProgress.style.display = 'block';
+            this.elements.exportStatus.textContent = 'Rendering audio...';
+            this.elements.exportProgressFill.style.width = '0%';
+
+            try {
+                const currentFile = this.elements.fileStatus.textContent;
+                const baseName = currentFile !== '-' ? currentFile.replace(/\.(mid|midi|rmf|kar|smf|xmf|mxmf)$/i, '') : 'exported';
+                var duration = null;
+                if (baseName == "DialingWebTV") {
+                    duration = 240000; // milliseconds
+                }
+
+                const audioData = await this.player.exportToRawAudio((progress) => {
+                    this.elements.exportProgressFill.style.width = (progress * 70) + '%';
+                    this.elements.exportStatus.textContent = `Rendering... ${Math.round(progress * 70)}%`;
+                }, duration);
+                
+                this.elements.exportStatus.textContent = 'Creating WAV file...';
+                this.elements.exportProgressFill.style.width = '90%';
+                await new Promise(r => setTimeout(r, 10));
+                
+                const wavData = this.player.createWavFile(audioData.leftChannel, audioData.rightChannel, audioData.sampleRate);
+                
+                this.elements.exportProgressFill.style.width = '100%';
+                this.elements.exportStatus.textContent = 'Creating download...';
+                
+                const blob = new Blob([wavData], { type: 'audio/wav' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                
+                a.download = `${baseName}.wav`;
+                
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                
+                this.elements.exportStatus.textContent = 'Export complete!';
+                setTimeout(() => {
+                    this.elements.exportProgress.style.display = 'none';
+                }, 2000);
+            } catch (error) {
+                console.error('Export error:', error);
+                this.elements.exportStatus.textContent = 'Error: ' + error.message;
+            } finally {
+                this.elements.exportBtn.disabled = false;
+            }
+        });
+        
+        this.elements.loopCheckbox.addEventListener('change', (e) => {
+            this.isLooping = e.target.checked;
+            // Set BAESong loop count like the GUI does
+            if (this.player && this.player._wasmModule && this.player._songLoaded) {
+                this.player._wasmModule._BAE_WASM_SetLoops(this.isLooping ? 32767 : 0);
+            }
+        });
+
+        // Progress bar
+        this.elements.progressBar.addEventListener('click', (e) => {
+            if (this.player && this.player.duration > 0) {
+                const rect = this.elements.progressBar.getBoundingClientRect();
+                const percent = (e.clientX - rect.left) / rect.width;
+                const time = percent * this.player.duration;
+                this.player.currentTime = time;
+            }
+        });
+
+        // Transpose
+        this.elements.transposeSlider.addEventListener('input', (e) => {
+            this.transpose = parseInt(e.target.value);
+            this.elements.transposeValue.textContent = this.transpose >= 0 ? `+${this.transpose}` : this.transpose;
+            if (this.player) {
+                this.player.transpose = this.transpose;
+            }
+        });
+        this.elements.transposeReset.addEventListener('click', () => {
+            this.elements.transposeSlider.value = 0;
+            this.elements.transposeSlider.dispatchEvent(new Event('input'));
+        });
+
+        // Tempo
+        this.elements.tempoSlider.addEventListener('input', (e) => {
+            this.tempo = parseInt(e.target.value);
+            this.elements.tempoValue.textContent = `${this.tempo}%`;
+            if (this.player) {
+                this.player.tempo = this.tempo / 100;
+            }
+        });
+        this.elements.tempoReset.addEventListener('click', () => {
+            this.elements.tempoSlider.value = 100;
+            this.elements.tempoSlider.dispatchEvent(new Event('input'));
+        });
+
+        // Reverb
+        this.elements.reverbSelect.addEventListener('change', (e) => {
+            const reverbType = parseInt(e.target.value);
+            if (this.player) {
+                this.player.reverbType = reverbType;
+            }
+        });
+
+        // Volume
+        this.elements.volumeSlider.addEventListener('input', (e) => {
+            const volume = parseInt(e.target.value);
+            this.elements.volumeValue.textContent = `${volume}%`;
+            if (this.player) {
+                this.player.volume = volume / 100;
+            }
+        });
+
+        // Channel controls
+        this.elements.invertBtn.addEventListener('click', () => {
+            const checkboxes = this.elements.channelsGrid.querySelectorAll('input[type="checkbox"]');
+            checkboxes.forEach((cb, i) => {
+                cb.checked = !cb.checked;
+                this.channelMutes[i] = !cb.checked;
+                if (this.player && this.player._songLoaded) {
+                    this.player.muteChannel(i, this.channelMutes[i]);
+                }
+            });
+        });
+
+        this.elements.muteAllBtn.addEventListener('click', () => {
+            const checkboxes = this.elements.channelsGrid.querySelectorAll('input[type="checkbox"]');
+            checkboxes.forEach((cb, i) => {
+                cb.checked = false;
+                this.channelMutes[i] = true;
+                if (this.player && this.player._songLoaded) {
+                    this.player.muteChannel(i, true);
+                }
+            });
+        });
+
+        this.elements.unmuteAllBtn.addEventListener('click', () => {
+            const checkboxes = this.elements.channelsGrid.querySelectorAll('input[type="checkbox"]');
+            checkboxes.forEach((cb, i) => {
+                cb.checked = true;
+                this.channelMutes[i] = false;
+                if (this.player && this.player._songLoaded) {
+                    this.player.muteChannel(i, false);
+                }
+            });
+        });
+    }
+
+    async initPlayer() {
+        try {
+            this.updateStatus('Initializing audio engine...');
+            
+            this.player = new BeatnikPlayer();
+
+            this.player.addEventListener('ready', () => {
+                this.updateStatus('Ready');
+            });
+
+            this.player.addEventListener('play', () => {
+                this.updateButtonStates(true);
+                this.updateStatus('Playing');
+            });
+
+            this.player.addEventListener('pause', () => {
+                this.updateButtonStates(false);
+                this.updateStatus('Paused');
+            });
+
+            this.player.addEventListener('stop', () => {
+                this.updateButtonStates(false);
+                this.updateStatus('Stopped');
+            });
+
+            this.player.addEventListener('end', () => {
+                // BAESong_SetLoops handles looping internally, so just update status when truly finished
+                if (!this.isLooping) {
+                    this.updateButtonStates(false);
+                    this.updateStatus('Finished');
+                }
+            });
+
+            this.player.addEventListener('error', (error) => {
+                this.updateStatus(`Error: ${error.message}`);
+                console.error('Player error:', error);
+            });
+
+            this.player.addEventListener('timeupdate', (time) => {
+                this.updateTimeDisplay(time);
+            });
+
+            await this.player._init({
+                sampleRate: 44100,
+                maxVoices: 64
+            });
+
+            this.player.volume = this.elements.volumeSlider.value / 100;
+
+        } catch (error) {
+            this.updateStatus(`Failed to initialize: ${error.message}`);
+            console.error('Init error:', error);
+        }
+    }
+
+    togglePlayPause() {
+        if (!this.player) return;
+        
+        if (this.player._isPlaying) {
+            this.pause();
+        } else {
+            // Use resume if we're paused, otherwise play from start
+            if (this.isPaused) {
+                this.resume();
+            } else {
+                this.play();
+            }
+        }
+    }
+
+    play() {
+        if (this.player) {
+            try {
+                this.player.play();
+                this.isPaused = false;
+            } catch (error) {
+                this.updateStatus(`Play error: ${error.message}`);
+            }
+        }
+    }
+
+    pause() {
+        if (this.player) {
+            try {
+                this.player.pause();
+                this.isPaused = true;
+                this.clearActiveKeyboardNotes();
+            } catch (error) {
+                this.updateStatus(`Pause error: ${error.message}`);
+            }
+        }
+    }
+
+    resume() {
+        if (this.player) {
+            try {
+                this.player.resume();
+                this.isPaused = false;
+            } catch (error) {
+                this.updateStatus(`Resume error: ${error.message}`);
+            }
+        }
+    }
+
+    stop() {
+        if (this.player) {
+            this.player.stop();
+            this.isPaused = false;
+            this.clearActiveKeyboardNotes();
+            this.updateTimeDisplay(0);
+        }
+    }
+
+    clearActiveKeyboardNotes() {
+        // Clear all active keyboard highlights
+        const allKeys = document.querySelectorAll('.key');
+        allKeys.forEach(key => {
+            key.classList.remove('active', 'from-playback');
+        });
+    }
+
+    updateButtonStates(playing) {
+        this.elements.playBtn.textContent = playing ? 'Pause' : 'Play';
+        this.elements.playBtn.disabled = false;
+        this.elements.stopBtn.disabled = !playing;
+        this.elements.exportBtn.disabled = !this.player || !this.player._songLoaded;
+        
+        this.elements.statusIndicator.className = playing ? 'status-indicator playing' : 'status-indicator stopped';
+    }
+
+    updateTimeDisplay(currentTime) {
+        const duration = this.player ? this.player.duration : 0;
+        
+        this.elements.currentTime.textContent = this.formatTime(currentTime);
+        this.elements.duration.innerHTML = this.formatTime(duration);
+        
+        if (duration > 0) {
+            const percent = (currentTime / duration) * 100;
+            this.elements.progressFill.style.width = `${percent}%`;
+        }
+    }
+
+    formatTime(ms, includeMs = true) {
+        const totalSeconds = Math.floor(ms / 1000);
+        const minutes = Math.floor(totalSeconds / 60);
+        const seconds = totalSeconds % 60;
+        const milliseconds = Math.floor((ms % 1000));
+        
+        if (includeMs) {
+            return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${milliseconds.toString().padStart(3, '0')}`;
+        } else {
+            return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+        }
+    }
+
+    updateStatus(message) {
+        this.elements.statusText.textContent = message;
+    }
+
+    showHelpModal() {
+        // Create modal overlay
+        const overlay = document.createElement('div');
+        overlay.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10000;
+            padding: 20px;
+        `;
+
+        // Create modal content
+        const modal = document.createElement('div');
+        modal.style.cssText = `
+            background: #2d2d30;
+            border: 2px solid #007acc;
+            border-radius: 8px;
+            max-width: 700px;
+            max-height: 80vh;
+            overflow-y: auto;
+            color: #cccccc;
+        `;
+
+        modal.innerHTML = `
+            <div style="padding: 20px;">
+                <h2 style="font-size: 20px; margin-bottom: 16px; color: #9cdcfe; border-bottom: 1px solid #555; padding-bottom: 8px;">
+                    URL Parameters
+                </h2>
+                <div style="font-size: 13px; line-height: 1.6;">
+                    <p style="margin-bottom: 16px;">You can control the player using URL parameters:</p>
+                    
+                    <div style="margin-bottom: 12px;">
+                        <strong style="color: #dcdcaa;">file</strong>
+                        <div style="margin-left: 16px; color: #aaa;">Path to the MIDI/RMF file to load</div>
+                        <div style="margin-left: 16px; font-family: monospace; font-size: 11px; color: #ce9178;">?file=${this.default_media_file}</div>
+                    </div>
+                    
+                    <div style="margin-bottom: 12px;">
+                        <strong style="color: #dcdcaa;">bank</strong>
+                        <div style="margin-left: 16px; color: #aaa;">Path to custom sound bank (.hsb, .sf2, .sf3, .sfo, .dls)</div>
+                        <div style="margin-left: 16px; font-family: monospace; font-size: 11px; color: #ce9178;">?bank=${this.default_bank_rmf}</div>
+                    </div>
+                    
+                    <div style="margin-bottom: 12px;">
+                        <strong style="color: #dcdcaa;">reverb</strong>
+                        <div style="margin-left: 16px; color: #aaa;">Reverb type (0-11)</div>
+                        <div style="margin-left: 16px; font-family: monospace; font-size: 11px; color: #ce9178;">?reverb=${this.default_reverb}</div>
+                    </div>
+                    
+                    <div style="margin-bottom: 12px;">
+                        <strong style="color: #dcdcaa;">transpose</strong>
+                        <div style="margin-left: 16px; color: #aaa;">Transpose in semitones (-12 to 12)</div>
+                        <div style="margin-left: 16px; font-family: monospace; font-size: 11px; color: #ce9178;">?transpose=2</div>
+                    </div>
+                    
+                    <div style="margin-bottom: 12px;">
+                        <strong style="color: #dcdcaa;">tempo</strong>
+                        <div style="margin-left: 16px; color: #aaa;">Tempo percentage (50-200)</div>
+                        <div style="margin-left: 16px; font-family: monospace; font-size: 11px; color: #ce9178;">?tempo=120</div>
+                    </div>
+                    
+                    <div style="margin-bottom: 12px;">
+                        <strong style="color: #dcdcaa;">volume</strong>
+                        <div style="margin-left: 16px; color: #aaa;">Volume percentage (0-100)</div>
+                        <div style="margin-left: 16px; font-family: monospace; font-size: 11px; color: #ce9178;">?volume=80</div>
+                    </div>
+                    
+                    <div style="margin-bottom: 12px;">
+                        <strong style="color: #dcdcaa;">muted</strong>
+                        <div style="margin-left: 16px; color: #aaa;">Comma-separated list of muted channels (1-16)</div>
+                        <div style="margin-left: 16px; font-family: monospace; font-size: 11px; color: #ce9178;">?muted=1,10,16</div>
+                    </div>
+                    
+                    <div style="margin-bottom: 12px;">
+                        <strong style="color: #dcdcaa;">loop</strong>
+                        <div style="margin-left: 16px; color: #aaa;">Enable BAE Loop (0 = disabled, any other value = enabled)</div>
+                        <div style="margin-left: 16px; font-family: monospace; font-size: 11px; color: #ce9178;">?loop=0</div>
+                    </div>
+                    
+                    <div style="margin-bottom: 12px;">
+                        <strong style="color: #dcdcaa;">seek</strong>
+                        <div style="margin-left: 16px; color: #aaa;">Start position in seconds (validated against song duration)</div>
+                        <div style="margin-left: 16px; font-family: monospace; font-size: 11px; color: #ce9178;">?seek=30.5</div>
+                    </div>
+                    
+                    <div style="margin-bottom: 12px;">
+                        <strong style="color: #dcdcaa;">vkbd</strong>
+                        <div style="margin-left: 16px; color: #aaa;">Virtual keyboard channel (1-16, default: 1)</div>
+                        <div style="margin-left: 16px; font-family: monospace; font-size: 11px; color: #ce9178;">?vkbd=10</div>
+                    </div>
+                    
+                    <div style="margin-bottom: 12px;">
+                        <strong style="color: #dcdcaa;">autostart</strong>
+                        <div style="margin-left: 16px; color: #aaa;">Automatically start playback (1 = enabled)</div>
+                        <div style="margin-left: 16px; font-family: monospace; font-size: 11px; color: #ce9178;">?autostart=1</div>
+                    </div>
+                    
+                    <div style="margin-top: 20px; padding: 12px; background: #1e1e1e; border-radius: 4px; border-left: 3px solid #007acc;">
+                        <strong style="color: #dcdcaa;">Example:</strong>
+                        <div style="font-family: monospace; font-size: 11px; margin-top: 8px; color: #ce9178; word-break: break-all;">
+                            ?file=${this.default_media_file}&bank=${this.default_bank_rmf}&reverb=${this.default_reverb}&transpose=2&tempo=120&volume=80&muted=10,16&loop=0&seek=30&vkbd=10&autostart=1
+                        </div>
+                    </div>
+                </div>
+                <div style="margin-top: 20px; text-align: right;">
+                    <button id="closeHelpModal" style="
+                        padding: 6px 16px;
+                        border: 1px solid #555;
+                        border-radius: 3px;
+                        background: #3c3c3c;
+                        color: #cccccc;
+                        font-size: 12px;
+                        cursor: pointer;
+                    ">Close</button>
+                </div>
+            </div>
+        `;
+
+        overlay.appendChild(modal);
+        document.body.appendChild(overlay);
+
+        // Close handlers
+        const closeModal = () => overlay.remove();
+        modal.querySelector('#closeHelpModal').addEventListener('click', closeModal);
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) closeModal();
+        });
+
+        // Escape key to close
+        const handleEscape = (e) => {
+            if (e.key === 'Escape') {
+                closeModal();
+                document.removeEventListener('keydown', handleEscape);
+            }
+        };
+        document.addEventListener('keydown', handleEscape);
+    }
+
+    showFeaturesModal(version, features) {
+        // Create modal overlay
+        const overlay = document.createElement('div');
+        overlay.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10000;
+            padding: 20px;
+        `;
+
+        // Create modal content
+        const modal = document.createElement('div');
+        modal.style.cssText = `
+            background: #2d2d30;
+            border: 2px solid #007acc;
+            border-radius: 8px;
+            max-width: 600px;
+            max-height: 80vh;
+            overflow-y: auto;
+            color: #cccccc;
+        `;
+
+        // Parse features into readable format
+        const featureLines = features.split(',').map(f => f.trim());
+        const featureList = featureLines.map(f => `<li style="margin: 4px 0;">${f}</li>`).join('');
+
+        modal.innerHTML = `
+            <div style="padding: 20px;">
+                <h2 style="font-size: 20px; margin-bottom: 16px; color: #9cdcfe; border-bottom: 1px solid #555; padding-bottom: 8px;">
+                    miniBAE Build Information
+                </h2>
+                <div style="margin-bottom: 16px;">
+                    <strong style="color: #dcdcaa;">Version:</strong>
+                    <span style="margin-left: 8px;">${version}</span>
+                </div>
+                <div>
+                    <strong style="color: #dcdcaa;">Compiled Features:</strong>
+                    <ul style="margin: 8px 0 0 20px; padding: 0; list-style-type: disc;">
+                        ${featureList}
+                    </ul>
+                </div>
+                <div style="margin-top: 20px; text-align: right;">
+                    <button id="closeModal" style="
+                        padding: 6px 16px;
+                        border: 1px solid #555;
+                        border-radius: 3px;
+                        background: #3c3c3c;
+                        color: #cccccc;
+                        font-size: 12px;
+                        cursor: pointer;
+                    ">Close</button>
+                </div>
+            </div>
+        `;
+
+        overlay.appendChild(modal);
+        document.body.appendChild(overlay);
+
+        // Close handlers
+        const closeModal = () => overlay.remove();
+        modal.querySelector('#closeModal').addEventListener('click', closeModal);
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) closeModal();
+        });
+
+        // Escape key to close
+        const handleEscape = (e) => {
+            if (e.key === 'Escape') {
+                closeModal();
+                document.removeEventListener('keydown', handleEscape);
+            }
+        };
+        document.addEventListener('keydown', handleEscape);
+    }
 }
 
-// Reverb type constants
-BeatnikPlayer.REVERB_NONE = 0;
-BeatnikPlayer.REVERB_CLOSET = 1;
-BeatnikPlayer.REVERB_GARAGE = 2;
-BeatnikPlayer.REVERB_ACOUSTIC_LAB = 3;
-BeatnikPlayer.REVERB_CAVERN = 4;
-BeatnikPlayer.REVERB_DUNGEON = 5;
-BeatnikPlayer.REVERB_SMALL_REFLECTIONS = 6;
-BeatnikPlayer.REVERB_EARLY_REFLECTIONS = 7;
-BeatnikPlayer.REVERB_BASEMENT = 8;
-BeatnikPlayer.REVERB_BANQUET_HALL = 9;
-BeatnikPlayer.REVERB_CATACOMBS = 10;
-
-// Export for module systems
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = BeatnikPlayer;
-}
-
-// Also attach to window for script tag usage
-if (typeof window !== 'undefined') {
-    window.BeatnikPlayer = BeatnikPlayer;
-}
+// Initialize the player when the page loads
+document.addEventListener('DOMContentLoaded', () => {
+    new MiniBAEPlayer();
+});
