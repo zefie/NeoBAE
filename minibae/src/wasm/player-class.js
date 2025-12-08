@@ -15,6 +15,7 @@ class BeatnikPlayer {
         this._soundbankLoaded = false;
         this._songLoaded = false;
         this._stopping = false;
+        this._unloading = false;
 
         // Event handlers
         this._eventListeners = {
@@ -383,6 +384,31 @@ class BeatnikPlayer {
         this._stopping = false;
     }
 
+    unload() {
+        if (this._wasmModule) {
+            this.stop();
+            this._wasmModule._BAE_WASM_UnloadSong();
+        }
+    }
+
+    unloadSoundbank() {
+        if (this._unloading) {
+            return;
+        }
+        if (this._wasmModule) {
+            this._unloading = true;
+            this.stop();
+            this._wasmModule._BAE_WASM_UnloadSoundbank();
+            this._songLoaded = false;
+            this._songData = null;
+            this._soundbankLoaded = false;
+            if (this._soundbankPtr) {
+                this._wasmModule._free(this._soundbankPtr);
+                this._soundbankPtr = null;
+            }
+            this._unloading = false;
+        }
+    }
     /**
      * Current playback position in milliseconds
      */
@@ -901,7 +927,7 @@ class BeatnikPlayer {
      * Clean up resources
      */
     dispose() {
-        this._stopTimeUpdates();
+        this._stopTimeUpdates();        
 
         if (this._workletNode) {
             this._workletNode.disconnect();
@@ -914,6 +940,8 @@ class BeatnikPlayer {
         }
 
         if (this._wasmModule) {
+            this.unload();
+            this.unloadSoundbank();
             this._wasmModule._BAE_WASM_Shutdown();
 
             // Free soundbank memory after shutdown

@@ -540,6 +540,7 @@ void GM_UnloadSF2Soundfont(void)
         g_temp_sf_path[0] = '\0';
         g_temp_sf_is_tempfile = FALSE;
     }
+    GM_SetMixerSF2Mode(FALSE);
 }
 
 // Check if a song should use FluidSynth rendering

@@ -142,8 +142,11 @@ int BAE_WASM_LoadSoundbank(const uint8_t* data, int length) {
     BAEMixer_UnloadBanks(gMixer);
 
 #if USE_SF2_SUPPORT == TRUE
-    GM_UnloadSF2Soundfont();
-    GM_SetMixerSF2Mode(FALSE);
+    // Unload SF2/DLS soundfont if currently loaded
+    if (GM_GetMixerSF2Mode()) {
+        BAE_PRINTF("[BAE] LoadSoundbank: Unloading existing SF2/SF3/DLS...\n");
+        GM_UnloadSF2Soundfont();
+    }
     
     // Detect soundbank type by header
     // RIFF format: bytes 0-3 = "RIFF", bytes 8-11 = format identifier
@@ -157,7 +160,7 @@ int BAE_WASM_LoadSoundbank(const uint8_t* data, int length) {
         // Check format identifier at offset 8
         if (data[8] == 's' && data[9] == 'f' && data[10] == 'b' && data[11] == 'k') {
             isSF2 = 1;
-            BAE_PRINTF("[BAE] LoadSoundbank: Detected SF2 format\n");
+            BAE_PRINTF("[BAE] LoadSoundbank: Detected SF2/SF3 format\n");
         }
 #if _USING_FLUIDSYNTH == TRUE
         else if (data[8] == 'D' && data[9] == 'L' && data[10] == 'S' && data[11] == ' ') {
@@ -173,7 +176,7 @@ int BAE_WASM_LoadSoundbank(const uint8_t* data, int length) {
 #endif
        )
     {
-        BAE_PRINTF("[BAE] LoadSoundbank: Loading SF2/DLS via temp file (WASM workaround)...\n");
+        BAE_PRINTF("[BAE] LoadSoundbank: Loading SF2/SF3/DLS via temp file (WASM workaround)...\n");
         
         // WASM workaround: Write to temp file and load from file
         // FluidSynth's memory loader seems to have issues in WASM
@@ -212,6 +215,8 @@ int BAE_WASM_LoadSoundbank(const uint8_t* data, int length) {
         return 0;
     }
 #endif
+
+    // HSB Handling
 
     // Add bank from memory
     BAE_PRINTF("[BAE] LoadSoundbank: Adding bank from memory...\n");
@@ -310,6 +315,64 @@ int BAE_WASM_LoadSong(const uint8_t* data, int length) {
     PV_ResetRingBuffer();
 
     BAE_PRINTF("[BAE] LoadSong: SUCCESS\n");
+    return 0;
+}
+
+/*
+ * Unload the current song
+ * Returns: 0 on success, -1 if no song loaded
+ */
+EMSCRIPTEN_KEEPALIVE
+int BAE_WASM_UnloadSong(void) {
+    BAE_PRINTF("[BAE] UnloadSong: gCurrentSong=%p\n", (void*)gCurrentSong);
+    
+    if (gCurrentSong == NULL) {
+        BAE_PRINTF("[BAE] UnloadSong: No song to unload\n");
+        return -1;  // No song loaded
+    }
+
+    // Stop playback
+    BAE_PRINTF("[BAE] UnloadSong: Stopping song...\n");
+    BAESong_Stop(gCurrentSong, FALSE);
+    
+    // Delete song
+    BAE_PRINTF("[BAE] UnloadSong: Deleting song...\n");
+    BAESong_Delete(gCurrentSong);
+    gCurrentSong = NULL;
+
+    // Clear ring buffer
+    PV_ResetRingBuffer();
+
+    BAE_PRINTF("[BAE] UnloadSong: SUCCESS\n");
+    return 0;
+}
+
+/*
+ * Unload the current soundbank
+ * Returns: 0 on success, -1 if mixer not initialized
+ */
+EMSCRIPTEN_KEEPALIVE
+int BAE_WASM_UnloadSoundbank(void) {
+    BAE_PRINTF("[BAE] UnloadSoundbank: gMixer=%p\n", (void*)gMixer);
+    
+    if (gMixer == NULL) {
+        BAE_PRINTF("[BAE] UnloadSoundbank: ERROR - gMixer is NULL\n");
+        return -1;  // Not initialized
+    }
+
+    // Unload existing banks
+    BAE_PRINTF("[BAE] UnloadSoundbank: Unloading banks...\n");
+    BAEMixer_UnloadBanks(gMixer);
+
+#if USE_SF2_SUPPORT == TRUE
+    // Unload SF2/DLS soundfont if loaded
+    if (GM_GetMixerSF2Mode()) {
+        BAE_PRINTF("[BAE] UnloadSoundbank: Unloading SF2/SF3/DLS...\n");
+        GM_UnloadSF2Soundfont();
+    }
+#endif
+
+    BAE_PRINTF("[BAE] UnloadSoundbank: SUCCESS\n");
     return 0;
 }
 

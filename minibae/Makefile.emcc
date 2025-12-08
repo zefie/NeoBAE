@@ -43,7 +43,13 @@ LDFLAGS		:= $(ARCH) $(OPTI) -O3 -DNDEBUG -s WASM=1 -s ALLOW_MEMORY_GROWTH=1 -s I
 -s EXPORTED_RUNTIME_METHODS="['ccall','cwrap','UTF8ToString','HEAPU8','HEAP16']" -s MODULARIZE=1 -s EXPORT_NAME='BeatnikModule' -s ASSERTIONS=0 --no-entry \
 -Wno-unused-command-line-argument
 
-
+ifeq ($(TESTING),1)
+    LDFLAGS += --pre-js src/wasm/testing.js # search for /testing/engine.wasm on server
+else
+	ifeq ($(PROD),1)
+    	LDFLAGS += --pre-js src/wasm/prod.js # search for /player/engine.wasm on server
+	endif
+endif
 
 LIBS	= 	-lpthread
 
@@ -52,6 +58,8 @@ all: ${TARGET_JS} extra-files
 extra-files:
 	@mkdir -p $(TARGET_OUT)
 	@cp src/wasm/player.js $(TARGET_OUT)
+	@cp src/wasm/miniplayer.js $(TARGET_OUT)
+	@cp src/wasm/miniplayer-demo.html $(TARGET_OUT)
 	@cp src/wasm/player-class.js $(TARGET_OUT)
 	@cp src/wasm/player.html $(TARGET_OUT)
 	@cp src/wasm/player.css $(TARGET_OUT)

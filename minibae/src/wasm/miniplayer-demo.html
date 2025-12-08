@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>miniBAE Mini Player Demo</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 40px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        h1 {
+            color: #9cdcfe;
+            margin-bottom: 30px;
+        }
+        .demo-section {
+            background: #2d2d30;
+            border: 1px solid #555;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .demo-section h2 {
+            font-size: 14px;
+            color: #ce9178;
+            margin-bottom: 15px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .btn {
+            background: #007acc;
+            border: 1px solid #0e639c;
+            color: #fff;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            margin: 5px;
+            transition: all 0.2s;
+        }
+        .btn:hover {
+            background: #1e8ad6;
+        }
+        .btn:active {
+            transform: translateY(1px);
+        }
+        code {
+            background: #1e1e1e;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            color: #ce9178;
+        }
+        pre {
+            background: #1e1e1e;
+            padding: 15px;
+            border-radius: 4px;
+            overflow-x: auto;
+            border: 1px solid #555;
+        }
+        pre code {
+            background: transparent;
+            padding: 0;
+            color: #d4d4d4;
+        }
+        .note {
+            background: #1e1e1e;
+            padding: 12px;
+            border-left: 3px solid #007acc;
+            margin: 15px 0;
+            font-size: 13px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🎵 miniBAE Mini Player Demo</h1>
+
+    <div class="demo-section">
+        <h2>Quick Test</h2>
+        <p>Click a button to open the mini player with a sample song:</p>
+        <button class="btn" onclick="testPlayer1()">Play MIDI Example</button>
+        <button class="btn" onclick="testPlayer2()">Play RMF Example</button>
+        <button class="btn" onclick="testPlayer3()">Play FluidSynth Example (if enabled)</button>
+    </div>
+
+    <div class="demo-section">
+        <h2>Usage</h2>
+        <p>Include the required scripts in your HTML:</p>
+        <pre><code>&lt;script src="./player-class.js">&lt;/script>
+&lt;script src="./engine.js">&lt;/script>
+&lt;script src="./miniplayer.js">&lt;/script></code></pre>
+
+        <p>Then simply call:</p>
+        <pre><code>playSong('path/to/song.mid', 'path/to/soundbank.hsb');</code></pre>
+
+        <div class="note">
+            <strong>Note:</strong> The player is self-contained and handles all UI, controls, and playback. 
+            No additional HTML or CSS needed!
+        </div>
+    </div>
+
+    <div class="demo-section">
+        <h2>API Reference</h2>
+        
+        <h3 style="color: #4ec9b0; font-size: 13px; margin: 15px 0 10px;">playSong(songSource, bankSource, options)</h3>
+        <p><strong>Parameters:</strong></p>
+        <ul style="line-height: 1.8;">
+            <li><code>songSource</code> - URL or ArrayBuffer of MIDI/RMF file</li>
+            <li><code>bankSource</code> - URL or ArrayBuffer of soundbank (.hsb, .sf2, etc.)</li>
+            <li><code>options</code> (optional) - Configuration object:
+                <ul style="margin-left: 20px; margin-top: 5px;">
+                    <li><code>title</code> - Custom title for player (default: filename)</li>
+                    <li><code>autoplay</code> - Auto-play on load (default: true)</li>
+                </ul>
+            </li>
+        </ul>
+
+        <p><strong>Example:</strong></p>
+        <pre><code>playSong('song.mid', 'bank.hsb', {
+    title: 'My Amazing Song',
+    autoplay: false
+});</code></pre>
+
+        <h3 style="color: #4ec9b0; font-size: 13px; margin: 15px 0 10px;">closeMiniPlayer()</h3>
+        <p>Programmatically close the player:</p>
+        <pre><code>closeMiniPlayer();</code></pre>
+    </div>
+
+    <div class="demo-section">
+        <h2>Features</h2>
+        <ul style="line-height: 1.8;">
+            <li>✅ Play/Pause/Resume/Stop controls</li>
+            <li>✅ Seekable progress bar with time display</li>
+            <li>✅ Volume slider (0-100%)</li>
+            <li>✅ Current time and total duration (MM:SS.mmm format)</li>
+            <li>✅ Popup modal overlay with smooth animations</li>
+            <li>✅ Click outside or press ESC to close</li>
+            <li>✅ Status indicators (Loading, Playing, Paused, Stopped, Error)</li>
+            <li>✅ Responsive and modern dark theme</li>
+        </ul>
+    </div>
+
+    <!-- Include required scripts -->
+    <script src="./player-class.js"></script>
+    <script src="./engine.js"></script>
+    <script src="./miniplayer.js"></script>
+
+    <script>
+        // Demo functions
+        function testPlayer1() {
+            playSong(
+                'https://www.soundmusicsys.com/content/MIDI/WebTV/ClassicROM/Daybreak.mid',
+                'https://www.soundmusicsys.com/content/PatchBanks/HSB/minibae-wtv.hsb'
+            );
+        }
+
+        function testPlayer2() {
+            playSong(
+                'https://www.soundmusicsys.com/content/RMF/Other/trance.rmf',
+                'https://www.soundmusicsys.com/content/PatchBanks/HSB/patchesp.hsb',
+                { title: 'RMF Test Song' }
+            );
+        }
+
+        function testPlayer3() {
+            playSong(
+                'https://www.soundmusicsys.com/content/MIDI/Other/eminem-not_afraid.mid',
+                'https://www.soundmusicsys.com/content/PatchBanks/SF3/GeneralUser-GS.sf3',
+                { 
+                    title: '🎹 FluidSynth Test',
+                    autoplay: true 
+                }
+            );
+        }
+    </script>
+</body>
+</html>
