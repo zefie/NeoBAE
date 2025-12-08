@@ -555,7 +555,7 @@
                             <option value="4">Cavern</option>
                             <option value="5">Dungeon</option>
                             <option value="6">Small Reflections</option>
-                            <option value="7" selected>Early Reflections</option>
+                            <option value="7">Early Reflections</option>
                             <option value="8">Basement</option>
                             <option value="9">Banquet Hall</option>
                             <option value="10">Catacombs</option>
@@ -648,11 +648,28 @@
                 this.tempo = 100;
                 this.default_bank_mid = "/content/PatchBanks/SF3/GeneralUser-GS.sf3"
                 this.default_bank_rmf = "/content/PatchBanks/HSB/patchesp.hsb"
+                this.default_reverb = 7; // Early Reflections
 
                 // Get file parameter from URL
                 const urlParams = new URLSearchParams(window.location.search);
                 const fileName = urlParams.get('file');
                 const customBank = urlParams.get('bank');
+                
+                // Parse and sanity check reverb (0-11 based on available types)
+                const customReverb = urlParams.get('reverb') !== null ? parseInt(urlParams.get('reverb')) : this.default_reverb;
+                
+                // Parse and sanity check transpose (-12 to 12 semitones)
+                let customTranspose = urlParams.get('transpose') !== null ? parseInt(urlParams.get('transpose')) : 0;
+                customTranspose = Math.max(-12, Math.min(12, customTranspose));
+                
+                // Parse and sanity check tempo (50 to 200%)
+                let customTempo = urlParams.get('tempo') !== null ? parseInt(urlParams.get('tempo')) : 100;
+                customTempo = Math.max(50, Math.min(200, customTempo));
+                
+                // Parse and sanity check volume (0 to 100%)
+                let customVolume = urlParams.get('volume') !== null ? parseInt(urlParams.get('volume')) : 100;
+                customVolume = Math.max(0, Math.min(100, customVolume));
+                
                 this.autostart = urlParams.get('autostart') === '1';
 
                 // Detect file type and set appropriate bank
@@ -686,11 +703,27 @@
                                         this.showFeaturesModal(version, features);
                                     }
                                 });
-                            }
+                            }                            
                         }                        
                         this.load(fileName, this.bank).then(() => {
                             // After loading, wait for audio context if needed, then optionally autostart
                             this.waitForAudioContext().then(() => {
+                                this.player._wasmModule._BAE_WASM_SetReverbType(customReverb);
+                                // Update dropdown to match the custom reverb setting
+                                this.elements.reverbSelect.value = customReverb.toString();
+                                
+                                // Apply custom transpose
+                                this.elements.transposeSlider.value = customTranspose;
+                                this.elements.transposeSlider.dispatchEvent(new Event('input'));
+                                
+                                // Apply custom tempo
+                                this.elements.tempoSlider.value = customTempo;
+                                this.elements.tempoSlider.dispatchEvent(new Event('input'));
+                                
+                                // Apply custom volume
+                                this.elements.volumeSlider.value = customVolume;
+                                this.elements.volumeSlider.dispatchEvent(new Event('input'));
+                                
                                 if (this.autostart) {
                                     this.play();
                                 }
