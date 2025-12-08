@@ -232,7 +232,7 @@
 
 #define VOLUME_PRECISION_SCALAR     6L      // used to be 8, so we must scale down output by 2
 #if __EMSCRIPTEN__
-    #define OUTPUT_SCALAR               8L      // boost HSB volume for WebAssembly build
+    #define OUTPUT_SCALAR               9L      // boost HSB volume for WebAssembly build
 #else
     #define OUTPUT_SCALAR               10L      // 9 for volume minus 4 for increased volume_range resolution, plus 2 for increased volume precision scalar
 #endif
