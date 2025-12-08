@@ -449,37 +449,41 @@ ifeq ($(VORBIS_DEC),1)
 			src/BAE_Source/Common/XVorbisFiles.c \
 			src/thirdparty/libvorbis/lib/lpc.c \
 			src/thirdparty/libvorbis/lib/window.c
+	else
+		SRC += src/BAE_Source/Common/XVorbisFiles.c
 	endif
 endif
 
 # Add libvorbis encoder source files  
 ifeq ($(VORBIS_ENC),1)
 	BAE_FLAGS += -DUSE_VORBIS_ENCODER=1
-	SRC += src/thirdparty/libvorbis/lib/vorbisenc.c
-	# If decoder not already included, add required decoder files for encoder
-	ifneq ($(VORBIS_DEC),1)
-		SRC += src/thirdparty/libvorbis/lib/analysis.c \
-			src/thirdparty/libvorbis/lib/bitrate.c \
-			src/thirdparty/libvorbis/lib/block.c \
-			src/thirdparty/libvorbis/lib/codebook.c \
-			src/thirdparty/libvorbis/lib/envelope.c \
-			src/thirdparty/libvorbis/lib/floor0.c \
-			src/thirdparty/libvorbis/lib/floor1.c \
-			src/thirdparty/libvorbis/lib/info.c \
-			src/thirdparty/libvorbis/lib/lookup.c \
-			src/thirdparty/libvorbis/lib/lsp.c \
-			src/thirdparty/libvorbis/lib/mapping0.c \
-			src/thirdparty/libvorbis/lib/mdct.c \
-			src/thirdparty/libvorbis/lib/psy.c \
-			src/thirdparty/libvorbis/lib/registry.c \
-			src/thirdparty/libvorbis/lib/res0.c \
-			src/thirdparty/libvorbis/lib/sharedbook.c \
-			src/thirdparty/libvorbis/lib/smallft.c \
-			src/thirdparty/libvorbis/lib/synthesis.c \
-			src/thirdparty/libvorbis/lib/vorbisfile.c \
-			src/BAE_Source/Common/XVorbisFiles.c \
-			src/thirdparty/libvorbis/lib/lpc.c \
-			src/thirdparty/libvorbis/lib/window.c
+	ifneq ($(WASM),1)	
+		SRC += src/thirdparty/libvorbis/lib/vorbisenc.c
+		# If decoder not already included, add required decoder files for encoder	
+		ifneq ($(VORBIS_DEC),1)
+			SRC += src/thirdparty/libvorbis/lib/analysis.c \
+				src/thirdparty/libvorbis/lib/bitrate.c \
+				src/thirdparty/libvorbis/lib/block.c \
+				src/thirdparty/libvorbis/lib/codebook.c \
+				src/thirdparty/libvorbis/lib/envelope.c \
+				src/thirdparty/libvorbis/lib/floor0.c \
+				src/thirdparty/libvorbis/lib/floor1.c \
+				src/thirdparty/libvorbis/lib/info.c \
+				src/thirdparty/libvorbis/lib/lookup.c \
+				src/thirdparty/libvorbis/lib/lsp.c \
+				src/thirdparty/libvorbis/lib/mapping0.c \
+				src/thirdparty/libvorbis/lib/mdct.c \
+				src/thirdparty/libvorbis/lib/psy.c \
+				src/thirdparty/libvorbis/lib/registry.c \
+				src/thirdparty/libvorbis/lib/res0.c \
+				src/thirdparty/libvorbis/lib/sharedbook.c \
+				src/thirdparty/libvorbis/lib/smallft.c \
+				src/thirdparty/libvorbis/lib/synthesis.c \
+				src/thirdparty/libvorbis/lib/vorbisfile.c \
+				src/BAE_Source/Common/XVorbisFiles.c \
+				src/thirdparty/libvorbis/lib/lpc.c \
+				src/thirdparty/libvorbis/lib/window.c
+		endif
 	endif
 endif
 
