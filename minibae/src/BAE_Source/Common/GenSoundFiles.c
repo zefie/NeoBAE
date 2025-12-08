@@ -195,7 +195,11 @@
 #include "FLAC/stream_encoder.h"
 #endif
 #if USE_VORBIS_DECODER != FALSE || USE_VORBIS_ENCODER != FALSE
-#include "XVorbisFiles.h"
+#include <vorbis/codec.h>
+#include <vorbis/vorbisfile.h>
+#if USE_VORBIS_ENCODER != FALSE
+#include <vorbis/vorbisenc.h>
+#endif
 #endif
 #include <stdint.h>
 #include <limits.h>
@@ -216,6 +220,72 @@
 // Forward declaration for Vorbis file reading
 static GM_Waveform* PV_ReadIntoMemoryVorbisFile(XFILE file, XBOOL decodeData, 
                                                int32_t *pFormat, void **ppBlockPtr, uint32_t *pBlockSize, OPErr *pError);
+
+// Callback functions for libvorbisfile to read from XFILE
+static size_t PV_VorbisReadFunc(void *ptr, size_t size, size_t nmemb, void *datasource)
+{
+    XFILE file = (XFILE)datasource;
+    size_t bytes_to_read = size * nmemb;
+    XERR err;
+    
+    if (bytes_to_read == 0) return 0;
+    
+    /* Cap the requested size to the remaining bytes to allow partial/EOF reads */
+    {
+        int32_t file_len = XFileGetLength(file);
+        int32_t file_pos = XFileGetPosition(file);
+        if (file_len >= 0 && file_pos >= 0) {
+            int32_t remaining = file_len - file_pos;
+            if (remaining <= 0) return 0; /* EOF */
+            if ((uint64_t)bytes_to_read > (uint64_t)remaining) {
+                bytes_to_read = (size_t)remaining;
+            }
+        }
+    }
+    
+    err = XFileRead(file, ptr, (int32_t)bytes_to_read);
+    if (err != 0) {
+        return 0; /* Error reading */
+    }
+    
+    /* Return number of 'items' read as fread would */
+    return bytes_to_read / size;
+}
+
+static int PV_VorbisSeekFunc(void *datasource, ogg_int64_t offset, int whence)
+{
+    XFILE file = (XFILE)datasource;
+    
+    switch (whence) {
+        case 0: // SEEK_SET - absolute position from start
+            return XFileSetPosition(file, (long)offset) == NO_ERR ? 0 : -1;
+        case 1: // SEEK_CUR - relative to current position  
+            return XFileSetPositionRelative(file, (long)offset) == NO_ERR ? 0 : -1;
+        case 2: // SEEK_END - relative to end
+            {
+                int32_t file_length = XFileGetLength(file);
+                if (file_length >= 0) {
+                    int32_t new_pos = file_length + (int32_t)offset;
+                    return XFileSetPosition(file, new_pos) == NO_ERR ? 0 : -1;
+                }
+                return -1;
+            }
+        default:
+            return -1;
+    }
+}
+
+static int PV_VorbisCloseFunc(void *datasource)
+{
+    // We don't close the file here, let the caller handle it
+    return 0;
+}
+
+static long PV_VorbisTellFunc(void *datasource)
+{
+    XFILE file = (XFILE)datasource;
+    return XFileGetPosition(file);
+}
 #endif
 
 #undef X_PACK_FAST
@@ -3394,10 +3464,25 @@ static GM_Waveform* PV_ReadIntoMemoryVorbisFile(XFILE file, XBOOL decodeData,
                                                int32_t *pFormat, void **ppBlockPtr, uint32_t *pBlockSize, OPErr *pError)
 {
     GM_Waveform *wave = NULL;
-    void *vorbis_decoder = NULL;
-    UINT32 samples, sample_rate, channels, bit_depth;
+    OggVorbis_File vf;
+    vorbis_info *vi;
+    UINT32 total_samples;
+    UINT32 sample_rate;
+    UINT32 channels;
     UINT32 total_bytes;
-    OPErr err = NO_ERR;
+    long bytes_read;
+    long total_read = 0;
+    int bitstream;
+    int result;
+    long pos;
+    
+    // Setup callbacks for libvorbisfile
+    ov_callbacks callbacks = {
+        PV_VorbisReadFunc,
+        PV_VorbisSeekFunc,
+        PV_VorbisCloseFunc,
+        PV_VorbisTellFunc
+    };
     
     if (file == NULL || pError == NULL) {
         if (pError) *pError = PARAM_ERR;
@@ -3409,40 +3494,52 @@ static GM_Waveform* PV_ReadIntoMemoryVorbisFile(XFILE file, XBOOL decodeData,
     if (ppBlockPtr) *ppBlockPtr = NULL;
     if (pBlockSize) *pBlockSize = 0;
     
-    // Check if this is a Vorbis file
-    if (!XIsVorbisFile(file)) {
+    // Save current file position
+    pos = XFileGetPosition(file);
+    
+    // Try to open as Vorbis file
+    result = ov_test_callbacks(file, &vf, NULL, 0, callbacks);
+    if (result != 0) {
+        XFileSetPosition(file, pos);
         *pError = PARAM_ERR;
         return NULL;
     }
     
-    // Open Vorbis decoder
-    vorbis_decoder = XOpenVorbisFile(file);
-    if (vorbis_decoder == NULL) {
+    // Complete opening the file for full decoding
+    ov_clear(&vf);
+    XFileSetPosition(file, pos);
+    
+    result = ov_open_callbacks(file, &vf, NULL, 0, callbacks);
+    if (result != 0) {
         *pError = PARAM_ERR;
         return NULL;
     }
     
     // Get file information
-    err = XGetVorbisFileInfo(vorbis_decoder, &samples, &sample_rate, &channels, &bit_depth);
-    if (err != NO_ERR) {
-        XCloseVorbisFile(vorbis_decoder);
-        *pError = err;
+    vi = ov_info(&vf, -1);
+    if (vi == NULL) {
+        ov_clear(&vf);
+        *pError = BAD_FILE;
         return NULL;
     }
+    
+    total_samples = (UINT32)ov_pcm_total(&vf, -1);
+    sample_rate = vi->rate;
+    channels = vi->channels;
     
     // Allocate waveform structure
     wave = (GM_Waveform*)XNewPtr(sizeof(GM_Waveform));
     if (wave == NULL) {
-        XCloseVorbisFile(vorbis_decoder);
+        ov_clear(&vf);
         *pError = MEMORY_ERR;
         return NULL;
     }
     
-    // Fill in waveform info
-    wave->waveSize = samples * channels * (bit_depth / 8);
-    wave->waveFrames = samples;
+    // Fill in waveform info (Vorbis outputs 16-bit PCM)
+    wave->waveSize = total_samples * channels * 2;
+    wave->waveFrames = total_samples;
     wave->sampledRate = sample_rate << 16L; // Convert to fixed point format
-    wave->bitSize = (unsigned char)bit_depth;
+    wave->bitSize = 16;
     wave->channels = (unsigned char)channels;
     wave->baseMidiPitch = 60; // middle C
     wave->compressionType = C_VORBIS;
@@ -3451,19 +3548,34 @@ static GM_Waveform* PV_ReadIntoMemoryVorbisFile(XFILE file, XBOOL decodeData,
     
     if (decodeData) {
         // Allocate memory for decoded audio data
-        total_bytes = samples * channels * (bit_depth / 8);
+        total_bytes = total_samples * channels * 2;
         wave->theWaveform = (SBYTE*)XNewPtr(total_bytes);
         if (wave->theWaveform == NULL) {
-            XCloseVorbisFile(vorbis_decoder);
+            ov_clear(&vf);
             XDisposePtr(wave);
             *pError = MEMORY_ERR;
             return NULL;
         }
         
         // Decode all audio data
-        long bytes_decoded = XDecodeVorbisFile(vorbis_decoder, wave->theWaveform, total_bytes);
-        if (bytes_decoded <= 0) {
-            XCloseVorbisFile(vorbis_decoder);
+        while (total_read < (long)total_bytes) {
+            bytes_read = ov_read(&vf, 
+                               (char*)wave->theWaveform + total_read, 
+                               total_bytes - total_read,
+                               0, // little endian
+                               2, // 16-bit samples
+                               1, // signed
+                               &bitstream);
+            
+            if (bytes_read <= 0) {
+                break; // EOF or error
+            }
+            
+            total_read += bytes_read;
+        }
+        
+        if (total_read <= 0) {
+            ov_clear(&vf);
             XDisposePtr(wave->theWaveform);
             XDisposePtr(wave);
             *pError = BAD_FILE;
@@ -3471,14 +3583,14 @@ static GM_Waveform* PV_ReadIntoMemoryVorbisFile(XFILE file, XBOOL decodeData,
         }
         
         // Update actual size based on what was decoded
-        wave->waveSize = bytes_decoded;
-        wave->waveFrames = bytes_decoded / (channels * (bit_depth / 8));
+        wave->waveSize = total_read;
+        wave->waveFrames = total_read / (channels * 2);
     } else {
         // Don't decode, just get metadata
         wave->theWaveform = NULL;
     }
     
-    XCloseVorbisFile(vorbis_decoder);
+    ov_clear(&vf);
     *pError = NO_ERR;
     return wave;
 }

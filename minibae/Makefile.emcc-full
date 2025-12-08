@@ -10,6 +10,8 @@ NOAUTO			:= 1
 SF2_SUPPORT		:= 1
 USE_FLUIDSYNTH  := 1
 MP3_DEC			:= 1
+VORBIS_DEC		:= 1
+FLAC_DEC		:= 1
 
 TARGET_JS	:= engine.js
 PACK_FILENAME	:= miniBAE_WASM_FluidSynth.tar.gz
@@ -49,7 +51,7 @@ LDFLAGS		:= $(ARCH) $(OPTI) -O3 -DNDEBUG -s WASM=1 -s ALLOW_MEMORY_GROWTH=1 -s I
 
 
 #/usr/share/emscripten/cache/sysroot/lib
-LIBS	:= $(BAE_LIBS) -lpthread -lfluidsynth -lsndfile -logg -lvorbis -lvorbisenc -lFLAC -lspeex -lmpg123 -lmp3lame -lopus
+LIBS	:= $(BAE_LIBS) -lpthread -lfluidsynth -lsndfile -logg -lvorbis -lvorbisfile -lvorbisenc -lFLAC -lspeex -lmpg123 -lmp3lame -lopus
 
 all: ${TARGET_JS} extra-files
 

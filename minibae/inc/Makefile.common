@@ -268,7 +268,7 @@ ifeq ($(SF2_SUPPORT),1)
 				BAE_LIBS := ../deps/win/FluidSynth/x86_64-w64-mingw32/lib/libfluidsynth-3.lib -Wl,-rpath,'$$ORIGIN'
 			endif			
 		else
-			ifeq ($(WASM),0)
+			ifneq ($(WASM),1)
 				UNAME_S:=$(shell uname -s 2>/dev/null)
 				# System FluidSynth for Linux (dynamic) if pkg-config available
 				ifneq (,$(findstring Linux,$(UNAME_S)))
@@ -356,26 +356,28 @@ endif
 # Add FLAC decoder source files
 ifeq ($(FLAC_DEC),1)
 	BAE_FLAGS += -DUSE_FLAC_DECODER=1
-	SRC += src/thirdparty/flac/src/libFLAC/stream_decoder.c \
-		src/thirdparty/flac/src/libFLAC/bitreader.c \
-		src/thirdparty/flac/src/libFLAC/bitmath.c \
-		src/thirdparty/flac/src/libFLAC/bitwriter.c \
-		src/thirdparty/flac/src/libFLAC/cpu.c \
-		src/thirdparty/flac/src/libFLAC/crc.c \
-		src/thirdparty/flac/src/libFLAC/fixed.c \
-		src/thirdparty/flac/src/libFLAC/format.c \
-		src/thirdparty/flac/src/libFLAC/lpc.c \
-		src/thirdparty/flac/src/libFLAC/md5.c \
-		src/thirdparty/flac/src/libFLAC/memory.c \
-		src/thirdparty/flac/src/libFLAC/metadata_iterators.c \
-		src/thirdparty/flac/src/libFLAC/metadata_object.c \
-		src/thirdparty/flac/src/libFLAC/stream_encoder_framing.c \
-		src/thirdparty/flac/src/libFLAC/window.c
-	# Add OGG support files for FLAC if OGG is enabled
-	ifeq ($(OGG_SUPPORT),1)
-		SRC += src/thirdparty/flac/src/libFLAC/ogg_decoder_aspect.c \
-			src/thirdparty/flac/src/libFLAC/ogg_helper.c \
-			src/thirdparty/flac/src/libFLAC/ogg_mapping.c
+	ifneq ($(WASM),1)
+		SRC += src/thirdparty/flac/src/libFLAC/stream_decoder.c \
+			src/thirdparty/flac/src/libFLAC/bitreader.c \
+			src/thirdparty/flac/src/libFLAC/bitmath.c \
+			src/thirdparty/flac/src/libFLAC/bitwriter.c \
+			src/thirdparty/flac/src/libFLAC/cpu.c \
+			src/thirdparty/flac/src/libFLAC/crc.c \
+			src/thirdparty/flac/src/libFLAC/fixed.c \
+			src/thirdparty/flac/src/libFLAC/format.c \
+			src/thirdparty/flac/src/libFLAC/lpc.c \
+			src/thirdparty/flac/src/libFLAC/md5.c \
+			src/thirdparty/flac/src/libFLAC/memory.c \
+			src/thirdparty/flac/src/libFLAC/metadata_iterators.c \
+			src/thirdparty/flac/src/libFLAC/metadata_object.c \
+			src/thirdparty/flac/src/libFLAC/stream_encoder_framing.c \
+			src/thirdparty/flac/src/libFLAC/window.c
+		# Add OGG support files for FLAC if OGG is enabled
+		ifeq ($(OGG_SUPPORT),1)
+			SRC += src/thirdparty/flac/src/libFLAC/ogg_decoder_aspect.c \
+				src/thirdparty/flac/src/libFLAC/ogg_helper.c \
+				src/thirdparty/flac/src/libFLAC/ogg_mapping.c
+		endif
 	endif
 endif
 
@@ -416,34 +418,38 @@ endif
 # Add libogg source files
 ifeq ($(OGG_SUPPORT),1)
 	BAE_FLAGS += -DUSE_OGG_FORMAT=1
-	SRC += src/thirdparty/libogg/src/bitwise.c src/thirdparty/libogg/src/framing.c
+	ifneq ($(WASM),1)
+		SRC += src/thirdparty/libogg/src/bitwise.c src/thirdparty/libogg/src/framing.c
+	endif
 endif
 
 # Add libvorbis decoder source files
 ifeq ($(VORBIS_DEC),1)
 	BAE_FLAGS += -DUSE_VORBIS_DECODER=1
-	SRC += src/thirdparty/libvorbis/lib/analysis.c \
-		src/thirdparty/libvorbis/lib/bitrate.c \
-		src/thirdparty/libvorbis/lib/block.c \
-		src/thirdparty/libvorbis/lib/codebook.c \
-		src/thirdparty/libvorbis/lib/envelope.c \
-		src/thirdparty/libvorbis/lib/floor0.c \
-		src/thirdparty/libvorbis/lib/floor1.c \
-		src/thirdparty/libvorbis/lib/info.c \
-		src/thirdparty/libvorbis/lib/lookup.c \
-		src/thirdparty/libvorbis/lib/lsp.c \
-		src/thirdparty/libvorbis/lib/mapping0.c \
-		src/thirdparty/libvorbis/lib/mdct.c \
-		src/thirdparty/libvorbis/lib/psy.c \
-		src/thirdparty/libvorbis/lib/registry.c \
-		src/thirdparty/libvorbis/lib/res0.c \
-		src/thirdparty/libvorbis/lib/sharedbook.c \
-		src/thirdparty/libvorbis/lib/smallft.c \
-		src/thirdparty/libvorbis/lib/synthesis.c \
-		src/thirdparty/libvorbis/lib/vorbisfile.c \
-		src/BAE_Source/Common/XVorbisFiles.c \
-		src/thirdparty/libvorbis/lib/lpc.c \
-		src/thirdparty/libvorbis/lib/window.c
+	ifneq ($(WASM),1)
+		SRC += src/thirdparty/libvorbis/lib/analysis.c \
+			src/thirdparty/libvorbis/lib/bitrate.c \
+			src/thirdparty/libvorbis/lib/block.c \
+			src/thirdparty/libvorbis/lib/codebook.c \
+			src/thirdparty/libvorbis/lib/envelope.c \
+			src/thirdparty/libvorbis/lib/floor0.c \
+			src/thirdparty/libvorbis/lib/floor1.c \
+			src/thirdparty/libvorbis/lib/info.c \
+			src/thirdparty/libvorbis/lib/lookup.c \
+			src/thirdparty/libvorbis/lib/lsp.c \
+			src/thirdparty/libvorbis/lib/mapping0.c \
+			src/thirdparty/libvorbis/lib/mdct.c \
+			src/thirdparty/libvorbis/lib/psy.c \
+			src/thirdparty/libvorbis/lib/registry.c \
+			src/thirdparty/libvorbis/lib/res0.c \
+			src/thirdparty/libvorbis/lib/sharedbook.c \
+			src/thirdparty/libvorbis/lib/smallft.c \
+			src/thirdparty/libvorbis/lib/synthesis.c \
+			src/thirdparty/libvorbis/lib/vorbisfile.c \
+			src/BAE_Source/Common/XVorbisFiles.c \
+			src/thirdparty/libvorbis/lib/lpc.c \
+			src/thirdparty/libvorbis/lib/window.c
+	endif
 endif
 
 # Add libvorbis encoder source files  
