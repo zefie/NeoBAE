@@ -925,7 +925,13 @@ void GM_SF2_ProcessController(GM_Song* pSong, int16_t channel, int16_t controlle
         }
     }
     
-    fluid_synth_cc(g_fluidsynth_synth, channel, controller, value);
+    // Only send controller changes to FluidSynth during normal playback
+    // This prevents preroll/scanning phases from applying controller changes
+    // that should only take effect during actual playback
+    if (pSong->AnalyzeMode == SCAN_NORMAL)
+    {
+        fluid_synth_cc(g_fluidsynth_synth, channel, controller, value);
+    }
 }
 
 void GM_SF2_ProcessPitchBend(GM_Song* pSong, int16_t channel, int16_t bendMSB, int16_t bendLSB)
