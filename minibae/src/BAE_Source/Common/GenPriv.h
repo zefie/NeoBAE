@@ -231,7 +231,11 @@
 #include "GenSnd.h"
 
 #define VOLUME_PRECISION_SCALAR     6L      // used to be 8, so we must scale down output by 2
-#define OUTPUT_SCALAR               10L      // 9 for volume minus 4 for increased volume_range resolution, plus 2 for increased volume precision scalar
+#if __EMSCRIPTEN__
+    #define OUTPUT_SCALAR               8L      // boost HSB volume for WebAssembly build
+#else
+    #define OUTPUT_SCALAR               10L      // 9 for volume minus 4 for increased volume_range resolution, plus 2 for increased volume precision scalar
+#endif
 #define VOLUME_RANGE                4096    // original range was 256, therefore:
 #define UPSCALAR                    16L     // multiplier (NOT a shift count!) for increasing amplitude resolution
 #define MAXRESONANCE                127     // mask and buffer size for resonant filter.  Higher means wider frequency range.

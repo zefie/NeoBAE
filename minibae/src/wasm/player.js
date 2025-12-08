@@ -37,6 +37,9 @@ class BeatnikPlayer {
         // Memory pointers that must stay alive
         this._soundbankPtr = null;
 
+        // Song data for export
+        this._songData = null;
+
         // Time update interval
         this._timeUpdateInterval = null;
     }
@@ -276,6 +279,9 @@ class BeatnikPlayer {
             const ptr = this._wasmModule._malloc(data.byteLength);
             const heapBytes = new Uint8Array(this._wasmModule.HEAPU8.buffer, ptr, data.byteLength);
             heapBytes.set(new Uint8Array(data));
+
+            // Store song data for export
+            this._songData = new Uint8Array(data);
 
             // Load in WASM
             const result = this._wasmModule._BAE_WASM_LoadSong(ptr, data.byteLength);
@@ -749,6 +755,146 @@ class BeatnikPlayer {
                 }
             });
         }
+    }
+
+    /**
+     * Export the current song to raw audio data
+     * @param {function} onProgress - Progress callback (0.0 to 1.0)
+     * @param {number|null} duration - Duration in milliseconds to export (null = full song)
+     * @returns {Promise<{leftChannel: Float32Array, rightChannel: Float32Array, sampleRate: number}>}
+     */
+    async exportToRawAudio(onProgress, duration = null) {
+        if (!this._songLoaded) {
+            throw new Error('No song loaded');
+        }
+
+        const wasPlaying = this._isPlaying;
+        if (wasPlaying) {
+            this.stop();
+        }
+
+        // Reload the song for a clean export
+        const songData = this._songData;
+        if (!songData) {
+            throw new Error('Song data not available');
+        }
+
+        const ptr = this._wasmModule._malloc(songData.byteLength);
+        const heapBytes = new Uint8Array(this._wasmModule.HEAPU8.buffer, ptr, songData.byteLength);
+        heapBytes.set(songData);
+        this._wasmModule._BAE_WASM_LoadSong(ptr, songData.byteLength);
+        this._wasmModule._free(ptr);
+
+        // Apply current settings
+        this._wasmModule._BAE_WASM_SetVolume(Math.floor(this._volume * 100));
+        this._wasmModule._BAE_WASM_SetTempo(Math.floor(this._tempo * 100));
+        this._wasmModule._BAE_WASM_SetTranspose(this._transpose);
+        this._wasmModule._BAE_WASM_SetReverbType(this._reverbType);
+        this._wasmModule._BAE_WASM_SetOutputGain(Math.floor(this._outputGain * 256));
+
+        // Start playback for rendering
+        this._wasmModule._BAE_WASM_Play();
+
+        // Warmup frames
+        const warmupFrames = 16;
+        this._wasmModule._BAE_WASM_GenerateAudio(warmupFrames);
+
+        const sampleRate = this._audioContext.sampleRate;
+        const durationValue = duration !== null ? duration : this._wasmModule._BAE_WASM_GetDuration();
+        const totalFrames = Math.ceil(((durationValue / 1000) - 1) * sampleRate) + sampleRate;
+        const chunkSize = 512;
+
+        const leftChannel = new Float32Array(totalFrames);
+        const rightChannel = new Float32Array(totalFrames);
+
+        let framesRendered = 0;
+        while (framesRendered < totalFrames) {
+            const framesToRender = Math.min(chunkSize, totalFrames - framesRendered);
+
+            const bufferPtr = this._wasmModule._BAE_WASM_GenerateAudio(framesToRender);
+            const wasmBuffer = new Int16Array(
+                this._wasmModule.HEAP16.buffer,
+                bufferPtr,
+                framesToRender * 2
+            );
+
+            for (let i = 0; i < framesToRender; i++) {
+                leftChannel[framesRendered + i] = wasmBuffer[i * 2] / 32768.0;
+                rightChannel[framesRendered + i] = wasmBuffer[i * 2 + 1] / 32768.0;
+            }
+
+            framesRendered += framesToRender;
+            if (onProgress) {
+                onProgress(framesRendered / totalFrames);
+            }
+
+            // Yield to event loop periodically
+            if (framesRendered % (chunkSize * 20) === 0) {
+                await new Promise(r => setTimeout(r, 0));
+            }
+        }
+
+        this._wasmModule._BAE_WASM_Stop();
+
+        return { leftChannel, rightChannel, sampleRate };
+    }
+
+    /**
+     * Create a WAV file from audio data
+     * @param {Float32Array} leftChannel - Left channel audio data
+     * @param {Float32Array} rightChannel - Right channel audio data
+     * @param {number} sampleRate - Sample rate in Hz
+     * @returns {ArrayBuffer} WAV file data
+     */
+    createWavFile(leftChannel, rightChannel, sampleRate) {
+        const numChannels = 2;
+        const bitsPerSample = 16;
+        const bytesPerSample = bitsPerSample / 8;
+        const numSamples = leftChannel.length;
+        const dataSize = numSamples * numChannels * bytesPerSample;
+        const fileSize = 44 + dataSize;
+
+        const buffer = new ArrayBuffer(fileSize);
+        const view = new DataView(buffer);
+
+        const writeString = (offset, string) => {
+            for (let i = 0; i < string.length; i++) {
+                view.setUint8(offset + i, string.charCodeAt(i));
+            }
+        };
+
+        // RIFF header
+        writeString(0, 'RIFF');
+        view.setUint32(4, fileSize - 8, true);
+        writeString(8, 'WAVE');
+        
+        // fmt chunk
+        writeString(12, 'fmt ');
+        view.setUint32(16, 16, true); // fmt chunk size
+        view.setUint16(20, 1, true); // audio format (PCM)
+        view.setUint16(22, numChannels, true);
+        view.setUint32(24, sampleRate, true);
+        view.setUint32(28, sampleRate * numChannels * bytesPerSample, true); // byte rate
+        view.setUint16(32, numChannels * bytesPerSample, true); // block align
+        view.setUint16(34, bitsPerSample, true);
+        
+        // data chunk
+        writeString(36, 'data');
+        view.setUint32(40, dataSize, true);
+
+        // Write interleaved audio data
+        let offset = 44;
+        for (let i = 0; i < numSamples; i++) {
+            // Clamp and convert to 16-bit PCM
+            const leftSample = Math.max(-1, Math.min(1, leftChannel[i]));
+            const rightSample = Math.max(-1, Math.min(1, rightChannel[i]));
+            
+            view.setInt16(offset, Math.floor(leftSample * 32767), true);
+            view.setInt16(offset + 2, Math.floor(rightSample * 32767), true);
+            offset += 4;
+        }
+
+        return buffer;
     }
 
     /**
