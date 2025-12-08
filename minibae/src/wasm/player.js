@@ -14,7 +14,7 @@ class MiniBAEPlayer {
         // Get file parameter from URL
         const urlParams = new URLSearchParams(window.location.search);
         const fileName = urlParams.get('file') !== null ? urlParams.get('file') : this.default_media_file;
-        const customBank = urlParams.get('bank') !== null ? urlParams.get('bank') : this.default_bank_rmf;
+        const customBank = urlParams.get('bank');
         
         // Parse and sanity check reverb (0-11 based on available types)
         const customReverb = urlParams.get('reverb') !== null ? parseInt(urlParams.get('reverb')) : this.default_reverb;
