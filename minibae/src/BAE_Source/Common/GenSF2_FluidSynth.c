@@ -1061,13 +1061,13 @@ void GM_SF2_AllNotesOff(GM_Song* pSong)
 }
 
 // FluidSynth configuration
-void GM_SF2_SetMasterVolume(XFIXED volume)
+void GM_SF2_SetGain(float volume)
 {
-    g_fluidsynth_master_volume = volume;
-    if (g_fluidsynth_settings)
-    {
-        fluid_settings_setnum(g_fluidsynth_settings, "synth.gain", XFIXED_TO_FLOAT(volume));
-    }
+    fluid_synth_set_gain(g_fluidsynth_synth, volume);
+}
+
+float GM_SF2_GetGain() {
+    return fluid_synth_get_gain(g_fluidsynth_synth);
 }
 
 XFIXED GM_SF2_GetMasterVolume(void)

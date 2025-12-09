@@ -557,8 +557,8 @@
                     </div>
                     <div class="miniplayer-volume">
                         <span class="miniplayer-volume-label">Volume:</span>
-                        <input type="range" class="miniplayer-slider miniplayer-volume-slider" 
-                               min="0" max="100" value="100" step="1">
+                           <input type="range" class="miniplayer-slider miniplayer-volume-slider" 
+                               min="0" max="200" value="100" step="1">
                         <span class="miniplayer-volume-value">100%</span>
                     </div>
                     <div class="miniplayer-karaoke">
@@ -767,10 +767,18 @@
         const volumeValue = modal.querySelector('.miniplayer-volume-value');
         
         volumeSlider.addEventListener('input', (e) => {
-            const volume = parseInt(e.target.value) / 100;
-            player.volume = volume;
-            volumeValue.textContent = e.target.value + '%';
+            const raw = parseInt(e.target.value);
+            const clamped = isNaN(raw) ? 100 : Math.max(0, Math.min(200, raw));
+            if (clamped !== raw) {
+                e.target.value = clamped;
+            }
+            player.volume = clamped / 100;
+            volumeValue.textContent = clamped + '%';
         });
+
+        // Sync initial volume with slider default (100%)
+        player.volume = volumeSlider.value / 100;
+        volumeValue.textContent = volumeSlider.value + '%';
 
         // Time update interval
         const interval = setInterval(() => {

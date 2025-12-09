@@ -556,10 +556,8 @@ int BAE_WASM_GetDuration(void) {
 }
 
 /*
- * Set master volume (0-200)
- * Accepts up to 200% (2.0x) to align with the web UI slider.
+ * Set master volume (0-100)
  */
-#define FLOAT_TO_UNSIGNED_FIXED(x) ((BAE_UNSIGNED_FIXED)((double)(x) * 65536.0)) // the extra long is for signed values
 EMSCRIPTEN_KEEPALIVE
 int BAE_WASM_SetVolume(int volume) {
     if (gMixer == NULL) {
@@ -572,7 +570,7 @@ int BAE_WASM_SetVolume(int volume) {
 
     // Convert to BAE 16.16 fixed point format where BAE_FIXED_1 (0x10000 = 65536) = 1.0
     // volume 100% -> 0x10000, volume 50% -> 0x8000, volume 0% -> 0
-    BAE_UNSIGNED_FIXED fixedVol = FLOAT_TO_UNSIGNED_FIXED((double)volume / 100.0);
+    BAE_UNSIGNED_FIXED fixedVol = (BAE_UNSIGNED_FIXED)((volume * 0x10000L) / 100);
     
     // Set mixer master volume
     BAEMixer_SetMasterVolume(gMixer, fixedVol);
@@ -581,7 +579,17 @@ int BAE_WASM_SetVolume(int volume) {
     if (gCurrentSong != NULL) {
         BAESong_SetVolume(gCurrentSong, fixedVol);
     }
-    
+
+#if _USING_FLUIDSYNTH == TRUE && USE_SF2_SUPPORT == TRUE
+    // Also set FluidSynth global volume
+    if (GM_GetMixerSF2Mode()) {
+        if (volume > 100) {
+            GM_SF2_SetGain(((float)volume / 10000.0f) - 0.005f);
+        } else {
+            GM_SF2_SetGain(0.005f);
+        }
+    }
+#endif
     return 0;
 }
 
