@@ -299,6 +299,57 @@
             background: transparent;
         }
 
+        .miniplayer-karaoke {
+            display: none;
+            background: #252526;
+            border: 1px solid #3c3c3c;
+            border-radius: 4px;
+            padding: 12px;
+            margin-top: 15px;
+            min-height: 60px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+            line-height: 1.5;
+        }
+
+        .miniplayer-karaoke.visible {
+            display: block;
+        }
+
+        .miniplayer-karaoke-previous {
+            color: #808080;
+            font-size: 13px;
+            margin-bottom: 4px;
+            min-height: 20px;
+        }
+
+        .miniplayer-karaoke-current {
+            color: #d4d4d4;
+            font-size: 15px;
+            font-weight: 500;
+            min-height: 22px;
+        }
+
+        .miniplayer-karaoke-current .highlight {
+            color: #4ec9b0;
+            font-weight: 600;
+        }
+
+        @media (max-width: 640px) {
+            .miniplayer-karaoke {
+                padding: 10px;
+                margin-top: 12px;
+                min-height: 50px;
+            }
+            
+            .miniplayer-karaoke-previous {
+                font-size: 12px;
+            }
+            
+            .miniplayer-karaoke-current {
+                font-size: 14px;
+            }
+        }
+
         .miniplayer-slider::-moz-range-track {
             background: transparent;
         }
@@ -431,6 +482,10 @@
                         <input type="range" class="miniplayer-slider miniplayer-volume-slider" 
                                min="0" max="100" value="100" step="1">
                         <span class="miniplayer-volume-value">100%</span>
+                    </div>
+                    <div class="miniplayer-karaoke">
+                        <div class="miniplayer-karaoke-previous"></div>
+                        <div class="miniplayer-karaoke-current"></div>
                     </div>
                     <div class="miniplayer-status loading">Initializing...</div>
                 </div>
@@ -593,10 +648,48 @@
             stopBtn.disabled = true;
         };
 
+        // Karaoke support
+        const karaokePanel = modal.querySelector('.miniplayer-karaoke');
+        const karaokePrevious = modal.querySelector('.miniplayer-karaoke-previous');
+        const karaokeCurrent = modal.querySelector('.miniplayer-karaoke-current');
+
+        modal._lyricHandler = (lyricData) => {
+            // Show karaoke panel on first lyric
+            if (!karaokePanel.classList.contains('visible')) {
+                karaokePanel.classList.add('visible');
+            }
+
+            // Update previous line (dimmed)
+            if (lyricData.previous) {
+                karaokePrevious.textContent = lyricData.previous;
+            }
+
+            // Update current line with highlighting
+            if (lyricData.current) {
+                if (lyricData.fragment) {
+                    // Highlight the current fragment
+                    const fragmentIndex = lyricData.current.lastIndexOf(lyricData.fragment);
+                    if (fragmentIndex !== -1) {
+                        const before = lyricData.current.substring(0, fragmentIndex);
+                        const highlighted = lyricData.current.substring(fragmentIndex, fragmentIndex + lyricData.fragment.length);
+                        const after = lyricData.current.substring(fragmentIndex + lyricData.fragment.length);
+                        karaokeCurrent.innerHTML = `${before}<span class="highlight">${highlighted}</span>${after}`;
+                    } else {
+                        karaokeCurrent.textContent = lyricData.current;
+                    }
+                } else {
+                    karaokeCurrent.textContent = lyricData.current;
+                }
+            } else {
+                karaokeCurrent.textContent = '';
+            }
+        };
+
         // Player event listeners
         player.addEventListener('stop', modal._stopHandler);
         player.addEventListener('end', modal._endHandler);
         player.addEventListener('error', modal._errorHandler);
+        player.addEventListener('lyric', modal._lyricHandler);
 
         // Initial update
         updateTime();
@@ -635,10 +728,19 @@
                 if (currentModal._errorHandler) {
                     globalPlayer.removeEventListener('error', currentModal._errorHandler);
                 }
+                if (currentModal._lyricHandler) {
+                    globalPlayer.removeEventListener('lyric', currentModal._lyricHandler);
+                }
             }
             
             if (currentModal._cleanup) {
                 currentModal._cleanup();
+            }
+            
+            // Hide karaoke panel when closing
+            const karaokePanel = currentModal.querySelector('.miniplayer-karaoke');
+            if (karaokePanel) {
+                karaokePanel.classList.remove('visible');
             }
             currentModal.remove();
             currentModal = null;

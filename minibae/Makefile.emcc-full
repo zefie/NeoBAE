@@ -9,9 +9,9 @@ NOAUTO			:= 1
 SF2_SUPPORT		:= 1
 USE_FLUIDSYNTH  := 1
 MP3_DEC			:= 1
-VORBIS_DEC		:= 1
-FLAC_DEC		:= 1
 KARAOKE			:= 1
+VORBIS_DEC		:= 0 # not needed in miniBAE WASM
+FLAC_DEC		:= 0 # not needed in miniBAE WASM
 
 TARGET_JS	:= engine.js
 PACK_FILENAME	:= miniBAE_WASM_FluidSynth.tar.gz
@@ -59,7 +59,7 @@ endif
 
 
 #/usr/share/emscripten/cache/sysroot/lib
-LIBS	:= $(BAE_LIBS) -lpthread -lfluidsynth -lsndfile -logg -lvorbis -lvorbisfile -lvorbisenc -lFLAC -lspeex -lmpg123 -lmp3lame -lopus
+LIBS	:= $(BAE_LIBS) -lfluidsynth -lsndfile -logg -lvorbis -lvorbisfile -lvorbisenc -lFLAC -lopus
 
 all: ${TARGET_JS} extra-files
 
