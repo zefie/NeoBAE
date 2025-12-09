@@ -242,7 +242,6 @@ class BeatnikPlayer {
         
         // Allow 2 second window (handles both preroll dump and slight timing variations)
         if (timeDelta > 2000) {
-            console.log(`[Karaoke] Filtered lyric at ${lyricTimeMs}ms (current: ${currentTimeMs}ms, delta: ${timeDelta}ms)`);
             return;
         }
 
