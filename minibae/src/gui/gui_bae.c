@@ -466,9 +466,9 @@ bool bae_init(int sampleRateHz, bool stereo)
                                      sampleRateHz,
                                      E_LINEAR_INTERPOLATION,
                                      modifiers,
-                                     32,    // maxMidiVoices
+                                     64,    // maxMidiVoices
                                      8,     // maxSoundVoices
-                                     32,    // mixLevel (must be > 0)
+                                     64,    // mixLevel (must be > 0)
                                      TRUE); // engageAudio
 
     if (result != BAE_NO_ERROR)

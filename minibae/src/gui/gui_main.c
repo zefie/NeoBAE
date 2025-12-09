@@ -535,7 +535,7 @@ bool recreate_mixer_and_restore(int sampleRateHz, bool stereo, int reverbType,
     BAEMixer_SetAudioTask(g_bae.mixer, gui_audio_task, g_bae.mixer);
     BAEMixer_ReengageAudio(g_bae.mixer);
     BAEMixer_SetDefaultReverb(g_bae.mixer, (BAEReverbType)reverbType);
-    BAEMixer_SetMasterVolume(g_bae.mixer, FLOAT_TO_UNSIGNED_FIXED(1.0));
+    BAEMixer_SetMasterVolume(g_bae.mixer, FLOAT_TO_UNSIGNED_FIXED(g_last_requested_master_volume));
 
     // Ensure the lightweight live song is recreated so external MIDI
     // input continues to route into the new mixer. If a previous

@@ -50,7 +50,7 @@ static fluid_synth_t* g_fluidsynth_synth = NULL;
 static int g_fluidsynth_soundfont_id = -1;
 static XBOOL g_fluidsynth_initialized = FALSE;
 static XBOOL g_fluidsynth_mono_mode = FALSE;
-static XFIXED g_fluidsynth_master_volume = (XFIXED)((XFIXED_1 / 256) * 5);
+static XFIXED g_fluidsynth_master_volume = (XFIXED)(XFIXED_1 / 256);
 static uint16_t g_fluidsynth_sample_rate = BAE_DEFAULT_SAMPLE_RATE;
 static char g_fluidsynth_sf2_path[256] = {0};
 // Track a temp file we create for DLS fallback so we can remove it on unload
@@ -1192,6 +1192,8 @@ void GM_SF2_SetDefaultControllers(int16_t channel)
     fluid_synth_cc(g_fluidsynth_synth, channel, 64, 0);   // Sustain pedal off
     fluid_synth_cc(g_fluidsynth_synth, channel, 91, 0);   // Reverb depth
     fluid_synth_cc(g_fluidsynth_synth, channel, 93, 0);   // Chorus depth
+
+    fluid_synth_system_reset(g_fluidsynth_synth);
     
     // Program selection handled globally in PV_SF2_SetValidDefaultProgramsForAllChannels()
 }
@@ -1449,6 +1451,8 @@ static void PV_SF2_SetValidDefaultProgramsForAllChannels(void)
         fluid_synth_cc(g_fluidsynth_synth, ch, 91, 0);
         fluid_synth_cc(g_fluidsynth_synth, ch, 93, 0);
     }
+
+    fluid_synth_system_reset(g_fluidsynth_synth);
 
     // If no font loaded, nothing else to do
     if (g_fluidsynth_soundfont_id < 0)

@@ -62,6 +62,8 @@ XBOOL GM_IsSF2Song(GM_Song* pSong);
 // Enable/disable FluidSynth rendering for a song
 OPErr GM_EnableSF2ForSong(GM_Song* pSong, XBOOL enable);
 
+void GM_SF2_SetMasterVolume(XFIXED volume);
+
 // FluidSynth MIDI event processing (called from existing MIDI processors)
 void GM_SF2_ProcessNoteOn(GM_Song* pSong, int16_t channel, int16_t note, int16_t velocity);
 void GM_SF2_ProcessNoteOff(GM_Song* pSong, int16_t channel, int16_t note, int16_t velocity);
