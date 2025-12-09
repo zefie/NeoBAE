@@ -615,9 +615,11 @@ class BeatnikPlayer {
     }
 
     set volume(value) {
-        this._volume = Math.max(0, Math.min(1, value));
+        // Allow up to 200% gain; engine API expects 0-200 range
+        this._volume = Math.max(0, Math.min(2, value));
         if (this._wasmModule) {
-            this._wasmModule._BAE_WASM_SetVolume(Math.floor(this._volume * 100));
+            const scaled = Math.floor(this._volume * 100);
+            this._wasmModule._BAE_WASM_SetVolume(scaled);
         }
     }
 

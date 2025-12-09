@@ -556,8 +556,10 @@ int BAE_WASM_GetDuration(void) {
 }
 
 /*
- * Set master volume (0-100)
+ * Set master volume (0-200)
+ * Accepts up to 200% (2.0x) to align with the web UI slider.
  */
+#define FLOAT_TO_UNSIGNED_FIXED(x) ((BAE_UNSIGNED_FIXED)((double)(x) * 65536.0)) // the extra long is for signed values
 EMSCRIPTEN_KEEPALIVE
 int BAE_WASM_SetVolume(int volume) {
     if (gMixer == NULL) {
@@ -566,11 +568,11 @@ int BAE_WASM_SetVolume(int volume) {
 
     // Clamp to valid range
     if (volume < 0) volume = 0;
-    if (volume > 100) volume = 100;
+    if (volume > 200) volume = 200;
 
     // Convert to BAE 16.16 fixed point format where BAE_FIXED_1 (0x10000 = 65536) = 1.0
     // volume 100% -> 0x10000, volume 50% -> 0x8000, volume 0% -> 0
-    BAE_UNSIGNED_FIXED fixedVol = (BAE_UNSIGNED_FIXED)((volume * 0x10000L) / 100);
+    BAE_UNSIGNED_FIXED fixedVol = FLOAT_TO_UNSIGNED_FIXED((double)volume / 100.0);
     
     // Set mixer master volume
     BAEMixer_SetMasterVolume(gMixer, fixedVol);

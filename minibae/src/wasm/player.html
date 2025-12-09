@@ -71,7 +71,7 @@
                         <label class="control-label">Volume:</label>
                         <div class="slider-container">
                             <input type="range" id="volumeSlider" class="slider" 
-                                   min="0" max="100" value="100" step="1">
+                                min="0" max="200" value="100" step="1">
                             <span class="slider-value" id="volumeValue">100%</span>
                         </div>
                     </div>
@@ -127,11 +127,28 @@
                         </div>
                         <div class="time-display" id="duration">00:00.000</div>
                     </div>
+                    <div class="master-vu">
+                        <div class="master-vu-label">Output VU</div>
+                        <div class="master-vu-bars">
+                            <div class="master-vu-row">
+                                <span class="vu-side">L</span>
+                                <div class="vu-meter master-vu-meter">
+                                    <div class="vu-meter-fill" id="vu-master-left"></div>
+                                </div>
+                            </div>
+                            <div class="master-vu-row">
+                                <span class="vu-side">R</span>
+                                <div class="vu-meter master-vu-meter">
+                                    <div class="vu-meter-fill" id="vu-master-right"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
             <!-- Virtual Keyboard -->
-            <div class="section">
+            <div class="section virtual-keyboard-section">
                 <div class="section-title">Virtual MIDI Keyboard</div>
                 <div class="keyboard">
                     <div class="keyboard-controls">

@@ -12,6 +12,8 @@ class MiniBAEPlayer {
         this.default_reverb = 7; // Early Reflections
         this.userMediaFile = null;
         this.userBankFile = null;
+        this.masterVuBufferLeft = null;
+        this.masterVuBufferRight = null;
 
         // Get file parameter from URL
         const urlParams = new URLSearchParams(window.location.search);
@@ -31,7 +33,7 @@ class MiniBAEPlayer {
         
         // Parse and sanity check volume (0 to 100%)
         let customVolume = urlParams.get('volume') !== null ? parseInt(urlParams.get('volume')) : 100;
-        customVolume = Math.max(0, Math.min(100, customVolume));
+        customVolume = Math.max(0, Math.min(200, customVolume));
         
         // Parse muted channels (1-indexed, comma-separated or single value)
         const mutedParam = urlParams.get('muted');
@@ -370,23 +372,92 @@ class MiniBAEPlayer {
     }
 
     updateVUMeters() {
-        if (this.player && this.player._wasmModule && this.player._songLoaded) {
-            // Update VU meters
-            for (let i = 0; i < 16; i++) {
-                const activity = this.player._wasmModule._BAE_WASM_GetChannelActivity(i);
-                const percent = (activity / 255) * 100;
-                const vuFill = document.getElementById(`vu-${i}`);
-                if (vuFill) {
-                    vuFill.style.width = `${percent}%`;
-                }
-            }
-            
-            // Update keyboard highlighting from playback only when playing
-            if (this.player._isPlaying) {
-                this.updateKeyboardHighlighting();
+        const canRenderMeters = this.player && this.player._wasmModule && this.player._songLoaded && this.player._isPlaying;
+
+        if (!canRenderMeters) {
+            this.resetVUMeters();
+            requestAnimationFrame(() => this.updateVUMeters());
+            return;
+        }
+
+        for (let i = 0; i < 16; i++) {
+            const activity = this.player._wasmModule._BAE_WASM_GetChannelActivity(i);
+            const percent = (activity / 255) * 100;
+            const vuFill = document.getElementById(`vu-${i}`);
+            if (vuFill) {
+                vuFill.style.width = `${percent}%`;
             }
         }
+
+        this.updateMasterVUMeters();
+        this.updateKeyboardHighlighting();
+
         requestAnimationFrame(() => this.updateVUMeters());
+    }
+
+    resetVUMeters() {
+        for (let i = 0; i < 16; i++) {
+            const vuFill = document.getElementById(`vu-${i}`);
+            if (vuFill) {
+                vuFill.style.width = '0%';
+            }
+        }
+
+        if (this.elements.masterVuLeft) {
+            this.elements.masterVuLeft.style.width = '0%';
+        }
+
+        if (this.elements.masterVuRight) {
+            this.elements.masterVuRight.style.width = '0%';
+        }
+    }
+
+    updateMasterVUMeters() {
+        if (!this.elements.masterVuLeft || !this.elements.masterVuRight || !this.player) return;
+
+        const leftAnalyser = this.player.analyserLeft;
+        const rightAnalyser = this.player.analyserRight;
+
+        if (!leftAnalyser || !rightAnalyser) return;
+
+        this.masterVuBufferLeft = this.getVuBuffer(leftAnalyser, this.masterVuBufferLeft);
+        this.masterVuBufferRight = this.getVuBuffer(rightAnalyser, this.masterVuBufferRight);
+
+        const leftLevel = this.calculateAnalyserLevel(leftAnalyser, this.masterVuBufferLeft);
+        const rightLevel = this.calculateAnalyserLevel(rightAnalyser, this.masterVuBufferRight);
+
+        this.elements.masterVuLeft.style.width = `${leftLevel}%`;
+        this.elements.masterVuRight.style.width = `${rightLevel}%`;
+    }
+
+    getVuBuffer(analyser, existingBuffer) {
+        if (!existingBuffer || existingBuffer.length !== analyser.fftSize) {
+            return new Float32Array(analyser.fftSize);
+        }
+        return existingBuffer;
+    }
+
+    calculateAnalyserLevel(analyser, buffer) {
+        analyser.getFloatTimeDomainData(buffer);
+
+        let sumSquares = 0;
+        let peak = 0;
+
+        for (let i = 0; i < buffer.length; i++) {
+            const sample = buffer[i];
+            sumSquares += sample * sample;
+            const abs = Math.abs(sample);
+            if (abs > peak) peak = abs;
+        }
+
+        const rms = Math.sqrt(sumSquares / buffer.length);
+        const peakDb = peak > 0 ? 20 * Math.log10(peak) : -120;
+        const rmsDb = rms > 0 ? 20 * Math.log10(rms) : -120;
+        const vuDb = Math.max(rmsDb, peakDb);
+
+        const minDb = -60; // floor for mapping to 0%
+        const level = ((vuDb - minDb) / -minDb) * 100;
+        return Math.max(0, Math.min(100, level));
     }
 
     updateKeyboardHighlighting() {
@@ -472,6 +543,8 @@ class MiniBAEPlayer {
             progressFill: document.getElementById('progressFill'),
             currentTime: document.getElementById('currentTime'),
             duration: document.getElementById('duration'),
+            masterVuLeft: document.getElementById('vu-master-left'),
+            masterVuRight: document.getElementById('vu-master-right'),
             
             // Controls
             transposeSlider: document.getElementById('transposeSlider'),
@@ -846,6 +919,8 @@ class MiniBAEPlayer {
             this.player.addEventListener('stop', () => {
                 this.updateButtonStates(false);
                 this.updateStatus('Stopped');
+                this.resetVUMeters();
+                this.clearActiveKeyboardNotes();
             });
 
             this.player.addEventListener('end', () => {
@@ -937,6 +1012,7 @@ class MiniBAEPlayer {
             this.isPaused = false;
             this.clearActiveKeyboardNotes();
             this.updateTimeDisplay(0);
+            this.resetVUMeters();
         }
     }
 
