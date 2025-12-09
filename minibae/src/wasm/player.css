@@ -347,6 +347,14 @@ select:hover {
     color: #cccccc;
 }
 
+.time-display:first-child {
+    cursor: pointer;
+}
+
+.time-display:first-child:hover {
+    color: #9cdcfe;
+}
+
 .progress-bar {
     flex: 1;
     height: 6px;

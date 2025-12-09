@@ -576,6 +576,13 @@ class MiniBAEPlayer {
             }
         });
 
+        // Current time click to seek to start
+        this.elements.currentTime.addEventListener('click', () => {
+            if (this.player) {
+                this.player.currentTime = 0;
+            }
+        });
+
         // Transpose
         this.elements.transposeSlider.addEventListener('input', (e) => {
             this.transpose = parseInt(e.target.value);

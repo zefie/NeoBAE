@@ -176,6 +176,14 @@
             font-family: 'Courier New', monospace;
         }
 
+        .miniplayer-current-time {
+            cursor: pointer;
+        }
+
+        .miniplayer-current-time:hover {
+            color: #fff;
+        }
+
         .miniplayer-seekbar {
             width: 100%;
             height: 6px;
@@ -580,6 +588,12 @@
             const percent = (e.clientX - rect.left) / rect.width;
             const newTime = percent * player.duration;
             player.currentTime = newTime;
+            updateTime();
+        });
+
+        // Current time click to seek to start
+        currentTimeEl.addEventListener('click', () => {
+            player.currentTime = 0;
             updateTime();
         });
 
