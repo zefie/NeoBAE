@@ -35,6 +35,13 @@ static BAEMixer gMixer = NULL;
 static BAESong gCurrentSong = NULL;
 static BAESong gEffectSong = NULL;  // Second song for sound effects (plays on top)
 
+#ifdef SUPPORT_KARAOKE
+// Lyric callback support
+typedef void (*JSLyricCallback)(const char* lyric, uint32_t timeUs);
+static JSLyricCallback gJSLyricCallback = NULL;
+static int gSuppressLyrics = 1;  // Start suppressed (1 = suppress during preroll, 0 = allow)
+#endif
+
 // Audio buffer for JS interop
 #define AUDIO_BUFFER_FRAMES 512
 static int16_t gAudioBuffer[AUDIO_BUFFER_FRAMES * 2];  // Stereo
@@ -54,6 +61,10 @@ extern void BAE_BuildMixerSlice(void *threadContext, void *pAudioBuffer,
 // Forward declarations for internal helper functions
 static void PV_ResetRingBuffer(void);
 static void PV_FillRingBufferSlice(void);
+
+#ifdef SUPPORT_KARAOKE
+static void PV_LyricCallback(struct GM_Song *songPtr, const char *lyric, uint32_t timeUs, void *ref);
+#endif
 
 /*
  * Initialize the Beatnik Audio Engine
@@ -322,6 +333,12 @@ int BAE_WASM_LoadSong(const uint8_t* data, int length) {
         return (int)err;
     }
 
+#ifdef SUPPORT_KARAOKE
+    // Reset lyric state and suppress lyrics during preroll
+    extern BAEResult BAESong_ResetLyricState(BAESong song);
+    BAESong_ResetLyricState(gCurrentSong);
+#endif
+
     // Preroll (load instruments)
     BAE_PRINTF("[BAE] LoadSong: Prerolling...\n");
     err = BAESong_Preroll(gCurrentSong);
@@ -333,7 +350,12 @@ int BAE_WASM_LoadSong(const uint8_t* data, int length) {
         return (int)err;
     }
 
-    // Clear ring buffer to prevent stale audio from previous song
+#ifdef SUPPORT_KARAOKE
+    extern BAEResult BAESong_ResetLyricState(BAESong song);
+    BAESong_ResetLyricState(gCurrentSong);
+    BAE_PRINTF("[BAE] LoadSong: Lyric state reset\n");
+#endif
+
     PV_ResetRingBuffer();
 
     BAE_PRINTF("[BAE] LoadSong: SUCCESS\n");
@@ -392,7 +414,33 @@ int BAE_WASM_Play(void) {
     // Resume mixer/sequencer if paused
     GM_ResumeGeneralSound(NULL);
 
+#ifdef SUPPORT_KARAOKE
+    if (gJSLyricCallback) {
+        extern BAEResult BAESong_SetLyricCallback(BAESong song, GM_SongLyricCallbackProcPtr pCallback, void *callbackReference);
+        BAESong_SetLyricCallback(gCurrentSong, PV_LyricCallback, NULL);
+        BAE_PRINTF("[BAE] Play: Lyric callback installed\n");
+    }
+    
+#endif
+
     BAEResult err = BAESong_Start(gCurrentSong, 0);
+    if (err != BAE_NO_ERROR) {
+        BAE_PRINTF("[BAE] Play: ERROR - BAESong_Start failed with code %d\n", (int)err);
+        return (int)err;
+    }
+    // Delay unsuppressing lyrics by 550ms to skip preroll artifacts
+    // Use a simple spin-wait since we're already in the main thread
+    // and this happens only once per song start
+    #ifdef SUPPORT_KARAOKE
+    {
+        uint32_t startTime = BAE_GetMicroseconds();
+        while ((BAE_GetMicroseconds() - startTime) < 550000) {
+            // Busy wait for 550ms
+            BAE_WaitMicroseconds(1000);  // Sleep 1ms at a time to be CPU-friendly
+        }
+        gSuppressLyrics = 0;
+    }
+    #endif
     BAE_PRINTF("[BAE] Play: BAESong_Start returned %d\n", (int)err);
     return (int)err;
 }
@@ -433,6 +481,16 @@ int BAE_WASM_Stop(void) {
     if (gCurrentSong == NULL) {
         return -1;
     }
+
+#ifdef SUPPORT_KARAOKE
+    // Suppress lyrics when stopped
+    gSuppressLyrics = 1;
+    
+    // Uninstall lyric callback
+    extern BAEResult BAESong_SetLyricCallback(BAESong song, GM_SongLyricCallbackProcPtr pCallback, void *callbackReference);
+    BAESong_SetLyricCallback(gCurrentSong, NULL, NULL);
+    BAE_PRINTF("[BAE] Stop: Lyric callback uninstalled\n");
+#endif
 
     BAESong_Stop(gCurrentSong, TRUE);
     
@@ -1395,3 +1453,59 @@ int BAE_WASM_NoteOff(int channel, int note) {
     return (int)err;
 }
 
+
+#ifdef SUPPORT_KARAOKE
+/*
+ * Internal lyric callback that forwards to JavaScript
+ */
+static void PV_LyricCallback(struct GM_Song *songPtr, const char *lyric, uint32_t timeUs, void *ref) {
+    (void)songPtr;
+    (void)ref;
+    
+    // Suppress lyrics during preroll
+    if (gSuppressLyrics) {
+        return;
+    }
+    
+    if (gJSLyricCallback && lyric) {
+        gJSLyricCallback(lyric, timeUs);
+    }
+}
+
+/*
+ * Set JavaScript lyric callback function
+ * callback: JavaScript function pointer that accepts (lyric: string, timeUs: number)
+ * Returns: 0 on success, -1 on error
+ */
+EMSCRIPTEN_KEEPALIVE
+int BAE_WASM_SetLyricCallback(JSLyricCallback callback) {
+    gJSLyricCallback = callback;
+    
+    if (gCurrentSong == NULL) {
+        return -1;
+    }
+    
+    // External function from MiniBAE.c
+    extern BAEResult BAESong_SetLyricCallback(BAESong song, GM_SongLyricCallbackProcPtr pCallback, void *callbackReference);
+    
+    BAEResult err = BAESong_SetLyricCallback(gCurrentSong, callback ? PV_LyricCallback : NULL, NULL);
+    return (int)err;
+}
+
+/*
+ * Reset lyric state (clear accumulated lyrics)
+ * Returns: 0 on success, -1 on error
+ */
+EMSCRIPTEN_KEEPALIVE
+int BAE_WASM_ResetLyricState(void) {
+    if (gCurrentSong == NULL) {
+        return -1;
+    }
+    
+    // External function from MiniBAE.c
+    extern BAEResult BAESong_ResetLyricState(BAESong song);
+    
+    BAEResult err = BAESong_ResetLyricState(gCurrentSong);
+    return (int)err;
+}
+#endif // SUPPORT_KARAOKE

@@ -25,7 +25,8 @@ class BeatnikPlayer {
             stop: [],
             end: [],
             error: [],
-            timeupdate: []
+            timeupdate: [],
+            lyric: []
         };
 
         // Internal state
@@ -34,6 +35,12 @@ class BeatnikPlayer {
         this._transpose = 0;
         this._reverbType = 3; // Acoustic Lab (Beatnik default)
         this._outputGain = 0.5; // Default -6dB to reduce distortion on hot mixes
+
+        // Karaoke state
+        this._karaokeLineCurrent = '';
+        this._karaokeLinePrevious = '';
+        this._karaokeLastFragment = '';
+        this._karaokeHaveLyrics = false;
 
         // Memory pointers that must stay alive
         this._soundbankPtr = null;
@@ -89,6 +96,9 @@ class BeatnikPlayer {
 
             // Apply default output gain (reduces distortion on hot mixes)
             this._wasmModule._BAE_WASM_SetOutputGain(Math.floor(this._outputGain * 256));
+
+            // Set up karaoke lyric callback
+            this._setupLyricCallback();
 
             // Preload soundbank if specified
             if (soundbankUrl) {
@@ -178,6 +188,148 @@ class BeatnikPlayer {
         processor.connect(this._audioContext.destination);
 
         this._workletNode = processor;
+    }
+
+    /**
+     * Set up lyric callback for karaoke support
+     * @private
+     */
+    _setupLyricCallback() {
+        if (!this._wasmModule._BAE_WASM_SetLyricCallback) {
+            console.warn('Lyric callback not available in this build');
+            return;
+        }
+
+        // Create JavaScript callback function that WASM can call
+        const lyricCallback = this._wasmModule.addFunction((lyricPtr, timeUs) => {
+            const lyric = this._wasmModule.UTF8ToString(lyricPtr);
+            this._handleLyric(lyric, timeUs);
+        }, 'vii');  // void function(int, int) signature
+
+        // Register with WASM
+        this._wasmModule._BAE_WASM_SetLyricCallback(lyricCallback);
+    }
+
+    /**
+     * Handle incoming lyric event (called from WASM)
+     * @private
+     */
+    _handleLyric(lyric, timeUs) {
+        if (!lyric) return;
+
+        // Filter out preroll lyrics dump: only accept lyrics that are near current playback position
+        // During preroll, all lyrics fire with their actual timestamps but we're at position 0
+        // So we ignore any lyric that's more than 2 seconds ahead of current position
+        const currentTimeMs = this.currentTime;
+        const lyricTimeMs = timeUs / 1000;
+        const timeDelta = Math.abs(lyricTimeMs - currentTimeMs);
+        
+        // Allow 2 second window (handles both preroll dump and slight timing variations)
+        if (timeDelta > 2000) {
+            console.log(`[Karaoke] Filtered lyric at ${lyricTimeMs}ms (current: ${currentTimeMs}ms, delta: ${timeDelta}ms)`);
+            return;
+        }
+
+        this._karaokeHaveLyrics = true;
+
+        // Handle empty lyric as newline
+        if (lyric === '') {
+            this._karaokeNewline();
+            this._dispatchEvent('lyric', {
+                previous: this._karaokeLinePrevious,
+                current: this._karaokeLineCurrent,
+                fragment: ''
+            });
+            return;
+        }
+
+        // Process '/' or '\\' as newline delimiters
+        const segments = lyric.split(/[/\\\\]/);
+        
+        for (let i = 0; i < segments.length; i++) {
+            const segment = segments[i];
+            
+            if (segment) {
+                this._karaokeAddFragment(segment);
+            }
+            
+            // Add newline between segments (but not after last segment)
+            if (i < segments.length - 1) {
+                this._karaokeNewline();
+            }
+        }
+
+        // Dispatch event with current state
+        this._dispatchEvent('lyric', {
+            previous: this._karaokeLinePrevious,
+            current: this._karaokeLineCurrent,
+            fragment: this._karaokeLastFragment
+        });
+    }
+
+    /**
+     * Add lyric fragment to current line
+     * @private
+     */
+    _karaokeAddFragment(fragment) {
+        if (!fragment) return;
+
+        const fragLen = fragment.length;
+        const lastLen = this._karaokeLastFragment.length;
+        
+        // Check if this is a cumulative extension (growing substring)
+        const cumulativeExtension = lastLen > 0 && fragLen > lastLen &&
+                                    fragment.startsWith(this._karaokeLastFragment);
+
+        if (cumulativeExtension) {
+            // Replace with growing cumulative substring
+            this._karaokeLineCurrent = fragment;
+        } else {
+            // Append raw fragment
+            this._karaokeLineCurrent += fragment;
+        }
+
+        this._karaokeLastFragment = fragment;
+    }
+
+    /**
+     * Process newline in karaoke lyrics
+     * @private
+     */
+    _karaokeNewline() {
+        if (this._karaokeLineCurrent) {
+            this._karaokeLinePrevious = this._karaokeLineCurrent;
+            this._karaokeLineCurrent = '';
+        }
+        this._karaokeLastFragment = '';
+    }
+
+    /**
+     * Reset karaoke state
+     * @private
+     */
+    _resetKaraoke() {
+        this._karaokeLineCurrent = '';
+        this._karaokeLinePrevious = '';
+        this._karaokeLastFragment = '';
+        this._karaokeHaveLyrics = false;
+
+        if (this._wasmModule && this._wasmModule._BAE_WASM_ResetLyricState) {
+            this._wasmModule._BAE_WASM_ResetLyricState();
+        }
+    }
+
+    /**
+     * Get current karaoke state
+     * @returns {Object} {haveLyrics: boolean, current: string, previous: string, fragment: string}
+     */
+    getKaraokeState() {
+        return {
+            haveLyrics: this._karaokeHaveLyrics,
+            current: this._karaokeLineCurrent,
+            previous: this._karaokeLinePrevious,
+            fragment: this._karaokeLastFragment
+        };
     }
 
     /**
@@ -296,6 +448,9 @@ class BeatnikPlayer {
             }
 
             this._songLoaded = true;
+
+            // Reset karaoke state for new song
+            this._resetKaraoke();
 
             // Apply current settings
             this.volume = this._volume;

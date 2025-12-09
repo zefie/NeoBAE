@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+#include <unistd.h>
 #include <emscripten.h>
 
 #include "X_API.h"
@@ -130,8 +131,7 @@ uint32_t BAE_GetMicroseconds(void) {
 }
 
 void BAE_WaitMicroseconds(uint32_t wait) {
-    // Busy wait not appropriate for WASM
-    (void)wait;
+    usleep(wait);
 }
 
 // ============================================

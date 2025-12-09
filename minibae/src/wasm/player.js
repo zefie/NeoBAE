@@ -485,6 +485,11 @@ class MiniBAEPlayer {
             velocityDisplay: document.getElementById('velocityDisplay'),
             allChannelsCheckbox: document.getElementById('allChannelsCheckbox'),
             
+            // Karaoke
+            karaokePanel: document.getElementById('karaokePanel'),
+            karaokePrevious: document.getElementById('karaokePrevious'),
+            karaokeCurrent: document.getElementById('karaokeCurrent'),
+            
             // Status
             fileStatus: document.getElementById('fileStatus'),
             bankStatus: document.getElementById('bankStatus'),
@@ -691,6 +696,10 @@ class MiniBAEPlayer {
                 this.updateTimeDisplay(time);
             });
 
+            this.player.addEventListener('lyric', (lyricData) => {
+                this.updateKaraokeDisplay(lyricData);
+            });
+
             await this.player._init({
                 sampleRate: 44100,
                 maxVoices: 64
@@ -806,6 +815,44 @@ class MiniBAEPlayer {
 
     updateStatus(message) {
         this.elements.statusText.textContent = message;
+    }
+
+    updateKaraokeDisplay(lyricData) {
+        // Show panel when lyrics are detected
+        if (lyricData && (lyricData.current || lyricData.previous)) {
+            this.elements.karaokePanel.style.display = 'flex';
+            
+            // Update previous line (dimmed)
+            this.elements.karaokePrevious.textContent = lyricData.previous || '';
+            
+            // Update current line with highlighting logic
+            const current = lyricData.current || '';
+            const fragment = lyricData.fragment || '';
+            
+            if (fragment && current.endsWith(fragment) && current.length > fragment.length) {
+                // Split into prefix and highlighted fragment
+                const prefixLen = current.length - fragment.length;
+                const prefix = current.substring(0, prefixLen);
+                
+                // Clear and rebuild with styled elements
+                this.elements.karaokeCurrent.innerHTML = '';
+                
+                const prefixSpan = document.createElement('span');
+                prefixSpan.textContent = prefix;
+                prefixSpan.style.color = '#cccccc';
+                
+                const fragmentSpan = document.createElement('span');
+                fragmentSpan.textContent = fragment;
+                fragmentSpan.style.color = '#4ec9b0';
+                fragmentSpan.style.fontWeight = '600';
+                
+                this.elements.karaokeCurrent.appendChild(prefixSpan);
+                this.elements.karaokeCurrent.appendChild(fragmentSpan);
+            } else {
+                // No fragment highlighting, just show current line
+                this.elements.karaokeCurrent.textContent = current;
+            }
+        }
     }
 
     showHelpModal() {

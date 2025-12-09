@@ -247,6 +247,8 @@ uint32_t BAE_GetFilePosition(intptr_t fileReference);
 // get length of file
 uint32_t BAE_GetFileLength(intptr_t fileReference);
 
+uint32_t BAE_GetMicroseconds(void);
+
 // set the length of a file. Return 0, if ok, or -1 for error
 int BAE_SetFileLength(intptr_t fileReference, uint32_t newSize);
 
