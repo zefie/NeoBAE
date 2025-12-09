@@ -801,6 +801,39 @@ class BeatnikPlayer {
     }
 
     /**
+     * Get version and compile information from the WASM build
+     * @returns {{version: string, compileInfo: string, features: string}}
+     */
+    getVersionInfo() {
+        if (!this._wasmModule) {
+            return { version: 'Unavailable', compileInfo: 'Unavailable', features: 'Unavailable' };
+        }
+
+        const mod = this._wasmModule;
+        const versionPtr = mod._BAE_WASM_GetVersionString ? mod._BAE_WASM_GetVersionString() : 0;
+        const compilePtr = mod._BAE_WASM_GetCompileInfo ? mod._BAE_WASM_GetCompileInfo() : 0;
+        const featuresPtr = mod._BAE_WASM_GetFeatureString ? mod._BAE_WASM_GetFeatureString() : 0;
+
+        const safeRead = (ptr) => (ptr ? mod.UTF8ToString(ptr) : '');
+
+        const info = {
+            version: safeRead(versionPtr),
+            compileInfo: safeRead(compilePtr),
+            features: safeRead(featuresPtr)
+        };
+
+        if (versionPtr) {
+            mod._free(versionPtr);
+        }
+
+        if (compilePtr) {
+            mod._free(compilePtr);
+        }
+
+        return info;
+    }
+
+    /**
      * Load an RMF/MIDI as a sound effect (plays on top of main song)
      * @param {ArrayBuffer} data - RMF or MIDI file data
      * @returns {Promise<number>} 0 on success, error code on failure

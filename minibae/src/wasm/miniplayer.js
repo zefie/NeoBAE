@@ -139,6 +139,33 @@
             text-overflow: ellipsis;
         }
 
+        .miniplayer-header-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .miniplayer-info {
+            background: transparent;
+            border: 1px solid #3c3c3c;
+            color: #9cdcfe;
+            font-size: 14px;
+            width: 24px;
+            height: 24px;
+            border-radius: 4px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s, color 0.2s, border-color 0.2s;
+        }
+
+        .miniplayer-info:hover {
+            background: #007acc;
+            border-color: #1177bb;
+            color: #fff;
+        }
+
         .miniplayer-close {
             background: transparent;
             border: none;
@@ -395,6 +422,46 @@
             color: #f48771;
         }
 
+        .miniplayer-info-panel {
+            display: none;
+            background: #252526;
+            border: 1px solid #3c3c3c;
+            border-radius: 6px;
+            padding: 12px;
+            margin-top: 12px;
+            font-size: 12px;
+            color: #cccccc;
+            line-height: 1.4;
+        }
+
+        .miniplayer-info-panel.visible {
+            display: block;
+        }
+
+        .miniplayer-info-row {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 6px;
+            align-items: flex-start;
+        }
+
+        .miniplayer-info-row:last-child {
+            margin-bottom: 0;
+        }
+
+        .miniplayer-info-label {
+            color: #9cdcfe;
+            font-weight: 600;
+            min-width: 78px;
+        }
+
+        .miniplayer-info-value {
+            color: #cccccc;
+            white-space: normal;
+            word-break: break-word;
+            flex: 1;
+        }
+
         .miniplayer-statusbar {
             background: #2d2d30;
             border-top: 1px solid #555;
@@ -469,7 +536,10 @@
             <div class="miniplayer-modal">
                 <div class="miniplayer-header">
                     <div class="miniplayer-title">${title}</div>
-                    <button class="miniplayer-close" title="Close">×</button>
+                    <div class="miniplayer-header-actions">
+                        <button class="miniplayer-info" title="Show build info">i</button>
+                        <button class="miniplayer-close" title="Close">×</button>
+                    </div>
                 </div>
                 <div class="miniplayer-body">
                     <div class="miniplayer-progress">
@@ -496,6 +566,20 @@
                         <div class="miniplayer-karaoke-current"></div>
                     </div>
                     <div class="miniplayer-status loading">Initializing...</div>
+                    <div class="miniplayer-info-panel">
+                        <div class="miniplayer-info-row">
+                            <span class="miniplayer-info-label">Version</span>
+                            <span class="miniplayer-info-value miniplayer-info-version">-</span>
+                        </div>
+                        <div class="miniplayer-info-row">
+                            <span class="miniplayer-info-label">Compiler</span>
+                            <span class="miniplayer-info-value miniplayer-info-compile">-</span>
+                        </div>
+                        <div class="miniplayer-info-row">
+                            <span class="miniplayer-info-label">Features</span>
+                            <span class="miniplayer-info-value miniplayer-info-features">-</span>
+                        </div>
+                    </div>
                 </div>
                 <div class="miniplayer-statusbar">
                     <div class="miniplayer-statusbar-item">
@@ -515,6 +599,13 @@
         const closeBtn = overlay.querySelector('.miniplayer-close');
         closeBtn.addEventListener('click', closePlayer);
 
+        const infoBtn = overlay.querySelector('.miniplayer-info');
+        infoBtn.addEventListener('click', () => {
+            toggleInfoPanel(overlay).catch((err) => {
+                console.error('miniBAE info error:', err);
+            });
+        });
+
         // Make modal draggable
         const header = overlay.querySelector('.miniplayer-header');
         const modal = overlay.querySelector('.miniplayer-modal');
@@ -524,8 +615,12 @@
         let initialX = 0;
         let initialY = 0;
 
+        const shouldIgnoreDrag = (target) => {
+            return [closeBtn, infoBtn].some((btn) => btn && (target === btn || btn.contains(target)));
+        };
+
         header.addEventListener('mousedown', (e) => {
-            if (e.target === closeBtn || closeBtn.contains(e.target)) return;
+            if (shouldIgnoreDrag(e.target)) return;
             isDragging = true;
             initialX = e.clientX - currentX;
             initialY = e.clientY - currentY;
@@ -557,6 +652,48 @@
         overlay._escHandler = escHandler;
 
         return overlay;
+    }
+
+    async function toggleInfoPanel(modal) {
+        const infoPanel = modal.querySelector('.miniplayer-info-panel');
+        if (!infoPanel) return;
+
+        if (infoPanel.classList.contains('visible')) {
+            infoPanel.classList.remove('visible');
+            return;
+        }
+
+        const versionEl = modal.querySelector('.miniplayer-info-version');
+        const compileEl = modal.querySelector('.miniplayer-info-compile');
+        const featuresEl = modal.querySelector('.miniplayer-info-features');
+
+        if (!versionEl || !compileEl || !featuresEl) {
+            return;
+        }
+
+        versionEl.textContent = 'Loading...';
+        compileEl.textContent = 'Loading...';
+        featuresEl.textContent = 'Loading...';
+
+        try {
+            const player = await initPlayer();
+            const info = player && player.getVersionInfo ? player.getVersionInfo() : null;
+            if (info) {
+                versionEl.textContent = info.version || 'Unavailable';
+                compileEl.textContent = info.compileInfo || 'Unavailable';
+                featuresEl.textContent = info.features || 'Unavailable';
+            } else {
+                versionEl.textContent = 'Unavailable';
+                compileEl.textContent = 'Unavailable';
+                featuresEl.textContent = 'Unavailable';
+            }
+        } catch (err) {
+            versionEl.textContent = 'Unavailable';
+            compileEl.textContent = err && err.message ? err.message : 'Unavailable';
+            featuresEl.textContent = 'Unavailable';
+        }
+
+        infoPanel.classList.add('visible');
     }
 
     // Update UI elements
