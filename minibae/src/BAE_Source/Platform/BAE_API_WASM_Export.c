@@ -40,7 +40,7 @@ static BAESong gEffectSong = NULL;  // Second song for sound effects (plays on t
 static int16_t gAudioBuffer[AUDIO_BUFFER_FRAMES * 2];  // Stereo
 
 // Ring buffer for smooth streaming (prevent clicks/pops)
-#define RING_BUFFER_SLICES 8  // Number of slices to buffer (8 * 512 frames = 4096 frames ~ 93ms @ 44.1kHz)
+#define RING_BUFFER_SLICES 64  // Number of slices to buffer (64 * 512 frames = 32768 frames ~ 743ms @ 44.1kHz)
 #define SLICE_FRAMES AUDIO_BUFFER_FRAMES
 static int16_t gRingBuffer[RING_BUFFER_SLICES * SLICE_FRAMES * 2];  // Stereo
 static int gRingWritePos = 0;   // Write position in samples (not frames)
@@ -201,7 +201,9 @@ int BAE_WASM_LoadSoundbank(const uint8_t* data, int length) {
         OPErr sfErr = GM_LoadSF2Soundfont(tmpfile);
         BAE_PRINTF("[BAE] LoadSoundbank: GM_LoadSF2Soundfont returned %d\n", sfErr);
 
-        unlink(tmpfile);  // Clean up temp file
+        // Clean up temp file (use remove() instead of unlink() for WASM compatibility)
+        // Note: In WASM/Emscripten, the file will be reused on next load anyway
+        remove(tmpfile);
 
         if (sfErr != NO_ERR)
         {
@@ -386,6 +388,15 @@ int BAE_WASM_Play(void) {
         BAE_PRINTF("[BAE] Play: ERROR - no song loaded\n");
         return -1;
     }
+
+    // Pre-fill ring buffer to prevent initial clicks/pops
+    // Fill to at least 6 slices for smooth startup
+    const int targetSamples = SLICE_FRAMES * 2 * 6;  // 6 slices
+    BAE_PRINTF("[BAE] Play: Pre-buffering audio (target=%d samples)...\n", targetSamples);
+    while (gRingAvailable < targetSamples && gMixer != NULL) {
+        PV_FillRingBufferSlice();
+    }
+    BAE_PRINTF("[BAE] Play: Pre-buffered %d samples\n", gRingAvailable);
 
     // Resume mixer/sequencer if paused
     GM_ResumeGeneralSound(NULL);
@@ -667,20 +678,42 @@ static void PV_FillRingBufferSlice(void) {
     // Generate audio using BAE's mixer
     BAE_BuildMixerSlice(NULL, (void*)tempSlice, bufferByteLength, SLICE_FRAMES);
 
-    // Apply output gain and soft limiting
-    if (gOutputGain != 256) {
-        int sliceSamples = SLICE_FRAMES * 2;
-        for (int i = 0; i < sliceSamples; i++) {
-            int32_t sample = tempSlice[i];
+    // Apply output gain with soft limiting (prevents harsh clicks from clipping)
+    int sliceSamples = SLICE_FRAMES * 2;
+    for (int i = 0; i < sliceSamples; i++) {
+        int32_t sample = tempSlice[i];
+        
+        // Apply gain
+        if (gOutputGain != 256) {
             sample = (sample * gOutputGain) >> 8;
-            if (sample > 32767) sample = 32767;
-            else if (sample < -32768) sample = -32768;
-            tempSlice[i] = (int16_t)sample;
         }
+        
+        // Soft limiting using tanh approximation (prevents harsh clipping artifacts)
+        // Only apply when near clipping threshold to preserve quality
+        if (sample > 28000 || sample < -28000) {
+            // Fast tanh approximation for soft knee limiting
+            // Maps 28000-40000 range smoothly to 28000-32767
+            if (sample > 32767) {
+                // Hard limit at max
+                sample = 32767;
+            } else if (sample < -32768) {
+                sample = -32768;
+            } else if (sample > 28000) {
+                // Soft knee compression above 28000
+                int32_t excess = sample - 28000;
+                sample = 28000 + (excess * 4767) / (4767 + (excess >> 2));
+            } else if (sample < -28000) {
+                // Soft knee compression below -28000
+                int32_t excess = -28000 - sample;
+                sample = -28000 - (excess * 4768) / (4768 + (excess >> 2));
+            }
+        }
+        
+        tempSlice[i] = (int16_t)sample;
     }
 
     // Copy to ring buffer (handle wrap-around)
-    int sliceSamples = SLICE_FRAMES * 2;
+    // sliceSamples already declared above
     for (int i = 0; i < sliceSamples; i++) {
         gRingBuffer[gRingWritePos] = tempSlice[i];
         gRingWritePos = (gRingWritePos + 1) % totalSamples;
@@ -719,8 +752,9 @@ int16_t* BAE_WASM_GenerateAudio(int frames) {
     const int totalSamples = RING_BUFFER_SLICES * SLICE_FRAMES * 2;
     int samplesNeeded = frames * 2;  // Stereo
 
-    // Fill ring buffer if we're running low (maintain at least 2 slices buffered)
-    while (gRingAvailable < (SLICE_FRAMES * 2 * 2)) {  // Less than 2 slices? Fill more
+    // Fill ring buffer if we're running low (maintain at least 4 slices buffered for safety)
+    // 4 slices @ 512 frames = ~46ms buffer @ 44.1kHz - prevents underruns from timing jitter
+    while (gRingAvailable < (SLICE_FRAMES * 2 * 4)) {  // Less than 4 slices? Fill more
         PV_FillRingBufferSlice();
     }
 

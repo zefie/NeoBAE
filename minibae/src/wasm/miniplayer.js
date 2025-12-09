@@ -51,12 +51,70 @@
             border: 1px solid #555;
             border-radius: 8px;
             width: 420px;
+            max-width: 90vw;
             box-shadow: 0 8px 32px rgba(0, 0, 0, 0.8);
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
             color: #d4d4d4;
             animation: slideIn 0.3s ease-out;
             pointer-events: auto;
             position: relative;
+        }
+        
+        @media (max-width: 640px) {
+            .miniplayer-overlay {
+                top: 0;
+                left: 0;
+                transform: none;
+                width: 100%;
+                height: 100%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                padding: 10px;
+            }
+            
+            .miniplayer-modal {
+                width: 100%;
+                max-width: 100%;
+                margin: 0 auto;
+            }
+            
+            .miniplayer-body {
+                padding: 15px !important;
+            }
+            
+            .miniplayer-controls {
+                flex-wrap: wrap;
+            }
+            
+            .miniplayer-btn {
+                flex: 1;
+                min-width: calc(50% - 5px);
+            }
+            
+            .miniplayer-volume {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 8px;
+            }
+            
+            .miniplayer-volume-label {
+                min-width: auto;
+                text-align: center;
+            }
+            
+            .miniplayer-volume-value {
+                text-align: center;
+            }
+            
+            .miniplayer-statusbar {
+                flex-direction: column;
+                gap: 6px;
+            }
+            
+            .miniplayer-statusbar-item {
+                justify-content: center;
+            }
         }
 
         .miniplayer-header {
