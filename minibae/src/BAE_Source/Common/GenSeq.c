@@ -3786,10 +3786,6 @@ OPErr PV_ProcessMidiSequencerSlice(void *threadContext, GM_Song *pSong)
                         }
                     }
                     PV_CallSongMetaEventCallback(threadContext, pSong, midi_byte, cbPtr, value, (int16_t)currentTrack);
-                    if (allocated)
-                    {
-                        XDisposePtr((XPTR)allocated);
-                    }
                     if (pSong->lyricCallbackPtr)
                     {
                         XBOOL invoke = FALSE;
@@ -3839,6 +3835,11 @@ OPErr PV_ProcessMidiSequencerSlice(void *threadContext, GM_Song *pSong)
                             uint32_t lyrTimeUs = (uint32_t)pSong->songMicroseconds;
                             pSong->lyricCallbackPtr(pSong, lyricStr, lyrTimeUs, pSong->lyricCallbackReference);
                         }
+                    }
+                    // Free allocated buffer AFTER all callbacks complete
+                    if (allocated)
+                    {
+                        XDisposePtr((XPTR)allocated);
                     }
                 }
                 //                  BAE_PRINTF("lyric event: %s\n", (char *)cbPtr);

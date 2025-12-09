@@ -84,7 +84,8 @@
         <p>Click a button to open the mini player with a sample song:</p>
         <button class="btn" onclick="testPlayer1()">Play MIDI Example</button>
         <button class="btn" onclick="testPlayer2()">Play RMF Example</button>
-        <button class="btn" onclick="testPlayer3()">Play FluidSynth Example (if enabled)</button>
+        <button class="btn" onclick="testPlayer3()">Play Karaoke Example</button>
+        <button class="btn" onclick="testPlayer4()">Play FluidSynth Example (if enabled)</button>
     </div>
 
     <div class="demo-section">
@@ -137,8 +138,8 @@
             <li>✅ Seekable progress bar with time display</li>
             <li>✅ Volume slider (0-100%)</li>
             <li>✅ Current time and total duration (MM:SS.mmm format)</li>
-            <li>✅ Popup modal overlay with smooth animations</li>
-            <li>✅ Click outside or press ESC to close</li>
+            <li>✅ Draggable popup modal overlay with smooth animations</li>
+            <li>✅ Karaoke Lyric Support</li>
             <li>✅ Status indicators (Loading, Playing, Paused, Stopped, Error)</li>
             <li>✅ Responsive and modern dark theme</li>
         </ul>
@@ -162,18 +163,23 @@
             playSong(
                 'https://www.soundmusicsys.com/content/RMF/Other/trance.rmf',
                 'https://www.soundmusicsys.com/content/PatchBanks/HSB/patchesp.hsb',
-                { title: 'RMF Test Song' }
+                { title: '🎹 RMF Test' }
             );
         }
 
         function testPlayer3() {
             playSong(
-                'https://www.soundmusicsys.com/content/MIDI/Other/eminem-not_afraid.mid',
+                'https://www.soundmusicsys.com//content/MIDI/Master%20Karaoke/H/Haddaway%20-%20What%20Is%20Love.kar',
+                'https://www.soundmusicsys.com/content/PatchBanks/HSB/patchesp.hsb',
+                { title: '🎹 Karaoke Test' }
+            );
+        }
+
+        function testPlayer4() {
+            playSong(
+                'https://www.soundmusicsys.com//content/MIDI/The%20Magic%20of%20MIDI%20/M/U/S/MUS_33.MID',
                 'https://www.soundmusicsys.com/content/PatchBanks/SF3/GeneralUser-GS.sf3',
-                { 
-                    title: '🎹 FluidSynth Test',
-                    autoplay: true 
-                }
+                { title: '🎹 FluidSynth Test' }
             );
         }
     </script>

@@ -668,34 +668,58 @@
         const karaokeCurrent = modal.querySelector('.miniplayer-karaoke-current');
 
         modal._lyricHandler = (lyricData) => {
+            if (!lyricData) return;
+            
             // Show karaoke panel on first lyric
-            if (!karaokePanel.classList.contains('visible')) {
-                karaokePanel.classList.add('visible');
+            if (lyricData.current || lyricData.previous) {
+                if (!karaokePanel.classList.contains('visible')) {
+                    karaokePanel.classList.add('visible');
+                }
             }
 
             // Update previous line (dimmed)
-            if (lyricData.previous) {
-                karaokePrevious.textContent = lyricData.previous;
-            }
+            karaokePrevious.textContent = lyricData.previous || '';
 
-            // Update current line with highlighting
-            if (lyricData.current) {
-                if (lyricData.fragment) {
-                    // Highlight the current fragment
-                    const fragmentIndex = lyricData.current.lastIndexOf(lyricData.fragment);
-                    if (fragmentIndex !== -1) {
-                        const before = lyricData.current.substring(0, fragmentIndex);
-                        const highlighted = lyricData.current.substring(fragmentIndex, fragmentIndex + lyricData.fragment.length);
-                        const after = lyricData.current.substring(fragmentIndex + lyricData.fragment.length);
-                        karaokeCurrent.innerHTML = `${before}<span class="highlight">${highlighted}</span>${after}`;
-                    } else {
-                        karaokeCurrent.textContent = lyricData.current;
-                    }
+            // Update current line with highlighting logic
+            const current = lyricData.current || '';
+            const fragment = lyricData.fragment || '';
+            
+            if (fragment) {
+                if (current === fragment) {
+                    // Cumulative fragment (entire current line is the fragment being built)
+                    // Highlight the whole thing
+                    karaokeCurrent.innerHTML = '';
+                    const fragmentSpan = document.createElement('span');
+                    fragmentSpan.textContent = fragment;
+                    fragmentSpan.style.color = '#4ec9b0';
+                    fragmentSpan.style.fontWeight = '600';
+                    karaokeCurrent.appendChild(fragmentSpan);
+                } else if (current.endsWith(fragment) && current.length > fragment.length) {
+                    // Fragment appended to existing line
+                    // Split into prefix and highlighted fragment
+                    const prefixLen = current.length - fragment.length;
+                    const prefix = current.substring(0, prefixLen);
+                    
+                    karaokeCurrent.innerHTML = '';
+                    
+                    const prefixSpan = document.createElement('span');
+                    prefixSpan.textContent = prefix;
+                    prefixSpan.style.color = '#cccccc';
+                    
+                    const fragmentSpan = document.createElement('span');
+                    fragmentSpan.textContent = fragment;
+                    fragmentSpan.style.color = '#4ec9b0';
+                    fragmentSpan.style.fontWeight = '600';
+                    
+                    karaokeCurrent.appendChild(prefixSpan);
+                    karaokeCurrent.appendChild(fragmentSpan);
                 } else {
-                    karaokeCurrent.textContent = lyricData.current;
+                    // Fallback: just show current line
+                    karaokeCurrent.textContent = current;
                 }
             } else {
-                karaokeCurrent.textContent = '';
+                // No fragment highlighting, just show current line
+                karaokeCurrent.textContent = current;
             }
         };
 

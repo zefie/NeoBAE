@@ -5,6 +5,7 @@ SF2_SUPPORT		:= 0
 USE_FLUIDSYNTH  := 0
 NOAUTO			:= 1
 MP3_DEC			:= 1
+KARAOKE			:= 1
 
 TARGET_JS	:= engine.js
 PACK_FILENAME	:= miniBAE_WASM.tar.gz

@@ -202,7 +202,23 @@ class BeatnikPlayer {
 
         // Create JavaScript callback function that WASM can call
         const lyricCallback = this._wasmModule.addFunction((lyricPtr, timeUs) => {
-            const lyric = this._wasmModule.UTF8ToString(lyricPtr);
+            // Read as ASCII/Latin-1 instead of UTF-8 to handle control characters properly
+            const heap = this._wasmModule.HEAPU8;
+            let len = 0;
+            while (heap[lyricPtr + len] !== 0 && len < 256) len++;
+            
+            // Build string from raw bytes (treating as Latin-1/ISO-8859-1)
+            let lyric = '';
+            for (let i = 0; i < len; i++) {
+                const byte = heap[lyricPtr + i];
+                // Filter out control characters except newline/tab
+                if (byte === 0x18 || (byte < 0x20 && byte !== 0x0A && byte !== 0x0D && byte !== 0x09)) {
+                    // Skip control characters like 0x18
+                    continue;
+                }
+                lyric += String.fromCharCode(byte);
+            }
+            
             this._handleLyric(lyric, timeUs);
         }, 'vii');  // void function(int, int) signature
 
