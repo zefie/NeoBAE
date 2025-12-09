@@ -78,6 +78,29 @@
                 </div>
             </div>
 
+            <!-- File Loading -->
+            <div class="section">
+                <div class="section-title">File Loading</div>
+                <div class="controls-row">
+                    <div class="control-group">
+                        <label class="control-label">Media File:</label>
+                        <div class="file-load-container">
+                            <input type="file" id="mediaFileInput" accept=".mid,.midi,.rmi,.rmf,.xmf,.mxmf,.wav,.mp2,.mp3" style="display: none;">
+                            <button class="btn-file-load" id="loadMediaBtn">Load Media</button>
+                            <span class="file-load-status" id="mediaLoadStatus">URL param or use button</span>
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <label class="control-label">Soundbank:</label>
+                        <div class="file-load-container">
+                            <input type="file" id="bankFileInput" accept=".sf2,.sf3,.sfo,.hsb,.dls" style="display: none;">
+                            <button class="btn-file-load" id="loadBankBtn">Load Bank</button>
+                            <span class="file-load-status" id="bankLoadStatus">Default or use button</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Transport & Progress -->
             <div class="section">
                 <div class="section-title">Transport & Progress</div>

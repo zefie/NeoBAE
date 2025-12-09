@@ -10,6 +10,8 @@ class MiniBAEPlayer {
         this.default_bank_mid = "/content/PatchBanks/SF3/GeneralUser-GS.sf3";
         this.default_bank_rmf = "/content/PatchBanks/HSB/patchesp.hsb";
         this.default_reverb = 7; // Early Reflections
+        this.userMediaFile = null;
+        this.userBankFile = null;
 
         // Get file parameter from URL
         const urlParams = new URLSearchParams(window.location.search);
@@ -72,6 +74,7 @@ class MiniBAEPlayer {
         this.initChannels();
         this.initKeyboard();
         this.bindEvents();
+        this.setupFileLoading();
 
 
         
@@ -246,8 +249,8 @@ class MiniBAEPlayer {
     }
 
     async load(fileName, bank) {
-        const displayFileName = fileName.split('/').pop();
-        const displayBank = bank.split('/').pop();
+        const displayFileName = typeof fileName === 'string' ? fileName.split('/').pop() : fileName.name;
+        const displayBank = typeof bank === 'string' ? bank.split('/').pop() : bank.name;
         
         this.elements.fileStatus.textContent = displayFileName;
         this.elements.bankStatus.textContent = 'Loading...';
@@ -456,6 +459,14 @@ class MiniBAEPlayer {
             exportStatus: document.getElementById('exportStatus'),
             exportProgressFill: document.getElementById('exportProgressFill'),
             
+            // File Loading
+            mediaFileInput: document.getElementById('mediaFileInput'),
+            loadMediaBtn: document.getElementById('loadMediaBtn'),
+            mediaLoadStatus: document.getElementById('mediaLoadStatus'),
+            bankFileInput: document.getElementById('bankFileInput'),
+            loadBankBtn: document.getElementById('loadBankBtn'),
+            bankLoadStatus: document.getElementById('bankLoadStatus'),
+            
             // Progress
             progressBar: document.getElementById('progressBar'),
             progressFill: document.getElementById('progressFill'),
@@ -661,6 +672,157 @@ class MiniBAEPlayer {
         });
     }
 
+    setupFileLoading() {
+        // Media file loading
+        this.elements.loadMediaBtn.addEventListener('click', () => {
+            this.elements.mediaFileInput.click();
+        });
+
+        this.elements.mediaFileInput.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            this.userMediaFile = file;
+            this.elements.mediaLoadStatus.textContent = file.name;
+
+            // If we have the audio system initialized, load immediately
+            if (this.player && this.player._wasmModule) {
+                await this.loadUserFile();
+            }
+        });
+
+        // Soundbank file loading
+        this.elements.loadBankBtn.addEventListener('click', () => {
+            this.elements.bankFileInput.click();
+        });
+
+        this.elements.bankFileInput.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            this.userBankFile = file;
+            this.elements.bankLoadStatus.textContent = file.name;
+
+            // If we have the audio system initialized, load immediately
+            if (this.player && this.player._wasmModule) {
+                await this.loadUserBank();
+            }
+        });
+    }
+
+    async loadUserFile() {
+        if (!this.userMediaFile) return;
+
+        try {
+            // Track if we were playing so we can resume after loading
+            const wasPlaying = this.player && this.player._isPlaying;
+            
+            // Stop current playback
+            if (wasPlaying) {
+                this.stop();
+            }
+
+            this.updateStatus('Loading user file...');
+            
+            // Convert File to ArrayBuffer
+            const fileData = await this.userMediaFile.arrayBuffer();
+            
+            // Use current bank (user bank if loaded, otherwise default)
+            const bank = this.userBankFile ? await this.userBankFile.arrayBuffer() : this.bank;
+            
+            // Load with the file data
+            await this.player.loadSoundbank(bank);
+            this.elements.bankStatus.textContent = this.userBankFile ? this.userBankFile.name : this.bank.split('/').pop();
+            
+            await this.player.load(fileData);
+            this.elements.fileStatus.textContent = this.userMediaFile.name;
+            this.elements.playBtn.disabled = false;
+            this.elements.exportBtn.disabled = false;
+            
+            // Apply current channel mute states
+            for (let i = 0; i < 16; i++) {
+                if (this.channelMutes[i]) {
+                    this.player.muteChannel(i, true);
+                }
+            }
+            
+            // Apply current loop setting
+            if (this.player._wasmModule) {
+                this.player._wasmModule._BAE_WASM_SetLoops(this.isLooping ? 32767 : 0);
+            }
+            
+            this.updateStatus('User file loaded successfully');
+            
+            // Resume playback if we were playing before
+            if (wasPlaying) {
+                this.play();
+            }
+        } catch (error) {
+            this.updateStatus(`Failed to load user file: ${error.message}`);
+            console.error('User file load error:', error);
+        }
+    }
+
+    async loadUserBank() {
+        if (!this.userBankFile) return;
+
+        try {
+            // Track if we were playing so we can resume after loading
+            const wasPlaying = this.player && this.player._isPlaying;
+            
+            // Stop current playback
+            if (wasPlaying) {
+                this.stop();
+            }
+
+            this.updateStatus('Loading user soundbank...');
+            
+            // Convert File to ArrayBuffer
+            const bankData = await this.userBankFile.arrayBuffer();
+            
+            // Reload current file with new bank
+            let mediaData;
+            if (this.userMediaFile) {
+                mediaData = await this.userMediaFile.arrayBuffer();
+            } else if (this.fileName) {
+                const response = await fetch(this.fileName);
+                mediaData = await response.arrayBuffer();
+            } else {
+                throw new Error('No media file to reload');
+            }
+            
+            // Load with the new bank
+            await this.player.loadSoundbank(bankData);
+            this.elements.bankStatus.textContent = this.userBankFile.name;
+            
+            await this.player.load(mediaData);
+            this.elements.playBtn.disabled = false;
+            this.elements.exportBtn.disabled = false;
+            
+            // Apply current channel mute states
+            for (let i = 0; i < 16; i++) {
+                if (this.channelMutes[i]) {
+                    this.player.muteChannel(i, true);
+                }
+            }
+            
+            // Apply current loop setting
+            if (this.player._wasmModule) {
+                this.player._wasmModule._BAE_WASM_SetLoops(this.isLooping ? 32767 : 0);
+            }
+            
+            this.updateStatus('User soundbank loaded successfully');
+            
+            // Resume playback if we were playing before
+            if (wasPlaying) {
+                this.play();
+            }
+        } catch (error) {
+            this.updateStatus(`Failed to load user soundbank: ${error.message}`);
+            console.error('User soundbank load error:', error);
+        }
+    }
+
     async initPlayer() {
         try {
             this.updateStatus('Initializing audio engine...');
@@ -721,7 +883,7 @@ class MiniBAEPlayer {
     }
 
     togglePlayPause() {
-        if (!this.player) return;
+        if (!this.player || !this.player._songLoaded) return;
         
         if (this.player._isPlaying) {
             this.pause();

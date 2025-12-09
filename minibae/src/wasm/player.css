@@ -151,6 +151,42 @@ body {
     background: #2d2d30;
 }
 
+/* File Loading Buttons */
+.btn-file-load {
+    padding: 4px 12px;
+    background: #0e639c;
+    color: #fff;
+    border: 1px solid #007acc;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 11px;
+    transition: background 0.2s;
+    white-space: nowrap;
+}
+
+.btn-file-load:hover {
+    background: #1177bb;
+}
+
+.btn-file-load:active {
+    background: #004578;
+}
+
+.file-load-container {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+}
+
+.file-load-status {
+    font-size: 11px;
+    color: #858585;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 /* Playback Controls */
 .controls-row {
     display: flex;
