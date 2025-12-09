@@ -119,6 +119,32 @@ int BAE_WASM_Init(int sampleRate, int maxVoices) {
     return 0;
 }
 
+
+/*
+ * Unload the current soundbank
+ * Returns: 0 on success, -1 if mixer not initialized
+ */
+EMSCRIPTEN_KEEPALIVE
+int BAE_WASM_UnloadSoundbank(void) {
+    BAE_PRINTF("[BAE] UnloadSoundbank: gMixer=%p\n", (void*)gMixer);
+    
+    if (gMixer == NULL) {
+        BAE_PRINTF("[BAE] UnloadSoundbank: ERROR - gMixer is NULL\n");
+        return -1;  // Not initialized
+    }
+
+    // Unload existing banks
+    BAE_PRINTF("[BAE] UnloadSoundbank: Unloading banks...\n");
+    BAEMixer_UnloadBanks(gMixer);
+
+#if USE_SF2_SUPPORT == TRUE
+    GM_UnloadSF2Soundfont();
+#endif
+
+    BAE_PRINTF("[BAE] UnloadSoundbank: SUCCESS\n");
+    return 0;
+}
+
 /*
  * Load a soundbank from memory
  * Returns: 0 on success, error code on failure
@@ -139,15 +165,9 @@ int BAE_WASM_LoadSoundbank(const uint8_t* data, int length) {
 
     // Unload existing banks
     BAE_PRINTF("[BAE] LoadSoundbank: Unloading existing banks...\n");
-    BAEMixer_UnloadBanks(gMixer);
+    BAE_WASM_UnloadSoundbank();
 
 #if USE_SF2_SUPPORT == TRUE
-    // Unload SF2/DLS soundfont if currently loaded
-    if (GM_GetMixerSF2Mode()) {
-        BAE_PRINTF("[BAE] LoadSoundbank: Unloading existing SF2/SF3/DLS...\n");
-        GM_UnloadSF2Soundfont();
-    }
-    
     // Detect soundbank type by header
     // RIFF format: bytes 0-3 = "RIFF", bytes 8-11 = format identifier
     // SF2: "RIFF" + "sfbk" at offset 8
@@ -346,35 +366,6 @@ int BAE_WASM_UnloadSong(void) {
     PV_ResetRingBuffer();
 
     BAE_PRINTF("[BAE] UnloadSong: SUCCESS\n");
-    return 0;
-}
-
-/*
- * Unload the current soundbank
- * Returns: 0 on success, -1 if mixer not initialized
- */
-EMSCRIPTEN_KEEPALIVE
-int BAE_WASM_UnloadSoundbank(void) {
-    BAE_PRINTF("[BAE] UnloadSoundbank: gMixer=%p\n", (void*)gMixer);
-    
-    if (gMixer == NULL) {
-        BAE_PRINTF("[BAE] UnloadSoundbank: ERROR - gMixer is NULL\n");
-        return -1;  // Not initialized
-    }
-
-    // Unload existing banks
-    BAE_PRINTF("[BAE] UnloadSoundbank: Unloading banks...\n");
-    BAEMixer_UnloadBanks(gMixer);
-
-#if USE_SF2_SUPPORT == TRUE
-    // Unload SF2/DLS soundfont if loaded
-    if (GM_GetMixerSF2Mode()) {
-        BAE_PRINTF("[BAE] UnloadSoundbank: Unloading SF2/SF3/DLS...\n");
-        GM_UnloadSF2Soundfont();
-    }
-#endif
-
-    BAE_PRINTF("[BAE] UnloadSoundbank: SUCCESS\n");
     return 0;
 }
 
