@@ -252,13 +252,13 @@ class MiniBAEPlayer {
         const displayFileName = typeof fileName === 'string' ? fileName.split('/').pop() : fileName.name;
         const displayBank = typeof bank === 'string' ? bank.split('/').pop() : bank.name;
         
-        this.elements.fileStatus.textContent = displayFileName;
+        this.elements.fileStatus.textContent = decodeURIComponent(displayFileName);
         this.elements.bankStatus.textContent = 'Loading...';
         this.updateStatus('Loading bank...');
 
         try {
             await this.player.loadSoundbank(bank);
-            this.elements.bankStatus.textContent = displayBank;
+            this.elements.bankStatus.textContent = decodeURIComponent(displayBank);
             this.updateStatus('Loading file...');
             
             await this.player.load(fileName);

@@ -968,9 +968,9 @@
             const bankStatus = currentModal.querySelector('.miniplayer-bank-status');
 
             // Update status bar with file names
-            fileStatus.textContent = getFileName(songSource);
+            fileStatus.textContent = decodeURIComponent(getFileName(songSource));
             fileStatus.title = fileStatus.textContent; // Full name on hover
-            bankStatus.textContent = getFileName(bankSource);
+            bankStatus.textContent = decodeURIComponent(getFileName(bankSource));
             bankStatus.title = bankStatus.textContent; // Full name on hover
 
             // Initialize player
