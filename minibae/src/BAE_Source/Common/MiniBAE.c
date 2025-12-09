@@ -7025,7 +7025,7 @@ BAEResult BAESong_LoadMidiFromMemory(BAESong song, void const *pMidiData, uint32
     {
         BAE_AcquireMutex(song->mLock);
         
-#if USE_FULL_RMF_SUPPORT == TRUE || USE_CREATION_API == TRUE
+#if USE_SF2_SUPPORT == TRUE && _USING_FLUIDSYNTH == TRUE
         // Check if this is an RMI file and extract MIDI + DLS
         if (GM_IsRMIFile((const unsigned char *)pMidiData, midiSize))
         {
@@ -7169,7 +7169,7 @@ BAEResult BAESong_LoadMidiFromFile(BAESong song, BAEPathName filePath, BAE_BOOL 
         XConvertPathToXFILENAME(filePath, &name);
         pMidiData = PV_GetFileAsData(&name, &midiSize);
         
-#if USE_FULL_RMF_SUPPORT == TRUE || USE_CREATION_API == TRUE
+#if USE_SF2_SUPPORT == TRUE && _USING_FLUIDSYNTH == TRUE
         // Check if this is an RMI file and extract MIDI + DLS
         if (pMidiData && GM_IsRMIFile((const unsigned char *)pMidiData, midiSize))
         {
