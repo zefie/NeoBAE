@@ -1440,7 +1440,7 @@ L3psycho_anal_vbr(lame_internal_flags * gfc,
 
     /* block type  */
     int     ns_attacks[4][4] = { {0, 0, 0, 0}, {0, 0, 0, 0}, {0, 0, 0, 0}, {0, 0, 0, 0} };
-    int     uselongblock[2];
+    int     uselongblock[2] = { 1, 1 };
 
     /* usual variables like loop indices, etc..    */
     int     chn, sb, sblock;
