@@ -44,8 +44,20 @@ static uint32_t gLyricUnsuppressTime = 0;  // Time when lyrics should be unsuppr
 #endif
 
 // Audio buffer for JS interop
-#define AUDIO_BUFFER_FRAMES 512
+#define AUDIO_BUFFER_FRAMES 6144
 static int16_t gAudioBuffer[AUDIO_BUFFER_FRAMES * 2];  // Stereo
+
+// Ring buffer for 250ms audio buffering
+typedef struct {
+    int16_t *buffer;          // Ring buffer data (stereo interleaved)
+    size_t capacity;          // Total capacity in samples (stereo pairs)
+    size_t writePos;          // Write position in samples
+    size_t readPos;           // Read position in samples
+    size_t available;         // Number of samples available to read
+} RingBuffer;
+
+static RingBuffer gRingBuffer = {NULL, 0, 0, 0, 0};
+static int gCurrentSampleRate = 44100;  // Default sample rate
 
 // External function from GenSynth.c
 extern void BAE_BuildMixerSlice(void *threadContext, void *pAudioBuffer,
@@ -54,6 +66,13 @@ extern void BAE_BuildMixerSlice(void *threadContext, void *pAudioBuffer,
 #ifdef SUPPORT_KARAOKE
 static void PV_LyricCallback(struct GM_Song *songPtr, const char *lyric, uint32_t timeUs, void *ref);
 #endif
+
+// Ring buffer management functions
+static void RingBuffer_Init(int sampleRate);
+static void RingBuffer_Destroy(void);
+static void RingBuffer_Clear(void);
+static size_t RingBuffer_Write(const int16_t *data, size_t frames);
+static size_t RingBuffer_Read(int16_t *dest, size_t frames);
 
 /*
  * Initialize the Beatnik Audio Engine
@@ -94,6 +113,9 @@ int BAE_WASM_Init(int sampleRate, int maxVoices) {
         midiVoices = 1;
     }
 
+    // Store current sample rate for ring buffer
+    gCurrentSampleRate = sampleRate;
+
     // Open mixer
     // Mix level controls internal gain scaling via L2Levels lookup table:
     //   mixLevel 16 = 1.22x amplification (causes clipping!)
@@ -115,6 +137,9 @@ int BAE_WASM_Init(int sampleRate, int maxVoices) {
         gMixer = NULL;
         return (int)err;
     }
+
+    // Initialize ring buffer for 250ms
+    RingBuffer_Init(sampleRate);
 
     return 0;
 }
@@ -402,6 +427,11 @@ int BAE_WASM_Play(void) {
         return (int)err;
     }
     
+    // Clear ring buffer on play start - let normal playback fill it gradually
+    // This avoids applying gain/limiting twice to pre-filled data
+    RingBuffer_Clear();
+    BAE_PRINTF("[BAE] Play: Ring buffer cleared, will fill during playback\n");
+    
     BAE_PRINTF("[BAE] Play: SUCCESS\n");
     return 0;
 }
@@ -456,6 +486,10 @@ int BAE_WASM_Stop(void) {
 
     // Use FALSE to immediately stop and remove from mixer (no fade)
     BAESong_Stop(gCurrentSong, FALSE);
+    
+    // Clear ring buffer when stopped
+    RingBuffer_Clear();
+    BAE_PRINTF("[BAE] Stop: Ring buffer cleared\n");
     
     return 0;
 }
@@ -679,12 +713,6 @@ int16_t* BAE_WASM_GenerateAudio(int frames) {
     }
 #endif
 
-    // Log every 100 calls to avoid spam
-    if ((gGenerateAudioCallCount <= 5 || (gGenerateAudioCallCount % 100) == 0)) {
-        BAE_PRINTF("[BAE] GenerateAudio: call #%d, frames=%d, gMixer=%p\n",
-               gGenerateAudioCallCount, frames, (void*)gMixer);
-    }
-
     if (gMixer == NULL) {
         // Fill with silence
         memset(gAudioBuffer, 0, frames * 2 * sizeof(int16_t));
@@ -696,48 +724,85 @@ int16_t* BAE_WASM_GenerateAudio(int frames) {
         frames = AUDIO_BUFFER_FRAMES;
     }
 
-    // Generate audio directly from mixer (like SDL2 does)
-    long bufferByteLength = frames * 2 * sizeof(int16_t);
-    BAE_BuildMixerSlice(NULL, (void*)gAudioBuffer, bufferByteLength, frames);
-
-    // Apply output gain with soft limiting (prevents harsh clicks from clipping)
-    int totalSamples = frames * 2;  // Stereo
-    for (int i = 0; i < totalSamples; i++) {
-        int32_t sample = gAudioBuffer[i];
+    // Try to read from ring buffer first (if available)
+    size_t framesRead = 0;
+    if (gRingBuffer.buffer != NULL && gRingBuffer.available > 0) {
+        framesRead = RingBuffer_Read(gAudioBuffer, frames);
+    }
+    
+    // If ring buffer didn't have enough data, generate more
+    if (framesRead < (size_t)frames) {
+        // Generate fresh audio into temporary buffer
+        size_t framesToGenerate = frames - framesRead;
+        int16_t *destPtr = &gAudioBuffer[framesRead * 2];
+        long bufferByteLength = framesToGenerate * 2 * sizeof(int16_t);
+        BAE_BuildMixerSlice(NULL, (void*)destPtr, bufferByteLength, framesToGenerate);
+    }
+    
+    // Refill ring buffer to maintain 250ms buffer
+    // Generate as many frames as we consumed (or as much as will fit)
+    if (gRingBuffer.buffer != NULL && framesRead > 0) {
+        size_t spaceAvailable = gRingBuffer.capacity - gRingBuffer.available;
+        size_t framesToRefill = (framesRead < spaceAvailable) ? framesRead : spaceAvailable;
         
-        // Apply gain
-        if (gOutputGain != 256) {
-            sample = (sample * gOutputGain) >> 8;
-        }
-        
-        // Soft limiting using tanh approximation (prevents harsh clipping artifacts)
-        // Only apply when near clipping threshold to preserve quality
-        if (sample > 28000 || sample < -28000) {
-            // Fast tanh approximation for soft knee limiting
-            // Maps 28000-40000 range smoothly to 28000-32767
-            if (sample > 32767) {
-                // Hard limit at max
-                sample = 32767;
-            } else if (sample < -32768) {
-                sample = -32768;
-            } else if (sample > 28000) {
-                // Soft knee compression above 28000
-                int32_t excess = sample - 28000;
-                sample = 28000 + (excess * 4767) / (4767 + (excess >> 2));
-            } else if (sample < -28000) {
-                // Soft knee compression below -28000
-                int32_t excess = -28000 - sample;
-                sample = -28000 - (excess * 4768) / (4768 + (excess >> 2));
+        if (framesToRefill > 0) {
+            // Clamp to our temp buffer size
+            if (framesToRefill > AUDIO_BUFFER_FRAMES) {
+                framesToRefill = AUDIO_BUFFER_FRAMES;
+            }
+            
+            int16_t *tempBuf = (int16_t*)malloc(framesToRefill * 2 * sizeof(int16_t));
+            if (tempBuf != NULL) {
+                long refillBytes = framesToRefill * 2 * sizeof(int16_t);
+                BAE_BuildMixerSlice(NULL, (void*)tempBuf, refillBytes, framesToRefill);
+                RingBuffer_Write(tempBuf, framesToRefill);
+                free(tempBuf);
             }
         }
-        
-        gAudioBuffer[i] = (int16_t)sample;
     }
 
-    // Log first few samples for debugging (only first 5 calls)
-    if (gGenerateAudioCallCount <= 5) {
-        BAE_PRINTF("[BAE] GenerateAudio: first samples: %d %d %d %d\n",
-               gAudioBuffer[0], gAudioBuffer[1], gAudioBuffer[2], gAudioBuffer[3]);
+    // Apply output gain and soft limiting in a single optimized pass
+    int totalSamples = frames * 2;  // Stereo
+    
+    if (gOutputGain != 256) {
+        // Non-unity gain path with soft limiting
+        for (int i = 0; i < totalSamples; i++) {
+            int32_t sample = (gAudioBuffer[i] * gOutputGain) >> 8;
+            
+            // Fast soft limiter with reduced branching
+            // Most samples won't need limiting, so optimize for that case
+            if (sample >= -28000 && sample <= 28000) {
+                // Fast path: no limiting needed
+                gAudioBuffer[i] = (int16_t)sample;
+            } else {
+                // Slow path: apply soft knee or hard limit
+                if (sample > 32767) {
+                    sample = 32767;
+                } else if (sample < -32768) {
+                    sample = -32768;
+                } else if (sample > 28000) {
+                    // Soft knee: use shift instead of division
+                    int32_t excess = sample - 28000;
+                    // Approximate: 28000 + excess * (4767/4767+x) ≈ 28000 + excess*0.8
+                    sample = 28000 + ((excess * 13) >> 4);  // *0.8125 via shift
+                } else {  // sample < -28000
+                    int32_t excess = -28000 - sample;
+                    sample = -28000 - ((excess * 13) >> 4);
+                }
+                gAudioBuffer[i] = (int16_t)sample;
+            }
+        }
+    } else {
+        // Unity gain - minimal processing, most samples won't clip
+        for (int i = 0; i < totalSamples; i++) {
+            int32_t sample = gAudioBuffer[i];
+            // Branch prediction friendly: most values are in range
+            if (sample < -32768 || sample > 32767) {
+                sample = (sample > 32767) ? 32767 : -32768;
+                gAudioBuffer[i] = (int16_t)sample;
+            }
+            // No write needed if already in range (already int16_t)
+        }
     }
 
     return gAudioBuffer;
@@ -1408,3 +1473,156 @@ int BAE_WASM_ResetLyricState(void) {
     return (int)err;
 }
 #endif // SUPPORT_KARAOKE
+
+/*
+ * Ring Buffer Implementation
+ * Provides 250ms audio buffering for smooth playback
+ */
+
+/*
+ * Initialize ring buffer for 250ms of audio at given sample rate
+ */
+static void RingBuffer_Init(int sampleRate) {
+    // Clean up existing buffer if any
+    RingBuffer_Destroy();
+    
+    // Calculate buffer size for 250ms (0.25 seconds)
+    // frames = sampleRate * 0.25
+    size_t bufferFrames = (size_t)(sampleRate * 0.25);
+    
+    // Allocate buffer (stereo = 2 channels)
+    gRingBuffer.buffer = (int16_t*)malloc(bufferFrames * 2 * sizeof(int16_t));
+    if (gRingBuffer.buffer == NULL) {
+        BAE_PRINTF("[BAE] RingBuffer_Init: ERROR - Failed to allocate buffer\n");
+        return;
+    }
+    
+    gRingBuffer.capacity = bufferFrames;
+    gRingBuffer.writePos = 0;
+    gRingBuffer.readPos = 0;
+    gRingBuffer.available = 0;
+    
+    // Clear buffer
+    memset(gRingBuffer.buffer, 0, bufferFrames * 2 * sizeof(int16_t));
+    
+    BAE_PRINTF("[BAE] RingBuffer_Init: Initialized %zu frames (%.1fms at %d Hz)\n",
+           bufferFrames, (bufferFrames * 1000.0) / sampleRate, sampleRate);
+}
+
+/*
+ * Destroy ring buffer and free memory
+ */
+static void RingBuffer_Destroy(void) {
+    if (gRingBuffer.buffer != NULL) {
+        free(gRingBuffer.buffer);
+        gRingBuffer.buffer = NULL;
+    }
+    gRingBuffer.capacity = 0;
+    gRingBuffer.writePos = 0;
+    gRingBuffer.readPos = 0;
+    gRingBuffer.available = 0;
+}
+
+/*
+ * Clear ring buffer (reset to empty state)
+ */
+static void RingBuffer_Clear(void) {
+    if (gRingBuffer.buffer != NULL) {
+        memset(gRingBuffer.buffer, 0, gRingBuffer.capacity * 2 * sizeof(int16_t));
+    }
+    gRingBuffer.writePos = 0;
+    gRingBuffer.readPos = 0;
+    gRingBuffer.available = 0;
+}
+
+/*
+ * Write audio frames to ring buffer
+ * Returns number of frames actually written
+ */
+static size_t RingBuffer_Write(const int16_t *data, size_t frames) {
+    if (gRingBuffer.buffer == NULL || data == NULL) {
+        return 0;
+    }
+    
+    // Calculate how much space is available
+    size_t spaceAvailable = gRingBuffer.capacity - gRingBuffer.available;
+    size_t framesToWrite = (frames < spaceAvailable) ? frames : spaceAvailable;
+    
+    if (framesToWrite == 0) {
+        return 0;  // Buffer is full
+    }
+    
+    // Write in two parts if wrapping around
+    size_t firstPart = gRingBuffer.capacity - gRingBuffer.writePos;
+    if (firstPart > framesToWrite) {
+        firstPart = framesToWrite;
+    }
+    
+    // Copy first part (stereo = 2 samples per frame)
+    memcpy(&gRingBuffer.buffer[gRingBuffer.writePos * 2],
+           data,
+           firstPart * 2 * sizeof(int16_t));
+    
+    // Copy second part if wrapping
+    if (framesToWrite > firstPart) {
+        size_t secondPart = framesToWrite - firstPart;
+        memcpy(gRingBuffer.buffer,
+               &data[firstPart * 2],
+               secondPart * 2 * sizeof(int16_t));
+    }
+    
+    // Update write position and available count
+    gRingBuffer.writePos = (gRingBuffer.writePos + framesToWrite) % gRingBuffer.capacity;
+    gRingBuffer.available += framesToWrite;
+    
+    return framesToWrite;
+}
+
+/*
+ * Read audio frames from ring buffer
+ * Returns number of frames actually read
+ */
+static size_t RingBuffer_Read(int16_t *dest, size_t frames) {
+    if (gRingBuffer.buffer == NULL || dest == NULL) {
+        return 0;
+    }
+    
+    // Can't read more than available
+    size_t framesToRead = (frames < gRingBuffer.available) ? frames : gRingBuffer.available;
+    
+    if (framesToRead == 0) {
+        // Buffer is empty - fill with silence
+        memset(dest, 0, frames * 2 * sizeof(int16_t));
+        return 0;
+    }
+    
+    // Read in two parts if wrapping around
+    size_t firstPart = gRingBuffer.capacity - gRingBuffer.readPos;
+    if (firstPart > framesToRead) {
+        firstPart = framesToRead;
+    }
+    
+    // Copy first part (stereo = 2 samples per frame)
+    memcpy(dest,
+           &gRingBuffer.buffer[gRingBuffer.readPos * 2],
+           firstPart * 2 * sizeof(int16_t));
+    
+    // Copy second part if wrapping
+    if (framesToRead > firstPart) {
+        size_t secondPart = framesToRead - firstPart;
+        memcpy(&dest[firstPart * 2],
+               gRingBuffer.buffer,
+               secondPart * 2 * sizeof(int16_t));
+    }
+    
+    // Fill remaining with silence if not enough data
+    if (framesToRead < frames) {
+        memset(&dest[framesToRead * 2], 0, (frames - framesToRead) * 2 * sizeof(int16_t));
+    }
+    
+    // Update read position and available count
+    gRingBuffer.readPos = (gRingBuffer.readPos + framesToRead) % gRingBuffer.capacity;
+    gRingBuffer.available -= framesToRead;
+    
+    return framesToRead;
+}
