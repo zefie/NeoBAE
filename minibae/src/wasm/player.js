@@ -362,7 +362,9 @@ class MiniBAEPlayer {
                 // Add black keys
                 if ([0, 1, 3, 4, 5].includes(i)) {
                     const blackKey = document.createElement('div');
-                    blackKey.className = 'key black-key';
+                    const noteNames = ['C', 'D', 'F', 'G', 'A'];
+                    const positionClass = `black-key-${noteNames[[0, 1, 3, 4, 5].indexOf(i)]}`;
+                    blackKey.className = `key black-key ${positionClass}`;
                     const blackMidiNote = midiNote + 1;
                     blackKey.dataset.note = blackMidiNote;
                     

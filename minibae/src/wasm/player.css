@@ -537,17 +537,24 @@ select:hover {
 }
 
 .black-key {
-    width: 20px;
+    width: 12px;
     height: 60px;
     background: linear-gradient(to bottom, #2a2a2a 0%, #1a1a1a 50%, #000000 100%);
     border: 1px solid #000;
     border-radius: 0 0 2px 2px;
     position: absolute;
-    right: -10px;
+    right: -8px;
     z-index: 1;
     box-shadow: 0 3px 5px rgba(0, 0, 0, 0.6);
     transition: all 0.05s ease;
 }
+
+/* Specific positioning for different black key positions */
+.black-key-C { right: -8.5px; }
+.black-key-D { right: -9.5px; }
+.black-key-F { right: -9px; }
+.black-key-G { right: -8.5px; }
+.black-key-A { right: -9.0px; } 
 
 .black-key:hover {
     background: linear-gradient(to bottom, #3a3a3a 0%, #2a2a2a 50%, #1a1a1a 100%);
