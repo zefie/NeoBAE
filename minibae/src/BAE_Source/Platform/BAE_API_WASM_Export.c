@@ -59,6 +59,10 @@ typedef struct {
 static RingBuffer gRingBuffer = {NULL, 0, 0, 0, 0};
 static int gCurrentSampleRate = 44100;  // Default sample rate
 
+// Reusable temp buffer for ring buffer refills (avoid malloc/free in hot path)
+static int16_t *gTempRefillBuffer = NULL;
+static size_t gTempRefillBufferSize = 0;
+
 // External function from GenSynth.c
 extern void BAE_BuildMixerSlice(void *threadContext, void *pAudioBuffer,
                                 int32_t bufferByteLength, int32_t sampleFrames);
@@ -140,6 +144,13 @@ int BAE_WASM_Init(int sampleRate, int maxVoices) {
 
     // Initialize ring buffer for 250ms
     RingBuffer_Init(sampleRate);
+    
+    // Allocate reusable temp buffer for ring buffer refills (avoid malloc in hot path)
+    gTempRefillBufferSize = AUDIO_BUFFER_FRAMES;
+    gTempRefillBuffer = (int16_t*)malloc(gTempRefillBufferSize * 2 * sizeof(int16_t));
+    if (gTempRefillBuffer == NULL) {
+        BAE_PRINTF("[BAE] Init: WARNING - Failed to allocate temp refill buffer\n");
+    }
 
     return 0;
 }
@@ -741,23 +752,20 @@ int16_t* BAE_WASM_GenerateAudio(int frames) {
     
     // Refill ring buffer to maintain 250ms buffer
     // Generate as many frames as we consumed (or as much as will fit)
-    if (gRingBuffer.buffer != NULL && framesRead > 0) {
+    if (gRingBuffer.buffer != NULL && framesRead > 0 && gTempRefillBuffer != NULL) {
         size_t spaceAvailable = gRingBuffer.capacity - gRingBuffer.available;
-        size_t framesToRefill = (framesRead < spaceAvailable) ? framesRead : spaceAvailable;
-        
-        if (framesToRefill > 0) {
+        if (spaceAvailable > 0) {
+            size_t framesToRefill = (framesRead < spaceAvailable) ? framesRead : spaceAvailable;
+            
             // Clamp to our temp buffer size
-            if (framesToRefill > AUDIO_BUFFER_FRAMES) {
-                framesToRefill = AUDIO_BUFFER_FRAMES;
+            if (framesToRefill > gTempRefillBufferSize) {
+                framesToRefill = gTempRefillBufferSize;
             }
             
-            int16_t *tempBuf = (int16_t*)malloc(framesToRefill * 2 * sizeof(int16_t));
-            if (tempBuf != NULL) {
-                long refillBytes = framesToRefill * 2 * sizeof(int16_t);
-                BAE_BuildMixerSlice(NULL, (void*)tempBuf, refillBytes, framesToRefill);
-                RingBuffer_Write(tempBuf, framesToRefill);
-                free(tempBuf);
-            }
+            // Use reusable buffer - no malloc/free in hot path
+            long refillBytes = framesToRefill * 2 * sizeof(int16_t);
+            BAE_BuildMixerSlice(NULL, (void*)gTempRefillBuffer, refillBytes, framesToRefill);
+            RingBuffer_Write(gTempRefillBuffer, framesToRefill);
         }
     }
 
@@ -1539,40 +1547,40 @@ static void RingBuffer_Clear(void) {
  * Write audio frames to ring buffer
  * Returns number of frames actually written
  */
-static size_t RingBuffer_Write(const int16_t *data, size_t frames) {
+static size_t RingBuffer_Write(const int16_t * __restrict__ data, size_t frames) {
     if (gRingBuffer.buffer == NULL || data == NULL) {
         return 0;
     }
     
     // Calculate how much space is available
     size_t spaceAvailable = gRingBuffer.capacity - gRingBuffer.available;
-    size_t framesToWrite = (frames < spaceAvailable) ? frames : spaceAvailable;
-    
-    if (framesToWrite == 0) {
-        return 0;  // Buffer is full
+    if (spaceAvailable == 0 || frames == 0) {
+        return 0;  // Buffer is full or nothing to write
     }
     
+    size_t framesToWrite = (frames < spaceAvailable) ? frames : spaceAvailable;
+    size_t writePos = gRingBuffer.writePos;
+    size_t capacity = gRingBuffer.capacity;
+    int16_t * __restrict__ buffer = gRingBuffer.buffer;
+    
     // Write in two parts if wrapping around
-    size_t firstPart = gRingBuffer.capacity - gRingBuffer.writePos;
+    size_t firstPart = capacity - writePos;
     if (firstPart > framesToWrite) {
         firstPart = framesToWrite;
     }
     
     // Copy first part (stereo = 2 samples per frame)
-    memcpy(&gRingBuffer.buffer[gRingBuffer.writePos * 2],
-           data,
-           firstPart * 2 * sizeof(int16_t));
+    // Using restrict helps compiler optimize memcpy to direct writes
+    memcpy(&buffer[writePos * 2], data, firstPart * 2 * sizeof(int16_t));
     
     // Copy second part if wrapping
     if (framesToWrite > firstPart) {
         size_t secondPart = framesToWrite - firstPart;
-        memcpy(gRingBuffer.buffer,
-               &data[firstPart * 2],
-               secondPart * 2 * sizeof(int16_t));
+        memcpy(buffer, &data[firstPart * 2], secondPart * 2 * sizeof(int16_t));
     }
     
     // Update write position and available count
-    gRingBuffer.writePos = (gRingBuffer.writePos + framesToWrite) % gRingBuffer.capacity;
+    gRingBuffer.writePos = (writePos + framesToWrite) % capacity;
     gRingBuffer.available += framesToWrite;
     
     return framesToWrite;
@@ -1582,37 +1590,38 @@ static size_t RingBuffer_Write(const int16_t *data, size_t frames) {
  * Read audio frames from ring buffer
  * Returns number of frames actually read
  */
-static size_t RingBuffer_Read(int16_t *dest, size_t frames) {
+static size_t RingBuffer_Read(int16_t * __restrict__ dest, size_t frames) {
     if (gRingBuffer.buffer == NULL || dest == NULL) {
         return 0;
     }
     
-    // Can't read more than available
-    size_t framesToRead = (frames < gRingBuffer.available) ? frames : gRingBuffer.available;
+    size_t available = gRingBuffer.available;
     
-    if (framesToRead == 0) {
+    if (available == 0) {
         // Buffer is empty - fill with silence
         memset(dest, 0, frames * 2 * sizeof(int16_t));
         return 0;
     }
     
+    // Can't read more than available
+    size_t framesToRead = (frames < available) ? frames : available;
+    size_t readPos = gRingBuffer.readPos;
+    size_t capacity = gRingBuffer.capacity;
+    int16_t * __restrict__ buffer = gRingBuffer.buffer;
+    
     // Read in two parts if wrapping around
-    size_t firstPart = gRingBuffer.capacity - gRingBuffer.readPos;
+    size_t firstPart = capacity - readPos;
     if (firstPart > framesToRead) {
         firstPart = framesToRead;
     }
     
     // Copy first part (stereo = 2 samples per frame)
-    memcpy(dest,
-           &gRingBuffer.buffer[gRingBuffer.readPos * 2],
-           firstPart * 2 * sizeof(int16_t));
+    memcpy(dest, &buffer[readPos * 2], firstPart * 2 * sizeof(int16_t));
     
     // Copy second part if wrapping
     if (framesToRead > firstPart) {
         size_t secondPart = framesToRead - firstPart;
-        memcpy(&dest[firstPart * 2],
-               gRingBuffer.buffer,
-               secondPart * 2 * sizeof(int16_t));
+        memcpy(&dest[firstPart * 2], buffer, secondPart * 2 * sizeof(int16_t));
     }
     
     // Fill remaining with silence if not enough data
@@ -1621,8 +1630,8 @@ static size_t RingBuffer_Read(int16_t *dest, size_t frames) {
     }
     
     // Update read position and available count
-    gRingBuffer.readPos = (gRingBuffer.readPos + framesToRead) % gRingBuffer.capacity;
-    gRingBuffer.available -= framesToRead;
+    gRingBuffer.readPos = (readPos + framesToRead) % capacity;
+    gRingBuffer.available = available - framesToRead;
     
     return framesToRead;
 }
