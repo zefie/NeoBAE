@@ -372,7 +372,7 @@ class MiniBAEPlayer {
     }
 
     updateVUMeters() {
-        const canRenderMeters = this.player && this.player._wasmModule && this.player._songLoaded && this.player._isPlaying;
+        const canRenderMeters = this.player && this.player._wasmModule && this.player._songLoaded && this.player.isPlaying;
 
         if (!canRenderMeters) {
             this.resetVUMeters();
@@ -788,7 +788,7 @@ class MiniBAEPlayer {
 
         try {
             // Track if we were playing so we can resume after loading
-            const wasPlaying = this.player && this.player._isPlaying;
+            const wasPlaying = this.player && this.player.isPlaying();
             
             // Stop current playback
             if (wasPlaying) {
@@ -841,7 +841,7 @@ class MiniBAEPlayer {
 
         try {
             // Track if we were playing so we can resume after loading
-            const wasPlaying = this.player && this.player._isPlaying;
+            const wasPlaying = this.player && this.player.isPlaying();
             
             // Stop current playback
             if (wasPlaying) {
@@ -960,7 +960,7 @@ class MiniBAEPlayer {
     togglePlayPause() {
         if (!this.player || !this.player._songLoaded) return;
         
-        if (this.player._isPlaying) {
+        if (this.player.isPlaying) {
             this.pause();
         } else {
             // Use resume if we're paused, otherwise play from start
@@ -973,7 +973,7 @@ class MiniBAEPlayer {
     }
 
     play() {
-        if (this.player) {
+        if (this.player && this.player.isPlaying === false) {
             try {
                 this.player.play();
                 this.isPaused = false;
@@ -984,7 +984,7 @@ class MiniBAEPlayer {
     }
 
     pause() {
-        if (this.player) {
+        if (this.player && this.player.isPlaying) {
             try {
                 this.player.pause();
                 this.isPaused = true;
@@ -996,7 +996,7 @@ class MiniBAEPlayer {
     }
 
     resume() {
-        if (this.player) {
+        if (this.player && this.player.isPlaying === false) {
             try {
                 this.player.resume();
                 this.isPaused = false;

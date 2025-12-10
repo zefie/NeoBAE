@@ -47,7 +47,7 @@ static int gSuppressLyrics = 1;  // Start suppressed (1 = suppress during prerol
 static int16_t gAudioBuffer[AUDIO_BUFFER_FRAMES * 2];  // Stereo
 
 // Ring buffer for smooth streaming (prevent clicks/pops)
-#define RING_BUFFER_SLICES 64  // Number of slices to buffer (64 * 512 frames = 32768 frames ~ 743ms @ 44.1kHz)
+#define RING_BUFFER_SLICES 8  // Number of slices to buffer (64 * 512 frames = 32768 frames ~ 743ms @ 44.1kHz)
 #define SLICE_FRAMES AUDIO_BUFFER_FRAMES
 static int16_t gRingBuffer[RING_BUFFER_SLICES * SLICE_FRAMES * 2];  // Stereo
 static int gRingWritePos = 0;   // Write position in samples (not frames)
@@ -492,7 +492,9 @@ int BAE_WASM_Stop(void) {
     BAE_PRINTF("[BAE] Stop: Lyric callback uninstalled\n");
 #endif
 
-    BAESong_Stop(gCurrentSong, TRUE);
+    // Use FALSE to immediately stop and remove from mixer (no fade)
+    // This ensures Play() will work correctly after Stop()
+    BAESong_Stop(gCurrentSong, FALSE);
     
     // Clear ring buffer to prevent stale audio
     PV_ResetRingBuffer();
