@@ -1,6 +1,7 @@
 class MiniBAEPlayer {
     constructor() {
         this.player = null;
+        this.isFirstPlay = true;
         this.isLooping = true;
         this.isPaused = false;
         this.channelMutes = new Array(16).fill(false);
@@ -977,6 +978,12 @@ class MiniBAEPlayer {
             try {
                 this.player.play();
                 this.isPaused = false;
+                if (this.isFirstPlay) {
+                    this.isFirstPlay = false;
+                    this.stop();
+                    this.player.currentTime = 0;
+                    this.play();
+                }
             } catch (error) {
                 this.updateStatus(`Play error: ${error.message}`);
             }
