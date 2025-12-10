@@ -232,34 +232,11 @@ int BAE_WASM_LoadSoundbank(const uint8_t* data, int length) {
 #endif
        )
     {
-        BAE_PRINTF("[BAE] LoadSoundbank: Loading SF2/SF3/DLS via temp file (WASM workaround)...\n");
-        
-        // WASM workaround: Write to temp file and load from file
-        // FluidSynth's memory loader seems to have issues in WASM
-        const char *tmpfile = "/tmp/soundbank";
-        FILE *fp = fopen(tmpfile, "wb");
-        if (!fp) {
-            BAE_PRINTF("[BAE] LoadSoundbank: Failed to create temp file\n");
-            return -1;
-        }
-        
-        size_t written = fwrite(data, 1, (size_t)length, fp);
-        fclose(fp);
-        
-        if (written != (size_t)length) {
-            BAE_PRINTF("[BAE] LoadSoundbank: Failed to write complete data (%zu/%d)\n", written, length);
-            return -1;
-        }
-        
-        BAE_PRINTF("[BAE] LoadSoundbank: Wrote %zu bytes to %s\n", written, tmpfile);
-        
-        // Load from file instead
-        OPErr sfErr = GM_LoadSF2Soundfont(tmpfile);
-        BAE_PRINTF("[BAE] LoadSoundbank: GM_LoadSF2Soundfont returned %d\n", sfErr);
+        BAE_PRINTF("[BAE] LoadSoundbank: Loading SF2/SF3/DLS...\n");
 
-        // Clean up temp file (use remove() instead of unlink() for WASM compatibility)
-        // Note: In WASM/Emscripten, the file will be reused on next load anyway
-        remove(tmpfile);
+        // Load from file instead
+        OPErr sfErr = GM_LoadSF2SoundfontFromMemory(data, length);
+        BAE_PRINTF("[BAE] LoadSoundbank: GM_LoadSF2SoundfontFromMemory returned %d\n", sfErr);
 
         if (sfErr != NO_ERR)
         {

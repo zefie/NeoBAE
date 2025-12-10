@@ -31,7 +31,7 @@ AR      	:= emar
 STRIP		:= strip
 
 
-OPTI		:= -fPIC
+OPTI		:= -fPIC -O3
 CFLAGS  	:= $(ARCH) $(OPTI) $(INC_PATH) -DWASM -D_THREAD_SAFE -Wno-pragma-pack -Wno-unused-value
 
 ifneq ($(BAE_FLAGS),)
