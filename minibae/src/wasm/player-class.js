@@ -48,6 +48,9 @@ class BeatnikPlayer {
         // Song data for export
         this._songData = null;
 
+        // Audio callback counter for throttled song-end detection
+        this._audioCallbackCounter = 0;
+
         // Time update interval
         this._timeUpdateInterval = null;
     }
@@ -166,6 +169,17 @@ class BeatnikPlayer {
             for (let i = 0; i < frames; i++) {
                 left[i] = wasmBuffer[i * 2] / 32768.0;
                 right[i] = wasmBuffer[i * 2 + 1] / 32768.0;
+            }
+
+            // Check for song end periodically (throttled to avoid overhead)
+            // Only check every ~100ms (at 44.1kHz, 512 frames = 11.6ms, so check every ~9 callbacks)
+            if (++this._audioCallbackCounter >= 9) {
+                this._audioCallbackCounter = 0;
+                if (this._wasmModule._BAE_WASM_IsPlaying() === 0) {
+                    this._isPlaying = false;
+                    this._stopTimeUpdates();
+                    this._dispatchEvent('end');
+                }
             }
         };
 
@@ -923,19 +937,13 @@ class BeatnikPlayer {
     _startTimeUpdates() {
         if (this._timeUpdateInterval) return;
 
+        // Reduced frequency to 200ms (5Hz) to avoid performance violations
         this._timeUpdateInterval = setInterval(() => {
             if (!this._isPlaying) return;
 
-            // Check if song ended
-            if (this._wasmModule._BAE_WASM_IsPlaying() === 0) {
-                this._isPlaying = false;
-                this._stopTimeUpdates();
-                this._dispatchEvent('end');
-                return;
-            }
-
+            // Just dispatch time updates - song end detection is in audio callback
             this._dispatchEvent('timeupdate', this.currentTime);
-        }, 100);
+        }, 200);
     }
 
     _stopTimeUpdates() {

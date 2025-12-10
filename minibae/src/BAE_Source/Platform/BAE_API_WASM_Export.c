@@ -40,27 +40,16 @@ static BAESong gEffectSong = NULL;  // Second song for sound effects (plays on t
 typedef void (*JSLyricCallback)(const char* lyric, uint32_t timeUs);
 static JSLyricCallback gJSLyricCallback = NULL;
 static int gSuppressLyrics = 1;  // Start suppressed (1 = suppress during preroll, 0 = allow)
+static uint32_t gLyricUnsuppressTime = 0;  // Time when lyrics should be unsuppressed (0 = inactive)
 #endif
 
 // Audio buffer for JS interop
 #define AUDIO_BUFFER_FRAMES 512
 static int16_t gAudioBuffer[AUDIO_BUFFER_FRAMES * 2];  // Stereo
 
-// Ring buffer for smooth streaming (prevent clicks/pops)
-#define RING_BUFFER_SLICES 8  // Number of slices to buffer (64 * 512 frames = 32768 frames ~ 743ms @ 44.1kHz)
-#define SLICE_FRAMES AUDIO_BUFFER_FRAMES
-static int16_t gRingBuffer[RING_BUFFER_SLICES * SLICE_FRAMES * 2];  // Stereo
-static int gRingWritePos = 0;   // Write position in samples (not frames)
-static int gRingReadPos = 0;    // Read position in samples
-static int gRingAvailable = 0;  // Available samples in ring buffer
-
 // External function from GenSynth.c
 extern void BAE_BuildMixerSlice(void *threadContext, void *pAudioBuffer,
                                 int32_t bufferByteLength, int32_t sampleFrames);
-
-// Forward declarations for internal helper functions
-static void PV_ResetRingBuffer(void);
-static void PV_FillRingBufferSlice(void);
 
 #ifdef SUPPORT_KARAOKE
 static void PV_LyricCallback(struct GM_Song *songPtr, const char *lyric, uint32_t timeUs, void *ref);
@@ -356,8 +345,6 @@ int BAE_WASM_LoadSong(const uint8_t* data, int length) {
     BAE_PRINTF("[BAE] LoadSong: Lyric state reset\n");
 #endif
 
-    PV_ResetRingBuffer();
-
     BAE_PRINTF("[BAE] LoadSong: SUCCESS\n");
     return 0;
 }
@@ -384,9 +371,6 @@ int BAE_WASM_UnloadSong(void) {
     BAESong_Delete(gCurrentSong);
     gCurrentSong = NULL;
 
-    // Clear ring buffer
-    PV_ResetRingBuffer();
-
     BAE_PRINTF("[BAE] UnloadSong: SUCCESS\n");
     return 0;
 }
@@ -402,47 +386,24 @@ int BAE_WASM_Play(void) {
         return -1;
     }
 
-    // Pre-fill ring buffer to prevent initial clicks/pops
-    // Fill to at least 6 slices for smooth startup
-    const int targetSamples = SLICE_FRAMES * 2 * 6;  // 6 slices
-    BAE_PRINTF("[BAE] Play: Pre-buffering audio (target=%d samples)...\n", targetSamples);
-    while (gRingAvailable < targetSamples && gMixer != NULL) {
-        PV_FillRingBufferSlice();
-    }
-    BAE_PRINTF("[BAE] Play: Pre-buffered %d samples\n", gRingAvailable);
-
-    // Resume mixer/sequencer if paused
-    GM_ResumeGeneralSound(NULL);
-
 #ifdef SUPPORT_KARAOKE
     if (gJSLyricCallback) {
         extern BAEResult BAESong_SetLyricCallback(BAESong song, GM_SongLyricCallbackProcPtr pCallback, void *callbackReference);
         BAESong_SetLyricCallback(gCurrentSong, PV_LyricCallback, NULL);
         BAE_PRINTF("[BAE] Play: Lyric callback installed\n");
     }
-    
+    // Schedule lyric unsuppression for 550ms from now (non-blocking)
+    gLyricUnsuppressTime = BAE_GetMicroseconds() + 550000;
 #endif
-
+    GM_ResumeGeneralSound(NULL);
     BAEResult err = BAESong_Start(gCurrentSong, 0);
     if (err != BAE_NO_ERROR) {
         BAE_PRINTF("[BAE] Play: ERROR - BAESong_Start failed with code %d\n", (int)err);
         return (int)err;
     }
-    // Delay unsuppressing lyrics by 550ms to skip preroll artifacts
-    // Use a simple spin-wait since we're already in the main thread
-    // and this happens only once per song start
-    #ifdef SUPPORT_KARAOKE
-    {
-        uint32_t startTime = BAE_GetMicroseconds();
-        while ((BAE_GetMicroseconds() - startTime) < 550000) {
-            // Busy wait for 550ms
-            BAE_WaitMicroseconds(1000);  // Sleep 1ms at a time to be CPU-friendly
-        }
-        gSuppressLyrics = 0;
-    }
-    #endif
-    BAE_PRINTF("[BAE] Play: BAESong_Start returned %d\n", (int)err);
-    return (int)err;
+    
+    BAE_PRINTF("[BAE] Play: SUCCESS\n");
+    return 0;
 }
 
 /*
@@ -483,8 +444,9 @@ int BAE_WASM_Stop(void) {
     }
 
 #ifdef SUPPORT_KARAOKE
-    // Suppress lyrics when stopped
+    // Suppress lyrics when stopped and cancel any pending unsuppression
     gSuppressLyrics = 1;
+    gLyricUnsuppressTime = 0;
     
     // Uninstall lyric callback
     extern BAEResult BAESong_SetLyricCallback(BAESong song, GM_SongLyricCallbackProcPtr pCallback, void *callbackReference);
@@ -493,11 +455,7 @@ int BAE_WASM_Stop(void) {
 #endif
 
     // Use FALSE to immediately stop and remove from mixer (no fade)
-    // This ensures Play() will work correctly after Stop()
     BAESong_Stop(gCurrentSong, FALSE);
-    
-    // Clear ring buffer to prevent stale audio
-    PV_ResetRingBuffer();
     
     return 0;
 }
@@ -704,45 +662,48 @@ int BAE_WASM_GetOutputGain(void) {
 }
 
 /*
- * Reset the ring buffer (clears buffered audio)
- * Internal helper - call when stopping/loading songs to prevent stale audio
+ * Generate audio samples into buffer
+ * Called from JavaScript audio callback
+ * Returns: pointer to audio buffer (interleaved stereo 16-bit)
  */
-static void PV_ResetRingBuffer(void) {
-    gRingWritePos = 0;
-    gRingReadPos = 0;
-    gRingAvailable = 0;
-    // Optionally zero the buffer to ensure silence
-    memset(gRingBuffer, 0, sizeof(gRingBuffer));
-}
+EMSCRIPTEN_KEEPALIVE
+int16_t* BAE_WASM_GenerateAudio(int frames) {
+    gGenerateAudioCallCount++;
 
-/*
- * Fill the ring buffer with one slice of audio
- * Internal helper function - generates audio and adds to ring buffer
- */
-static void PV_FillRingBufferSlice(void) {
+#ifdef SUPPORT_KARAOKE
+    // Check if it's time to unsuppress lyrics (non-blocking)
+    if (gLyricUnsuppressTime > 0 && BAE_GetMicroseconds() >= gLyricUnsuppressTime) {
+        gSuppressLyrics = 0;
+        gLyricUnsuppressTime = 0;  // Clear the timer
+        BAE_PRINTF("[BAE] GenerateAudio: Lyrics unsuppressed\n");
+    }
+#endif
+
+    // Log every 100 calls to avoid spam
+    if ((gGenerateAudioCallCount <= 5 || (gGenerateAudioCallCount % 100) == 0)) {
+        BAE_PRINTF("[BAE] GenerateAudio: call #%d, frames=%d, gMixer=%p\n",
+               gGenerateAudioCallCount, frames, (void*)gMixer);
+    }
+
     if (gMixer == NULL) {
-        return;
+        // Fill with silence
+        memset(gAudioBuffer, 0, frames * 2 * sizeof(int16_t));
+        return gAudioBuffer;
     }
 
-    const int totalSamples = RING_BUFFER_SLICES * SLICE_FRAMES * 2;  // Total ring buffer size in samples
-    
-    // Check if we have room for another slice
-    if (gRingAvailable + (SLICE_FRAMES * 2) > totalSamples) {
-        // Ring buffer is full, skip generation
-        return;
+    // Clamp frames to buffer size
+    if (frames > AUDIO_BUFFER_FRAMES) {
+        frames = AUDIO_BUFFER_FRAMES;
     }
 
-    // Generate one slice directly into a temp buffer
-    int16_t tempSlice[SLICE_FRAMES * 2];
-    long bufferByteLength = SLICE_FRAMES * 2 * sizeof(int16_t);
-    
-    // Generate audio using BAE's mixer
-    BAE_BuildMixerSlice(NULL, (void*)tempSlice, bufferByteLength, SLICE_FRAMES);
+    // Generate audio directly from mixer (like SDL2 does)
+    long bufferByteLength = frames * 2 * sizeof(int16_t);
+    BAE_BuildMixerSlice(NULL, (void*)gAudioBuffer, bufferByteLength, frames);
 
     // Apply output gain with soft limiting (prevents harsh clicks from clipping)
-    int sliceSamples = SLICE_FRAMES * 2;
-    for (int i = 0; i < sliceSamples; i++) {
-        int32_t sample = tempSlice[i];
+    int totalSamples = frames * 2;  // Stereo
+    for (int i = 0; i < totalSamples; i++) {
+        int32_t sample = gAudioBuffer[i];
         
         // Apply gain
         if (gOutputGain != 256) {
@@ -770,81 +731,7 @@ static void PV_FillRingBufferSlice(void) {
             }
         }
         
-        tempSlice[i] = (int16_t)sample;
-    }
-
-    // Copy to ring buffer (handle wrap-around)
-    // sliceSamples already declared above
-    for (int i = 0; i < sliceSamples; i++) {
-        gRingBuffer[gRingWritePos] = tempSlice[i];
-        gRingWritePos = (gRingWritePos + 1) % totalSamples;
-    }
-    
-    gRingAvailable += sliceSamples;
-}
-
-/*
- * Generate audio samples into buffer
- * Called from AudioWorklet
- * Uses ring buffer for smooth streaming (prevents clicks/pops)
- * Returns: pointer to audio buffer (interleaved stereo 16-bit)
- */
-EMSCRIPTEN_KEEPALIVE
-int16_t* BAE_WASM_GenerateAudio(int frames) {
-    gGenerateAudioCallCount++;
-
-    // Log every 100 calls to avoid spam
-    if ((gGenerateAudioCallCount <= 5 || (gGenerateAudioCallCount % 100) == 0)) {
-        BAE_PRINTF("[BAE] GenerateAudio: call #%d, frames=%d, gMixer=%p, buffered=%d samples\n",
-               gGenerateAudioCallCount, frames, (void*)gMixer, gRingAvailable);
-    }
-
-    if (gMixer == NULL) {
-        // Fill with silence
-        memset(gAudioBuffer, 0, frames * 2 * sizeof(int16_t));
-        return gAudioBuffer;
-    }
-
-    // Clamp frames to buffer size
-    if (frames > AUDIO_BUFFER_FRAMES) {
-        frames = AUDIO_BUFFER_FRAMES;
-    }
-
-    const int totalSamples = RING_BUFFER_SLICES * SLICE_FRAMES * 2;
-    int samplesNeeded = frames * 2;  // Stereo
-
-    // Fill ring buffer if we're running low (maintain at least 4 slices buffered for safety)
-    // 4 slices @ 512 frames = ~46ms buffer @ 44.1kHz - prevents underruns from timing jitter
-    while (gRingAvailable < (SLICE_FRAMES * 2 * 4)) {  // Less than 4 slices? Fill more
-        PV_FillRingBufferSlice();
-    }
-
-    // Read from ring buffer
-    if (gRingAvailable >= samplesNeeded) {
-        // Enough data available - copy from ring buffer
-        for (int i = 0; i < samplesNeeded; i++) {
-            gAudioBuffer[i] = gRingBuffer[gRingReadPos];
-            gRingReadPos = (gRingReadPos + 1) % totalSamples;
-        }
-        gRingAvailable -= samplesNeeded;
-    } else {
-        // Not enough data - copy what we have and fill rest with silence
-        int availableSamples = gRingAvailable;
-        int i;
-        for (i = 0; i < availableSamples; i++) {
-            gAudioBuffer[i] = gRingBuffer[gRingReadPos];
-            gRingReadPos = (gRingReadPos + 1) % totalSamples;
-        }
-        // Fill remaining with silence
-        for (; i < samplesNeeded; i++) {
-            gAudioBuffer[i] = 0;
-        }
-        gRingAvailable = 0;
-        
-        if (gGenerateAudioCallCount <= 10 || (gGenerateAudioCallCount % 100) == 0) {
-            BAE_PRINTF("[BAE] GenerateAudio: UNDERRUN - only had %d/%d samples\n",
-                   availableSamples, samplesNeeded);
-        }
+        gAudioBuffer[i] = (int16_t)sample;
     }
 
     // Log first few samples for debugging (only first 5 calls)
