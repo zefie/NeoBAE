@@ -252,7 +252,8 @@ SRC		+=	src/BAE_Source/Common/DriverTools.c \
 			src/BAE_Source/Common/g723_24.c \
 			src/BAE_Source/Common/g723_40.c \
 			src/BAE_Source/Common/g72x.c \
-			src/BAE_Source/Common/sha1mini.c
+			src/BAE_Source/Common/sha1mini.c \
+			src/BAE_Source/Common/XFileTypes.c
 
 ifeq ($(SF2_SUPPORT),1)
 	ifeq ($(USE_FLUIDSYNTH),1)

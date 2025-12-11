@@ -31,9 +31,12 @@
 #include "GenSnd.h"
 #include "GenPriv.h"
 #include "GenRMI.h"
-#include "GenSF2_FluidSynth.h"
+
 
 #if USE_SF2_SUPPORT == TRUE && _USING_FLUIDSYNTH == TRUE
+#include "GenSF2_FluidSynth.h"
+#endif
+
 
 // Helper: Read 32-bit little-endian value
 static uint32_t PV_ReadLE32(const unsigned char *p)
@@ -244,6 +247,75 @@ static void PV_ParseRMIInfo(const unsigned char *buf, uint32_t len)
 }
 
 /**
+ * GM_LoadRMIFromFile
+ * 
+ * Load an RMI (RIFF MIDI) file from disk, extracting both the MIDI data
+ * and any embedded DLS soundbank.
+ * 
+ * This is a convenience wrapper around GM_LoadRMIFromMemory that handles
+ * file I/O automatically.
+ * 
+ * @param path                 Path to the RMI file
+ * @param outMidiData          Pointer to receive allocated MIDI data buffer
+ * @param outMidiLen           Pointer to receive MIDI data length
+ * @param loadDLS              If TRUE, attempt to load embedded DLS data
+ * @return OPErr error code (NO_ERR on success)
+ */
+OPErr GM_LoadRMIFromFile(const char *path,
+                         unsigned char **outMidiData, uint32_t *outMidiLen,
+                         XBOOL loadDLS)
+{
+    XPTR fileData = NULL;
+    XFILENAME fileName;
+    XFILE fileRef;
+    uint32_t fileSize = 0;
+    OPErr err;
+    
+    if (!path || !outMidiData || !outMidiLen)
+    {
+        return PARAM_ERR;
+    }
+    
+    // Read entire file into memory
+        // Convert path to XFILENAME
+    XConvertPathToXFILENAME((void *)path, &fileName);
+    
+    // Open file for reading
+    fileRef = XFileOpenForRead(&fileName);
+    if (fileRef == 0)
+        return BAE_INVALID_TYPE;
+
+    // Get file size
+    XFileSetPosition(fileRef, 0L);
+    fileSize = XFileGetLength(fileRef);
+    if (fileSize == 0)
+    {
+        XFileClose(fileRef);
+        return BAD_FILE;
+    }
+
+    // Allocate buffer for file data
+    fileData = XNewPtr(fileSize);
+    XFileRead(fileRef, fileData, fileSize);
+    XFileClose(fileRef);    
+
+    if (!fileData)
+    {
+        BAE_PRINTF("[RMI] Failed to read file: %s\n", path);
+        return BAD_FILE;
+    }
+    
+    // Parse RMI from memory
+    err = GM_LoadRMIFromMemory((const unsigned char *)fileData, fileSize,
+                               outMidiData, outMidiLen, loadDLS);
+    
+    // Clean up file buffer
+    XDisposePtr(fileData);
+    
+    return err;
+}
+
+/**
  * GM_LoadRMIFromMemory
  * 
  * Load an RMI (RIFF MIDI) file from memory, extracting both the MIDI data
@@ -395,5 +467,3 @@ XBOOL GM_IsRMIFile(const unsigned char *buf, uint32_t len)
     
     return (PV_MatchFourCC(buf, "RIFF") && PV_MatchFourCC(&buf[8], "RMID"));
 }
-
-#endif

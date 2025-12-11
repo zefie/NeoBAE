@@ -10226,3 +10226,138 @@ XBOOL PV_RefillMPEGEncodeBuffer(void *buffer, void *userRef)
     return TRUE;
 }
 #endif
+
+// -----------------------------------------------------------------------------------------
+// -----------------------------------------------------------------------------------------
+// Universal file loader
+// -----------------------------------------------------------------------------------------
+// -----------------------------------------------------------------------------------------
+
+// BAEMixer_LoadFromFile()
+// --------------------------------------
+// Universal file loader that automatically detects file type and loads the appropriate
+// BAESong or BAESound object based on file content
+BAEResult BAEMixer_LoadFromFile(BAEMixer mixer, BAEPathName filePath, BAELoadResult *result)
+{
+    if (!mixer || !filePath || !result)
+        return BAE_PARAM_ERR;
+
+    // Initialize result structure
+    result->type = BAE_LOAD_TYPE_NONE;
+    result->result = BAE_NO_ERROR;
+    result->fileType = BAE_INVALID_TYPE;
+    result->data.song = NULL;
+    result->data.sound = NULL;
+
+    // Detect file type using existing file type detection
+    BAEFileType ftype = X_DetermineFileType(filePath);
+    result->fileType = ftype;
+    
+    if (ftype == BAE_INVALID_TYPE)
+    {
+        result->result = BAE_INVALID_TYPE;
+        return BAE_INVALID_TYPE;
+    }
+
+    // Determine if this is an audio file or a song file
+    BAE_BOOL isAudio = FALSE;
+    if (ftype == BAE_WAVE_TYPE || ftype == BAE_AIFF_TYPE || ftype == BAE_AU_TYPE ||
+        ftype == BAE_MPEG_TYPE || ftype == BAE_FLAC_TYPE || ftype == BAE_VORBIS_TYPE)
+    {
+        isAudio = TRUE;
+    }
+
+    if (isAudio)
+    {
+        // Load as audio file using BAESound
+        result->data.sound = BAESound_New(mixer);
+        if (!result->data.sound)
+        {
+            result->result = BAE_MEMORY_ERR;
+            return BAE_MEMORY_ERR;
+        }
+
+        BAEResult sr = BAESound_LoadFileSample(result->data.sound, filePath, ftype);
+        if (sr != BAE_NO_ERROR)
+        {
+            BAESound_Delete(result->data.sound);
+            result->data.sound = NULL;
+            result->result = sr;
+            return sr;
+        }
+
+        result->type = BAE_LOAD_TYPE_SOUND;
+        result->result = BAE_NO_ERROR;
+        return BAE_NO_ERROR;
+    }
+    else
+    {
+        // Load as song file using BAESong
+        result->data.song = BAESong_New(mixer);
+        if (!result->data.song)
+        {
+            result->result = BAE_MEMORY_ERR;
+            return BAE_MEMORY_ERR;
+        }
+
+        BAEResult sr = BAE_NO_ERROR;
+
+        if (ftype == BAE_RMF)
+        {
+            sr = BAESong_LoadRmfFromFile(result->data.song, filePath, 0, TRUE);
+        }
+#if USE_XMF_SUPPORT == TRUE
+        else if (ftype == BAE_XMF)
+        {
+            sr = BAESong_LoadXmfFromFile(result->data.song, filePath, TRUE);
+        }
+#endif
+        else if (ftype == BAE_MIDI_TYPE || ftype == BAE_RMI)
+        {
+            sr = BAESong_LoadMidiFromFile(result->data.song, filePath, TRUE);
+        }
+        else
+        {
+            // Default to standard MIDI for any remaining cases
+            sr = BAESong_LoadMidiFromFile(result->data.song, filePath, TRUE);
+        }
+
+        if (sr != BAE_NO_ERROR)
+        {
+            BAESong_Delete(result->data.song);
+            result->data.song = NULL;
+            result->result = sr;
+            return sr;
+        }
+
+        result->type = BAE_LOAD_TYPE_SONG;
+        result->result = BAE_NO_ERROR;
+        return BAE_NO_ERROR;
+    }
+}
+
+// BAELoadResult_Cleanup()
+// --------------------------------------
+// Cleans up resources allocated by BAEMixer_LoadFromFile
+BAEResult BAELoadResult_Cleanup(BAELoadResult *result)
+{
+    if (!result)
+        return BAE_PARAM_ERR;
+
+    if (result->type == BAE_LOAD_TYPE_SONG && result->data.song)
+    {
+        BAESong_Delete(result->data.song);
+        result->data.song = NULL;
+    }
+    else if (result->type == BAE_LOAD_TYPE_SOUND && result->data.sound)
+    {
+        BAESound_Delete(result->data.sound);
+        result->data.sound = NULL;
+    }
+
+    result->type = BAE_LOAD_TYPE_NONE;
+    result->result = BAE_NO_ERROR;
+    result->fileType = BAE_INVALID_TYPE;
+
+    return BAE_NO_ERROR;
+}

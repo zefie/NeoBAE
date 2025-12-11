@@ -284,12 +284,20 @@ extern "C"
         BAE_MPEG_TYPE,
         BAE_AU_TYPE,
         BAE_MIDI_TYPE,
+#if USE_FLAC_DECODER == TRUE || USE_FLAC_ENCODER == TRUE        
         BAE_FLAC_TYPE,
+#endif        
+#if USE_VORBIS_DECODER == TRUE || USE_VORBIS_ENCODER == TRUE
         BAE_VORBIS_TYPE,
+#endif        
 
         // meta types
         BAE_GROOVOID,
         BAE_RMF,
+#if USE_XMF_SUPPORT == TRUE        
+        BAE_XMF,
+#endif        
+        BAE_RMI,
         BAE_RAW_PCM
     } BAEFileType;
 
@@ -2675,6 +2683,60 @@ extern "C"
 #if USE_SF2_SUPPORT == TRUE
     XBOOL BAESong_IsSF2Song(BAESong song);
 #endif
+
+// Content-based file type detection functions
+BAEFileType X_DetermineFileType(const char *filePath);
+BAEFileType X_DetermineFileTypeByPath(const char *filePath);
+BAEFileType X_DetermineFileTypeByData(XFILE fileRef);
+const char *X_GetFileTypeString(BAEFileType fileType);
+BAEFileType X_ConvertFileTypeString(const char *typeString);
+
+// Universal loader structures and functions
+typedef enum
+{
+    BAE_LOAD_TYPE_NONE = 0,
+    BAE_LOAD_TYPE_SONG,  // Result contains a BAESong (MIDI/RMF/XMF)
+    BAE_LOAD_TYPE_SOUND  // Result contains a BAESound (audio file)
+} BAELoadType;
+
+typedef struct
+{
+    BAELoadType type;       // What was loaded
+    BAEResult result;       // Load result code
+    BAEFileType fileType;   // Detected file type
+    union {
+        BAESong song;       // Valid if type == BAE_LOAD_TYPE_SONG
+        BAESound sound;     // Valid if type == BAE_LOAD_TYPE_SOUND
+    } data;
+} BAELoadResult;
+
+// BAEMixer_LoadFromFile()
+// ------------------------------------
+// Universal file loader that automatically detects file type and loads
+// the appropriate BAESong or BAESound object. Handles MIDI, RMF, XMF,
+// WAV, AIFF, AU, MP3, FLAC, and OGG files automatically.
+// ------------------------------------
+// Parameters:
+//           mixer      -- BAEMixer to load into
+//           filePath   -- Path to file to load
+//           result     -- Pointer to BAELoadResult structure to fill
+// ------------------------------------
+// BAEResult codes:
+//           BAE_NO_ERROR      -- Successfully loaded
+//           BAE_PARAM_ERR     -- Invalid parameters
+//           BAE_INVALID_TYPE  -- Unknown file type
+//           BAE_BAD_FILE      -- File could not be read or parsed
+//           BAE_MEMORY_ERR    -- Could not allocate memory
+//           Other codes from specific loaders
+// ------------------------------------
+BAEResult BAEMixer_LoadFromFile(BAEMixer mixer, BAEPathName filePath, BAELoadResult *result);
+
+// BAELoadResult_Cleanup()
+// ------------------------------------
+// Cleans up resources allocated by BAEMixer_LoadFromFile.
+// Call this when you're done with the loaded song/sound.
+// ------------------------------------
+BAEResult BAELoadResult_Cleanup(BAELoadResult *result);
 
 #ifdef __cplusplus
 } // extern "C"

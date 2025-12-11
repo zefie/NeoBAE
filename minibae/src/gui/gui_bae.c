@@ -600,11 +600,11 @@ bool bae_load_song(const char *path)
         // Clear lyric callback if it exists
         extern BAEResult BAESong_SetLyricCallback(BAESong song, GM_SongLyricCallbackProcPtr pCallback, void *callbackReference);
         BAESong_SetLyricCallback(g_bae.song, NULL, NULL);
-#endif
         BAESong_Delete(g_bae.song);
         g_bae.song = NULL;
+#endif
     }
-    if (g_bae.sound)
+    else if (g_bae.sound)
     {
         BAESound_Stop(g_bae.sound, FALSE);
         BAESound_Delete(g_bae.sound);
@@ -623,25 +623,16 @@ bool bae_load_song(const char *path)
     GM_ResetSF2();
 #endif    
 
-    // Detect extension
-    const char *le = strrchr(path, '.');
-    char ext[8] = {0};
-    if (le)
-    {
-        strncpy(ext, le, sizeof(ext) - 1);
-        for (char *p = ext; *p; ++p)
-            *p = (char)tolower(*p);
+    BAEFileType ftype = X_DetermineFileType(path);
+    if (ftype == BAE_INVALID_TYPE) {
+        return false;
     }
 
     bool isAudio = false;
-    if (le)
+    if (ftype == BAE_WAVE_TYPE || ftype == BAE_AIFF_TYPE || ftype == BAE_AU_TYPE ||
+        ftype == BAE_MPEG_TYPE || ftype == BAE_FLAC_TYPE || ftype == BAE_VORBIS_TYPE)
     {
-        if (strcmp(ext, ".wav") == 0 || strcmp(ext, ".aif") == 0 || strcmp(ext, ".aiff") == 0 ||
-            strcmp(ext, ".au") == 0 || strcmp(ext, ".mp2") == 0 || strcmp(ext, ".mp3") == 0 ||
-            strcmp(ext, ".flac") == 0 || strcmp(ext, ".ogg") == 0 || strcmp(ext, ".oga") == 0)
-        {
-            isAudio = true;
-        }
+        isAudio = true;
     }
 
     if (isAudio)
@@ -650,23 +641,8 @@ bool bae_load_song(const char *path)
         if (!g_bae.sound)
             return false;
 
-        BAEFileType ftype = BAE_INVALID_TYPE;
-        if (strcmp(ext, ".wav") == 0)
-            ftype = BAE_WAVE_TYPE;
-        else if (strcmp(ext, ".aif") == 0 || strcmp(ext, ".aiff") == 0)
-            ftype = BAE_AIFF_TYPE;
-        else if (strcmp(ext, ".au") == 0)
-            ftype = BAE_AU_TYPE;
-        else if (strcmp(ext, ".mp2") == 0)
-            ftype = BAE_MPEG_TYPE;
-        else if (strcmp(ext, ".mp3") == 0)
-            ftype = BAE_MPEG_TYPE;
-        else if (strcmp(ext, ".flac") == 0)
-            ftype = BAE_FLAC_TYPE;
-        else if (strcmp(ext, ".ogg") == 0 || strcmp(ext, ".oga") == 0)
-            ftype = BAE_VORBIS_TYPE;
 
-        BAEResult sr = (ftype != BAE_INVALID_TYPE) ? BAESound_LoadFileSample(g_bae.sound, (BAEPathName)path, ftype) : BAE_BAD_FILE_TYPE;
+        BAEResult sr = BAESound_LoadFileSample(g_bae.sound, (BAEPathName)path, ftype);
         if (sr != BAE_NO_ERROR)
         {
             BAESound_Delete(g_bae.sound);
@@ -713,32 +689,39 @@ bool bae_load_song(const char *path)
     }
 
     // MIDI / RMF
+    BAEResult sr = BAE_NO_ERROR;
     g_bae.song = BAESong_New(g_bae.mixer);
     if (!g_bae.song)
         return false;
 
-    BAEResult r;
-    if (le && (stricmp(ext, ".rmf") == 0))
+    if (ftype == BAE_RMF)
     {
-        r = BAESong_LoadRmfFromFile(g_bae.song, (BAEPathName)path, 0, TRUE);
+        sr = BAESong_LoadRmfFromFile(g_bae.song, (BAEPathName)path, 0, TRUE);
         g_bae.is_rmf_file = true;
     }
-#if USE_XMF_SUPPORT == TRUE    
-    else if (le && (stricmp(ext, ".xmf") == 0 || stricmp(ext, ".mxmf") == 0))
+#if USE_XMF_SUPPORT == TRUE
+    else if (ftype == BAE_XMF)
     {
-        r = BAESong_LoadXmfFromFile(g_bae.song, (BAEPathName)path, TRUE);
+        sr = BAESong_LoadXmfFromFile(g_bae.song, (BAEPathName)path, TRUE);
         g_bae.is_rmf_file = false;
     }
-#endif    
-    else
+#endif
+    else if (ftype == BAE_MIDI_TYPE) 
     {
-        r = BAESong_LoadMidiFromFile(g_bae.song, (BAEPathName)path, TRUE);
+        sr = BAESong_LoadMidiFromFile(g_bae.song, (BAEPathName)path, TRUE);
         g_bae.is_rmf_file = false;
     }
 
-    if (r != BAE_NO_ERROR)
+    else
     {
-        BAE_PRINTF("Song load failed %d %s\n", r, path);
+        // Default to standard MIDI for any remaining cases (including detected MIDI_TYPE)
+        sr = BAESong_LoadMidiFromFile(g_bae.song, (BAEPathName)path, TRUE);
+        g_bae.is_rmf_file = false;
+    }
+
+    if (sr != BAE_NO_ERROR)
+    {
+        BAE_PRINTF("Song load failed %d %s\n", sr, path);
         BAESong_Delete(g_bae.song);
         g_bae.song = NULL;
         return false;
