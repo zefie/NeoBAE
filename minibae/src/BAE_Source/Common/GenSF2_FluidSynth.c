@@ -390,8 +390,9 @@ OPErr GM_LoadSF2SoundfontFromMemory(const unsigned char *data, size_t size) {
         isSF2 = (type[0]=='s' && type[1]=='f' && type[2]=='b' && type[3]=='k');
         isDLS = (type[0]=='D' && type[1]=='L' && type[2]=='S' && type[3]==' ');
     }
-    if (isDLS && is_libinstpatch_loaded()) {
-        // libinstpatch requires a path-based load for DLS files
+    //if (isDLS && is_libinstpatch_loaded()) {
+    if (isDLS) {    
+        // fluidsynth requires a path-based load for DLS files
         GM_UnloadSF2Soundfont();
         char tmpl[] = "/tmp/minibae_dls_XXXXXX.dls"; // keep .dls suffix
 #if defined(_WIN32) || defined(_WIN64)
