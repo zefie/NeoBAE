@@ -71,10 +71,10 @@ static void pv_fluidsynth_log_filter(int level, const char* message, void* data)
     {
         return; // ignore
     }
-    // Fallback to stderr to preserve other logs
+    // Print via BAE_PRINTF to preserve other logs in debug mode
     if (message)
     {
-        fprintf(stderr, "fluidsynth: %s", message);
+        BAE_PRINTF("fluidsynth: %s", message);
     }
 }
 
