@@ -121,19 +121,6 @@ if [ -z "${SKIPTO}" ] || [ "${SKIPTO}" -le 5 ]; then
 fi
 
 if [ -z "${SKIPTO}" ] || [ "${SKIPTO}" -le 6 ]; then
-	export USE_SDL=0
-	export NOAUTO=1
-	export SF2_SUPPORT=0
-	export MP3_DEC=1
-	echo "Building Enscripten WebAssembly (miniBAE Only)..."
-	runcmd make clean
-	runcmd make -f Makefile.emcc "-j$(nproc)" all
-	runcmd make -f Makefile.emcc pack
-	install_file "${BDIR}/miniBAE_WASM.tar.gz" "${ODIR}/miniBAE_WASM.tar.gz"
-	runcmd make -f Makefile.emcc clean
-fi
-
-if [ -z "${SKIPTO}" ] || [ "${SKIPTO}" -le 7 ]; then
 	export BITS=32
 	echo "Building RMFInfo (x32)..."
 	runcmd make clean
@@ -143,7 +130,7 @@ if [ -z "${SKIPTO}" ] || [ "${SKIPTO}" -le 7 ]; then
 	runcmd make -f Makefile.rmfinfo-mingw clean
 fi
 
-if [ -z "${SKIPTO}" ] || [ "${SKIPTO}" -le 8 ]; then
+if [ -z "${SKIPTO}" ] || [ "${SKIPTO}" -le 7 ]; then
 	export BITS=64
 	echo "Building RMFInfo (x64)..."
 	runcmd make clean
@@ -153,7 +140,7 @@ if [ -z "${SKIPTO}" ] || [ "${SKIPTO}" -le 8 ]; then
 	runcmd make -f Makefile.rmfinfo-mingw clean
 fi
 
-if [ -z "${SKIPTO}" ] || [ "${SKIPTO}" -le 9 ]; then
+if [ -z "${SKIPTO}" ] || [ "${SKIPTO}" -le 8 ]; then
 	export BITS=32
 	echo "Building RMF2MID (x32)..."
 	runcmd make clean
@@ -163,7 +150,7 @@ if [ -z "${SKIPTO}" ] || [ "${SKIPTO}" -le 9 ]; then
 	runcmd make -f Makefile.rmf2mid-mingw clean
 fi
 
-if [ -z "${SKIPTO}" ] || [ "${SKIPTO}" -le 10 ]; then
+if [ -z "${SKIPTO}" ] || [ "${SKIPTO}" -le 9 ]; then
 	export BITS=64
 	echo "Building RMF2MID (x64)..."
 	runcmd make clean

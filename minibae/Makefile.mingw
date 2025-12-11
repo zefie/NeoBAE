@@ -3,12 +3,8 @@ BAE_BUILT_IN_PATCHES	:= 1
 WINDOWS		:= 1
 BAE_API := WinOS
 
-ifeq ($(USE_SDL2),1)
-    BAE_API			:= SDL2
-else
-    ifeq ($(USE_SDL3),1)
-        BAE_API			:= SDL3
-    endif
+ifeq ($(USE_SDL3),1)
+    BAE_API		:= SDL3
 endif
 
 include inc/Makefile.common
@@ -67,11 +63,11 @@ ifeq ($(USE_SDL3),1)
     ifeq ($(BITS),32)
         CFLAGS   += -I../deps/win/SDL3/i686-w64-mingw32/include
         LDFLAGS  += -L../deps/win/SDL3/i686-w64-mingw32/lib
-        TARGET_NAME := playbae_sdl2_x32
+        TARGET_NAME := playbae_sdl3_x32
     else
         CFLAGS    += -I../deps/win/SDL3/x86_64-w64-mingw32/include
         LDFLAGS   += -L../deps/win/SDL3/x86_64-w64-mingw32/lib
-        TARGET_NAME := playbae_sdl2_x64
+        TARGET_NAME := playbae_sdl3_x64
     endif
     # Override LIBS completely for SDL build to enforce correct ordering
     LIBS = \

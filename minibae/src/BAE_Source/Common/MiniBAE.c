@@ -10353,12 +10353,12 @@ BAEResult BAELoadResult_Cleanup(BAELoadResult *result)
     if (!result)
         return BAE_PARAM_ERR;
 
-    if (result->type == BAE_LOAD_TYPE_SONG && result->data.song)
+    if (result->data.song)
     {
         BAESong_Delete(result->data.song);
         result->data.song = NULL;
     }
-    else if (result->type == BAE_LOAD_TYPE_SOUND && result->data.sound)
+    else if (result->data.sound)
     {
         BAESound_Delete(result->data.sound);
         result->data.sound = NULL;

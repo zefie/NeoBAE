@@ -3,33 +3,12 @@ RDIR="$(realpath "$(pwd)")"
 BDIR="${RDIR}/bin"
 ODIR="${RDIR}/out"
 
-export USE_FLUIDSYNTH=1
 SILENT=1
-
-if  [ "${1}" == "testing" ]; then
-	shift;
-	function signit() {
-  		echo "Skipping signing for testing build..."
-		mv "${1}" "${2}"
-	}
-else
-	function signit() {
-  	# Custom for zefie's Jenkins build system
-  	osslsigncode sign \
-	    -certs /opt/signkey/signcert.pem \
-	    -key /opt/signkey/signkey.pem \
-	    -n "zefie's miniBAE" \
-	    -i "https://www.soundmusicsys.com" \
-	    -t "http://timestamp.digicert.com" \
-	    -in "${1}" "${2}"
-	}
-fi
 
 if [ -n "$1" ]; then
 	SILENT=0
 	shift
 fi
-
 
 function runcmd() {
 	if [ ${SILENT} -eq 1 ]; then
@@ -47,6 +26,18 @@ function install_file() {
 		exit 1
 	fi
 }
+
+export USE_SDL=0
+export NOAUTO=1
+export SF2_SUPPORT=0
+export USING_FLUIDSYNTH=0
+export MP3_DEC=1
+echo "Building Enscripten WebAssembly (miniBAE Only)..."
+runcmd make clean
+runcmd make -f Makefile.emcc "-j$(nproc)" all
+runcmd make -f Makefile.emcc pack
+install_file "${BDIR}/miniBAE_WASM.tar.gz" "${ODIR}/miniBAE_WASM.tar.gz"
+runcmd make -f Makefile.emcc clean
 
 export USE_SDL=0
 export NOAUTO=1
