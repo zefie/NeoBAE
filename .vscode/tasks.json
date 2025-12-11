@@ -27,7 +27,7 @@
       "options": {
         "cwd": "${workspaceFolder}/minibae"
       },
-      "args": ["-f", "Makefile.gui-mingw", "-j8"],
+      "args": ["-f", "Makefile.gui-mingw", "-j20"],
       "group": {
         "kind": "build",
         "isDefault": true
@@ -42,7 +42,7 @@
       "options": {
         "cwd": "${workspaceFolder}/minibae"
       },
-      "args": ["-f", "Makefile.gui-mingw", "DEBUG=1", "-j8"],
+      "args": ["-f", "Makefile.gui-mingw", "DEBUG=1", "-j20"],
       "group": {
         "kind": "build",
         "isDefault": true
@@ -57,7 +57,7 @@
       "options": {
         "cwd": "${workspaceFolder}/minibae"
       },
-      "args": ["-f", "Makefile.gui-mingw", "DEBUG=1", "LDEBUG=1","-j8"],
+      "args": ["-f", "Makefile.gui-mingw", "DEBUG=1", "LDEBUG=1","-j20"],
       "group": {
         "kind": "build",
         "isDefault": true
