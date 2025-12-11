@@ -384,10 +384,11 @@ OPErr GM_LoadSF2SoundfontFromMemory(const unsigned char *data, size_t size) {
 
     // Detect container type
     XBOOL isRIFF = (size >= 12 && data[0]=='R' && data[1]=='I' && data[2]=='F' && data[3]=='F');
-    XBOOL isSF2 = FALSE, isDLS = FALSE;
+    //XBOOL isSF2 = FALSE;
+    XBOOL isDLS = FALSE;
     if (isRIFF) {
         const unsigned char *type = data + 8;
-        isSF2 = (type[0]=='s' && type[1]=='f' && type[2]=='b' && type[3]=='k');
+        //isSF2 = (type[0]=='s' && type[1]=='f' && type[2]=='b' && type[3]=='k');
         isDLS = (type[0]=='D' && type[1]=='L' && type[2]=='S' && type[3]==' ');
     }
     //if (isDLS && is_libinstpatch_loaded()) {

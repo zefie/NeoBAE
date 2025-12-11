@@ -32,21 +32,19 @@
 #define FILETYPE_PROBE_SIZE 64
 
 // Magic byte signatures for different file types
-#define FOURCC_MIDI     0x4D546864  // "MThd" - Standard MIDI File
-#define FOURCC_RMF      0x4952455A  // "IREZ" - Rich Music Format
-#define FOURCC_XMF      0x584D465F  // "XMF_" - eXtensible Music Format
-#ifndef FOURCC_RIFF
-    #define FOURCC_RIFF     0x52494646  // "RIFF" - Resource Interchange File Format
-#endif  
-#define FOURCC_FORM     0x464F524D  // "FORM" - IFF FORM container (AIFF)
-#define FOURCC_AU       0x2E736E64  // ".snd" - Sun Audio
-#define FOURCC_FLAC     0x664C6143  // "fLaC" - Free Lossless Audio Codec
-#define FOURCC_OGGS     0x4F676753  // "OggS" - Ogg container
+#define BAE_FOURCC_MIDI     0x4D546864  // "MThd" - Standard MIDI File
+#define BAE_FOURCC_RMF      0x4952455A  // "IREZ" - Rich Music Format
+#define BAE_FOURCC_XMF      0x584D465F  // "XMF_" - eXtensible Music Format
+#define BAE_FOURCC_RIFF     0x52494646  // "RIFF" - Resource Interchange File Format
+#define BAE_FOURCC_FORM     0x464F524D  // "FORM" - IFF FORM container (AIFF)
+#define BAE_FOURCC_AU       0x2E736E64  // ".snd" - Sun Audio
+#define BAE_FOURCC_FLAC     0x664C6143  // "fLaC" - Free Lossless Audio Codec
+#define BAE_FOURCC_OGGS     0x4F676753  // "OggS" - Ogg container
 
 // RIFF/IFF subtype FOURCCs
-#define FOURCC_WAVE     0x57415645  // "WAVE" - RIFF Wave audio
-#define FOURCC_RMID     0x524D4944  // "RMID" - RIFF MIDI
-#define FOURCC_AIFF     0x41494646  // "AIFF" - Audio Interchange File Format
+#define BAE_FOURCC_WAVE     0x57415645  // "WAVE" - RIFF Wave audio
+#define BAE_FOURCC_RMID     0x524D4944  // "RMID" - RIFF MIDI
+#define BAE_FOURCC_AIFF     0x41494646  // "AIFF" - Audio Interchange File Format
 
 // OGG codec identifiers
 #define OGG_VORBIS_MAGIC    0x01766F72  // "\x01vor" - Vorbis identification header
@@ -96,10 +94,10 @@ static BAEFileType PV_DetectRIFFType(const unsigned char *buffer, int32_t buffer
     
     switch (subtype)
     {
-        case FOURCC_WAVE:
+        case BAE_FOURCC_WAVE:
             return BAE_WAVE_TYPE;
             
-        case FOURCC_RMID:
+        case BAE_FOURCC_RMID:
             // Verify there's actually MIDI data embedded
             // Look for "data" chunk followed by "MThd"
             if (bufferSize >= 24)
@@ -108,7 +106,7 @@ static BAEFileType PV_DetectRIFFType(const unsigned char *buffer, int32_t buffer
                 {
                     if (PV_ReadBigEndian32(&buffer[i]) == 0x64617461 && // "data"
                         i + 12 < bufferSize &&
-                        PV_ReadBigEndian32(&buffer[i + 8]) == FOURCC_MIDI)
+                        PV_ReadBigEndian32(&buffer[i + 8]) == BAE_FOURCC_MIDI)
                     {
                         return BAE_RMI; // RMI files are treated as MIDI
                     }
@@ -179,7 +177,7 @@ static BAEFileType PV_DetectOGGType(const unsigned char *buffer, int32_t bufferS
         offset = payloadOffset + payloadSize;
         while (offset + 4 <= bufferSize)
         {
-            if (PV_ReadBigEndian32(&buffer[offset]) == FOURCC_OGGS)
+            if (PV_ReadBigEndian32(&buffer[offset]) == BAE_FOURCC_OGGS)
                 break;
             offset++;
         }
@@ -286,10 +284,14 @@ BAEFileType X_DetermineFileTypeByPath(const char *filePath)
         return BAE_AU_TYPE;
     else if (strcmp(extLower, ".mp2") == 0 || strcmp(extLower, ".mp3") == 0)
         return BAE_MPEG_TYPE;
+#if USE_FLAC_DECODER == TRUE
     else if (strcmp(extLower, ".flac") == 0)
         return BAE_FLAC_TYPE;
+#endif
+#if USE_VORBIS_DECODER == TRUE        
     else if (strcmp(extLower, ".ogg") == 0 || strcmp(extLower, ".oga") == 0)
         return BAE_VORBIS_TYPE;
+#endif
     // Check for MIDI/music file extensions
     else if (strcmp(extLower, ".mid") == 0 || strcmp(extLower, ".midi") == 0)
         return BAE_MIDI_TYPE;
@@ -332,9 +334,50 @@ BAEFileType X_DetermineFileType(const char *filePath)
         
         if (fileRef != 0)
         {
-            result = X_DetermineFileTypeByData(fileRef);
+            unsigned char buffer[FILETYPE_PROBE_SIZE];
+            uint32_t originalPosition;
+            int32_t bytesRead = 0;
+            
+            // Save current file position
+            originalPosition = XFileGetPosition(fileRef);
+            
+            // Read from beginning of file
+            XFileSetPosition(fileRef, 0L);
+            
+            // Initialize buffer
+            memset(buffer, 0, FILETYPE_PROBE_SIZE);
+            
+            XERR readResult = XFileRead(fileRef, buffer, FILETYPE_PROBE_SIZE);
+            
+            if (readResult == 0) // NO_ERR = 0, success
+            {
+                bytesRead = FILETYPE_PROBE_SIZE;
+            }
+            else
+            {
+                // Try a smaller read if the first one failed
+                XFileSetPosition(fileRef, 0L);
+                readResult = XFileRead(fileRef, buffer, 4);
+                if (readResult == 0)
+                {
+                    bytesRead = 4;
+                }
+            }
+            
+            // Restore file position
+            XFileSetPosition(fileRef, originalPosition);
+            
+            if (bytesRead >= 4)
+            {
+                result = X_DetermineFileTypeByData(buffer, bytesRead);
+                BAE_PRINTF("[FileType] Content-based detection result: %s\n", X_GetFileTypeString(result));
+            }
+            else
+            {
+                BAE_PRINTF("[FileType] Failed to read enough data for content detection\n");
+            }
+            
             XFileClose(fileRef);
-            BAE_PRINTF("[FileType] Content-based detection result: %s\n", X_GetFileTypeString(result));
         }
         else
         {
@@ -345,124 +388,104 @@ BAEFileType X_DetermineFileType(const char *filePath)
     return result;
 }
 
+
 /**
- * Determine file type by analyzing file contents
+ * Determine file type by analyzing raw data buffer
  * 
- * @param fileRef - Open file reference to analyze
+ * @param data - Raw data buffer to analyze
+ * @param length - Length of data buffer in bytes
  * @return BAEFileType - Detected file type or BAE_INVALID_TYPE if unknown
  */
-BAEFileType X_DetermineFileTypeByData(XFILE fileRef)
+BAEFileType X_DetermineFileTypeByData(const unsigned char *data, int32_t length)
 {
-    unsigned char buffer[FILETYPE_PROBE_SIZE];
     uint32_t fourcc;
-    int32_t bytesRead;
-    uint32_t originalPosition;
+    uint32_t offset = 0;
     
-    if (fileRef == 0)
+    if (data == NULL || length < 4)
     {
-        BAE_PRINTF("[FileType] Invalid file reference\n");
-        return BAE_INVALID_TYPE;
-    }
-       
-    // Save current file position
-    originalPosition = XFileGetPosition(fileRef);
-    
-    // Check file length
-    uint32_t fileLength = XFileGetLength(fileRef);
-    
-    // Read from beginning of file
-    int32_t setResult = XFileSetPosition(fileRef, 0L);
-    
-    uint32_t currentPos = XFileGetPosition(fileRef);
-    
-    // Initialize buffer to make sure it's clean
-    memset(buffer, 0, FILETYPE_PROBE_SIZE);
-    
-    XERR readResult = XFileRead(fileRef, buffer, FILETYPE_PROBE_SIZE);
-    
-    if (readResult == 0) // NO_ERR = 0, success
-    {
-        bytesRead = FILETYPE_PROBE_SIZE; // Successfully read the full amount
-    }
-    else
-    {
-        // Try a smaller read if the first one failed
-        BAE_PRINTF("[FileType] Read failed (code %d), trying smaller read (4 bytes)...\n", readResult);
-        
-        XFileSetPosition(fileRef, 0L);
-        readResult = XFileRead(fileRef, buffer, 4);
-        
-        if (readResult == 0)
-        {
-            bytesRead = 4;
-        }
-        else
-        {
-            bytesRead = 0;
-            BAE_PRINTF("[FileType] All read attempts failed\n");
-        }
-    }
-    
-    // Restore file position
-    XFileSetPosition(fileRef, originalPosition);
-    
-    if (bytesRead < 4)
-    {
-        BAE_PRINTF("[FileType] Only read %d bytes, need at least 4\n", bytesRead);
+        BAE_PRINTF("[FileType] Invalid data buffer or insufficient length (%d bytes)\n", length);
         return BAE_INVALID_TYPE;
     }
     
     // Read the first FOURCC
-    fourcc = PV_ReadBigEndian32(buffer);
+    fourcc = PV_ReadBigEndian32(data);
+    // Skip leading null bytes (up to 1024 bytes)
+    if (fourcc == 0)
+    {
+        
+        offset += 4;
+        while (offset + 4 <= length && offset < 1024)
+        {
+            fourcc = PV_ReadBigEndian32(&data[offset]);
+            if (fourcc != 0) {
+                // read next bytes until we get a full FOURCC
+                while (data[offset] == 0) {
+                    offset++;
+                }
+                fourcc = PV_ReadBigEndian32(&data[offset]);
+                break;
+            }                
+            offset += 4;
+        }
+        
+        // If we still have no valid FOURCC, give up
+        if (fourcc == 0)
+        {
+            BAE_PRINTF("[FileType] No valid FOURCC found in first 1024 bytes\n");
+            return BAE_INVALID_TYPE;
+        }
+        
+        BAE_PRINTF("[FileType] Found non-zero FOURCC at offset %d: 0x%08X\n", offset, fourcc);
+    }
         
     // Check primary magic signatures
     switch (fourcc)
     {
-        case FOURCC_MIDI:
+        case BAE_FOURCC_MIDI:
             return BAE_MIDI_TYPE;
             
-        case FOURCC_RMF:
+        case BAE_FOURCC_RMF:
             return BAE_RMF;
 #if USE_XMF_SUPPORT == TRUE            
-        case FOURCC_XMF:
+        case BAE_FOURCC_XMF:
             // Could be XMF or MXMF, both are handled the same way
             return BAE_XMF;
 #endif            
-        case FOURCC_RIFF:
-            return PV_DetectRIFFType(buffer, bytesRead);
+        case BAE_FOURCC_RIFF:
+            return PV_DetectRIFFType(data, length);
             
-        case FOURCC_FORM:
+        case BAE_FOURCC_FORM:
             // IFF container, check subtype
-            if (bytesRead >= 12)
+            if (length >= 12)
             {
-                uint32_t subtype = PV_ReadBigEndian32(&buffer[8]);
-                if (subtype == FOURCC_AIFF)
+                uint32_t subtype = PV_ReadBigEndian32(&data[8]);
+                if (subtype == BAE_FOURCC_AIFF)
                     return BAE_AIFF_TYPE;
             }
             return BAE_AIFF_TYPE; // Assume AIFF if we can't determine subtype
             
-        case FOURCC_AU:
+        case BAE_FOURCC_AU:
             return BAE_AU_TYPE;
             
 #if USE_FLAC_DECODER == TRUE || USE_FLAC_ENCODER == TRUE        
-        case FOURCC_FLAC:
+        case BAE_FOURCC_FLAC:
             return BAE_FLAC_TYPE;
 #endif
 #if USE_OGG_FORMAT == TRUE            
-        case FOURCC_OGGS:
-            return PV_DetectOGGType(buffer, bytesRead);
+        case BAE_FOURCC_OGGS:
+            return PV_DetectOGGType(data, length);
 #endif
 
         default:
  #if USE_MPEG_DECODER == TRUE
             // Check for MPEG audio (MP2/MP3)
-            if (PV_IsLikelyMPEGHeader(buffer))
+            if (PV_IsLikelyMPEGHeader(&data[offset]))
             {
                 return BAE_MPEG_TYPE;
             }
             
             // Check for ID3v1 tag at the end (less reliable, but possible)
-            if (buffer[0] == 'T' && buffer[1] == 'A' && buffer[2] == 'G')
+            if (data[offset] == 'T' && data[offset+1] == 'A' && data[offset+2] == 'G')
             {
                 // This could be an MP3 with ID3v1 tag at the beginning
                 // (unusual but not impossible)
@@ -485,7 +508,7 @@ BAEFileType X_DetermineFileTypeFromPath(const char *filePath)
 {
     XFILENAME fileName;
     XFILE fileRef;
-    BAEFileType result;
+    BAEFileType result = BAE_INVALID_TYPE;
     
     if (filePath == NULL)
         return BAE_INVALID_TYPE;
@@ -498,8 +521,35 @@ BAEFileType X_DetermineFileTypeFromPath(const char *filePath)
     if (fileRef == 0)
         return BAE_INVALID_TYPE;
     
-    // Determine type from file contents
-    result = X_DetermineFileTypeByData(fileRef);
+    // Read file data for analysis
+    unsigned char buffer[FILETYPE_PROBE_SIZE];
+    int32_t bytesRead = 0;
+    
+    // Initialize buffer
+    memset(buffer, 0, FILETYPE_PROBE_SIZE);
+    
+    XERR readResult = XFileRead(fileRef, buffer, FILETYPE_PROBE_SIZE);
+    
+    if (readResult == 0) // NO_ERR = 0, success
+    {
+        bytesRead = FILETYPE_PROBE_SIZE;
+    }
+    else
+    {
+        // Try a smaller read if the first one failed
+        XFileSetPosition(fileRef, 0L);
+        readResult = XFileRead(fileRef, buffer, 4);
+        if (readResult == 0)
+        {
+            bytesRead = 4;
+        }
+    }
+    
+    if (bytesRead >= 4)
+    {
+        // Determine type from file contents
+        result = X_DetermineFileTypeByData(buffer, bytesRead);
+    }
     
     // Close file
     XFileClose(fileRef);

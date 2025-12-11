@@ -629,8 +629,17 @@ bool bae_load_song(const char *path)
     }
 
     bool isAudio = false;
-    if (ftype == BAE_WAVE_TYPE || ftype == BAE_AIFF_TYPE || ftype == BAE_AU_TYPE ||
-        ftype == BAE_MPEG_TYPE || ftype == BAE_FLAC_TYPE || ftype == BAE_VORBIS_TYPE)
+    if (ftype == BAE_WAVE_TYPE || ftype == BAE_AIFF_TYPE || ftype == BAE_AU_TYPE
+#if USE_MPEG_DECODER == TRUE
+        || ftype == BAE_MPEG_TYPE
+#endif
+#if USE_FLAC_DECODER == TRUE
+        || ftype == BAE_FLAC_TYPE
+#endif
+#if USE_VORBIS_DECODER == TRUE
+        || ftype == BAE_VORBIS_TYPE
+#endif
+    )
     {
         isAudio = true;
     }

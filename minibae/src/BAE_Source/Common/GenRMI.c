@@ -283,7 +283,7 @@ OPErr GM_LoadRMIFromFile(const char *path,
     // Open file for reading
     fileRef = XFileOpenForRead(&fileName);
     if (fileRef == 0)
-        return BAE_INVALID_TYPE;
+        return BAD_FILE;
 
     // Get file size
     XFileSetPosition(fileRef, 0L);

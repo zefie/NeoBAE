@@ -2687,7 +2687,7 @@ extern "C"
 // Content-based file type detection functions
 BAEFileType X_DetermineFileType(const char *filePath);
 BAEFileType X_DetermineFileTypeByPath(const char *filePath);
-BAEFileType X_DetermineFileTypeByData(XFILE fileRef);
+BAEFileType X_DetermineFileTypeByData(const unsigned char *data, int32_t length);
 const char *X_GetFileTypeString(BAEFileType fileType);
 BAEFileType X_ConvertFileTypeString(const char *typeString);
 

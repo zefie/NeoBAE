@@ -3599,7 +3599,9 @@ BAEResult BAEMixer_StartOutputToFile(BAEMixer theMixer,
         compressionType;
 #endif
 
+#if USE_FLAC_ENCODER == TRUE
     case BAE_FLAC_TYPE:
+#endif    
     case BAE_WAVE_TYPE:
     case BAE_AIFF_TYPE:
     case BAE_AU_TYPE:
@@ -3733,8 +3735,8 @@ void BAEMixer_StopOutputToFile(void)
             BAE_PRINTF("audio: BAEMixer_StopOutputToFile mWritingEncoder now NULL\n");
             break;
 #endif
-        case BAE_VORBIS_TYPE:
 #if USE_VORBIS_ENCODER == TRUE
+        case BAE_VORBIS_TYPE:
             BAE_PRINTF("audio: BAEMixer_StopOutputToFile freeing vorbis encoder=%p\n", mWritingEncoder);
             if (mWritingEncoder)
             {
@@ -3991,9 +3993,9 @@ BAEResult BAEMixer_ServiceAudioOutputToFile(BAEMixer theMixer)
                 break;
 #endif
 
+#if USE_VORBIS_ENCODER == TRUE
                 case BAE_VORBIS_TYPE:
                 {
-#if USE_VORBIS_ENCODER != FALSE
                     // Build PCM slice into mWritingDataBlock
                     uint32_t framesToProcess = (uint32_t)(mWritingDataBlockSize / sampleSize / channels);
                     BAE_BuildMixerSlice(NULL, mWritingDataBlock, mWritingDataBlockSize, framesToProcess);
@@ -4034,11 +4036,9 @@ BAEResult BAEMixer_ServiceAudioOutputToFile(BAEMixer theMixer)
                     {
                         theErr = BAD_FILE;
                     }
-#else
-                    theErr = BAD_FILE_TYPE;
-#endif
                 }
                 break;
+#endif
 
                 default:
                 {
@@ -10255,14 +10255,23 @@ BAEResult BAEMixer_LoadFromFile(BAEMixer mixer, BAEPathName filePath, BAELoadRes
     
     if (ftype == BAE_INVALID_TYPE)
     {
-        result->result = BAE_INVALID_TYPE;
-        return BAE_INVALID_TYPE;
+        result->result = BAE_BAD_FILE;
+        return BAE_BAD_FILE;
     }
 
     // Determine if this is an audio file or a song file
     BAE_BOOL isAudio = FALSE;
-    if (ftype == BAE_WAVE_TYPE || ftype == BAE_AIFF_TYPE || ftype == BAE_AU_TYPE ||
-        ftype == BAE_MPEG_TYPE || ftype == BAE_FLAC_TYPE || ftype == BAE_VORBIS_TYPE)
+    if (ftype == BAE_WAVE_TYPE || ftype == BAE_AIFF_TYPE || ftype == BAE_AU_TYPE
+#if USE_MPEG_DECODER == TRUE
+        || ftype == BAE_MPEG_TYPE
+#endif
+#if USE_FLAC_DECODER == TRUE
+        || ftype == BAE_FLAC_TYPE
+#endif
+#if USE_VORBIS_DECODER == TRUE
+        || ftype == BAE_VORBIS_TYPE
+#endif
+    )
     {
         isAudio = TRUE;
     }
