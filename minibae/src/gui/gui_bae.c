@@ -537,9 +537,9 @@ bool bae_load_song(const char *path)
         // Clear lyric callback if it exists
         extern BAEResult BAESong_SetLyricCallback(BAESong song, GM_SongLyricCallbackProcPtr pCallback, void *callbackReference);
         BAESong_SetLyricCallback(g_bae.song, NULL, NULL);
+#endif
         BAESong_Delete(g_bae.song);
         g_bae.song = NULL;
-#endif
     }
     else if (g_bae.sound)
     {
