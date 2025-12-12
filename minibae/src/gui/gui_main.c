@@ -211,9 +211,9 @@ int calculate_window_height(void)
 
 // Embedded TTF font (generated header). Define EMBED_TTF_FONT and
 // generate embedded_font.h via scripts/create_embedded_font_h.py to enable.
-// #ifdef EMBED_TTF_FONT
+#ifdef EMBED_TTF_FONT
 #include "embedded_font.h" // provides embedded_font_data[], embedded_font_size
-// #endif
+#endif
 
 void gui_audio_task(void *reference)
 {

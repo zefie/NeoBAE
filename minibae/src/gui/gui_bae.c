@@ -616,7 +616,9 @@ bool bae_load_song(const char *path)
     g_bae.is_rmf_file = false;
     g_bae.song_length_us = 0;
     g_show_rmf_info_dialog = false;
+#if SUPPORT_KARAOKE == TRUE    
     karaoke_cleanup();
+#endif    
     rmf_info_reset();
     
 #if USE_SF2_SUPPORT == TRUE

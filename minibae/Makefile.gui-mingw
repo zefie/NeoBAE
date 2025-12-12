@@ -131,7 +131,7 @@ endif
 
 
 
-$(TARGET_BIN): $(TARGET_LIB).dll ${OBJ_BIN}
+$(TARGET_BIN): ${OBJ_BIN}
 	@mkdir -p $(TARGET_OUT)/Banks
 	$(${SOURCE_DIR}/src/banks/copy.sh $(TARGET_OUT)/Banks)
 	@if [ -f src/gui/zefidi.rc ]; then \
