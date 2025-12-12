@@ -76,8 +76,7 @@ LIBS = \
 	-lSDL3_ttf.dll \
 	-lwinmm \
 	-lole32 \
-	-lcomdlg32 \
-	-lz
+	-lcomdlg32
 
 ifneq ($(BAE_LIBS),)
 	LIBS += $(BAE_LIBS)
