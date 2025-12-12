@@ -1283,9 +1283,9 @@ void GM_SetSongVolume(GM_Song *theSong, INT16 newVolume)
         {
             newVolume = 0;
         }
-        if (newVolume > MAX_NOTE_VOLUME * 5)
+        if (newVolume > MAX_NOTE_VOLUME)
         {
-            newVolume = MAX_NOTE_VOLUME * 5;
+            newVolume = MAX_NOTE_VOLUME;
         }
         theSong->songVolume = newVolume;
         if (GM_IsSongPaused(theSong) == FALSE)
@@ -1312,6 +1312,9 @@ void GM_SetSongVolume(GM_Song *theSong, INT16 newVolume)
                         newVolume = (INT16)((theNote->NoteMIDIVolume * pMixer->scaleBackAmount) >> 8);
                         newVolume = (INT16)PV_ScaleVolumeFromChannelAndSong(theNote->pSong, theNote->NoteChannel, newVolume);
                         // CLS: Do we not want a 32-bit intermediate value here?
+                        if (newVolume > MAX_NOTE_VOLUME) {
+                            newVolume = MAX_NOTE_VOLUME;
+                        }
                         theNote->NoteVolume = newVolume;
                     }
                 }

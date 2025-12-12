@@ -386,6 +386,18 @@ OPErr GM_LoadSF2SoundfontFromMemory(const unsigned char *data, size_t size) {
         return PARAM_ERR;
     }
 
+    // Debug: Print first 16 bytes of the buffer
+    BAE_PRINTF("[FluidMem] Loading %zu bytes from memory. First 16 bytes (hex): ", size);
+    for (size_t i = 0; i < 16 && i < size; i++) {
+        BAE_PRINTF("%02X ", data[i]);
+    }
+    BAE_PRINTF("\n[FluidMem] First 16 bytes (ASCII): ");
+    for (size_t i = 0; i < 16 && i < size; i++) {
+        char c = (data[i] >= 32 && data[i] <= 126) ? (char)data[i] : '.';
+        BAE_PRINTF("%c", c);
+    }
+    BAE_PRINTF("\n");
+    
     // Detect container type
     XBOOL isRIFF = (size >= 12 && data[0]=='R' && data[1]=='I' && data[2]=='F' && data[3]=='F');
     //XBOOL isSF2 = FALSE;
