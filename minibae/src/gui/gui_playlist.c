@@ -1094,13 +1094,6 @@ void playlist_render(SDL_Renderer *R, Rect panel_rect, int mx, int my, bool mdow
     draw_rect(R, list_rect, panelBg);
     draw_frame(R, list_rect, panelBorder);
     
-    // Debug: print the actual list rect during rendering
-    static int debug_counter = 0;
-    if (debug_counter++ % 60 == 0) // Print every 60 frames (~1 second)
-    {
-        printf("RENDER: list_rect=(%d,%d,%d,%d)\n", list_rect.x, list_rect.y, list_rect.w, list_rect.h);
-    }
-
     // Calculate visible entries
     int entry_height = 20;
     int visible_entries = (list_h - 4) / entry_height;

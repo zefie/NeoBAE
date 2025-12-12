@@ -7,6 +7,10 @@
  *
  ****************************************************************************/
 
+#ifndef _WIN32
+#define _GNU_SOURCE  // Required for dl_iterate_phdr on Linux
+#endif
+
 #include "GenSF2_FluidSynth.h"
 
 #if USE_SF2_SUPPORT == TRUE && _USING_FLUIDSYNTH == TRUE
