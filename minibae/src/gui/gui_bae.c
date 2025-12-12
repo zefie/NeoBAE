@@ -10,6 +10,7 @@
 #if USE_SF2_SUPPORT
     #if _USING_FLUIDSYNTH
         #include "GenSF2_FluidSynth.h"
+        #include "GenRMI.h"  // For RMI embedded soundbank detection
         #if USE_XMF_SUPPORT
             #include "GenXMF.h"
         #endif
@@ -43,6 +44,11 @@ uint32_t g_channel_peak_hold_ms = 600; // how long to hold peak in ms
 // Bank info
 BankEntry banks[32]; // Static array for simplicity
 int bank_count = 0;
+
+// User bank tracking for RMI embedded soundbanks
+static bool g_user_bank_stored = false;
+static char g_user_bank_path[1024] = {0};
+static char g_user_bank_name[256] = {0};
 
 // External keyboard-related globals (defined in gui_midi_vkbd.c)
 extern bool g_show_virtual_keyboard;
@@ -110,6 +116,21 @@ bool load_bank(const char *path, bool current_playing_state, int transpose, int 
     if (!path)
         return false;
 
+    // If user is manually loading a bank while an RMI embedded bank is active,
+    // clear the embedded bank state so we don't restore the old bank later
+#if USE_SF2_SUPPORT == TRUE && _USING_FLUIDSYNTH == TRUE
+    if (g_bae.has_embedded_soundbank)
+    {
+        BAE_PRINTF("User overriding embedded bank with manual bank load\n");
+        GM_ClearRMISoundbankFlag();
+        g_bae.has_embedded_soundbank = false;
+        // Clear stored bank so we don't try to restore later
+        g_user_bank_stored = false;
+        g_user_bank_path[0] = '\0';
+        g_user_bank_name[0] = '\0';
+    }
+#endif
+
     // Store current song info before bank change
     bool had_song = g_bae.song_loaded;
     char current_song_path[1024] = {0};
@@ -134,22 +155,16 @@ bool load_bank(const char *path, bool current_playing_state, int transpose, int 
     }
 
     // Unload existing banks (single active bank paradigm like original patch switcher)
-    if (g_bae.bank_loaded)
-    {
-        BAEMixer_UnloadBanks(g_bae.mixer);
-        g_bae.bank_loaded = false;
+    BAEMixer_UnloadBanks(g_bae.mixer);
+    g_bae.bank_loaded = false;
 #if USE_SF2_SUPPORT == TRUE
-        if (GM_SF2_IsActive()) {            
-            GM_UnloadSF2Soundfont();
-        }
+    GM_UnloadSF2Soundfont();
 #endif
-    }
+
 #ifdef _BUILT_IN_PATCHES
     if (strcmp(path, "__builtin__") == 0)
     {
-        if (g_bae.bank_loaded) {
-            BAEMixer_UnloadBank(g_bae.mixer, g_bae.bank_token);
-        }
+
         BAEBankToken t;
         BAEResult br = BAEMixer_LoadBuiltinBank(g_bae.mixer, &t);
         if (br == BAE_NO_ERROR)
@@ -283,7 +298,7 @@ bool load_bank(const char *path, bool current_playing_state, int transpose, int 
             g_bae.is_playing = false;
         }
 
-        if (bae_load_song_with_settings(current_song_path, transpose, tempo, volume, loop_enabled, reverb_type, ch_enable))
+        if (bae_load_song_with_settings(current_song_path, transpose, tempo, volume, loop_enabled, reverb_type, ch_enable, false))
         {
             // Restore playback state
             if (was_playing)
@@ -465,6 +480,9 @@ bool bae_load_bank(const char *bank_path)
         return false;
 
     const char *ext = strrchr(bank_path, '.');
+
+    BAEMixer_UnloadBanks(g_bae.mixer);
+
 #if USE_SF2_SUPPORT == TRUE
     GM_UnloadSF2Soundfont();
     GM_SetMixerSF2Mode(FALSE);
@@ -485,7 +503,7 @@ bool bae_load_bank(const char *bank_path)
             BAE_PRINTF("SF2 bank load failed: %d %s\n", err, bank_path);
             return false;
         }
-
+        GM_SetMixerSF2Mode(TRUE);
         // Mark as loaded
         g_bae.bank_loaded = true;
         return true;
@@ -522,10 +540,45 @@ bool bae_load_bank_from_memory(const char *bankdata, int banksize)
     return true;
 }
 
-bool bae_load_song(const char *path)
+bool bae_load_song(const char *path, bool use_embedded_banks)
 {
     if (!g_bae.mixer || !path)
         return false;
+
+    // Restore user's bank BEFORE loading new song if we had an embedded bank previously
+#if USE_SF2_SUPPORT == TRUE && _USING_FLUIDSYNTH == TRUE
+    if (g_user_bank_stored)
+    {
+        BAE_PRINTF("Restoring user bank before loading new song: %s (%s)\n", g_user_bank_name, g_user_bank_path);
+        
+        // Clear the embedded soundbank flag
+        GM_ClearRMISoundbankFlag();
+        g_bae.has_embedded_soundbank = false;
+        
+        // Reload the user's bank
+        if (g_user_bank_path[0] != '\0')
+        {
+            if (bae_load_bank(g_user_bank_path))
+            {
+                strncpy(g_bae.bank_name, g_user_bank_name, sizeof(g_bae.bank_name) - 1);
+                g_bae.bank_name[sizeof(g_bae.bank_name) - 1] = '\0';
+                strncpy(g_current_bank_path, g_user_bank_path, sizeof(g_current_bank_path) - 1);
+                g_current_bank_path[sizeof(g_current_bank_path) - 1] = '\0';
+                g_bae.bank_loaded = true;
+                BAE_PRINTF("Restored user bank successfully\n");
+            }
+            else
+            {
+                BAE_PRINTF("Warning: Failed to restore user bank\n");
+            }
+        }
+        
+        // Clear stored bank after restoration
+        g_user_bank_stored = false;
+        g_user_bank_path[0] = '\0';
+        g_user_bank_name[0] = '\0';
+    }
+#endif
 
     // Clean previous
     if (g_bae.song)
@@ -654,6 +707,50 @@ bool bae_load_song(const char *path)
         g_bae.is_rmf_file = false;
     }
 #endif
+#if USE_SF2_SUPPORT == TRUE && _USING_FLUIDSYNTH == TRUE
+    else if (ftype == BAE_RMI)
+    {
+        // Store current bank info before attempting RMI load in case embedded DLS fails
+        char temp_bank_path[1024] = {0};
+        char temp_bank_name[256] = {0};
+        bool had_bank_before = g_bae.bank_loaded;
+        
+        if (use_embedded_banks && had_bank_before)
+        {
+            strncpy(temp_bank_path, g_current_bank_path, sizeof(temp_bank_path) - 1);
+            strncpy(temp_bank_name, g_bae.bank_name, sizeof(temp_bank_name) - 1);
+        }
+        
+        sr = BAESong_LoadRmiFromFile(g_bae.song, (BAEPathName)path, TRUE, (XBOOL)use_embedded_banks);
+        
+        // If RMI load failed and we requested embedded banks, restore user bank and retry without embedded bank
+        if (sr != BAE_NO_ERROR && use_embedded_banks && had_bank_before && temp_bank_path[0] != '\0')
+        {
+            BAE_PRINTF("RMI load with embedded bank failed (error %d), restoring previous bank and retrying: %s\n", sr, temp_bank_name);
+            if (bae_load_bank(temp_bank_path))
+            {
+                strncpy(g_bae.bank_name, temp_bank_name, sizeof(g_bae.bank_name) - 1);
+                g_bae.bank_name[sizeof(g_bae.bank_name) - 1] = '\0';
+                strncpy(g_current_bank_path, temp_bank_path, sizeof(g_current_bank_path) - 1);
+                g_current_bank_path[sizeof(g_current_bank_path) - 1] = '\0';
+                BAE_PRINTF("Successfully restored previous bank, now loading RMI without embedded bank\n");
+                
+                // Retry loading RMI without embedded bank option
+                sr = BAESong_LoadRmiFromFile(g_bae.song, (BAEPathName)path, TRUE, FALSE);
+                if (sr == BAE_NO_ERROR)
+                {
+                    BAE_PRINTF("RMI MIDI data loaded successfully with user bank\n");
+                }
+            }
+            else
+            {
+                BAE_PRINTF("Warning: Failed to restore previous bank\n");
+            }
+        }
+        
+        g_bae.is_rmf_file = false;
+    }
+#endif    
     else if (ftype == BAE_MIDI_TYPE) 
     {
         sr = BAESong_LoadMidiFromFile(g_bae.song, (BAEPathName)path, TRUE);
@@ -674,6 +771,38 @@ bool bae_load_song(const char *path)
         g_bae.song = NULL;
         return false;
     }
+
+    // Check if this MIDI file has an embedded soundbank (RMI format)
+#if USE_SF2_SUPPORT == TRUE && _USING_FLUIDSYNTH == TRUE
+    if (use_embedded_banks)
+    {
+        bool has_embedded_bank = GM_LastRMIHadEmbeddedSoundbank();
+        
+        if (has_embedded_bank)
+        {
+            // Store current user bank if not already stored
+            if (!g_user_bank_stored && g_bae.bank_loaded)
+            {
+                strncpy(g_user_bank_path, g_current_bank_path, sizeof(g_user_bank_path) - 1);
+                g_user_bank_path[sizeof(g_user_bank_path) - 1] = '\0';
+                strncpy(g_user_bank_name, g_bae.bank_name, sizeof(g_user_bank_name) - 1);
+                g_user_bank_name[sizeof(g_user_bank_name) - 1] = '\0';
+                g_user_bank_stored = true;
+                BAE_PRINTF("Stored user bank: %s (%s)\n", g_user_bank_name, g_user_bank_path);
+            }
+            
+            // Update GUI to show embedded bank
+            strncpy(g_bae.bank_name, "RMI Embedded Bank", sizeof(g_bae.bank_name) - 1);
+            g_bae.bank_name[sizeof(g_bae.bank_name) - 1] = '\0';
+            g_bae.has_embedded_soundbank = true;
+            BAE_PRINTF("Using embedded soundbank from RMI file\n");
+        }
+    }
+    else
+    {
+        BAE_PRINTF("Skipping embedded bank detection (use_embedded_banks=false)\n");
+    }
+#endif
 
     // Restore Reverb after load
     Settings settings = load_settings();
@@ -742,9 +871,9 @@ bool bae_load_song(const char *path)
     return true;
 }
 
-bool bae_load_song_with_settings(const char *path, int transpose, int tempo, int volume, bool loop_enabled, int reverb_type, bool ch_enable[BAE_MAX_MIDI_CHANNELS])
+bool bae_load_song_with_settings(const char *path, int transpose, int tempo, int volume, bool loop_enabled, int reverb_type, bool ch_enable[BAE_MAX_MIDI_CHANNELS], bool use_embedded_banks)
 {
-    if (!bae_load_song(path))
+    if (!bae_load_song(path, use_embedded_banks))
         return false;
     bae_apply_current_settings(transpose, tempo, volume, loop_enabled, reverb_type, ch_enable);
     return true;

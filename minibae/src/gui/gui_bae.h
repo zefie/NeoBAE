@@ -37,6 +37,10 @@ typedef struct
     BAEBankToken bank_token;
     char bank_name[256];
     bool bank_loaded;
+    // Embedded soundbank tracking (for RMI files)
+    bool has_embedded_soundbank;
+    char previous_bank_name[256];
+    char previous_bank_path[1024];
     // Status message system
     char status_message[256];
     Uint32 status_message_time;
@@ -87,9 +91,9 @@ bool bae_init(int sampleRateHz, bool stereo);
 void bae_shutdown(void);
 
 // Song loading and playback
-bool bae_load_song(const char *path);
+bool bae_load_song(const char *path, bool use_embedded_banks);
 bool bae_load_song_with_settings(const char *path, int transpose, int tempo, int volume,
-                                 bool loop_enabled, int reverb_type, bool ch_enable[16]);
+                                 bool loop_enabled, int reverb_type, bool ch_enable[16], bool use_embedded_banks);
 bool bae_play(bool *playing);
 void bae_stop(bool *playing, int *progress);
 void bae_pause(bool *playing, bool *paused);

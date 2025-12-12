@@ -7030,6 +7030,7 @@ BAEResult BAESong_LoadMidiFromMemory(BAESong song, void const *pMidiData, uint32
         if (GM_IsRMIFile((const unsigned char *)pMidiData, midiSize))
         {
             BAE_PRINTF("[BAE] Detected RMI file format\n");
+            BAEMixer_UnloadBanks(song->mixer);
             theErr = GM_LoadRMIFromMemory((const unsigned char *)pMidiData, midiSize,
                                           &extractedMidi, &extractedMidiLen, TRUE);
             if (theErr == NO_ERR && extractedMidi)
@@ -7147,6 +7148,74 @@ BAEResult BAESong_LoadMidiFromMemory(BAESong song, void const *pMidiData, uint32
     return BAE_TranslateOPErr(theErr);
 }
 
+
+#if USE_SF2_SUPPORT == TRUE && _USING_FLUIDSYNTH == TRUE
+BAEResult BAESong_LoadRmiFromFile(BAESong song, BAEPathName filePath, BAE_BOOL ignoreBadInstruments, BAE_BOOL useEmbeddedBank)
+{
+    XFILENAME name;
+    XPTR pMidiData;
+    int32_t midiSize;
+    OPErr theErr;
+    unsigned char *extractedMidi = NULL;
+    uint32_t extractedMidiLen = 0;
+
+    theErr = NO_ERR;
+    if ((song) && (song->mID == OBJECT_ID))
+    {
+        BAE_AcquireMutex(song->mLock);
+        XConvertPathToXFILENAME(filePath, &name);
+        pMidiData = PV_GetFileAsData(&name, &midiSize);
+        
+        if (pMidiData)
+        {
+            // Check if this is an RMI file and extract MIDI + optional DLS
+            if (GM_IsRMIFile((const unsigned char *)pMidiData, midiSize))
+            {
+                BAE_PRINTF("[BAE] Detected RMI file format, useEmbeddedBank=%d\\n", useEmbeddedBank);
+                
+                // Load RMI and extract MIDI, optionally loading embedded DLS
+                theErr = GM_LoadRMIFromMemory((const unsigned char *)pMidiData, midiSize,
+                                              &extractedMidi, &extractedMidiLen, useEmbeddedBank);
+                XDisposePtr(pMidiData); // Free original file data
+                
+                if (theErr == NO_ERR && extractedMidi)
+                {
+                    BAE_PRINTF("[BAE] RMI processing complete, extracted %u bytes of MIDI\\n", extractedMidiLen);
+                    
+                    // Now load the extracted MIDI data using LoadMidiFromMemory
+                    BAE_ReleaseMutex(song->mLock);
+                    BAEResult result = BAESong_LoadMidiFromMemory(song, extractedMidi, extractedMidiLen, ignoreBadInstruments);
+                    XDisposePtr(extractedMidi); // Clean up extracted MIDI
+                    return result;
+                }
+                else
+                {
+                    BAE_PRINTF("[BAE] Failed to parse RMI file (error %d)\\n", theErr);
+                    theErr = BAD_FILE;
+                }
+            }
+            else
+            {
+                XDisposePtr(pMidiData);
+                BAE_PRINTF("[BAE] File is not RMI format\\n");
+                theErr = BAD_FILE;
+            }
+        }
+        else
+        {
+            theErr = BAD_FILE;
+        }
+        
+        BAE_ReleaseMutex(song->mLock);
+    }
+    else
+    {
+        theErr = NULL_OBJECT;
+    }
+    return BAE_TranslateOPErr(theErr);
+}
+#endif
+
 // BAESong_LoadMidiFromFile()
 // --------------------------------------
 //
@@ -7169,28 +7238,6 @@ BAEResult BAESong_LoadMidiFromFile(BAESong song, BAEPathName filePath, BAE_BOOL 
         XConvertPathToXFILENAME(filePath, &name);
         pMidiData = PV_GetFileAsData(&name, &midiSize);
         
-#if USE_SF2_SUPPORT == TRUE && _USING_FLUIDSYNTH == TRUE
-        // Check if this is an RMI file and extract MIDI + DLS
-        if (pMidiData && GM_IsRMIFile((const unsigned char *)pMidiData, midiSize))
-        {
-            unsigned char *extractedMidi = NULL;
-            uint32_t extractedMidiLen = 0;
-            BAE_PRINTF("[BAE] Detected RMI file format in file\n");
-            theErr = GM_LoadRMIFromMemory((const unsigned char *)pMidiData, midiSize,
-                                          &extractedMidi, &extractedMidiLen, TRUE);
-            XDisposePtr(pMidiData); // Free original file data
-            if (theErr == NO_ERR && extractedMidi)
-            {
-                pMidiData = extractedMidi;
-                midiSize = extractedMidiLen;
-            }
-            else
-            {
-                BAE_PRINTF("[BAE] Failed to parse RMI file from disk (error %d)\n", theErr);
-                pMidiData = NULL;
-            }
-        }
-#endif
         if (pMidiData)
         {
             theID = midiSongCount++; // runtime midi ID

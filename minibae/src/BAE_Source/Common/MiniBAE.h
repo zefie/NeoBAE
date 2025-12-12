@@ -2738,6 +2738,8 @@ BAEResult BAEMixer_LoadFromFile(BAEMixer mixer, BAEPathName filePath, BAELoadRes
 // ------------------------------------
 BAEResult BAELoadResult_Cleanup(BAELoadResult *result);
 
+BAEResult BAESong_LoadRmiFromFile(BAESong song, BAEPathName filePath, BAE_BOOL ignoreBadInstruments, BAE_BOOL useEmbeddedBank);
+
 #ifdef __cplusplus
 } // extern "C"
 #endif

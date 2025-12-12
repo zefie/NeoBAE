@@ -297,6 +297,8 @@ BAEFileType X_DetermineFileTypeByPath(const char *filePath)
         return BAE_MIDI_TYPE;
     else if (strcmp(extLower, ".rmf") == 0)
         return BAE_RMF;
+    else if (strcmp(extLower, ".rmi") == 0)
+        return BAE_RMI;        
     else if (strcmp(extLower, ".xmf") == 0 || strcmp(extLower, ".mxmf") == 0)
         return BAE_MIDI_TYPE; // XMF files contain MIDI data
     

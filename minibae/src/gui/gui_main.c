@@ -84,8 +84,8 @@ struct GM_Song;       // opaque
 typedef short XSWORD; // 16-bit signed used by engine for track index
 
 // Forward declarations for functions
-bool bae_load_song(const char *path);
-bool bae_load_song_with_settings(const char *path, int transpose, int tempo, int volume, bool loop_enabled, int reverb_type, bool ch_enable[BAE_MAX_MIDI_CHANNELS]);
+bool bae_load_song(const char *path, bool use_embedded_banks);
+bool bae_load_song_with_settings(const char *path, int transpose, int tempo, int volume, bool loop_enabled, int reverb_type, bool ch_enable[BAE_MAX_MIDI_CHANNELS], bool use_embedded_banks);
 void bae_seek_ms(int ms);
 int bae_get_pos_ms(void);
 bool bae_play(bool *playing);
@@ -569,7 +569,7 @@ bool recreate_mixer_and_restore(int sampleRateHz, bool stereo, int reverbType,
     // Reload prior song
     if (had_song && last_song_path[0])
     {
-        if (bae_load_song_with_settings(last_song_path, transpose, tempo, volume, loopPlay, reverbType, ch_enable))
+        if (bae_load_song_with_settings(last_song_path, transpose, tempo, volume, loopPlay, reverbType, ch_enable, true))
         {
             if (pos_ms > 0)
             {
@@ -1050,7 +1050,7 @@ int main(int argc, char *argv[])
     // Load command line file if provided
     if (argc > 1)
     {
-        if (bae_load_song_with_settings(argv[1], transpose, tempo, volume, loopPlay, reverbType, ch_enable))
+        if (bae_load_song_with_settings(argv[1], transpose, tempo, volume, loopPlay, reverbType, ch_enable, true))
         {
 #if SUPPORT_PLAYLIST == TRUE
             // Add file to playlist and set as current
@@ -1168,7 +1168,7 @@ int main(int argc, char *argv[])
                         else
                         {
 #endif
-                            if (bae_load_song_with_settings(incoming, transpose, tempo, volume, loopPlay, reverbType, ch_enable))
+                            if (bae_load_song_with_settings(incoming, transpose, tempo, volume, loopPlay, reverbType, ch_enable, true))
                             {
 #if SUPPORT_PLAYLIST == TRUE
                                 // Add file to playlist and set as current
@@ -1516,7 +1516,7 @@ int main(int argc, char *argv[])
                                 {
                                     // Try to load as media file (original behavior)
                                     BAE_PRINTF("Drag and drop: Loading media file: %s\n", dropped);
-                                    if (bae_load_song_with_settings(dropped, transpose, tempo, volume, loopPlay, reverbType, ch_enable))
+                                    if (bae_load_song_with_settings(dropped, transpose, tempo, volume, loopPlay, reverbType, ch_enable, true))
                                     {
 #if SUPPORT_PLAYLIST == TRUE
                                         if (g_playlist.enabled) {
@@ -2130,7 +2130,7 @@ int main(int argc, char *argv[])
 
                             BAE_PRINTF("Playlist: advancing to index %d: %s\n", next_index, next_file);
 
-                            if (bae_load_song_with_settings(next_file, transpose, tempo, volume, loopPlay, reverbType, ch_enable))
+                            if (bae_load_song_with_settings(next_file, transpose, tempo, volume, loopPlay, reverbType, ch_enable, true))
                             {
                                 // Update playlist current index
                                 g_playlist.current_index = next_index;
@@ -2196,7 +2196,7 @@ int main(int argc, char *argv[])
         if (playlist_has_pending_load() && g_playlist.enabled)
         {
             const char *pending_file = playlist_get_pending_load_file();
-            if (pending_file && bae_load_song_with_settings(pending_file, transpose, tempo, volume, loopPlay, reverbType, ch_enable))
+            if (pending_file && bae_load_song_with_settings(pending_file, transpose, tempo, volume, loopPlay, reverbType, ch_enable, true))
             {
 #if SUPPORT_PLAYLIST == TRUE
                 // Successfully loaded the song from playlist
@@ -4022,7 +4022,7 @@ int main(int argc, char *argv[])
                 char *sel = open_file_dialog();
                 if (sel)
                 {
-                    if (bae_load_song_with_settings(sel, transpose, tempo, volume, loopPlay, reverbType, ch_enable))
+                    if (bae_load_song_with_settings(sel, transpose, tempo, volume, loopPlay, reverbType, ch_enable, true))
                     {
 #if SUPPORT_PLAYLIST == TRUE
                         if (g_playlist.enabled) {

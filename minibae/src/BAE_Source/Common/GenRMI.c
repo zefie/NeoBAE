@@ -2,27 +2,31 @@
 /*
 ** "GenRMI.c"
 **
-** RMI (RIFF MIDI) file format parser with DLS support
+** RMI (RIFF MIDI) file format parser with SF2/DLS support
 **
 ** Overview:
 **  This file implements parsing for RMI (RIFF-based MIDI) files according to
-**  the RMID specification (RP-029). RMI files are standard MIDI files wrapped
-**  in a RIFF container, which allows for additional metadata and embedded
-**  soundbank data (DLS).
+**  the RMID specification (RP-029) and the SF2 RMIDI extension specification.
+**  RMI files are standard MIDI files wrapped in a RIFF container, which allows
+**  for additional metadata and embedded soundbank data (DLS/SF2/SF3).
 **
 **  Key features:
 **  - Extract MIDI data from the 'data' chunk
-**  - Parse INFO chunks for metadata (INAM, IART, ICOP, etc.)
-**  - Detect and load embedded DLS soundbanks
+**  - Parse INFO chunks for metadata (INAM, IART, ICOP, IENC, DBNK, etc.)
+**  - Detect and load embedded DLS/SF2/SF3 soundbanks
+**  - Support for bank offset (DBNK chunk)
+**  - Support for text encoding detection (IENC/MENC chunks)
 **  - Support for DISP chunks (displayable objects)
 **
 ** References:
 **  - https://zumi.neocities.org/stuff/rmi/
+**  - https://github.com/spessasus/sf2-rmidi-specification
 **  - MIDI Manufacturers Association RP-029 (RMID spec)
 **  - Microsoft RIFF specification
 **
 ** Modification History:
-**  12/8/2025  Initial implementation with DLS support
+**  12/8/2025   Initial implementation with DLS support
+**  12/11/2025  Added SF2 RMIDI specification support
 **
 ****************************************************************************/
 
@@ -36,6 +40,9 @@
 #if USE_SF2_SUPPORT == TRUE && _USING_FLUIDSYNTH == TRUE
 #include "GenSF2_FluidSynth.h"
 #endif
+
+// Global flag to track if the last loaded RMI had an embedded soundbank
+static XBOOL g_last_rmi_had_soundbank = FALSE;
 
 
 // Helper: Read 32-bit little-endian value
@@ -109,21 +116,30 @@ static XBOOL PV_ExtractRMIDToSMF(const unsigned char *buf, uint32_t len,
 }
 
 /**
- * PV_FindDLSInRMI
+ * PV_FindSoundbankInRMI
  * 
- * Search for embedded DLS (Downloadable Sounds) data in an RMI file.
- * According to the RMI specification, DLS data can be appended after the
- * RMID chunks. The file size in the RIFF header should reflect the total
- * size including the DLS data.
+ * Search for embedded soundbank (DLS/SF2/SF3) data in an RMI file.
+ * According to the SF2 RMIDI specification, the soundbank is a nested RIFF chunk
+ * inside the main RIFF RMID container, after the 'data' and 'LIST' chunks.
  * 
- * @param buf       Pointer to RMI file data in memory
- * @param len       Length of the RMI file data
- * @param outDls    Pointer to receive the DLS data pointer (within buf)
- * @param outDlsLen Pointer to receive the DLS data length
- * @return TRUE if DLS data was found, FALSE otherwise
+ * File structure:
+ *   RIFF (main container)
+ *     RMID (type)
+ *     data (MIDI data)
+ *     LIST INFO (metadata - optional)
+ *     RIFF (nested soundbank)
+ *       sfbk or DLS  (soundbank type)
+ * 
+ * @param buf         Pointer to RMI file data in memory
+ * @param len         Length of the RMI file data
+ * @param outBank     Pointer to receive the soundbank data pointer (within buf)
+ * @param outBankLen  Pointer to receive the soundbank data length
+ * @param outIsSF2    Pointer to receive TRUE if SF2/SF3, FALSE if DLS (optional)
+ * @return TRUE if soundbank data was found, FALSE otherwise
  */
-static XBOOL PV_FindDLSInRMI(const unsigned char *buf, uint32_t len,
-                              const unsigned char **outDls, uint32_t *outDlsLen)
+static XBOOL PV_FindSoundbankInRMI(const unsigned char *buf, uint32_t len,
+                                    const unsigned char **outBank, uint32_t *outBankLen,
+                                    XBOOL *outIsSF2)
 {
     if (!buf || len < 12) return FALSE;
     
@@ -132,74 +148,100 @@ static XBOOL PV_FindDLSInRMI(const unsigned char *buf, uint32_t len,
     if (!PV_MatchFourCC(&buf[8], "RMID")) return FALSE;
     
     uint32_t riffSize = PV_ReadLE32(&buf[4]);
-    uint32_t rmidEnd = 8 + riffSize;
+    uint32_t riffEnd = 8 + riffSize;
     
-    // DLS data should be after the RMID section
-    // Search for RIFF DLS chunks after RMID ends
-    uint32_t searchStart = 12;
+    BAE_PRINTF("[RMI] Searching for nested soundbank within RIFF RMID (size: %u bytes)...\n", 
+               riffSize);
     
-    // First, find where RMID actually ends by parsing all chunks
+    // Start scanning after the RMID type identifier at offset 12
     uint32_t i = 12;
-    uint32_t lastChunkEnd = 12;
-    while (i + 8 <= len && i < rmidEnd)
+    
+    while (i + 8 <= len && i < riffEnd)
     {
         const unsigned char *chunk = buf + i;
         uint32_t chunkSize = PV_ReadLE32(&chunk[4]);
         
         if (i + 8 + chunkSize > len) break;
         
-        // Track the last valid chunk position
-        lastChunkEnd = i + 8 + chunkSize;
-        if (lastChunkEnd & 1) lastChunkEnd++; // word-aligned
+        // Look for nested RIFF chunks (soundbank)
+        if (PV_MatchFourCC(chunk, "RIFF") && chunkSize >= 4)
+        {
+            XBOOL isSF2 = FALSE;
+            
+            // Check if this is SF2/SF3
+            if (PV_MatchFourCC(&chunk[8], "sfbk"))
+            {
+                isSF2 = TRUE;
+                BAE_PRINTF("[RMI] Found embedded SF2/SF3 at offset %u, size %u bytes\n", 
+                           i, 8 + chunkSize);
+            }
+            // Check if this is DLS
+            else if (PV_MatchFourCC(&chunk[8], "DLS "))
+            {
+                isSF2 = FALSE;
+                BAE_PRINTF("[RMI] Found embedded DLS at offset %u, size %u bytes\n", 
+                           i, 8 + chunkSize);
+            }
+            else
+            {
+                // Not a recognized soundbank, skip it
+                BAE_PRINTF("[RMI] Found RIFF chunk at offset %u but not a soundbank (type: %.4s)\n",
+                           i, &chunk[8]);
+                // Continue searching
+                i += 8 + chunkSize;
+                if (i & 1) i++;
+                continue;
+            }
+            
+            // Found soundbank data
+            if (outBank) *outBank = chunk;
+            if (outBankLen) *outBankLen = 8 + chunkSize;
+            if (outIsSF2) *outIsSF2 = isSF2;
+            return TRUE;
+        }
         
-        // Move to next chunk
+        // Move to next chunk (word-aligned)
         i += 8 + chunkSize;
         if (i & 1) i++;
     }
     
-    // Now search for DLS starting after the last RMID chunk
-    searchStart = lastChunkEnd;
-    
-    // Look for RIFF DLS header
-    for (i = searchStart; i + 12 <= len; i++)
-    {
-        if (PV_MatchFourCC(&buf[i], "RIFF"))
-        {
-            uint32_t dlsSize = PV_ReadLE32(&buf[i + 4]);
-            
-            // Check if this is a DLS file
-            if (PV_MatchFourCC(&buf[i + 8], "DLS "))
-            {
-                // Verify we have enough data
-                if (i + 8 + dlsSize <= len)
-                {
-                    // Found DLS data
-                    if (outDls) *outDls = &buf[i];
-                    if (outDlsLen) *outDlsLen = 8 + dlsSize;
-                    
-                    BAE_PRINTF("[RMI] Found embedded DLS at offset %u, size %u bytes\n", 
-                               i, 8 + dlsSize);
-                    return TRUE;
-                }
-            }
-        }
-    }
-    
+    BAE_PRINTF("[RMI] No embedded soundbank found in RIFF RMID\n");
     return FALSE;
 }
+
+// Structure to hold parsed RMI INFO data
+typedef struct
+{
+    int16_t bankOffset;      // DBNK chunk: bank offset (-1 = not specified)
+    XBOOL hasEncoding;       // TRUE if IENC was found
+    char encoding[32];       // IENC chunk: text encoding (e.g., "utf-8")
+    char midiEncoding[32];   // MENC chunk: MIDI text encoding
+} RMIInfo;
 
 /**
  * PV_ParseRMIInfo
  * 
  * Parse INFO LIST chunk for metadata tags like title, artist, copyright, etc.
  * This is optional metadata that may be present in RMI files.
+ * According to SF2 RMIDI spec, extracts DBNK (bank offset), IENC (encoding),
+ * and other metadata.
  * 
  * @param buf       Pointer to INFO chunk data (after "INFO" type)
  * @param len       Length of the INFO chunk data
+ * @param info      Pointer to RMIInfo structure to fill (optional)
  */
-static void PV_ParseRMIInfo(const unsigned char *buf, uint32_t len)
+static void PV_ParseRMIInfo(const unsigned char *buf, uint32_t len, RMIInfo *info)
 {
     uint32_t i = 0;
+    
+    // Initialize info structure if provided
+    if (info)
+    {
+        info->bankOffset = -1;  // -1 means not specified
+        info->hasEncoding = FALSE;
+        info->encoding[0] = '\0';
+        info->midiEncoding[0] = '\0';
+    }
     
     while (i + 8 <= len)
     {
@@ -208,8 +250,57 @@ static void PV_ParseRMIInfo(const unsigned char *buf, uint32_t len)
         
         if (i + 8 + chunkSize > len) break;
         
-        // Common INFO tags (null-terminated strings)
-        if (PV_MatchFourCC(chunk, "INAM"))
+        // SF2 RMIDI specific chunks
+        if (PV_MatchFourCC(chunk, "DBNK"))
+        {
+            // Bank offset (16-bit unsigned little-endian)
+            if (chunkSize == 2)
+            {
+                uint16_t offset = PV_ReadLE16(&chunk[8]);
+                if (offset <= 127)  // Valid range per spec
+                {
+                    if (info) info->bankOffset = (int16_t)offset;
+                    BAE_PRINTF("[RMI] Bank Offset (DBNK): %u\n", offset);
+                }
+                else
+                {
+                    BAE_PRINTF("[RMI] Invalid DBNK value %u (must be 0-127)\n", offset);
+                }
+            }
+            else
+            {
+                BAE_PRINTF("[RMI] Invalid DBNK chunk size %u (expected 2)\n", chunkSize);
+            }
+        }
+        else if (PV_MatchFourCC(chunk, "IENC"))
+        {
+            // Text encoding for INFO chunks
+            if (chunkSize > 0 && chunkSize < 32)
+            {
+                if (info)
+                {
+                    XBlockMove(&chunk[8], info->encoding, chunkSize);
+                    info->encoding[chunkSize] = '\0';
+                    info->hasEncoding = TRUE;
+                }
+                BAE_PRINTF("[RMI] Text Encoding (IENC): %.*s\n", (int)chunkSize, (const char *)(chunk + 8));
+            }
+        }
+        else if (PV_MatchFourCC(chunk, "MENC"))
+        {
+            // MIDI text encoding hint
+            if (chunkSize > 0 && chunkSize < 32)
+            {
+                if (info)
+                {
+                    XBlockMove(&chunk[8], info->midiEncoding, chunkSize);
+                    info->midiEncoding[chunkSize] = '\0';
+                }
+                BAE_PRINTF("[RMI] MIDI Encoding (MENC): %.*s\n", (int)chunkSize, (const char *)(chunk + 8));
+            }
+        }
+        // Standard INFO tags (null-terminated strings)
+        else if (PV_MatchFourCC(chunk, "INAM"))
         {
             // Title
             BAE_PRINTF("[RMI] Title: %.*s\n", (int)chunkSize, (const char *)(chunk + 8));
@@ -223,6 +314,16 @@ static void PV_ParseRMIInfo(const unsigned char *buf, uint32_t len)
         {
             // Copyright
             BAE_PRINTF("[RMI] Copyright: %.*s\n", (int)chunkSize, (const char *)(chunk + 8));
+        }
+        else if (PV_MatchFourCC(chunk, "ICRD"))
+        {
+            // Creation date
+            BAE_PRINTF("[RMI] Date: %.*s\n", (int)chunkSize, (const char *)(chunk + 8));
+        }
+        else if (PV_MatchFourCC(chunk, "IPRD") || PV_MatchFourCC(chunk, "IALB"))
+        {
+            // Album (IALB preferred over IPRD per spec)
+            BAE_PRINTF("[RMI] Album: %.*s\n", (int)chunkSize, (const char *)(chunk + 8));
         }
         else if (PV_MatchFourCC(chunk, "ICMT"))
         {
@@ -238,6 +339,21 @@ static void PV_ParseRMIInfo(const unsigned char *buf, uint32_t len)
         {
             // Genre
             BAE_PRINTF("[RMI] Genre: %.*s\n", (int)chunkSize, (const char *)(chunk + 8));
+        }
+        else if (PV_MatchFourCC(chunk, "IENG"))
+        {
+            // Engineer (soundfont creator)
+            BAE_PRINTF("[RMI] Engineer: %.*s\n", (int)chunkSize, (const char *)(chunk + 8));
+        }
+        else if (PV_MatchFourCC(chunk, "ISFT"))
+        {
+            // Software
+            BAE_PRINTF("[RMI] Software: %.*s\n", (int)chunkSize, (const char *)(chunk + 8));
+        }
+        else if (PV_MatchFourCC(chunk, "IPIC"))
+        {
+            // Picture/album art (binary data)
+            BAE_PRINTF("[RMI] Picture: %u bytes\n", chunkSize);
         }
         
         // Move to next chunk (word-aligned)
@@ -312,7 +428,13 @@ OPErr GM_LoadRMIFromMemory(const unsigned char *buf, uint32_t len,
     *outMidiData = midiCopy;
     *outMidiLen = midiLen;
     
-    // Parse optional INFO chunks
+    // Parse optional INFO chunks to get bank offset and other metadata
+    RMIInfo rmiInfo;
+    rmiInfo.bankOffset = -1;  // Default: not specified
+    rmiInfo.hasEncoding = FALSE;
+    rmiInfo.encoding[0] = '\0';
+    rmiInfo.midiEncoding[0] = '\0';
+    
     uint32_t i = 12;
     while (i + 8 <= len)
     {
@@ -327,7 +449,7 @@ OPErr GM_LoadRMIFromMemory(const unsigned char *buf, uint32_t len,
             if (PV_MatchFourCC(&chunk[8], "INFO"))
             {
                 BAE_PRINTF("[RMI] Found INFO chunk\n");
-                PV_ParseRMIInfo(&chunk[12], chunkSize - 4);
+                PV_ParseRMIInfo(&chunk[12], chunkSize - 4, &rmiInfo);
             }
         }
         
@@ -336,18 +458,51 @@ OPErr GM_LoadRMIFromMemory(const unsigned char *buf, uint32_t len,
         if (i & 1) i++;
     }
     
-    // Look for and load embedded DLS data if requested
+    // Look for and load embedded soundbank (SF2/SF3/DLS) if requested
+    BAE_PRINTF("[RMI] loadDLS parameter = %d\n", loadDLS);
     if (loadDLS)
     {
-        const unsigned char *dlsData = NULL;
-        uint32_t dlsLen = 0;
+        const unsigned char *bankData = NULL;
+        uint32_t bankLen = 0;
+        XBOOL isSF2 = FALSE;
         
-        if (PV_FindDLSInRMI(buf, len, &dlsData, &dlsLen))
+        // Reset flag at start
+        g_last_rmi_had_soundbank = FALSE;
+        
+        BAE_PRINTF("[RMI] Searching for embedded soundbank...\n");
+        if (PV_FindSoundbankInRMI(buf, len, &bankData, &bankLen, &isSF2))
         {
 #if USE_SF2_SUPPORT == TRUE && _USING_FLUIDSYNTH == TRUE
-            BAE_PRINTF("[RMI] Loading embedded DLS soundbank...\n");
+            const char *bankType = isSF2 ? "SF2/SF3" : "DLS";
+            BAE_PRINTF("[RMI] Loading embedded %s soundbank...\n", bankType);
             
-            OPErr err = GM_LoadSF2SoundfontFromMemory(dlsData, (size_t)dlsLen);
+            // Determine bank offset according to SF2 RMIDI spec:
+            // - If DBNK specified: use that value
+            // - If no embedded bank: offset is 0 (ignored anyway)
+            // - If embedded bank but no DBNK: default is 1
+            int16_t bankOffset = rmiInfo.bankOffset;
+            if (bankOffset < 0)  // Not specified in DBNK
+            {
+                bankOffset = 1;  // Default per SF2 RMIDI spec
+            }
+            
+            // Clamp to valid range (0-127)
+            if (bankOffset < 0) bankOffset = 0;
+            if (bankOffset > 127) bankOffset = 127;
+            
+            BAE_PRINTF("[RMI] Using bank offset: %d\n", bankOffset);
+            
+            // Unload any existing soundfont first
+            if (GM_SF2_IsActive())
+            {
+                BAE_PRINTF("[RMI] Unloading existing soundfont before loading embedded one\n");
+                GM_UnloadSF2Soundfont();
+            }            
+            
+            BAE_PRINTF("[RMI] Loading from memory at offset %p, size %u\n", 
+                       (void*)bankData, bankLen);
+            
+            OPErr err = GM_LoadSF2SoundfontFromMemory(bankData, (size_t)bankLen);
             if (err == NO_ERR)
             {
                 // Verify the bank loaded successfully with presets
@@ -356,26 +511,44 @@ OPErr GM_LoadRMIFromMemory(const unsigned char *buf, uint32_t len,
                 
                 if (hasPresets)
                 {
-                    BAE_PRINTF("[RMI] DLS soundbank loaded successfully (%d presets)\n", 
-                               presetCount);
+                    BAE_PRINTF("[RMI] %s soundbank loaded successfully (%d presets)\n", 
+                               bankType, presetCount);
+                    
+                    // Set flag to indicate embedded soundbank was loaded
+                    g_last_rmi_had_soundbank = TRUE;
+                    
+                    // Apply bank offset if non-zero
+                    // According to SF2 RMIDI spec, add bankOffset to all preset banks
+                    // except drum banks (bank 128)
+                    if (bankOffset != 0)
+                    {
+                        BAE_PRINTF("[RMI] Applying bank offset %d to presets...\n", bankOffset);
+                        // Note: Bank offset adjustment would be done in FluidSynth layer
+                        // For now, just log it - actual implementation would need
+                        // FluidSynth API to adjust preset bank numbers
+                        // This is a TODO for future enhancement
+                    }
                 }
                 else
                 {
-                    BAE_PRINTF("[RMI] DLS soundbank loaded but has no presets\n");
+                    BAE_PRINTF("[RMI] %s soundbank loaded but has no presets\n", bankType);
                     GM_UnloadSF2Soundfont();
                 }
             }
             else
             {
-                BAE_PRINTF("[RMI] Failed to load DLS soundbank (error %d)\n", err);
+                BAE_PRINTF("[RMI] Failed to load %s soundbank (error %d)\n", bankType, err);
+                // Return error so caller can handle fallback (e.g., restore user bank)
+                return err;
             }
 #else
-            BAE_PRINTF("[RMI] DLS support not compiled in (FluidSynth required)\n");
+            BAE_PRINTF("[RMI] Soundbank support not compiled in (FluidSynth required)\n");
 #endif
         }
         else
         {
-            BAE_PRINTF("[RMI] No embedded DLS data found\n");
+            // No embedded soundbank - per spec, use offset 0 (use main soundfont)
+            BAE_PRINTF("[RMI] No embedded soundbank found, using main soundfont\n");
         }
     }
     
@@ -466,4 +639,28 @@ XBOOL GM_IsRMIFile(const unsigned char *buf, uint32_t len)
     if (!buf || len < 12) return FALSE;
     
     return (PV_MatchFourCC(buf, "RIFF") && PV_MatchFourCC(&buf[8], "RMID"));
+}
+
+/**
+ * GM_LastRMIHadEmbeddedSoundbank
+ * 
+ * Query if the last loaded RMI file had an embedded soundbank that was loaded.
+ * This flag is set by GM_LoadRMIFromMemory when a soundbank is successfully loaded.
+ * 
+ * @return TRUE if the last RMI had an embedded soundbank, FALSE otherwise
+ */
+XBOOL GM_LastRMIHadEmbeddedSoundbank(void)
+{
+    return g_last_rmi_had_soundbank;
+}
+
+/**
+ * GM_ClearRMISoundbankFlag
+ * 
+ * Clear the embedded soundbank flag. Should be called when unloading an RMI
+ * or when the embedded soundbank is no longer active.
+ */
+void GM_ClearRMISoundbankFlag(void)
+{
+    g_last_rmi_had_soundbank = FALSE;
 }

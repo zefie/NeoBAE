@@ -43,6 +43,22 @@ OPErr GM_LoadRMIFromMemory(const unsigned char *buf, uint32_t len,
  */
 XBOOL GM_IsRMIFile(const unsigned char *buf, uint32_t len);
 
+/**
+ * GM_LastRMIHadEmbeddedSoundbank
+ * 
+ * Query if the last loaded RMI file had an embedded soundbank.
+ * 
+ * @return TRUE if the last RMI had an embedded soundbank, FALSE otherwise
+ */
+XBOOL GM_LastRMIHadEmbeddedSoundbank(void);
+
+/**
+ * GM_ClearRMISoundbankFlag
+ * 
+ * Clear the embedded soundbank flag.
+ */
+void GM_ClearRMISoundbankFlag(void);
+
 #endif // USE_FULL_RMF_SUPPORT || USE_CREATION_API
 
 #endif // GEN_RMI_H
