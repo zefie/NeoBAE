@@ -346,69 +346,6 @@ bool load_bank_simple(const char *path, bool save_to_settings, int reverb_type, 
     return load_bank(path, false, 0, 100, 75, loop_enabled, reverb_type, dummy_ch, save_to_settings);
 }
 
-// Platform file open dialog abstraction. Returns malloc'd string (caller frees) or NULL.
-static char *open_file_dialog()
-{
-#ifdef _WIN32
-    char fileBuf[1024] = {0};
-    OPENFILENAMEA ofn;
-    ZeroMemory(&ofn, sizeof(ofn));
-    ofn.lStructSize = sizeof(ofn);
-    ofn.hwndOwner = NULL;
-    ofn.lpstrFilter = "Audio/MIDI/RMF\0*.mid;*.midi;*.kar;*.rmf;*.wav;*.aif;*.aiff;*.au;*.mp2;*.mp3\0MIDI Files\0*.mid;*.midi;*.kar\0RMF Files\0*.rmf\0Audio Files\0*.wav;*.aif;*.aiff;*.au;*.mp3\0All Files\0*.*\0";
-    ofn.lpstrFile = fileBuf;
-    ofn.nMaxFile = sizeof(fileBuf);
-    ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST;
-    ofn.lpstrDefExt = "mid";
-    if (GetOpenFileNameA(&ofn))
-    {
-        size_t len = strlen(fileBuf);
-        char *ret = (char *)malloc(len + 1);
-        if (ret)
-        {
-            memcpy(ret, fileBuf, len + 1);
-        }
-        return ret;
-    }
-    return NULL;
-#else
-    const char *cmds[] = {
-        "zenity --file-selection --title='Open Audio/MIDI/RMF' --file-filter='Audio/MIDI/RMF | *.mid *.midi *.kar *.rmf *.wav *.aif *.aiff *.au *.mp2 *.mp3' 2>/dev/null",
-        "kdialog --getopenfilename . '*.mid *.midi *.kar *.rmf *.wav *.aif *.aiff *.au *.mp2 *.mp3' 2>/dev/null",
-        "yad --file-selection --title='Open Audio/MIDI/RMF' --file-filter='Audio/MIDI/RMF | *.mid *.midi *.kar *.rmf *.wav *.aif *.aiff *.au *.mp2 *.mp3' 2>/dev/null",
-        NULL};
-    for (int i = 0; cmds[i]; ++i)
-    {
-        FILE *p = popen(cmds[i], "r");
-        if (!p)
-            continue;
-        char buf[1024];
-        if (fgets(buf, sizeof(buf), p))
-        {
-            pclose(p);
-            // strip newline
-            size_t l = strlen(buf);
-            while (l > 0 && (buf[l - 1] == '\n' || buf[l - 1] == '\r'))
-                buf[--l] = '\0';
-            if (l > 0)
-            {
-                char *ret = (char *)malloc(l + 1);
-                if (ret)
-                {
-                    memcpy(ret, buf, l + 1);
-                }
-                return ret;
-            }
-        }
-        else
-        {
-            pclose(p);
-        }
-    }
-    BAE_PRINTF("No GUI file chooser available (zenity/kdialog/yad). Drag & drop still works for media and bank files.\n");
-    return NULL;
-#endif
-}
 
 extern void set_status_message(const char *msg);
 extern void rmf_info_reset(void);

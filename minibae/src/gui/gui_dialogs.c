@@ -168,8 +168,8 @@ static const char AUDIO_EXT_FILTER[] =
 #else
     ""
 #endif
-#if USE_MP3_DECODER == TRUE
-    "*.mp3;"
+#if USE_MPEG_DECODER == TRUE
+    "*.mp2;*.mp3;"
 #else
     ""
 #endif
@@ -246,8 +246,8 @@ static const char AUDIO_EXT_FILTER[] =
 #else
     ""
 #endif
-#if USE_MP3_DECODER == TRUE
-    "*.mp3 "
+#if USE_MPEG_DECODER == TRUE
+    "*.mp2 *.mp3 "
 #else
     ""
 #endif
