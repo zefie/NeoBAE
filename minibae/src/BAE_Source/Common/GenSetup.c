@@ -909,9 +909,9 @@ UINT32 PV_ScaleVolumeFromChannelAndSong(GM_Song *pSong, INT16 channel, UINT32 vo
         // scale note velocity via current master effects volume
         newVolume = (volume * (UINT32)MusicGlobals->effectsVolume) / MAX_MASTER_VOLUME;
     }
-    if (newVolume > MAX_NOTE_VOLUME * 5)
+    if (newVolume > MAX_NOTE_VOLUME * 8)
     {
-        newVolume = MAX_NOTE_VOLUME * 5;
+        newVolume = MAX_NOTE_VOLUME * 8;
     }
     return newVolume;
 }
@@ -1145,8 +1145,8 @@ void SetChannelVolume(GM_Song *pSong, INT16 the_channel, INT16 newVolume)
                 newVolume = (INT16)PV_ScaleVolumeFromChannelAndSong(theNote->pSong, the_channel, theNote->NoteMIDIVolume);
                 //CLS:  Do we not want to use a 32-bit intermediate value here?
                 newVolume = (INT16)((newVolume * pMixer->scaleBackAmount) >> 8);
-                if (newVolume > MAX_NOTE_VOLUME) {
-                    newVolume = MAX_NOTE_VOLUME;
+                if (newVolume > MAX_NOTE_VOLUME * 8) {
+                    newVolume = MAX_NOTE_VOLUME * 8;
                 }
                 theNote->NoteVolume = newVolume;
             }
