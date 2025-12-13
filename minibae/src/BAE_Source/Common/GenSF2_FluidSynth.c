@@ -30,9 +30,7 @@
 #include <stdio.h>
 #include <math.h>
 #include "MiniBAE.h"
-#ifdef _WIN32
-#include <windows.h>
-#endif
+
 
 // For temporary file fallback when loading DLS banks (path-based load only)
 #include <unistd.h>  // mkstemp, write, close, unlink, fsync
@@ -412,19 +410,33 @@ OPErr GM_LoadSF2SoundfontFromMemory(const unsigned char *data, size_t size) {
     if (isDLS) {    
         // fluidsynth requires a path-based load for DLS files
         GM_UnloadSF2Soundfont();
-        char tmpl[] = "/tmp/minibae_dls_XXXXXX.dls"; // keep .dls suffix
+        int fd;
+        char tmpl[PATH_MAX]; // keep .dls suffix
 #if defined(_WIN32) || defined(_WIN64)
-        int fd = mkstemp(tmpl);
+        // Get %TEMP% directory
+        char tempPath[MAX_PATH];
+        DWORD len = GetTempPathA(MAX_PATH, tempPath);
+        if (len == 0 || len > MAX_PATH) {
+            BAE_PRINTF("[FluidMem] Failed to get TEMP path for DLS temp file\n");
+            return 1;
+        }
+
+        snprintf(tmpl, sizeof(tmpl), "%sminibae_dls_XXXXXX", tempPath);
+        fd = mkstemp(tmpl);
 #else
-        int fd = mkstemps(tmpl, 4);
+        // On Linux/Unix, just use /tmp
+        strcpy(tmpl, "/tmp/minibae_dls_XXXXXX.dls");
+        fd = mkstemps(tmpl, 4);
 #endif
+
         if (fd < 0) {
+            BAE_PRINTF("[FluidMem] Failed to create temporary file for DLS load (%s)\n", tmpl);
             return GENERAL_BAD;
         }
         ssize_t written = 0;
         while ((size_t)written < size) {
             ssize_t w = write(fd, data + written, size - (size_t)written);
-            if (w <= 0) { close(fd); unlink(tmpl); return GENERAL_BAD; }
+            if (w <= 0) { close(fd); unlink(tmpl); BAE_PRINTF("[FluidMem] Failed to write to temporary file for DLS load\n"); return GENERAL_BAD; }
             written += w;
         }
 #if _WIN32
@@ -446,6 +458,7 @@ OPErr GM_LoadSF2SoundfontFromMemory(const unsigned char *data, size_t size) {
             g_temp_sf_path[sizeof(g_temp_sf_path)-1] = '\0';
             g_temp_sf_is_tempfile = TRUE;
         } else {
+            BAE_PRINTF("[FluidMem] Failed to load temp DLS file into FluidSynth\n");
             unlink(tmpl);
         }
         return perr;
