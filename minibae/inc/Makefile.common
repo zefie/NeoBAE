@@ -211,10 +211,7 @@ endif
 ifeq ($(XMF_SUPPORT),1)
 	BAE_FLAGS += -DUSE_XMF_SUPPORT=1
 	SRC += src/BAE_Source/Common/GenXMF.c
-	UNAME_S:=$(shell uname -s 2>/dev/null)
-	ifneq (,$(findstring Linux,$(UNAME_S)))
-		BAE_LIBS += -lz
-	endif
+	BAE_LIBS += -lz
 endif
 
 
@@ -263,11 +260,11 @@ ifeq ($(SF2_SUPPORT),1)
 			ifeq ($(BITS),32)
 				INC_PATH += -I../deps/win/FluidSynth/i686-w64-mingw32/include
 				BAE_LD_FLAGS := -L../deps/win/FluidSynth/i686-w64-mingw32/lib/
-				BAE_LIBS := ../deps/win/FluidSynth/i686-w64-mingw32/lib/libfluidsynth-3.lib -Wl,-rpath,'$$ORIGIN'
+				BAE_LIBS += ../deps/win/FluidSynth/i686-w64-mingw32/lib/libfluidsynth-3.dll.a -Wl,-rpath,'$$ORIGIN'
 			else
 				INC_PATH += -I../deps/win/FluidSynth/x86_64-w64-mingw32/include
 				BAE_LD_FLAGS := -L../deps/win/FluidSynth/x86_64-w64-mingw32/lib/
-				BAE_LIBS := ../deps/win/FluidSynth/x86_64-w64-mingw32/lib/libfluidsynth-3.lib -Wl,-rpath,'$$ORIGIN'
+				BAE_LIBS += ../deps/win/FluidSynth/x86_64-w64-mingw32/lib/libfluidsynth-3.dll.a -Wl,-rpath,'$$ORIGIN'
 			endif			
 		else
 			ifneq ($(WASM),1)
@@ -287,7 +284,7 @@ ifeq ($(SF2_SUPPORT),1)
 					else
 						# Fallback minimal guess
 						BAE_FLAGS += -I/usr/include/fluidsynth
-						BAE_LIBS := -lfluidsynth $(BAE_LIBS)
+						BAE_LIBS += -lfluidsynth $(BAE_LIBS)
 					endif
 				endif
 			endif
@@ -564,7 +561,7 @@ endif
 
 ifeq ($(WASM),1)
 	INC_PATH	+= -I../../emsdk/upstream/emscripten/cache/sysroot/include
-	BAE_LIBS	:= -L../../emsdk/upstream/emscripten/cache/sysroot/lib
+	BAE_LIBS	+= -L../../emsdk/upstream/emscripten/cache/sysroot/lib
 endif
 
 OBJ_DIR 	:= $(BUILD_DIR)obj/

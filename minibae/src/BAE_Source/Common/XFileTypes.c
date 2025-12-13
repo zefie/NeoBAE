@@ -156,6 +156,7 @@ static BAEFileType PV_DetectOGGType(const unsigned char *buffer, int32_t bufferS
         {
             uint32_t magic = PV_ReadBigEndian32(&buffer[payloadOffset]);
             
+#if USE_VORBIS_DECODER == TRUE
             // Check for Vorbis identification header
             if (magic == OGG_VORBIS_MAGIC && payloadOffset + 7 < bufferSize &&
                 buffer[payloadOffset + 4] == 'b' &&
@@ -164,15 +165,18 @@ static BAEFileType PV_DetectOGGType(const unsigned char *buffer, int32_t bufferS
             {
                 return BAE_VORBIS_TYPE;
             }
-            
+#endif
+
+#if USE_FLAC_DECODER == TRUE
             // Check for FLAC in OGG (rare but possible)
             if (magic == OGG_FLAC_MAGIC && payloadOffset + 4 < bufferSize &&
                 buffer[payloadOffset + 4] == 'C')
             {
                 return BAE_FLAC_TYPE;
             }
+#endif
         }
-        
+
         // Look for next OGG page
         offset = payloadOffset + payloadSize;
         while (offset + 4 <= bufferSize)
@@ -185,9 +189,13 @@ static BAEFileType PV_DetectOGGType(const unsigned char *buffer, int32_t bufferS
         if (offset + 4 > bufferSize)
             break;
     }
-    
+#if USE_VORBIS_DECODER == TRUE    
     // Default to Vorbis if we can't determine specifically
     return BAE_VORBIS_TYPE;
+#else
+    return BAE_INVALID_TYPE;
+#endif
+
 }
 #endif
 

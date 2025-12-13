@@ -3540,10 +3540,11 @@ BAEResult BAEMixer_StartOutputToFile(BAEMixer theMixer,
         }
     }
     break;
+#endif
 
+#if USE_VORBIS_ENCODER == TRUE
     case BAE_VORBIS_TYPE:
     {
-#if USE_VORBIS_ENCODER != FALSE
         if (theModifiers & BAE_USE_16)
         {
             mWritingToFileReference = (void *)XFileOpenForWrite(&theFile, TRUE);
@@ -3586,17 +3587,13 @@ BAEResult BAEMixer_StartOutputToFile(BAEMixer theMixer,
             /* Can only encode 16bit data. */
             theErr = PARAM_ERR;
         }
-#else
         /* Vorbis encoder not available in this build. */
         compressionType;
         outputType;
         theModifiers;
         theRate;
-#endif
     }
     break;
-#else
-        compressionType;
 #endif
 
 #if USE_FLAC_ENCODER == TRUE
@@ -3606,7 +3603,7 @@ BAEResult BAEMixer_StartOutputToFile(BAEMixer theMixer,
     case BAE_AIFF_TYPE:
     case BAE_AU_TYPE:
     {
-#if USE_FLAC_ENCODER != FALSE
+#if USE_FLAC_ENCODER == TRUE
         if (outputType == BAE_FLAC_TYPE)
         {
             // For FLAC, we'll accumulate audio in memory and then encode
@@ -3676,7 +3673,7 @@ BAEResult BAEMixer_StartOutputToFile(BAEMixer theMixer,
             {
                 theErr = BAD_FILE;
             }
-#if USE_FLAC_ENCODER != FALSE
+#if USE_FLAC_ENCODER == TRUE
         }
 #endif
     }
@@ -10193,7 +10190,7 @@ In memory of Jim Nitchals, 1962-1998.  A subtle genius and original thinker."};
 
 // EOF MiniBAE.c
 
-#if USE_MPEG_ENCODER != FALSE
+#if USE_MPEG_ENCODER == TRUE
 // Translate BAECompressionType (per-channel kbps enum naming) to bits/sec per channel.
 uint32_t BAE_TranslateMPEGTypeToBitrate(BAECompressionType ct)
 {
@@ -10235,7 +10232,9 @@ uint32_t BAE_TranslateMPEGTypeToBitrate(BAECompressionType ct)
         return 128000; // safe default
     }
 }
+#endif
 
+#if USE_VORBIS_ENCODER == TRUE
 // Map Vorbis compression enum to libvorbis quality parameter (approximate)
 float BAE_TranslateVorbisTypeToQuality(BAECompressionType ct)
 {
@@ -10253,7 +10252,9 @@ float BAE_TranslateVorbisTypeToQuality(BAECompressionType ct)
         return 0.4f; // safe default
     }
 }
+#endif
 
+#if USE_MPEG_ENCODER == TRUE
 // Refill callback: build next mixer slice of PCM into provided buffer.
 XBOOL PV_RefillMPEGEncodeBuffer(void *buffer, void *userRef)
 {

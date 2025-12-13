@@ -469,10 +469,13 @@ bool bae_start_mpeg_export(const char *output_file, int codec_index)
     // Determine output type: default MPEG, but switch to Vorbis if selected compression is Vorbis
     BAEFileType outType = BAE_MPEG_TYPE;
     BAECompressionType comp = g_exportCompressionMap[codec_index];
+    
+#if USE_VORBIS_ENCODER == TRUE
     if (comp == BAE_COMPRESSION_VORBIS_96 || comp == BAE_COMPRESSION_VORBIS_128 || comp == BAE_COMPRESSION_VORBIS_256 || comp == BAE_COMPRESSION_VORBIS_320)
     {
         outType = BAE_VORBIS_TYPE;
     }
+#endif
 
     // Start export
     BAEResult result = BAEMixer_StartOutputToFile(g_bae.mixer,

@@ -337,6 +337,16 @@ static int fs_mem_close(void *handle) {
     return FLUID_OK;
 }
 
+
+#if !defined(_WIN32) && !defined(__EMSCRIPTEN__)
+int is_libinstpatch_loaded_callback(struct dl_phdr_info *info, size_t size, void *data) {
+    if (info->dlpi_name && strstr(info->dlpi_name, "libinstpatch")) {
+        return true; // stop iteration
+    }
+    return false;
+}
+#endif
+
 bool is_libinstpatch_loaded(void) {
 #ifdef _WIN32
     HMODULE hMods[1024];
@@ -359,16 +369,7 @@ bool is_libinstpatch_loaded(void) {
 #else
     struct ctx { int found; } context = {0};
 
-    int callback(struct dl_phdr_info *info, size_t size, void *data) {
-        struct ctx *ctx = (struct ctx *)data;
-        if (info->dlpi_name && strstr(info->dlpi_name, "libinstpatch")) {
-            ctx->found = 1;
-            return true; // stop iteration
-        }
-        return false;
-    }
-
-    dl_iterate_phdr(callback, &context);
+    dl_iterate_phdr(is_libinstpatch_loaded_callback, &context);
     return context.found != 0 ? true : false;
 #endif
 #endif

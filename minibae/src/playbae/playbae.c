@@ -1615,12 +1615,16 @@ BAEResult playFile(BAEMixer theMixer, char *parmFile, BAE_UNSIGNED_FIXED volume,
          case BAE_MPEG_TYPE:
             playbae_printf("Playing MPEG audio (MP2/MP3) %s\n", parmFile);
             break;
+#if USE_FLAC_DECODER == TRUE
          case BAE_FLAC_TYPE:
             playbae_printf("Playing FLAC %s\n", parmFile);
             break;
+#endif
+#if USE_VORBIS_DECODER == TRUE
          case BAE_VORBIS_TYPE:
             playbae_printf("Playing Ogg Vorbis %s\n", parmFile);
             break;
+#endif
          default:
             playbae_printf("Playing sound %s\n", parmFile);
             break;
@@ -1631,7 +1635,7 @@ BAEResult playFile(BAEMixer theMixer, char *parmFile, BAE_UNSIGNED_FIXED volume,
    else
    {
       playbae_printf("playbae: Unknown load type from file '%s'\n", parmFile);
-      err = BAE_INVALID_TYPE;
+      err = BAE_BAD_FILE;
    }
    
    // Cleanup is handled by the playback functions (they call BAESong_Delete/BAESound_Delete)

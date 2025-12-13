@@ -1,9 +1,24 @@
 #!/bin/bash
 export NOAUTO=1
+export START=0
+if [ -n "${1}" ]; then
+	if [ "${1}" -gt 0 ]; then
+	    export START=${1}
+	fi
+fi
+
+CURRENT=0
+
 runtest() {
     echo "Testing ${@} ..."
+    if [ ${CURRENT} -lt ${START} ]; then
+        echo "Skipping test ${CURRENT}"
+        CURRENT=$((CURRENT + 1))
+        return
+    fi
     make clean > /dev/null
     ${@} -j16 > /dev/null
+    CURRENT=$((CURRENT + 1))
     if [ $? -ne 0 ]; then
         echo "Test failed: ${@}"
         exit 1

@@ -4798,7 +4798,7 @@ int main(int argc, char *argv[])
                             set_status_message("No WAV export in progress");
                         }
                     }
-#if USE_FLAC_ENCODER != FALSE
+#if USE_FLAC_ENCODER == TRUE
                     else if (stop_format_info.type == MIDI_RECORD_FORMAT_FLAC)
                     {
                         // FLAC: if using our PCM writer, finalize it
@@ -4816,6 +4816,7 @@ int main(int argc, char *argv[])
                         }
                     }
 #endif
+#if USE_MPEG_ENCODER == TRUE
                     else if (stop_format_info.type == MIDI_RECORD_FORMAT_MP3)
                     {
                         // MP3 format
@@ -4836,6 +4837,7 @@ int main(int argc, char *argv[])
                             set_status_message("No MP3 export in progress");
                         }
                     }
+#endif                    
                     else if (stop_format_info.type == MIDI_RECORD_FORMAT_VORBIS)
                     {
 #if USE_VORBIS_ENCODER == TRUE
