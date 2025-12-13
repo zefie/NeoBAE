@@ -1288,6 +1288,256 @@ static BAEResult PlayXMF(BAEMixer theMixer, char *fileName, BAE_UNSIGNED_FIXED v
 }
 #endif // USE_XMF_SUPPORT && _USING_FLUIDSYNTH
 
+// PlayLoadedSong()
+// ---------------------------------------------------------------------
+// Unified function to play an already-loaded BAESong
+// (loaded via BAEMixer_LoadFromFile or other means)
+//
+static BAEResult PlayLoadedSong(BAEMixer theMixer, BAESong theSong, char *fileName, BAE_UNSIGNED_FIXED volume, unsigned int timeLimit, unsigned int loopCount, BAEReverbType reverbType, char *midiMuteChannels)
+{
+   BAEResult err;
+   uint32_t currentPosition;
+   uint32_t lastPosition = 0;
+   uint32_t cumulativeTime = 0;
+   BAE_BOOL done;
+
+#ifdef SUPPORT_KARAOKE
+   cli_karaoke_reset(); // reset karaoke state per song
+#endif
+
+   if (!theSong)
+   {
+      return BAE_MEMORY_ERR;
+   }
+
+   // Apply velocity curve if set
+   if (gVelocityCurve >= 0)
+   {
+      BAESong_SetVelocityCurve(theSong, gVelocityCurve);
+      playbae_printf("Velocity curve set to %d\n", gVelocityCurve);
+   }
+
+#ifdef SUPPORT_KARAOKE
+   // Register lyric callback unless exporting (karaoke disabled during export)
+   if (!gWriteToFile && gEnableKaraoke)
+   {
+      if (BAESong_SetLyricCallback(theSong, cli_karaoke_lyric_callback, NULL) != BAE_NO_ERROR)
+      {
+         // Fallback to meta event callback (strict lyric filtering implemented there)
+         BAESong_SetMetaEventCallback(theSong, cli_karaoke_meta_callback, NULL);
+      }
+   }
+#endif
+
+   // Start playback
+   err = BAESong_Start(theSong, 0);
+   if (err != BAE_NO_ERROR)
+   {
+      playbae_printf("playbae: Couldn't start song (BAE Error #%d: %s)\n", err, BAE_GetErrorString(err));
+      BAESong_Delete(theSong);
+      return err;
+   }
+
+   BAESong_SetVolume(theSong, calculateVolume(volume, TRUE));
+
+#ifdef USE_MPEG_ENCODER
+   // When exporting (especially MP3) the song may appear "done" before
+   // the first mixer slices have been serviced. Prime the encoder by
+   // generating several slices up front so sequencer events schedule
+   // and voices start before we enter the main done loop.
+   if (gWriteToFile)
+   {
+      for (int prime = 0; prime < 8; ++prime)
+      {
+         BAEResult serr = BAEMixer_ServiceAudioOutputToFile(theMixer);
+         if (serr != BAE_NO_ERROR)
+         {
+            playbae_printf("MP3 export initialization failed (BAE Error #%d: %s). Aborting.\n", serr, BAE_GetErrorString(serr));
+            BAESong_Stop(theSong, fadeOut);
+            BAESong_Delete(theSong);
+            BAEMixer_Delete(theMixer);
+            return serr;
+         }
+      }
+      // If song still reports done (no events processed yet), keep priming until active or limit
+      BAE_BOOL preDone = TRUE;
+      int safety = 0;
+      while (preDone && safety < 32)
+      {
+         BAESong_IsDone(theSong, &preDone);
+         if (!preDone)
+            break;
+         {
+            BAEResult serr = BAEMixer_ServiceAudioOutputToFile(theMixer);
+            if (serr != BAE_NO_ERROR)
+            {
+               playbae_printf("MP3 export initialization failed (BAE Error #%d: %s). Aborting.\n", serr, BAE_GetErrorString(serr));
+               BAESong_Stop(theSong, fadeOut);
+               BAESong_Delete(theSong);
+               BAEMixer_Delete(theMixer);
+               return serr;
+            }
+         }
+         BAE_WaitMicroseconds(2000);
+         safety++;
+      }
+   }
+#endif
+
+#if _DEBUG
+   BAESong_SetCallback(theSong, (BAE_SongCallbackPtr)PV_SongCallback, (void *)0x1234);
+   BAESong_SetMetaEventCallback(theSong, (GM_SongMetaCallbackProcPtr)PV_SongMetaCallback, (void *)0x1235);
+#endif
+
+   if (verboseMode)
+   {
+      BAESong_DisplayInfo(theSong);
+   }
+
+   BAEMixer_SetDefaultReverb(theMixer, (BAEReverbType)reverbType);
+   playbae_printf("Reverb Type set to %d\n", reverbType);
+
+   if (strlen(midiMuteChannels) > 0)
+   {
+      MuteCommaSeperatedChannels(theSong, midiMuteChannels);
+   }
+
+   BAESong_SetLoops(theSong, loopCount);
+   playbae_printf("Master song volume set to %lu%%\n", calculateVolume(volume, FALSE));
+   if (loopCount > 0)
+   {
+      playbae_printf("Will loop song %u times\n", loopCount);
+   }
+   if (timeLimit > 0)
+   {
+      playbae_printf("Max Play Duration: %d seconds\n", timeLimit);
+   }
+
+   playbae_dprintf("BAE memory used for everything %ld bytes\n\n", BAE_GetSizeOfMemoryUsed());
+   
+   done = FALSE;
+   while (done == FALSE)
+   {
+      if (interruptPlayBack)
+      {
+         playbae_printf("Stop requested... please wait for data flush...\n");
+         interruptPlayBack = 0;
+         BAESong_Stop(theSong, fadeOut);
+      }
+      BAESong_IsDone(theSong, &done);
+      BAESong_GetMicrosecondPosition(theSong, &currentPosition);
+      currentPosition = currentPosition / 1000; // Convert microseconds to milliseconds
+
+      // Detect loop reset - if current position is significantly less than last position
+      if (currentPosition < lastPosition && (lastPosition - currentPosition) > 1000)
+      {
+         // Position reset detected, add the last position to cumulative time
+         cumulativeTime += lastPosition;
+         playbae_dprintf("Loop detected: added %u ms to cumulative time, now %u ms\n", lastPosition, cumulativeTime);
+      }
+      lastPosition = currentPosition;
+
+      // Use cumulative time + current position for display and time limit check
+      uint32_t totalPlayedTime = cumulativeTime + currentPosition;
+      displayCurrentPosition(currentPosition, totalPlayedTime);
+
+      if (timeLimit > 0)
+      {
+         if (totalPlayedTime > (timeLimit * 1000) - 750)
+         {
+            BAESong_Stop(theSong, fadeOut);
+         }
+      }
+      if (done == FALSE)
+      {
+         PV_Idle(theMixer, 15000);
+      }
+   }
+   
+   PV_Idle(theMixer, 900000);
+   playbae_printf("\n");
+   BAESong_Delete(theSong);
+   return BAE_NO_ERROR;
+}
+
+// PlayLoadedSound()
+// ---------------------------------------------------------------------
+// Unified function to play an already-loaded BAESound
+// (loaded via BAEMixer_LoadFromFile or other means)
+//
+static BAEResult PlayLoadedSound(BAEMixer theMixer, BAESound sound, BAE_UNSIGNED_FIXED volume, unsigned int timeLimit, unsigned int loopCount)
+{
+   BAEResult err;
+   BAESampleInfo songInfo;
+   uint32_t currentPosition;
+   int m, s, rate;
+   BAE_BOOL done;
+
+   if (!sound)
+   {
+      return BAE_MEMORY_ERR;
+   }
+
+   BAESound_SetVolume(sound, calculateVolume(volume, TRUE));
+
+   // Set loop count for testing
+   if (loopCount > 0)
+   {
+      BAESound_SetLoopCount(sound, loopCount);
+      playbae_printf("Sound loop count set to %u\n", loopCount);
+   }
+
+   err = BAESound_Start(sound, 0, BAE_FIXED_1, 0);
+   if (err != BAE_NO_ERROR)
+   {
+      playbae_printf("playbae: Couldn't start sound (BAE Error #%d: %s)\n", err, BAE_GetErrorString(err));
+      BAESound_Delete(sound);
+      return err;
+   }
+
+   BAESound_GetInfo(sound, &songInfo);
+   rate = songInfo.sampledRate / 65536;
+   playbae_dprintf("BAE memory used for everything %ld bytes\n\n", BAE_GetSizeOfMemoryUsed());
+   playbae_printf("Master sound volume set to %lu%%\n", calculateVolume(volume, FALSE));
+   
+   done = FALSE;
+   while (done == FALSE)
+   {
+      if (interruptPlayBack)
+      {
+         playbae_printf("Stop requested... please wait for data flush...\n");
+         interruptPlayBack = FALSE;
+         BAESound_Stop(sound, fadeOut);
+      }
+      BAESound_IsDone(sound, &done);
+      BAESound_GetSamplePlaybackPosition(sound, &currentPosition);
+      currentPosition = (currentPosition / rate);
+      m = (currentPosition / 60);
+      s = (currentPosition - (m * 60));
+      if (s > 0 || m > 0)
+      {
+         playbae_printf("Playback position: %02d:%02d\r", m, s);
+      }
+
+      if (timeLimit > 0)
+      {
+         if (currentPosition >= timeLimit)
+         {
+            BAESound_Stop(sound, fadeOut);
+         }
+      }
+      if (done == FALSE)
+      {
+         PV_Idle(theMixer, 15000);
+      }
+   }
+   
+   PV_Idle(theMixer, 900000);
+   playbae_printf("\n");
+   BAESound_Delete(sound);
+   return BAE_NO_ERROR;
+}
+
 static int PV_IsFileExtension(const char *path, const char *ext)
 {
    size_t lp, le;
@@ -1314,83 +1564,77 @@ static int PV_IsLikelyMP3Header(const unsigned char header[4])
 BAEResult playFile(BAEMixer theMixer, char *parmFile, BAE_UNSIGNED_FIXED volume, unsigned int timeLimit, unsigned int loopCount, BAEReverbType reverbType, char *midiMuteChannels)
 {
    BAEResult err = BAE_NO_ERROR;
-   char fileHeader[5] = {0}; // 4 char + 1 null byte
-   int32_t filePtr;
-   filePtr = BAE_FileOpenForRead(parmFile);
-   if (filePtr > 0)
+   BAELoadResult loadResult = {0};
+   
+   // Use the new universal loader to auto-detect file type
+   err = BAEMixer_LoadFromFile(theMixer, (BAEPathName)parmFile, &loadResult);
+   if (err != BAE_NO_ERROR)
    {
-      BAE_ReadFile(filePtr, &fileHeader, 4);
-      BAE_FileClose(filePtr);
-      if (strcmp(fileHeader, X_FILETYPE_MIDI) == 0)
+      playbae_printf("playbae: Couldn't load file '%s' (BAE Error #%d: %s)\n", parmFile, err, BAE_GetErrorString(err));
+      return err;
+   }
+   
+   // Route to appropriate playback function based on loaded type
+   if (loadResult.type == BAE_LOAD_TYPE_SONG)
+   {
+      // Print file type for user feedback
+      switch (loadResult.fileType)
       {
-         playbae_printf("Playing MIDI %s\n", parmFile);
-         err = PlayMidi(theMixer, parmFile, volume, timeLimit, loopCount, reverbType, midiMuteChannels);
+         case BAE_MIDI_TYPE:
+            playbae_printf("Playing MIDI %s\n", parmFile);
+            break;
+         case BAE_RMF:
+            playbae_printf("Playing RMF %s\n", parmFile);
+            break;
+#if USE_XMF_SUPPORT == TRUE && _USING_FLUIDSYNTH == TRUE            
+         case BAE_XMF:
+            playbae_printf("Playing XMF %s\n", parmFile);
+            break;
+#endif            
+         default:
+            playbae_printf("Playing song %s\n", parmFile);
+            break;
       }
-      else if (strcmp(fileHeader, X_FILETYPE_RMF) == 0)
+      
+      err = PlayLoadedSong(theMixer, loadResult.data.song, parmFile, volume, timeLimit, loopCount, reverbType, midiMuteChannels);
+   }
+   else if (loadResult.type == BAE_LOAD_TYPE_SOUND)
+   {
+      // Print file type for user feedback
+      switch (loadResult.fileType)
       {
-         playbae_printf("Playing RMF %s\n", parmFile);
-         err = PlayRMF(theMixer, parmFile, volume, timeLimit, loopCount, reverbType, midiMuteChannels);
+         case BAE_WAVE_TYPE:
+            playbae_printf("Playing WAVE %s\n", parmFile);
+            break;
+         case BAE_AIFF_TYPE:
+            playbae_printf("Playing AIFF %s\n", parmFile);
+            break;
+         case BAE_AU_TYPE:
+            playbae_printf("Playing AU %s\n", parmFile);
+            break;
+         case BAE_MPEG_TYPE:
+            playbae_printf("Playing MPEG audio (MP2/MP3) %s\n", parmFile);
+            break;
+         case BAE_FLAC_TYPE:
+            playbae_printf("Playing FLAC %s\n", parmFile);
+            break;
+         case BAE_VORBIS_TYPE:
+            playbae_printf("Playing Ogg Vorbis %s\n", parmFile);
+            break;
+         default:
+            playbae_printf("Playing sound %s\n", parmFile);
+            break;
       }
-      else if (
-#if USE_XMF_SUPPORT == TRUE && _USING_FLUIDSYNTH == TRUE
-               strcmp(fileHeader, X_FILETYPE_XMF) == 0 ||
-#endif
-               PV_IsFileExtension(parmFile, ".xmf") || PV_IsFileExtension(parmFile, ".mxmf"))
-      {
-#if USE_XMF_SUPPORT == TRUE && _USING_FLUIDSYNTH == TRUE
-         playbae_printf("Playing XMF %s\n", parmFile);
-         err = PlayXMF(theMixer, parmFile, volume, timeLimit, loopCount, reverbType, midiMuteChannels);
-#else
-         playbae_printf("XMF support not built. Rebuild with USE_XMF_SUPPORT=1 and FluidSynth enabled.\n");
-         err = BAE_UNSUPPORTED_FORMAT;
-#endif
-      }
-      else if (strcmp(fileHeader, X_FILETYPE_AIFF) == 0)
-      {
-         playbae_printf("Playing AIFF %s\n", parmFile);
-         err = PlayPCM(theMixer, parmFile, BAE_AIFF_TYPE, volume, timeLimit, loopCount);
-      }
-      else if (strcmp(fileHeader, X_FILETYPE_WAVE) == 0)
-      {
-         playbae_printf("Playing WAVE %s\n", parmFile);
-         err = PlayPCM(theMixer, parmFile, BAE_AIFF_TYPE, volume, timeLimit, loopCount);
-      }
-#ifdef USE_MPEG_DECODER
-      else if (PV_IsLikelyMP3Header((unsigned char *)fileHeader) ||
-               PV_IsFileExtension(parmFile, ".mp3") || PV_IsFileExtension(parmFile, ".mp2") || PV_IsFileExtension(parmFile, ".mpg"))
-      {
-         playbae_printf("Playing MPEG audio (MP2/MP3) %s\n", parmFile);
-         err = PlayPCM(theMixer, parmFile, BAE_MPEG_TYPE, volume, timeLimit, loopCount);
-      }
-#endif
-#ifdef USE_FLAC_DECODER
-      else if (PV_IsFileExtension(parmFile, ".flac"))
-      {
-         playbae_printf("Playing FLAC %s\n", parmFile);
-         err = PlayPCM(theMixer, parmFile, BAE_FLAC_TYPE, volume, timeLimit, loopCount);
-      }
-#endif
-#ifdef USE_VORBIS_DECODER
-      else if (PV_IsFileExtension(parmFile, ".ogg"))
-      {
-         playbae_printf("Playing Ogg Vorbis %s\n", parmFile);
-         err = PlayPCM(theMixer, parmFile, BAE_VORBIS_TYPE, volume, timeLimit, loopCount);
-      }
-      else if (PV_IsFileExtension(parmFile, ".oga"))
-      {
-         playbae_printf("Playing Ogg Vorbis %s\n", parmFile);
-         err = PlayPCM(theMixer, parmFile, BAE_VORBIS_TYPE, volume, timeLimit, loopCount);
-      }
-#endif
-      else
-      {
-         err = (BAEResult)10069;
-      }
+      
+      err = PlayLoadedSound(theMixer, loadResult.data.sound, volume, timeLimit, loopCount);
    }
    else
    {
-      err = (BAEResult)filePtr;
+      playbae_printf("playbae: Unknown load type from file '%s'\n", parmFile);
+      err = BAE_INVALID_TYPE;
    }
+   
+   // Cleanup is handled by the playback functions (they call BAESong_Delete/BAESound_Delete)
    return err;
 }
 
@@ -1857,8 +2101,8 @@ int main(int argc, char *argv[])
          if (PV_ParseCommands(argc, argv, "-a", TRUE, parmFile) && !fileSpecified)
          {
             fileSpecified = TRUE;
-            playbae_printf("Playing AIFF %s\n", parmFile);
-            err = PlayPCM(theMixer, parmFile, BAE_AIFF_TYPE, volume, timeLimit, loopCount);
+            // Auto-detect will handle AIFF, but explicit flag kept for backward compat
+            err = playFile(theMixer, parmFile, volume, timeLimit, loopCount, reverbType, midiMuteChannels);
             doneCommand = 1;
          }
          if (PV_ParseCommands(argc, argv, "-sa", TRUE, parmFile) && !fileSpecified)
@@ -1871,8 +2115,8 @@ int main(int argc, char *argv[])
          if (PV_ParseCommands(argc, argv, "-w", TRUE, parmFile) && !fileSpecified)
          {
             fileSpecified = TRUE;
-            playbae_printf("Playing WAVE %s\n", parmFile);
-            err = PlayPCM(theMixer, parmFile, BAE_WAVE_TYPE, volume, timeLimit, loopCount);
+            // Auto-detect will handle WAVE, but explicit flag kept for backward compat
+            err = playFile(theMixer, parmFile, volume, timeLimit, loopCount, reverbType, midiMuteChannels);
             doneCommand = 1;
          }
          if (PV_ParseCommands(argc, argv, "-sw", TRUE, parmFile) && !fileSpecified)
@@ -1885,15 +2129,15 @@ int main(int argc, char *argv[])
          if (PV_ParseCommands(argc, argv, "-r", TRUE, parmFile) && !fileSpecified)
          {
             fileSpecified = TRUE;
-            playbae_printf("Playing RMF %s\n", parmFile);
-            err = PlayRMF(theMixer, parmFile, volume, timeLimit, loopCount, reverbType, midiMuteChannels);
+            // Auto-detect will handle RMF, but explicit flag kept for backward compat
+            err = playFile(theMixer, parmFile, volume, timeLimit, loopCount, reverbType, midiMuteChannels);
             doneCommand = 1;
          }
          if (PV_ParseCommands(argc, argv, "-m", TRUE, parmFile) && !fileSpecified)
          {
             fileSpecified = TRUE;
-            playbae_printf("Playing MIDI %s\n", parmFile);
-            err = PlayMidi(theMixer, parmFile, volume, timeLimit, loopCount, reverbType, midiMuteChannels);
+            // Auto-detect will handle MIDI, but explicit flag kept for backward compat
+            err = playFile(theMixer, parmFile, volume, timeLimit, loopCount, reverbType, midiMuteChannels);
             doneCommand = 1;
          }
 
