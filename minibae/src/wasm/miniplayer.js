@@ -1018,20 +1018,31 @@
                 }
             }
 
-            // Load soundbank only if different or not loaded
-            const bankKey = typeof bankSource === 'string' ? bankSource : 'buffer';
-            if (currentSoundbank !== bankKey) {
-                if (currentSoundbank) {
-                    await player.unloadSoundbank();
-                }
-                statusEl.textContent = 'Loading soundbank...';
-                await player.loadSoundbank(bankSource);
-                currentSoundbank = bankKey;
-            }
-
-            // Load song
+            // Load song first to check if it has an embedded soundbank
             statusEl.textContent = 'Loading song...';
             await player.load(songSource);
+            
+            // Check if the song has an embedded soundbank (e.g., RMI with DLS/SF2/SF3)
+            const hasEmbeddedBank = player._wasmModule._BAE_WASM_HasEmbeddedSoundbank();
+            
+            if (hasEmbeddedBank) {
+                // File has embedded soundbank, don't load external bank
+                bankStatus.textContent = 'Embedded';
+                bankStatus.title = 'File has embedded soundbank';
+                currentSoundbank = null; // Reset so next file can load its own bank
+                console.log('File has embedded soundbank, skipping external bank load');
+            } else {
+                // No embedded soundbank, load external bank if needed
+                const bankKey = typeof bankSource === 'string' ? bankSource : 'buffer';
+                if (currentSoundbank !== bankKey) {
+                    if (currentSoundbank) {
+                        await player.unloadSoundbank();
+                    }
+                    statusEl.textContent = 'Loading soundbank...';
+                    await player.loadSoundbank(bankSource);
+                    currentSoundbank = bankKey;
+                }
+            }
 
             // Setup UI (only if new modal or first time)
             if (!currentModal._uiSetup) {

@@ -86,6 +86,7 @@
         <button class="btn" onclick="testPlayer2()">Play RMF Example</button>
         <button class="btn" onclick="testPlayer3()">Play Karaoke Example</button>
         <button class="btn" onclick="testPlayer4()">Play FluidSynth Example (if enabled)</button>
+        <button class="btn" onclick="testPlayer5()">Play FluidSynth RMI Example (if enabled)</button>
     </div>
 
     <div class="demo-section">
@@ -169,7 +170,7 @@
 
         function testPlayer3() {
             playSong(
-                'https://www.soundmusicsys.com//content/MIDI/Master%20Karaoke/H/Haddaway%20-%20What%20Is%20Love.kar',
+                'https://www.soundmusicsys.com/content/MIDI/Master%20Karaoke/H/Haddaway%20-%20What%20Is%20Love.kar',
                 'https://www.soundmusicsys.com/content/PatchBanks/HSB/patchesp.hsb',
                 { title: '🎹 Karaoke Test' }
             );
@@ -177,9 +178,17 @@
 
         function testPlayer4() {
             playSong(
-                'https://www.soundmusicsys.com//content/MIDI/The%20Magic%20of%20MIDI/M/U/S/MUS_33.MID',
+                'https://www.soundmusicsys.com/content/MIDI/The%20Magic%20of%20MIDI/M/U/S/MUS_33.MID',
                 'https://www.soundmusicsys.com/content/PatchBanks/SF3/GeneralUser-GS.sf3',
                 { title: '🎹 FluidSynth Test' }
+            );
+        }
+
+        function testPlayer5() {
+            playSong(
+                'https://www.soundmusicsys.com/content/MIDI/RMI/examples_AWEBLOWN.rmi',
+                null,
+                { title: '🎹 RMI Test' }
             );
         }
     </script>

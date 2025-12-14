@@ -21,6 +21,10 @@
 #include <link.h>
 #endif
 
+#ifndef PATH_MAX
+#include <limits.h>
+#endif
+
 #include "fluidsynth.h"
 #include "GenSnd.h"
 #include "GenPriv.h"

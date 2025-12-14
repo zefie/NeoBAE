@@ -253,18 +253,33 @@ class MiniBAEPlayer {
 
     async load(fileName, bank) {
         const displayFileName = typeof fileName === 'string' ? fileName.split('/').pop() : fileName.name;
-        const displayBank = typeof bank === 'string' ? bank.split('/').pop() : bank.name;
+        const displayBank = typeof bank === 'string' ? bank.split('/').pop() : bank ? bank.name : null;
         
         this.elements.fileStatus.textContent = decodeURIComponent(displayFileName);
         this.elements.bankStatus.textContent = 'Loading...';
-        this.updateStatus('Loading bank...');
+        this.updateStatus('Loading file...');
 
         try {
-            await this.player.loadSoundbank(bank);
-            this.elements.bankStatus.textContent = decodeURIComponent(displayBank);
-            this.updateStatus('Loading file...');
-            
+            // Load the song first (it may have an embedded soundbank)
             await this.player.load(fileName);
+            
+            // Check if the song has an embedded soundbank (e.g., RMI with DLS/SF2/SF3)
+            const hasEmbeddedBank = this.player._wasmModule._BAE_WASM_HasEmbeddedSoundbank();
+            
+            if (hasEmbeddedBank) {
+                // File has embedded soundbank, don't load external bank
+                this.elements.bankStatus.textContent = 'Embedded';
+                console.log('File has embedded soundbank, skipping external bank load');
+            } else if (bank) {
+                // No embedded soundbank, load external bank (if provided)
+                this.updateStatus('Loading bank...');
+                this.elements.bankStatus.textContent = 'Loading...';
+                await this.player.loadSoundbank(bank);
+                this.elements.bankStatus.textContent = decodeURIComponent(displayBank);
+            } else {
+                // No embedded bank and no external bank - error was already thrown by player.load()
+            }
+            
             this.elements.playBtn.disabled = false;
             this.elements.exportBtn.disabled = false;
             

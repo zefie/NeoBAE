@@ -439,12 +439,9 @@ class BeatnikPlayer {
      * @returns {Promise<void>}
      */
     async load(source, type = 'auto') {
-        if (!this._soundbankLoaded) {
-            const error = new Error('No soundbank loaded');
-            this._dispatchEvent('error', error);
-            throw error;
-        }
-
+        // Note: We allow loading without a soundbank here because RMI files
+        // can have embedded soundbanks. The check will be done after loading.
+        
         try {
             let data;
             if (typeof source === 'string') {
@@ -477,6 +474,18 @@ class BeatnikPlayer {
             }
 
             this._songLoaded = true;
+            
+            // Check if the song had an embedded soundbank
+            const hasEmbedded = this._wasmModule._BAE_WASM_HasEmbeddedSoundbank();
+            if (hasEmbedded) {
+                // Mark soundbank as loaded since embedded bank is now active
+                this._soundbankLoaded = true;
+            } else if (!this._soundbankLoaded) {
+                // No embedded bank and no external bank loaded - this is an error
+                const error = new Error('No soundbank available (neither embedded nor loaded)');
+                this._dispatchEvent('error', error);
+                throw error;
+            }
 
             // Reset karaoke state for new song
             this._resetKaraoke();

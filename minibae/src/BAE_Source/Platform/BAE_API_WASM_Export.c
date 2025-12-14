@@ -840,6 +840,16 @@ const char *BAE_WASM_GetFeatureString(void) {
 }
 
 /*
+ * Check if the last loaded song had an embedded soundbank (RMI with DLS/SF2/SF3)
+ * Returns: 1 if embedded soundbank was found and loaded, 0 otherwise
+ */
+EMSCRIPTEN_KEEPALIVE
+int BAE_WASM_HasEmbeddedSoundbank(void) {
+    extern XBOOL GM_LastRMIHadEmbeddedSoundbank(void);
+    return GM_LastRMIHadEmbeddedSoundbank() ? 1 : 0;
+}
+
+/*
  * Cleanup
  */
 EMSCRIPTEN_KEEPALIVE
