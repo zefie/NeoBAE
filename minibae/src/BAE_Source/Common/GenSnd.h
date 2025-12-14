@@ -1126,6 +1126,10 @@ typedef int32_t UNIT_TYPE;
         XBOOL seenTrueLyric;
         XBOOL seenGenericTextLyric;
         XBOOL seenLyricMeta;
+        
+        // Lyric deduplication (to filter duplicate events in MIDI files)
+        char lastLyric[256];          // Last lyric text sent to callback
+        XDWORD lastLyricTimestamp;    // Timestamp of last lyric (microseconds)
 
         // Optional raw MIDI event callback (mirroring/export). If set, this will be
         // called with the raw MIDI bytes for any MIDI event processed for this song.

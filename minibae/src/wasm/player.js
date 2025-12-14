@@ -260,24 +260,22 @@ class MiniBAEPlayer {
         this.updateStatus('Loading file...');
 
         try {
-            // Load the song first (it may have an embedded soundbank)
-            await this.player.load(fileName);
+            // Load the song (passing bank which will be loaded only if no embedded bank)
+            await this.player.load(fileName, bank);
             
             // Check if the song has an embedded soundbank (e.g., RMI with DLS/SF2/SF3)
             const hasEmbeddedBank = this.player._wasmModule._BAE_WASM_HasEmbeddedSoundbank();
             
             if (hasEmbeddedBank) {
-                // File has embedded soundbank, don't load external bank
+                // File has embedded soundbank
                 this.elements.bankStatus.textContent = 'Embedded';
                 console.log('File has embedded soundbank, skipping external bank load');
             } else if (bank) {
-                // No embedded soundbank, load external bank (if provided)
-                this.updateStatus('Loading bank...');
-                this.elements.bankStatus.textContent = 'Loading...';
-                await this.player.loadSoundbank(bank);
+                // External bank was loaded
                 this.elements.bankStatus.textContent = decodeURIComponent(displayBank);
             } else {
-                // No embedded bank and no external bank - error was already thrown by player.load()
+                // No bank
+                this.elements.bankStatus.textContent = 'None';
             }
             
             this.elements.playBtn.disabled = false;

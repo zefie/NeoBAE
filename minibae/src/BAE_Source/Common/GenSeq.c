@@ -3821,22 +3821,49 @@ OPErr PV_ProcessMidiSequencerSlice(void *threadContext, GM_Song *pSong)
                             }
                             else if (lyricStr && lyricStr[0] == '\\')
                             {
+                                /* Generic text lyrics with \\ prefix - set flags and process */
                                 pSong->seenGenericTextLyric = TRUE;
                                 pSong->seenTrueLyric = TRUE;
                                 invoke = TRUE;
                             }
+                            else if (!pSong->seenGenericTextLyric)
+                            {
+                                /* Only process plain 0x01 events before any \\ prefix is seen,
+                                   to avoid duplicates when both 0x05 and 0x01 events exist */
+                                invoke = FALSE;
+                            }
                             else
                             {
-                                if (pSong->seenTrueLyric)
-                                {
-                                    invoke = TRUE;
-                                }
+                                /* After \\ prefix seen, continue processing 0x01 events */
+                                invoke = TRUE;
                             }
                         }
                         if (invoke && lyricStr && lyricStr[0])
                         {
                             uint32_t lyrTimeUs = (uint32_t)pSong->songMicroseconds;
-                            pSong->lyricCallbackPtr(pSong, lyricStr, lyrTimeUs, pSong->lyricCallbackReference);
+                            
+                            // Deduplicate: skip if this exact lyric was just sent at the same timestamp
+                            // (Some MIDI files have duplicate lyric events written consecutively)
+                            size_t lyricLen = strlen(lyricStr);
+                            XBOOL isDuplicate = FALSE;
+                            if (lyricLen < sizeof(pSong->lastLyric) &&
+                                pSong->lastLyricTimestamp == lyrTimeUs &&
+                                strcmp(pSong->lastLyric, lyricStr) == 0)
+                            {
+                                isDuplicate = TRUE;
+                            }
+                            
+                            if (!isDuplicate)
+                            {
+                                pSong->lyricCallbackPtr(pSong, lyricStr, lyrTimeUs, pSong->lyricCallbackReference);
+                                
+                                // Store this lyric for duplicate detection
+                                if (lyricLen < sizeof(pSong->lastLyric))
+                                {
+                                    strcpy(pSong->lastLyric, lyricStr);
+                                    pSong->lastLyricTimestamp = lyrTimeUs;
+                                }
+                            }
                         }
                     }
                     // Free allocated buffer AFTER all callbacks complete

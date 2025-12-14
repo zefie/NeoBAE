@@ -433,15 +433,26 @@ class BeatnikPlayer {
     }
 
     /**
+     * Check if file data is RMI format (RIFF RMID)
+     * @param {ArrayBuffer|Uint8Array} data - File data
+     * @returns {boolean}
+     */
+    _isRMIFile(data) {
+        const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
+        if (bytes.length < 12) return false;
+        // Check for RIFF header and RMID format
+        return bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46 && // "RIFF"
+               bytes[8] === 0x52 && bytes[9] === 0x4D && bytes[10] === 0x49 && bytes[11] === 0x44;   // "RMID"
+    }
+
+    /**
      * Load a MIDI or RMF file
      * @param {string|ArrayBuffer} source - URL or ArrayBuffer
+     * @param {string|ArrayBuffer} [bankSource=null] - Optional soundbank to load if no embedded bank
      * @param {string} [type='auto'] - File type: 'midi', 'rmf', or 'auto'
      * @returns {Promise<void>}
      */
-    async load(source, type = 'auto') {
-        // Note: We allow loading without a soundbank here because RMI files
-        // can have embedded soundbanks. The check will be done after loading.
-        
+    async load(source, bankSource = null, type = 'auto') {
         try {
             let data;
             if (typeof source === 'string') {
@@ -454,13 +465,21 @@ class BeatnikPlayer {
                 data = source;
             }
 
+            // Store song data for export
+            this._songData = new Uint8Array(data);
+
+            // Check if this is an RMI file (which might have embedded soundbank)
+            const isRMI = this._isRMIFile(data);
+            
+            // If not RMI and we have a bank to load, load it first
+            if (!isRMI && bankSource && !this._soundbankLoaded) {
+                await this.loadSoundbank(bankSource);
+            }
+
             // Copy to WASM memory
             const ptr = this._wasmModule._malloc(data.byteLength);
             const heapBytes = new Uint8Array(this._wasmModule.HEAPU8.buffer, ptr, data.byteLength);
             heapBytes.set(new Uint8Array(data));
-
-            // Store song data for export
-            this._songData = new Uint8Array(data);
 
             // Load in WASM
             const result = this._wasmModule._BAE_WASM_LoadSong(ptr, data.byteLength);
@@ -481,10 +500,14 @@ class BeatnikPlayer {
                 // Mark soundbank as loaded since embedded bank is now active
                 this._soundbankLoaded = true;
             } else if (!this._soundbankLoaded) {
-                // No embedded bank and no external bank loaded - this is an error
-                const error = new Error('No soundbank available (neither embedded nor loaded)');
-                this._dispatchEvent('error', error);
-                throw error;
+                // This shouldn't happen if we loaded the bank above, but just in case
+                if (bankSource) {
+                    await this.loadSoundbank(bankSource);
+                } else {
+                    const error = new Error('No soundbank available (neither embedded nor loaded)');
+                    this._dispatchEvent('error', error);
+                    throw error;
+                }
             }
 
             // Reset karaoke state for new song

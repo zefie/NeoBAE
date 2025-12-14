@@ -856,6 +856,8 @@ void GM_ResetSongLyricState(GM_Song *pSong)
         pSong->seenTrueLyric = FALSE;
         pSong->seenGenericTextLyric = FALSE;
         pSong->seenLyricMeta = FALSE;
+        pSong->lastLyric[0] = '\0';
+        pSong->lastLyricTimestamp = 0;
     }
 }
 
