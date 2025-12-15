@@ -10,6 +10,9 @@ public class Song
 	private native int _loadSongFromMemory(long songReference, byte[] data);
 	private native int _startSong(long songReference);
 	private native void _stopSong(long songReference);
+	private native int _pauseSong(long songReference);
+	private native int _resumeSong(long songReference);
+	private native boolean _isSongPaused(long songReference);
 	private static native int _setSongVolume(long songReference, int fixedVolume);
 	private static native int _getSongVolume(long songReference);
 	// Extended position/length JNI (microseconds)
@@ -43,6 +46,21 @@ public class Song
 	public void stop()
 	{
 		_stopSong(mReference);
+	}
+
+	public int pause()
+	{
+		return _pauseSong(mReference);
+	}
+
+	public int resume()
+	{
+		return _resumeSong(mReference);
+	}
+
+	public boolean isPaused()
+	{
+		return _isSongPaused(mReference);
 	}
 
 	public int setVolumePercent(int percent){

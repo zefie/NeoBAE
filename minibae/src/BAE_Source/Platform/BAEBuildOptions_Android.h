@@ -68,9 +68,9 @@
 
 // Non-overwritable Flags
 // ----------------------------------------------
-#define COMPILER_TYPE                                           GCC_COMPILER
+#define COMPILER_TYPE                                           DEFAULT_COMPILER
 
-#define CPU_TYPE                                        kARM
+#define CPU_TYPE                                                kARM
 //#define CPU_TYPE                                            k80X86
 
 #define X_WORD_ORDER                                            TRUE

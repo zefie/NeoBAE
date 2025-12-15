@@ -10,7 +10,7 @@ android {
 
     defaultConfig {
         applicationId "com.zefie.miniBAEDroid"
-        minSdk 21
+        minSdk 23
         targetSdk 36
         versionCode 1
         versionName "1.0"
@@ -43,13 +43,15 @@ android {
 dependencies {
     implementation 'androidx.appcompat:appcompat:1.7.1'
     implementation 'org.jetbrains.kotlin:kotlin-stdlib:2.2.10' // You are using Kotlin 2.2.10
+    implementation 'com.google.android.material:material:1.13.0'
 
     // Jetpack Compose core dependencies via BOM (removes explicit versions to avoid resolution mismatch)
-    def composeBom = platform('androidx.compose:compose-bom:2025.08.00') // Keep updated with latest stable
+    def composeBom = platform('androidx.compose:compose-bom:2025.12.00') // Keep updated with latest stable
     implementation composeBom
     androidTestImplementation composeBom
 
-    implementation 'androidx.activity:activity-compose:1.10.1' // Activity Compose (not in BOM group)
+    implementation 'androidx.activity:activity-compose:1.12.1' // Activity Compose (not in BOM group)
+    implementation 'androidx.lifecycle:lifecycle-viewmodel-compose:2.10.0' // ViewModel for Compose
     implementation 'androidx.compose.ui:ui'
     implementation 'androidx.compose.material:material'
     implementation 'androidx.compose.material:material-icons-extended'

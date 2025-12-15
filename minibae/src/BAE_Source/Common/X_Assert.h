@@ -136,6 +136,8 @@
 #elif __EMSCRIPTEN__
     #include <emscripten/emscripten.h>
     #define BAE_STDERR(...) emscripten_log(EM_LOG_ERROR, __VA_ARGS__)
+#elif __ANDROID__
+    #include <android/log.h>
 #else 
     #define BAE_STDOUT		printf
     #define BAE_STDERR(...)         fprintf (stderr, __VA_ARGS__)

@@ -30,8 +30,8 @@ public class Mixer
 	{
         int status = 0;
 
-	mMixer = new Mixer(assetManager);
-	if (mMixer.mReference != 0L)
+		mMixer = new Mixer(assetManager);
+		if (mMixer.mReference != 0L)
 		{
 			status = _openMixer(mMixer.mReference, sampleRate, terpMode, maxSongVoices, maxSoundVoices, mixLevel);
 		}
@@ -41,11 +41,11 @@ public class Mixer
 	public static void delete()
 	{
         if (mMixer.mReference != 0L)
-	{
-		_deleteMixer(mMixer.mReference);
-		mMixer.mReference = 0L;
-		mMixer = null;
-	}
+		{
+			_deleteMixer(mMixer.mReference);
+			mMixer.mReference = 0L;
+			mMixer = null;
+		}
 	}
 
 	public static Sound create()

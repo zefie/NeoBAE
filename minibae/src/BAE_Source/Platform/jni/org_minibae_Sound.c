@@ -211,10 +211,7 @@ JNIEXPORT jint JNICALL Java_org_minibae_Song__1loadSong
 		if(!song){ __android_log_print(ANDROID_LOG_ERROR, "miniBAE", "_loadSong: invalid song handle"); (*env)->ReleaseStringUTFChars(env, path, cpath); return (jint)BAE_PARAM_ERR; }
 	BAEResult r = BAE_BAD_FILE;
 	const char *ext = strrchr(cpath, '.');
-	if(ext && (strcasecmp(ext, ".mid") == 0 || strcasecmp(ext, ".midi") == 0 || strcasecmp(ext, ".kar") == 0)){
-		r = BAESong_LoadMidiFromFile(song, (BAEPathName)cpath, TRUE);
-		__android_log_print(ANDROID_LOG_DEBUG, "miniBAE", "BAESong_LoadMidiFromFile returned %d", r);
-	} else {
+	if(ext && (strcasecmp(ext, ".rmf") == 0)){
 		// Try multiple RMF song indices (0..7)
 		const int kMaxSongIndexProbe = 8;
 		for(int idx = 0; idx < kMaxSongIndexProbe; ++idx){
@@ -224,6 +221,9 @@ JNIEXPORT jint JNICALL Java_org_minibae_Song__1loadSong
 			if(tr != BAE_RESOURCE_NOT_FOUND){ r = tr; break; }
 			if(idx == kMaxSongIndexProbe - 1){ r = tr; }
 		}
+	} else {
+		r = BAESong_LoadMidiFromFile(song, (BAEPathName)cpath, TRUE);
+		__android_log_print(ANDROID_LOG_DEBUG, "miniBAE", "BAESong_LoadMidiFromFile returned %d", r);
 	}
 	(*env)->ReleaseStringUTFChars(env, path, cpath);
 	return (jint)r;
@@ -354,7 +354,9 @@ JNIEXPORT jint JNICALL Java_org_minibae_Song__1startSong
 	BAE_UNSIGNED_FIXED cur;
 	if(BAESong_GetVolume(song, &cur) == BAE_NO_ERROR){ BAESong_SetVolume(song, cur); }
 	__android_log_print(ANDROID_LOG_DEBUG, "miniBAE", "_startSong song=%p", (void*)(intptr_t)songReference);
+	BAESong_SetMicrosecondPosition(song, 0);
 	BAESong_Preroll(song);
+	BAESong_SetMicrosecondPosition(song, 0);
 	BAEResult r = BAESong_Start(song, 0);
 	__android_log_print(ANDROID_LOG_DEBUG, "miniBAE", "BAESong_Start returned %d", r);
 	return (jint)r;

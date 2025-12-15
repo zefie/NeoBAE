@@ -200,6 +200,25 @@
 #include "GenPriv.h"
 #include "GenSnd.h"
 #include "X_Assert.h"
+#include <stdint.h>
+
+// Offsets into serialized InstrumentResource (packed-on-disk layout).
+// Keep in sync with GenPatch.c's kInstOffset_* definitions.
+enum
+{
+    kInstOffset_sndResourceID = 0,
+    kInstOffset_midiRootKey = 2,
+    kInstOffset_panPlacement = 4,
+    kInstOffset_flags1 = 5,
+    kInstOffset_flags2 = 6,
+    kInstOffset_smodResourceID = 7,
+    kInstOffset_miscParameter1 = 8,
+    kInstOffset_miscParameter2 = 10,
+    kInstOffset_keySplitCount = 12,
+    kInstOffset_keySplitData = 14,
+};
+
+#define KEY_SPLIT_FILE_SIZE 8
 #include <stdio.h>
 
 #if 0
@@ -314,17 +333,27 @@ void XDisposeSongPtr(SongResource *theSong)
 // Get a keysplit entry. The result will be ordered for the native CPU
 void XGetKeySplitFromPtr(InstrumentResource *theX, int16_t entry, KeySplit *keysplit)
 {
-    KeySplit    *pSplits;
-    int16_t   count;
+    const unsigned char *pBase;
+    const unsigned char *pSplit;
+    int16_t count;
 
-    count = (int16_t)XGetShort(&theX->keySplitCount);
-    if ( (count) && (entry < count) )
+    if (!theX)
     {
-        pSplits = (KeySplit *) ( ((unsigned char *)&theX->keySplitCount) + sizeof(int16_t));
-        *keysplit = pSplits[entry];
-        keysplit->sndResourceID = (XShortResourceID)XGetShort(&keysplit->sndResourceID);
-        keysplit->miscParameter1 = (int16_t)XGetShort(&keysplit->miscParameter1);
-        keysplit->miscParameter2 = (int16_t)XGetShort(&keysplit->miscParameter2);
+        XSetMemory((void *)keysplit, (int32_t)sizeof(KeySplit), 0);
+        return;
+    }
+
+    pBase = (const unsigned char *)theX;
+    count = (int16_t)XGetShort(pBase + kInstOffset_keySplitCount);
+    if ((count > 0) && (entry < count))
+    {
+        // Walk serialized bytes using fixed offsets; do not rely on struct packing.
+        pSplit = pBase + kInstOffset_keySplitData + (entry * KEY_SPLIT_FILE_SIZE);
+        keysplit->lowMidi = (char)pSplit[0];
+        keysplit->highMidi = (char)pSplit[1];
+        keysplit->sndResourceID = (XShortResourceID)XGetShort(pSplit + 2);
+        keysplit->miscParameter1 = (int16_t)XGetShort(pSplit + 4);
+        keysplit->miscParameter2 = (int16_t)XGetShort(pSplit + 6);
     }
     else
     {
@@ -2370,16 +2399,28 @@ XERR XLookupAlias(XAliasLinkResource *pLink, XLongResourceID sourceID, XLongReso
 {
     XERR                err;
     uint32_t       count, max;
+    const unsigned char *pBase;
+    const unsigned char *pEntry;
+    XLongResourceID     aliasFrom, aliasTo;
 
     err = -1;
     if (pDestID && pLink)
     {
-        max = XGetLong(&pLink->numberOfAliases);
+        // Read numberOfAliases from byte offset 4 (after version at offset 0)
+        pBase = (const unsigned char *)pLink;
+        max = XGetLong(pBase + 4);
+        
+        // Each XAliasLink entry is 8 bytes (4 bytes aliasFrom + 4 bytes aliasTo)
+        // Entries start at offset 8 (after version=4 bytes + numberOfAliases=4 bytes)
         for (count = 0; count < max; count++)
         {
-            if ((XLongResourceID)XGetLong(&pLink->list[count].aliasFrom) == sourceID)
+            pEntry = pBase + 8 + (count * 8);
+            aliasFrom = (XLongResourceID)XGetLong(pEntry);
+            aliasTo = (XLongResourceID)XGetLong(pEntry + 4);
+            
+            if (aliasFrom == sourceID)
             {
-                *pDestID = XGetLong(&pLink->list[count].aliasTo);
+                *pDestID = aliasTo;
                 err = 0;
                 break;
             }
@@ -2393,6 +2434,7 @@ XERR XLookupAlias(XAliasLinkResource *pLink, XLongResourceID sourceID, XLongReso
 XAliasLinkResource * XGetAliasLinkFromFile(XFILE thisFile)
 {
     XAliasLinkResource  *pLink;
+    uint32_t            version;
 
     if (thisFile)
     {
@@ -2404,7 +2446,9 @@ XAliasLinkResource * XGetAliasLinkFromFile(XFILE thisFile)
     }
     if (pLink)
     {
-        if (XGetLong(&pLink->version) != ALIAS_ID_RESOURCE_VERSION)
+        // Read version using byte-wise access to avoid alignment issues on arm64
+        version = XGetLong((const unsigned char *)pLink);
+        if (version != ALIAS_ID_RESOURCE_VERSION)
         {
             XDisposePtr((XPTR)pLink);
             pLink = NULL;

@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/types.h>
+#include <unistd.h>
 
 // printf
 #include <android/log.h>
@@ -12,7 +13,6 @@
 
 #include "org_minibae_Mixer.h"
 #include "MiniBAE.h"
-#include "BAEPatches.h"
 
 //http://developer.android.com/training/articles/perf-jni.html
 
@@ -84,7 +84,6 @@ JNIEXPORT void JNICALL Java_org_minibae_Mixer__1deleteMixer
 JNIEXPORT jint JNICALL Java_org_minibae_Mixer__1openMixer
 	(JNIEnv* env, jclass clazz, jlong reference, jint sampleRate, jint terpMode, jint maxSongVoices, jint maxSoundVoices, jint mixLevel)
 {
-	jint status = -1;
     BAEResult    err;
 		BAEMixer mixer = (BAEMixer)(intptr_t)reference;
 	if (mixer)
@@ -101,14 +100,13 @@ JNIEXPORT jint JNICALL Java_org_minibae_Mixer__1openMixer
         if (err == BAE_NO_ERROR)
         {
 	    	__android_log_print(ANDROID_LOG_DEBUG, "miniBAE", "hello openMixer (hardware engaged)");
-						status = 0;
 	    }
 	    else
 	    {
 	    	__android_log_print(ANDROID_LOG_ERROR, "miniBAE", "failed to open mixer (%d) engageAudio=TRUE", err);
 	    }
 	}
-	return status;
+	return (jint)err;
 }
 
 /* Mixer helper JNI wrappers */
@@ -128,6 +126,7 @@ JNIEXPORT jint JNICALL Java_org_minibae_Mixer__1addBankFromFile
 		if(!mixer) return -1;
 		const char* cpath = (*env)->GetStringUTFChars(env, path, NULL);
 		BAEBankToken token = 0;
+		BAEMixer_UnloadBanks(mixer);
 		BAEResult r = BAEMixer_AddBankFromFile(mixer, cpath, &token);
 		if(r == BAE_NO_ERROR) {
 			char friendlyBuf[256] = "";
@@ -202,6 +201,7 @@ JNIEXPORT jstring JNICALL Java_org_minibae_Mixer__1getBankFriendlyName
 		AAsset_close(asset);
 
 		BAEBankToken token = 0;
+		BAEMixer_UnloadBanks(mixer);
 		BAEResult br = BAEMixer_AddBankFromMemory(mixer, (void*)mem, (uint32_t)read_total, &token);
 		if(br == BAE_NO_ERROR){
 			// After a successful add, try to resolve a friendly name for this token
@@ -239,6 +239,7 @@ JNIEXPORT jint JNICALL Java_org_minibae_Mixer__1addBankFromMemory
 	if(!bytes) return (jint)BAE_MEMORY_ERR;
 
 	BAEBankToken token = 0;
+	BAEMixer_UnloadBanks(mixer);
 	BAEResult br = BAEMixer_AddBankFromMemory(mixer, (void*)bytes, (uint32_t)len, &token);
 	if(br == BAE_NO_ERROR){
 		char friendlyBuf[256] = "";
@@ -265,13 +266,9 @@ JNIEXPORT jint JNICALL Java_org_minibae_Mixer__1addBuiltInPatches
 	BAEMixer mixer = (BAEMixer)(intptr_t)reference;
 	if(!mixer) return -1;
 
-	extern unsigned char BAE_PATCHES[];
-	extern unsigned long BAE_PATCHES_size;
-
-	if(BAE_PATCHES == NULL || BAE_PATCHES_size == 0) return (jint)BAE_BAD_FILE;
-
 	BAEBankToken token = 0;
-	BAEResult br = BAEMixer_AddBankFromMemory(mixer, (void*)BAE_PATCHES, (uint32_t)BAE_PATCHES_size, &token);
+	BAEMixer_UnloadBanks(mixer);
+	BAEResult br = BAEMixer_LoadBuiltinBank(mixer, &token);
 	if(br == BAE_NO_ERROR){
 		char friendlyBuf[256] = "";
 		if(BAE_GetBankFriendlyName(mixer, token, friendlyBuf, (uint32_t)sizeof(friendlyBuf)) == BAE_NO_ERROR) {

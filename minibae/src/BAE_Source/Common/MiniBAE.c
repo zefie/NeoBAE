@@ -173,7 +173,11 @@
 
 
 #if _BUILT_IN_PATCHES == TRUE
-#include "BAEPatches.h"
+    #ifdef __ANDROID__
+        #include "../miniBAEDroid/BAEPatches.h"
+    #else
+        #include "BAEPatches.h"
+    #endif
 #endif
 
 #if USE_FLAC_ENCODER == TRUE

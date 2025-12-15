@@ -248,6 +248,54 @@
 
 #define DEBUG_DISPLAY_PATCHES   1
 
+// Byte-wise view of InstrumentResource to avoid unaligned packed-field dereferences on ARM64.
+typedef struct InstrumentResourceHeaderView
+{
+    XShortResourceID sndResourceID;
+    int16_t          midiRootKey;
+    uint8_t          panPlacement;
+    uint8_t          flags1;
+    uint8_t          flags2;
+    int8_t           smodResourceID;
+    int16_t          miscParameter1;
+    int16_t          miscParameter2;
+    int16_t          keySplitCount;
+} InstrumentResourceHeaderView;
+
+enum
+{
+    kInstOffset_sndResourceID = 0,
+    kInstOffset_midiRootKey = 2,
+    kInstOffset_panPlacement = 4,
+    kInstOffset_flags1 = 5,
+    kInstOffset_flags2 = 6,
+    kInstOffset_smodResourceID = 7,
+    kInstOffset_miscParameter1 = 8,
+    kInstOffset_miscParameter2 = 10,
+    kInstOffset_keySplitCount = 12,
+    kInstOffset_keySplitData = 14,
+};
+
+#define KEY_SPLIT_FILE_SIZE 8
+
+static InstrumentResourceHeaderView PV_ReadInstrumentHeader(const InstrumentResource *theX)
+{
+    const unsigned char *p = (const unsigned char *)theX;
+    InstrumentResourceHeaderView view;
+
+    view.sndResourceID = (XShortResourceID)XGetShort(p + kInstOffset_sndResourceID);
+    view.midiRootKey = (int16_t)XGetShort(p + kInstOffset_midiRootKey);
+    view.panPlacement = p[kInstOffset_panPlacement];
+    view.flags1 = p[kInstOffset_flags1];
+    view.flags2 = p[kInstOffset_flags2];
+    view.smodResourceID = (int8_t)p[kInstOffset_smodResourceID];
+    view.miscParameter1 = (int16_t)XGetShort(p + kInstOffset_miscParameter1);
+    view.miscParameter2 = (int16_t)XGetShort(p + kInstOffset_miscParameter2);
+    view.keySplitCount = (int16_t)XGetShort(p + kInstOffset_keySplitCount);
+
+    return view;
+}
+
 #if BAE_NOT_USED
 #include "SMOD.h"
 
@@ -404,11 +452,12 @@ static void PV_GetEnvelopeData(InstrumentResource   *theX, GM_Instrument *theI, 
     uint16_t      data;
     register char           *pData, *pData2;
     register char           *pUnit;
-    register KeySplit       *pSplits;
     register GM_LFO         *pLFO;
     register GM_ADSR        *pADSR;
     register GM_TieTo       *pCurve;
     XBOOL                   disableModWheel;
+    InstrumentResourceHeaderView header;
+    const unsigned char     *pBase;
 
     disableModWheel = FALSE;
     theI->volumeADSRRecord.currentTime = 0;
@@ -433,13 +482,17 @@ static void PV_GetEnvelopeData(InstrumentResource   *theX, GM_Instrument *theI, 
     size = theXSize;
     if (theX && size)
     {
-        if (theX->flags1 & ZBF_extendedFormat)
+        header = PV_ReadInstrumentHeader(theX);
+        pBase = (const unsigned char *)theX;
+
+        if (header.flags1 & ZBF_extendedFormat)
         {
             // search for end of tremlo data $8000. If not there, don't walk past end of instrument
-            pSplits = (KeySplit *) ( ((char *)&theX->keySplitCount) + sizeof(int16_t));
-            count = XGetShort(&theX->keySplitCount);
-            pData = (char *)&pSplits[count];
-            pData2 = (char *)theX;
+            // Calculate offset byte-by-byte to avoid unaligned access on ARM64
+            count = header.keySplitCount;
+            // Each KeySplit is 8 bytes when packed (1+1+2+2+2)
+            pData = (char *)(pBase + kInstOffset_keySplitCount + sizeof(int16_t) + (count * KEY_SPLIT_FILE_SIZE));
+            pData2 = (char *)pBase;
             size -= (pData - pData2);
             for (count = 0; count < size; count++)
             {
@@ -749,6 +802,7 @@ GM_Instrument * PV_GetInstrument(GM_Mixer *pMixer, GM_Song *pSong,
     GM_Instrument *         theI;
     GM_Instrument *         theS;
     InstrumentResource *    theX;
+    InstrumentResourceHeaderView header;
     int32_t                 size;
     int16_t                 count;
     XPTR                    theSound;
@@ -766,9 +820,11 @@ GM_Instrument * PV_GetInstrument(GM_Mixer *pMixer, GM_Song *pSong,
     }
     if (theX)
     {
-        if (XGetShort(&theX->keySplitCount) < 2)
+        header = PV_ReadInstrumentHeader(theX);
+
+        if (header.keySplitCount < 2)
         {
-            theSampleID = (int32_t)((int16_t)XGetShort(&theX->sndResourceID));
+            theSampleID = (int32_t)header.sndResourceID;
             if (GMCache_IsIDInCache(pMixer, theSampleID, bankToken) != TRUE)
             {
                 sndInfo = GMCache_BuildSampleCacheEntry(pMixer, theSampleID, bankToken, NULL, pErr);
@@ -787,30 +843,30 @@ GM_Instrument * PV_GetInstrument(GM_Mixer *pMixer, GM_Song *pSong,
                 if (theI)
                 {
                     theI->u.w.theWaveform = (SBYTE *)theSound;
-                    theI->disableSndLooping = TEST_FLAG_VALUE(theX->flags1, ZBF_disableSndLooping);
-                    theI->playAtSampledFreq = TEST_FLAG_VALUE(theX->flags2, ZBF_playAtSampledFreq);
+                    theI->disableSndLooping = TEST_FLAG_VALUE(header.flags1, ZBF_disableSndLooping);
+                    theI->playAtSampledFreq = TEST_FLAG_VALUE(header.flags2, ZBF_playAtSampledFreq);
                     theI->doKeymapSplit = FALSE;
-                    theI->notPolyphonic = TEST_FLAG_VALUE(theX->flags2, ZBF_notPolyphonic);
+                    theI->notPolyphonic = TEST_FLAG_VALUE(header.flags2, ZBF_notPolyphonic);
 #if REVERB_USED != REVERB_DISABLED
-                    theI->avoidReverb = TEST_FLAG_VALUE(theX->flags1, ZBF_avoidReverb);
+                    theI->avoidReverb = TEST_FLAG_VALUE(header.flags1, ZBF_avoidReverb);
 #endif
-                    theI->useSampleRate = TEST_FLAG_VALUE(theX->flags1, ZBF_useSampleRate);
-                    theI->sampleAndHold = TEST_FLAG_VALUE(theX->flags1, ZBF_sampleAndHold);
-                    theI->useSoundModifierAsRootKey = TEST_FLAG_VALUE(theX->flags2, ZBF_useSoundModifierAsRootKey);
+                    theI->useSampleRate = TEST_FLAG_VALUE(header.flags1, ZBF_useSampleRate);
+                    theI->sampleAndHold = TEST_FLAG_VALUE(header.flags1, ZBF_sampleAndHold);
+                    theI->useSoundModifierAsRootKey = TEST_FLAG_VALUE(header.flags2, ZBF_useSoundModifierAsRootKey);
                     PV_GetEnvelopeData(theX, theI, patchSize);
                     theI->u.w.bitSize = sndInfo->bitSize;
                     theI->u.w.channels = sndInfo->channels;
-                    theI->u.w.waveformID = XGetShort(&theX->sndResourceID);
+                    theI->u.w.waveformID = header.sndResourceID;
                     theI->u.w.waveSize = sndInfo->waveSize;
                     theI->u.w.waveFrames = sndInfo->waveFrames;
                     theI->u.w.startLoop = sndInfo->loopStart;
                     theI->u.w.endLoop = sndInfo->loopEnd;
-                    theI->masterRootKey = XGetShort(&theX->midiRootKey);
-                    theI->panPlacement = theX->panPlacement;
+                    theI->masterRootKey = header.midiRootKey;
+                    theI->panPlacement = header.panPlacement;
                     theI->u.w.baseMidiPitch = (unsigned char)sndInfo->baseKey;
                     theI->u.w.sampledRate = sndInfo->rate;
-                    theI->miscParameter1 = XGetShort(&theX->miscParameter1);
-                    theI->miscParameter2 = XGetShort(&theX->miscParameter2);
+                    theI->miscParameter1 = header.miscParameter1;
+                    theI->miscParameter2 = header.miscParameter2;
                     if (theI->useSoundModifierAsRootKey)
                     {
                         theI->enableSoundModifier = FALSE;
@@ -818,8 +874,8 @@ GM_Instrument * PV_GetInstrument(GM_Mixer *pMixer, GM_Song *pSong,
                     }
                     else
                     {
-                        theI->enableSoundModifier = TEST_FLAG_VALUE(theX->flags2, ZBF_enableSoundModifier);
-                        theI->smodResourceID = theX->smodResourceID;
+                        theI->enableSoundModifier = TEST_FLAG_VALUE(header.flags2, ZBF_enableSoundModifier);
+                        theI->smodResourceID = header.smodResourceID;
                     }
                 }
                 else
@@ -829,33 +885,37 @@ GM_Instrument * PV_GetInstrument(GM_Mixer *pMixer, GM_Song *pSong,
             }
             else
             {
-                if (pErr && *pErr == NO_ERR) { *pErr = BAD_INSTRUMENT; }
+                if (pErr && *pErr == NO_ERR)
+                {
+                    *pErr = BAD_INSTRUMENT;
+                    BAE_PRINTF("Debug: Instrument %ld sample load failed (snd=%d) err=%d\n", (long)theID, (int)theSampleID, (int)*pErr);
+                }
             }
         }
         else
         {
-            size = XGetShort(&theX->keySplitCount) * sizeof(GM_KeymapSplit);
+            size = header.keySplitCount * sizeof(GM_KeymapSplit);
             size += sizeof(GM_KeymapSplitInfo);
             theI = (GM_Instrument *)XNewPtr(size + sizeof(GM_Instrument));
             if (theI)
             {
-                theI->disableSndLooping = TEST_FLAG_VALUE(theX->flags1, ZBF_disableSndLooping);
+                theI->disableSndLooping = TEST_FLAG_VALUE(header.flags1, ZBF_disableSndLooping);
                 theI->doKeymapSplit = TRUE;
-                theI->notPolyphonic = TEST_FLAG_VALUE(theX->flags2, ZBF_notPolyphonic);
+                theI->notPolyphonic = TEST_FLAG_VALUE(header.flags2, ZBF_notPolyphonic);
 #if REVERB_USED != REVERB_DISABLED
-                theI->avoidReverb = TEST_FLAG_VALUE(theX->flags1, ZBF_avoidReverb);
+                theI->avoidReverb = TEST_FLAG_VALUE(header.flags1, ZBF_avoidReverb);
 #endif
-                theI->useSampleRate = TEST_FLAG_VALUE(theX->flags1, ZBF_useSampleRate);
-                theI->sampleAndHold = TEST_FLAG_VALUE(theX->flags1, ZBF_sampleAndHold);
-                theI->playAtSampledFreq = TEST_FLAG_VALUE(theX->flags2, ZBF_playAtSampledFreq);
-                theI->useSoundModifierAsRootKey = TEST_FLAG_VALUE(theX->flags2, ZBF_useSoundModifierAsRootKey);
+                theI->useSampleRate = TEST_FLAG_VALUE(header.flags1, ZBF_useSampleRate);
+                theI->sampleAndHold = TEST_FLAG_VALUE(header.flags1, ZBF_sampleAndHold);
+                theI->playAtSampledFreq = TEST_FLAG_VALUE(header.flags2, ZBF_playAtSampledFreq);
+                theI->useSoundModifierAsRootKey = TEST_FLAG_VALUE(header.flags2, ZBF_useSoundModifierAsRootKey);
                 PV_GetEnvelopeData(theX, theI, patchSize);
-                theI->u.k.KeymapSplitCount = XGetShort(&theX->keySplitCount);
-                theI->u.k.defaultInstrumentID = (XShortResourceID)XGetShort(&theX->sndResourceID);
-                theI->masterRootKey = XGetShort(&theX->midiRootKey);
-                theI->panPlacement = theX->panPlacement;
-                theI->miscParameter1 = XGetShort(&theX->miscParameter1);
-                theI->miscParameter2 = XGetShort(&theX->miscParameter2);
+                theI->u.k.KeymapSplitCount = header.keySplitCount;
+                theI->u.k.defaultInstrumentID = header.sndResourceID;
+                theI->masterRootKey = header.midiRootKey;
+                theI->panPlacement = header.panPlacement;
+                theI->miscParameter1 = header.miscParameter1;
+                theI->miscParameter2 = header.miscParameter2;
                 if (theI->useSoundModifierAsRootKey)
                 {
                     theI->enableSoundModifier = FALSE;
@@ -863,8 +923,8 @@ GM_Instrument * PV_GetInstrument(GM_Mixer *pMixer, GM_Song *pSong,
                 }
                 else
                 {
-                    theI->enableSoundModifier = TEST_FLAG_VALUE(theX->flags2, ZBF_enableSoundModifier);
-                    theI->smodResourceID = theX->smodResourceID;
+                    theI->enableSoundModifier = TEST_FLAG_VALUE(header.flags2, ZBF_enableSoundModifier);
+                    theI->smodResourceID = header.smodResourceID;
                 }
                 for (count = 0; count < theI->u.k.KeymapSplitCount; count++)
                 {
@@ -897,6 +957,11 @@ GM_Instrument * PV_GetInstrument(GM_Mixer *pMixer, GM_Song *pSong,
                             theS->LPF_frequency = theI->LPF_frequency;
                             theS->LPF_resonance = theI->LPF_resonance;
                             theS->LPF_lowpassAmount = theI->LPF_lowpassAmount;
+                        }
+                        else if (pErr && *pErr != NO_ERR)
+                        {
+                            BAE_PRINTF("Debug: Instrument %ld split %d load failed snd=%d err=%d\n",
+                                      (long)theID, (int)count, (int)theXSplit.sndResourceID, (int)*pErr);
                         }
                     }
                 }

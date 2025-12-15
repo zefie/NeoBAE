@@ -2,103 +2,39 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:orientation="vertical"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:paddingTop="?attr/actionBarSize">
-
-    <!-- Top header placed above the fragment container so fragment content is rendered under it -->
-    <LinearLayout
-        android:id="@+id/top_header"
-        android:layout_width="match_parent"
-        android:layout_height="56dp"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:paddingStart="16dp"
-        android:paddingEnd="16dp">
-
-        <!-- Title removed as requested -->
-
-    </LinearLayout>
-
-    <!-- Row containing Browse + Refresh controls -->
-    <LinearLayout
-        android:id="@+id/browse_refresh_row"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:layout_margin="8dp"
-        android:layout_marginTop="24dp"
-        android:translationY="-50px">
-
-        <Button
-            android:id="@+id/browse_button"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="Browse Folder" />
-
-        <ImageButton
-            android:id="@+id/refresh_button"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:layout_marginStart="8dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="Refresh Folder"
-            android:src="@android:drawable/ic_popup_sync" />
-    </LinearLayout>
+    android:layout_height="match_parent">
 
     <FrameLayout
         android:id="@+id/fragment_container"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_marginTop="8dp"
-        android:translationY="-50px"
         android:layout_weight="1" />
-
-    <!-- Player bar placed above the bottom tabs -->
-    <LinearLayout
-        android:id="@+id/player_bar"
-        android:layout_width="match_parent"
-        android:layout_height="64dp"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:padding="8dp">
-
-        <ImageButton
-            android:id="@+id/play_pause_button"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:src="@android:drawable/ic_media_play"
-            android:contentDescription="Play/Pause" />
-
-        <SeekBar
-            android:id="@+id/player_seek"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:progress="0"
-            android:max="1000" />
-
-    </LinearLayout>
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="56dp"
-        android:orientation="horizontal">
+        android:orientation="horizontal"
+        android:elevation="8dp"
+        android:background="?attr/colorPrimary"
+        android:visibility="gone">
 
         <Button
             android:id="@+id/tab_home"
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1"
-            android:text="Home" />
+            android:text="Player"
+            android:textColor="@android:color/white"
+            style="?android:attr/borderlessButtonStyle" />
 
         <Button
             android:id="@+id/tab_settings"
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1"
-            android:text="Settings" />
+            android:text="Settings"
+            android:textColor="@android:color/white"
+            style="?android:attr/borderlessButtonStyle" />
 
     </LinearLayout>
 

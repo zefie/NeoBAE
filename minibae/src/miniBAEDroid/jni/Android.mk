@@ -54,10 +54,11 @@ LOCAL_SRC_FILES	:= \
 			Common/g723_40.c \
 			Common/g72x.c \
 			Common/sha1mini.c \
+			Common/XFileTypes.c \
 			../BAE_MPEG_Source_II/XMPEG_minimp3_wrapper.c \
 			../BAE_MPEG_Source_II/XMPEGFilesSun.c \
-			../banks/patches111/BAEPatches.c \
 			Platform/jni/org_minibae_Mixer.c \
+			Platform/jni/org_minibae_SongExt.c \
 			Platform/jni/org_minibae_Sound.c
 
 
@@ -71,8 +72,9 @@ LOCAL_C_INCLUDES	+= $(LOCAL_PATH)/Platform
 LOCAL_C_INCLUDES	+= $(LOCAL_PATH)/../BAE_MPEG_Source_II
 LOCAL_C_INCLUDES	+= $(LOCAL_PATH)/../thirdparty/minimp3/
 LOCAL_C_INCLUDES	+= $(LOCAL_PATH)/../banks/patches111/
+LOCAL_C_INCLUDES	+= $(LOCAL_PATH)/../miniBAEDroid
 
-LOCAL_CFLAGS := -DX_PLATFORM=X_ANDROID -D_BUILT_IN_PATCHES=1 -DUSE_MINIMP3_WRAPPER=1 -DUSE_MPEG_DECODER=1 -DUSE_FULL_RMF_SUPPORT=1 -DUSE_HIGHLEVEL_FILE_API=1 -D_DEBUG=1
+LOCAL_CFLAGS := -DX_PLATFORM=X_ANDROID -D__ANDROID__=1 -D_BUILT_IN_PATCHES=1 -DUSE_MINIMP3_WRAPPER=1 -DUSE_MPEG_DECODER=1 -D_DEBUG=1 -Wno-pragma-pack
 
 # Only set ARM mode for 32-bit ARM builds; do not force for arm64
 ifeq ($(TARGET_ARCH_ABI), armeabi-v7a)

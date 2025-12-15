@@ -29,7 +29,7 @@ public class Sound
     int load(String resourceName)
     {
         mFile = ByteBuffer.allocateDirect(10000);
-    int status = _loadSound(mReference, mMixer.mAssetManager, resourceName);
+        int status = _loadSound(mReference, mMixer.mAssetManager, resourceName);
         return status;
     }
 

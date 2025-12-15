@@ -6,19 +6,28 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.view.LayoutInflater
-import android.view.View
 import android.view.ViewGroup
-import android.widget.ArrayAdapter
-import android.widget.Button
-import android.widget.SeekBar
-import android.widget.Spinner
-import android.widget.TextView
+import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.fragment.app.Fragment
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
 import org.minibae.Mixer
+import org.minibae.Song
 
 class SettingsFragment: Fragment(){
 
@@ -28,157 +37,191 @@ class SettingsFragment: Fragment(){
     private val keyMasterVol = "master_volume"
     private val keyCurve = "velocity_curve"
     private val keyReverb = "default_reverb"
+    
+    private var currentBankName = mutableStateOf("Loading...")
+    private var isLoadingBank = mutableStateOf(false)
+    private var reverbType = mutableStateOf(1)
+    private var velocityCurve = mutableStateOf(0)
+    private var masterVolume = mutableStateOf(75)
 
     private val openHsbPicker = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
             val data: Intent? = result.data
             data?.data?.let { uri ->
-                requireContext().contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                val cached = copyUriToCache(uri, "selected_bank.hsb")
-                if (cached != null) {
-                    // Read bytes and call native memory loader to avoid filesystem path issues
-                    val bytes = cached.readBytes()
-                    val r = Mixer.addBankFromMemory(bytes)
-                    if (r == 0) {
-                        val friendly = Mixer.getBankFriendlyName()
-                        val fallback = uri.lastPathSegment ?: cached.name
-                        view?.findViewById<TextView>(R.id.bank_name)?.text = friendly ?: fallback
-                        val prefs = requireContext().getSharedPreferences(prefName, Context.MODE_PRIVATE)
-                        prefs.edit().putString(keyBankPath, cached.absolutePath).apply()
-                    } else {
-                        view?.findViewById<TextView>(R.id.bank_name)?.text = "Failed to load bank (err=$r)"
-                    }
-                }
+                loadBankFromUri(uri, true)
             }
         }
     }
-
-    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {
-        val v = inflater.inflate(R.layout.fragment_settings, container, false)
-        // Shared prefs (moved up so UI controls can read persisted settings)
-        val prefs = requireContext().getSharedPreferences(prefName, Context.MODE_PRIVATE)
-
-        val reverbSpinner = v.findViewById<Spinner>(R.id.reverb_spinner)
-        val reverbOptions = listOf("None","Igor's Closet","Igor's Garage","Igor's Acoustic Lab","Igor's Cavern","Igor's Dungeon","Small Reflections","Early Reflections","Basement","Banquet Hall","Catacombs")
-        reverbSpinner.adapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_dropdown_item, reverbOptions)
-
-        // Restore saved reverb (engine uses 1-based types). Default to 1 (None).
-        val savedReverbEngine = prefs.getInt(keyReverb, 1)
-        val spinnerIndex = if (savedReverbEngine >= 1) savedReverbEngine - 1 else 0
-        reverbSpinner.setSelection(spinnerIndex)
-        // Propagate restored value to native mixer (no-op if mixer not created)
-        Mixer.setDefaultReverb(savedReverbEngine)
-
-        reverbSpinner.setOnItemSelectedListener(object: android.widget.AdapterView.OnItemSelectedListener{
-            override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, position: Int, id: Long) {
-                val engineValue = position + 1 // spinner pos 0 -> engine 1
-                Mixer.setDefaultReverb(engineValue)
-                prefs.edit().putInt(keyReverb, engineValue).apply()
-            }
-            override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
-        })
-
-    val bankBtn = v.findViewById<Button>(R.id.load_bank)
-    val builtinBtn = v.findViewById<Button>(R.id.load_builtin_patches)
-    val bankNameTv = v.findViewById<TextView>(R.id.bank_name)
-        bankBtn.setOnClickListener {
-            // Launch SAF picker for .hsb
-            val i = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-                addCategory(Intent.CATEGORY_OPENABLE)
-                type = "*/*"
-                putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("application/octet-stream", "application/hsb", "application/x-hsb"))
-            }
-            openHsbPicker.launch(i)
-        }
-
-        builtinBtn.setOnClickListener {
-            // Load embedded built-in patches compiled into the native library
-            val r = Mixer.addBuiltInPatches()
-            val prefs = requireContext().getSharedPreferences(prefName, Context.MODE_PRIVATE)
-            if (r == 0) {
-                val friendly = Mixer.getBankFriendlyName()
-                bankNameTv.text = friendly ?: "Built-in patches"
-                // Persist that builtin patches are selected so next launch restores them
-                prefs.edit().putString(keyBankPath, builtinMarker).apply()
-            } else {
-                bankNameTv.text = "Failed to load built-in patches (err=$r)"
-            }
-        }
-
-    val volumeSeek = v.findViewById<SeekBar>(R.id.master_volume)
-        val savedVol = prefs.getInt(keyMasterVol, 75)
-        volumeSeek.progress = savedVol
-        Mixer.setMasterVolumePercent(savedVol)
-        volumeSeek.setOnSeekBarChangeListener(object: SeekBar.OnSeekBarChangeListener{
-            override fun onProgressChanged(p0: SeekBar?, p1: Int, p2: Boolean) {
-                Mixer.setMasterVolumePercent(p1)
-                prefs.edit().putInt(keyMasterVol, p1).apply()
-            }
-            override fun onStartTrackingTouch(p0: SeekBar?) {}
-            override fun onStopTrackingTouch(p0: SeekBar?) {}
-        })
-
-        val curveSpinner = v.findViewById<Spinner>(R.id.curve_spinner)
-        val curveOptions = listOf("Default","Peaky","WebTV","Expo","Linear")
-        curveSpinner.adapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_dropdown_item, curveOptions)
-        val savedCurve = prefs.getInt(keyCurve, 0)
-        curveSpinner.setSelection(savedCurve)
-        Mixer.setDefaultVelocityCurve(savedCurve)
-        curveSpinner.setOnItemSelectedListener(object: android.widget.AdapterView.OnItemSelectedListener{
-            override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, position: Int, id: Long) {
-                Mixer.setDefaultVelocityCurve(position)
-                prefs.edit().putInt(keyCurve, position).apply()
-            }
-            override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
-        })
-
-        // If the native mixer already has a bank loaded, show its friendly name
-        // and skip the restore/auto-load logic. Otherwise restore last bank if
-        // persisted; if none or set to builtin, load built-in.
-        val currentFriendly = Mixer.getBankFriendlyName()
-        if (!currentFriendly.isNullOrEmpty()) {
-            bankNameTv.text = currentFriendly
-        } else {
-            val lastBank = prefs.getString(keyBankPath, null)
-            if (lastBank.isNullOrEmpty() || lastBank == builtinMarker) {
-                val r = Mixer.addBuiltInPatches()
-                if (r == 0) {
-                    val friendly = Mixer.getBankFriendlyName()
-                    bankNameTv.text = friendly ?: "Built-in patches"
-                    prefs.edit().putString(keyBankPath, builtinMarker).apply()
-                } else {
-                    bankNameTv.text = "Failed to load built-in patches (err=$r)"
-                }
-            } else {
-                val f = File(lastBank)
-                if (f.exists()) {
-                    try {
-                        val bytes = f.readBytes()
-                        val r = Mixer.addBankFromMemory(bytes)
+    
+    private fun loadBankFromUri(uri: Uri, hotSwap: Boolean) {
+        isLoadingBank.value = true
+        Thread {
+            try {
+                requireContext().contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                val cached = copyUriToCache(uri, "selected_bank.hsb")
+                if (cached != null) {
+                    // If hot-swapping, we need to handle the current playback state
+                    val prefs = requireContext().getSharedPreferences(prefName, Context.MODE_PRIVATE)
+                    
+                    if (hotSwap) {
+                        // Store current playback state
+                        // Note: This would ideally interact with the HomeFragment's state
+                        // For now, we just reload the bank
+                    }
+                    
+                    // Read bytes and call native memory loader to avoid filesystem path issues
+                    val bytes = cached.readBytes()
+                    android.util.Log.d("SettingsFragment", "Calling Mixer.addBankFromMemory with ${bytes.size} bytes")
+                    val r = Mixer.addBankFromMemory(bytes)
+                    android.util.Log.d("SettingsFragment", "Mixer.addBankFromMemory returned: $r")
+                    activity?.runOnUiThread {
                         if (r == 0) {
                             val friendly = Mixer.getBankFriendlyName()
-                            bankNameTv.text = friendly ?: f.name
+                            val fallback = uri.lastPathSegment ?: cached.name
+                            currentBankName.value = friendly ?: fallback
+                            prefs.edit().putString(keyBankPath, cached.absolutePath).apply()
+                            
+                            // Hot-swap: reload song immediately with new bank
+                            if (hotSwap) {
+                                android.util.Log.d("SettingsFragment", "Calling reloadCurrentSongForBankSwap")
+                                Thread {
+                                    (activity as? MainActivity)?.reloadCurrentSongForBankSwap()
+                                }.start()
+                            }
+                            
+                            Toast.makeText(requireContext(), "Bank loaded: ${friendly ?: fallback}", Toast.LENGTH_SHORT).show()
                         } else {
-                            bankNameTv.text = "Failed to load saved bank (err=$r)"
+                            currentBankName.value = "Failed to load bank"
+                            Toast.makeText(requireContext(), "Failed to load bank (err=$r)", Toast.LENGTH_SHORT).show()
                         }
-                    } catch (ex: Exception) {
-                        bankNameTv.text = "Failed to read saved bank"
+                        isLoadingBank.value = false
                     }
                 } else {
-                    // Saved path missing on disk; fall back to builtin patches
-                    val r = Mixer.addBuiltInPatches()
-                    if (r == 0) {
-                        val friendly = Mixer.getBankFriendlyName()
-                        bankNameTv.text = friendly ?: "Built-in patches"
-                        prefs.edit().putString(keyBankPath, builtinMarker).apply()
+                    activity?.runOnUiThread {
+                        currentBankName.value = "Failed to cache file"
+                        isLoadingBank.value = false
+                    }
+                }
+            } catch (ex: Exception) {
+                activity?.runOnUiThread {
+                    currentBankName.value = "Error: ${ex.message}"
+                    isLoadingBank.value = false
+                    Toast.makeText(requireContext(), "Error loading bank: ${ex.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }.start()
+    }
+    
+    private fun loadBuiltInPatches() {
+        isLoadingBank.value = true
+        Thread {
+            val r = Mixer.addBuiltInPatches()
+            activity?.runOnUiThread {
+                val prefs = requireContext().getSharedPreferences(prefName, Context.MODE_PRIVATE)
+                if (r == 0) {
+                    val friendly = Mixer.getBankFriendlyName()
+                    currentBankName.value = friendly ?: "Built-in patches"
+                    prefs.edit().putString(keyBankPath, builtinMarker).apply()
+                    
+                    // Hot-swap: reload song immediately with built-in bank
+                    Thread {
+                        (activity as? MainActivity)?.reloadCurrentSongForBankSwap()
+                    }.start()
+                    
+                    Toast.makeText(requireContext(), "Loaded built-in patches", Toast.LENGTH_SHORT).show()
+                } else {
+                    currentBankName.value = "Failed to load built-in"
+                    Toast.makeText(requireContext(), "Failed to load built-in patches (err=$r)", Toast.LENGTH_SHORT).show()
+                }
+                isLoadingBank.value = false
+            }
+        }.start()
+    }
+
+
+    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): android.view.View {
+        // Load saved preferences
+        val prefs = requireContext().getSharedPreferences(prefName, Context.MODE_PRIVATE)
+        reverbType.value = prefs.getInt(keyReverb, 1)
+        velocityCurve.value = prefs.getInt(keyCurve, 0)
+        masterVolume.value = prefs.getInt(keyMasterVol, 75)
+        
+        // Initialize bank name
+        Thread {
+            val friendly = Mixer.getBankFriendlyName()
+            activity?.runOnUiThread {
+                if (!friendly.isNullOrEmpty()) {
+                    currentBankName.value = friendly
+                } else {
+                    // Try to restore saved bank
+                    val lastBank = prefs.getString(keyBankPath, null)
+                    if (lastBank.isNullOrEmpty() || lastBank == builtinMarker) {
+                        loadBuiltInPatches()
                     } else {
-                        bankNameTv.text = "Failed to load saved bank and built-in (err=$r)"
+                        val f = File(lastBank)
+                        if (f.exists()) {
+                            try {
+                                val bytes = f.readBytes()
+                                val r = Mixer.addBankFromMemory(bytes)
+                                if (r == 0) {
+                                    val fn = Mixer.getBankFriendlyName()
+                                    currentBankName.value = fn ?: f.name
+                                } else {
+                                    loadBuiltInPatches()
+                                }
+                            } catch (ex: Exception) {
+                                loadBuiltInPatches()
+                            }
+                        } else {
+                            loadBuiltInPatches()
+                        }
                     }
                 }
             }
+        }.start()
+        
+        return ComposeView(requireContext()).apply {
+            setContent {
+                MaterialTheme(
+                    colors = if (androidx.compose.foundation.isSystemInDarkTheme()) darkColors() else lightColors()
+                ) {
+                    SettingsScreen(
+                        bankName = currentBankName.value,
+                        isLoadingBank = isLoadingBank.value,
+                        reverbType = reverbType.value,
+                        velocityCurve = velocityCurve.value,
+                        masterVolume = masterVolume.value,
+                        onLoadBank = {
+                            val i = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                                addCategory(Intent.CATEGORY_OPENABLE)
+                                type = "*/*"
+                                putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("application/octet-stream", "application/hsb", "application/x-hsb"))
+                            }
+                            openHsbPicker.launch(i)
+                        },
+                        onLoadBuiltin = {
+                            loadBuiltInPatches()
+                        },
+                        onReverbChange = { value ->
+                            reverbType.value = value
+                            Mixer.setDefaultReverb(value)
+                            prefs.edit().putInt(keyReverb, value).apply()
+                        },
+                        onCurveChange = { value ->
+                            velocityCurve.value = value
+                            Mixer.setDefaultVelocityCurve(value)
+                            prefs.edit().putInt(keyCurve, value).apply()
+                        },
+                        onVolumeChange = { value ->
+                            masterVolume.value = value
+                            Mixer.setMasterVolumePercent(value)
+                            prefs.edit().putInt(keyMasterVol, value).apply()                        },
+                        onClose = {
+                            (activity as? MainActivity)?.showHome()                        }
+                    )
+                }
+            }
         }
-
-        return v
     }
 
     private fun copyUriToCache(uri: Uri, outName: String): File? {
@@ -193,6 +236,273 @@ class SettingsFragment: Fragment(){
             }
         } catch (ex: Exception) {
             null
+        }
+    }
+}
+
+@Composable
+fun SettingsScreen(
+    bankName: String,
+    isLoadingBank: Boolean,
+    reverbType: Int,
+    velocityCurve: Int,
+    masterVolume: Int,
+    onLoadBank: () -> Unit,
+    onLoadBuiltin: () -> Unit,
+    onReverbChange: (Int) -> Unit,
+    onCurveChange: (Int) -> Unit,
+    onVolumeChange: (Int) -> Unit,
+    onClose: () -> Unit
+) {
+    val reverbOptions = listOf(
+        "None", "Igor's Closet", "Igor's Garage", "Igor's Acoustic Lab",
+        "Igor's Cavern", "Igor's Dungeon", "Small Reflections",
+        "Early Reflections", "Basement", "Banquet Hall", "Catacombs"
+    )
+    
+    val curveOptions = listOf("Default", "Peaky", "WebTV", "Expo", "Linear")
+    
+    var reverbExpanded by remember { mutableStateOf(false) }
+    var curveExpanded by remember { mutableStateOf(false) }
+    
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = MaterialTheme.colors.background
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp)
+        ) {
+            // Header with close button
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Settings",
+                    style = MaterialTheme.typography.h5,
+                    fontWeight = FontWeight.Bold
+                )
+                IconButton(onClick = onClose) {
+                    Icon(
+                        Icons.Filled.Close,
+                        contentDescription = "Close Settings",
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            // Bank Section
+            SettingCard(title = "Sound Bank", icon = Icons.Filled.LibraryMusic) {
+                Column {
+                    if (isLoadingBank) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text("Loading bank...", style = MaterialTheme.typography.body2)
+                        }
+                    } else {
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colors.primary.copy(alpha = 0.1f)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    Icons.Filled.MusicNote,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colors.primary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = bankName,
+                                    style = MaterialTheme.typography.body1,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colors.onSurface
+                                )
+                            }
+                        }
+                    }
+                    
+                    Spacer(modifier = Modifier.height(12.dp))
+                    
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = onLoadBank,
+                            modifier = Modifier.weight(1f),
+                            enabled = !isLoadingBank
+                        ) {
+                            Icon(Icons.Filled.FolderOpen, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Load .hsb")
+                        }
+                        OutlinedButton(
+                            onClick = onLoadBuiltin,
+                            modifier = Modifier.weight(1f),
+                            enabled = !isLoadingBank
+                        ) {
+                            Icon(Icons.Filled.GetApp, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Built-in")
+                        }
+                    }
+                    
+                    Text(
+                        text = "Hot-swap support: Bank changes reload current song automatically",
+                        style = MaterialTheme.typography.caption,
+                        color = MaterialTheme.colors.onSurface.copy(alpha = 0.6f),
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            // Reverb Section
+            SettingCard(title = "Reverb", icon = Icons.Filled.GraphicEq) {
+                Column {
+                    Box {
+                        OutlinedButton(
+                            onClick = { reverbExpanded = true },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = reverbOptions.getOrNull(reverbType - 1) ?: "None",
+                                modifier = Modifier.weight(1f)
+                            )
+                            Icon(Icons.Filled.ArrowDropDown, contentDescription = null)
+                        }
+                        DropdownMenu(
+                            expanded = reverbExpanded,
+                            onDismissRequest = { reverbExpanded = false }
+                        ) {
+                            reverbOptions.forEachIndexed { index, option ->
+                                DropdownMenuItem(onClick = {
+                                    onReverbChange(index + 1)
+                                    reverbExpanded = false
+                                }) {
+                                    Text(option)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            // Velocity Curve Section
+            SettingCard(title = "Velocity Curve", icon = Icons.Filled.TrendingUp) {
+                Column {
+                    Box {
+                        OutlinedButton(
+                            onClick = { curveExpanded = true },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = curveOptions.getOrNull(velocityCurve) ?: "Default",
+                                modifier = Modifier.weight(1f)
+                            )
+                            Icon(Icons.Filled.ArrowDropDown, contentDescription = null)
+                        }
+                        DropdownMenu(
+                            expanded = curveExpanded,
+                            onDismissRequest = { curveExpanded = false }
+                        ) {
+                            curveOptions.forEachIndexed { index, option ->
+                                DropdownMenuItem(onClick = {
+                                    onCurveChange(index)
+                                    curveExpanded = false
+                                }) {
+                                    Text(option)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            // Master Volume Section
+            SettingCard(title = "Master Volume", icon = Icons.Filled.VolumeUp) {
+                Column {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Slider(
+                            value = masterVolume.toFloat(),
+                            onValueChange = { onVolumeChange(it.toInt()) },
+                            valueRange = 0f..100f,
+                            modifier = Modifier.weight(1f),
+                            colors = SliderDefaults.colors(
+                                thumbColor = MaterialTheme.colors.primary,
+                                activeTrackColor = MaterialTheme.colors.primary,
+                                inactiveTrackColor = MaterialTheme.colors.onSurface.copy(alpha = 0.2f)
+                            )
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = "$masterVolume%",
+                            style = MaterialTheme.typography.h6,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colors.primary,
+                            modifier = Modifier.width(60.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun SettingCard(
+    title: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        elevation = 4.dp,
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(bottom = 12.dp)
+            ) {
+                Icon(
+                    icon,
+                    contentDescription = null,
+                    tint = MaterialTheme.colors.primary,
+                    modifier = Modifier.size(24.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.h6,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colors.primary
+                )
+            }
+            content()
         }
     }
 }

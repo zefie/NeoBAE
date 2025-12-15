@@ -83,7 +83,9 @@
         #if (X_PLATFORM == X_SOLARIS)
             #pragma pack (4)
         #else
-            #pragma pack (8)
+            #if (X_PLATFORM != X_ANDROID)
+                #pragma pack (8)
+            #endif
         #endif
     #endif
 #endif

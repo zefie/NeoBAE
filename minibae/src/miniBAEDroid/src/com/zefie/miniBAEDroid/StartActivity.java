@@ -15,7 +15,7 @@ public class StartActivity extends Activity
     {
         super.onCreate(savedInstanceState);
 
-        int status = Mixer.create(getAssets(),44100, 0, 4, 4, 4);
+        int status = Mixer.create(getAssets(),44100, 2, 64, 8, 64);
         if (status == 0)
             System.out.println("good");
 

@@ -17,7 +17,7 @@ JNIEXPORT jint JNICALL Java_org_minibae_Song__1getSongPositionUS(JNIEnv* env, jc
 
 JNIEXPORT jint JNICALL Java_org_minibae_Song__1setSongPositionUS(JNIEnv* env, jclass clazz, jlong songRef, jint us){
     (void)env; (void)clazz;
-    if(songRef == 0){ return (jint)BAE_BAD_REFERENCE; }
+    if(songRef == 0){ return (jint)BAE_NULL_OBJECT; }
     BAESong song = (BAESong)(intptr_t)songRef;
     BAEResult r = BAESong_SetMicrosecondPosition(song, (uint32_t)us);
     if(r != BAE_NO_ERROR){ __android_log_print(ANDROID_LOG_WARN, LOG_TAG, "BAESong_SetMicrosecondPosition err=%d", r); }
@@ -33,4 +33,35 @@ JNIEXPORT jint JNICALL Java_org_minibae_Song__1getSongLengthUS(JNIEnv* env, jcla
     BAEResult r = BAESong_GetMicrosecondLength(song, &us);
     if(r != BAE_NO_ERROR){ __android_log_print(ANDROID_LOG_WARN, LOG_TAG, "BAESong_GetMicrosecondLength err=%d", r); return 0; }
     return (jint)us;
+}
+
+// Pause song playback
+JNIEXPORT jint JNICALL Java_org_minibae_Song__1pauseSong(JNIEnv* env, jclass clazz, jlong songRef){
+    (void)env; (void)clazz;
+    if(songRef == 0){ return (jint)BAE_NULL_OBJECT; }
+    BAESong song = (BAESong)(intptr_t)songRef;
+    BAEResult r = BAESong_Pause(song);
+    if(r != BAE_NO_ERROR){ __android_log_print(ANDROID_LOG_WARN, LOG_TAG, "BAESong_Pause err=%d", r); }
+    return (jint)r;
+}
+
+// Resume song playback
+JNIEXPORT jint JNICALL Java_org_minibae_Song__1resumeSong(JNIEnv* env, jclass clazz, jlong songRef){
+    (void)env; (void)clazz;
+    if(songRef == 0){ return (jint)BAE_NULL_OBJECT; }
+    BAESong song = (BAESong)(intptr_t)songRef;
+    BAEResult r = BAESong_Resume(song);
+    if(r != BAE_NO_ERROR){ __android_log_print(ANDROID_LOG_WARN, LOG_TAG, "BAESong_Resume err=%d", r); }
+    return (jint)r;
+}
+
+// Check if song is paused
+JNIEXPORT jboolean JNICALL Java_org_minibae_Song__1isSongPaused(JNIEnv* env, jclass clazz, jlong songRef){
+    (void)env; (void)clazz;
+    if(songRef == 0){ return JNI_FALSE; }
+    BAESong song = (BAESong)(intptr_t)songRef;
+    BAE_BOOL isPaused = FALSE;
+    BAEResult r = BAESong_IsPaused(song, &isPaused);
+    if(r != BAE_NO_ERROR){ __android_log_print(ANDROID_LOG_WARN, LOG_TAG, "BAESong_IsPaused err=%d", r); return JNI_FALSE; }
+    return (isPaused == TRUE) ? JNI_TRUE : JNI_FALSE;
 }
