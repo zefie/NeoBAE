@@ -2291,7 +2291,7 @@ void PV_ProcessController(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTrack,
         {
         
         case B_BANK_LSB: // bank select MSB. This is GS.
-#if DISABLE_NOKIA_PATCH == TRUE
+#if DISABLE_NOKIA_PATCH != TRUE
             // START "NOKIA PATCH"
             if (value == 6)
             {
