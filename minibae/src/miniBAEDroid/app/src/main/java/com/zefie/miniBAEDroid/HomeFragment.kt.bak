@@ -1,0 +1,835 @@
+package com.zefie.miniBAEDroid
+
+import android.os.Bundle
+import android.content.Context
+import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
+import android.widget.Toast
+import android.net.Uri
+import androidx.documentfile.provider.DocumentFile
+import androidx.fragment.app.Fragment
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.background
+import androidx.compose.material.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.animation.Crossfade
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.draw.clip
+import java.io.File
+import org.minibae.Mixer
+import org.minibae.Song
+import kotlinx.coroutines.delay
+
+class HomeFragment : Fragment() {
+
+    private var pickedFolderUri: Uri? = null
+    private lateinit var viewModel: MusicPlayerViewModel
+    
+    private val currentSong: Song?
+        get() = (activity as? MainActivity)?.currentSong
+        
+    private fun setCurrentSong(song: Song?) {
+        (activity as? MainActivity)?.currentSong = song
+    }
+
+    // Called by the activity when a folder is picked via SAF
+    fun onFolderPicked(uri: Uri) {
+        pickedFolderUri = uri
+        Toast.makeText(this.requireContext(), "Folder selected: $uri", Toast.LENGTH_SHORT).show()
+        try {
+            val takeFlags = (android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+            requireContext().contentResolver.takePersistableUriPermission(uri, takeFlags)
+        } catch (_: Exception) { }
+        // Persist chosen folder for next launch
+        try {
+            val prefs = requireContext().getSharedPreferences("miniBAE_prefs", Context.MODE_PRIVATE)
+            prefs.edit().putString("lastFolderUri", uri.toString()).apply()
+        } catch (_: Exception) { }
+    }
+    
+    // Called by activity when user wants to open a single file
+    fun onFilePicked(uri: Uri) {
+        try {
+            // Get the actual filename from ContentResolver
+            var displayName: String? = null
+            requireContext().contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                    if (nameIndex >= 0) {
+                        displayName = cursor.getString(nameIndex)
+                    }
+                }
+            }
+            
+            val originalName = displayName ?: uri.lastPathSegment?.substringAfterLast('/') ?: "song.mid"
+            
+            // Copy to cache with original filename
+            val file = File(requireContext().cacheDir, originalName)
+            requireContext().contentResolver.openInputStream(uri)?.use { input ->
+                file.outputStream().use { output ->
+                    input.copyTo(output)
+                }
+            }
+            val item = PlaylistItem(file)
+            viewModel.addToPlaylist(item)
+            viewModel.playAtIndex(viewModel.playlist.size - 1)
+            startPlayback(file)
+            savePlaylist()
+            Toast.makeText(requireContext(), "Playing: ${file.name}", Toast.LENGTH_SHORT).show()
+        } catch (ex: Exception) {
+            Toast.makeText(requireContext(), "Failed to load file: ${ex.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    // Called by SettingsFragment when a new bank is loaded to hot-swap the bank on current song
+    fun reloadCurrentSongForBankSwap() {
+        (activity as? MainActivity)?.reloadCurrentSongForBankSwap()
+    }
+
+    private var loadingState: MutableState<Boolean>? = null
+    private var lastFolderPath: String? = null
+
+    private fun savePlaylist() {
+        try {
+            val prefs = requireContext().getSharedPreferences("miniBAE_prefs", Context.MODE_PRIVATE)
+            val paths = viewModel.playlist.map { it.file.absolutePath }
+            val json = paths.joinToString("|||")
+            prefs.edit()
+                .putString("savedPlaylist", json)
+                .putInt("savedCurrentIndex", viewModel.currentIndex)
+                .apply()
+        } catch (ex: Exception) {
+            android.util.Log.e("HomeFragment", "Failed to save playlist: ${ex.message}")
+        }
+    }
+    
+    private fun loadPlaylist() {
+        try {
+            val prefs = requireContext().getSharedPreferences("miniBAE_prefs", Context.MODE_PRIVATE)
+            val json = prefs.getString("savedPlaylist", null)
+            if (json != null && json.isNotEmpty()) {
+                val paths = json.split("|||")
+                val items = paths.mapNotNull { path ->
+                    val file = File(path)
+                    if (file.exists()) PlaylistItem(file) else null
+                }
+                if (items.isNotEmpty()) {
+                    viewModel.addAllToPlaylist(items)
+                    val savedIndex = prefs.getInt("savedCurrentIndex", 0)
+                    if (savedIndex in viewModel.playlist.indices) {
+                        viewModel.currentIndex = savedIndex
+                        viewModel.getCurrentItem()?.let { item ->
+                            viewModel.currentTitle = item.title
+                        }
+                    }
+                    Toast.makeText(requireContext(), "Restored ${items.size} song(s)", Toast.LENGTH_SHORT).show()
+                }
+            }
+        } catch (ex: Exception) {
+            android.util.Log.e("HomeFragment", "Failed to load playlist: ${ex.message}")
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        
+        // Check if bank was reloaded in settings and hot-swap current song
+        val mainActivity = activity as? MainActivity
+        android.util.Log.d("HomeFragment", "onResume: pendingBankReload=${mainActivity?.pendingBankReload}")
+        if (mainActivity?.pendingBankReload == true) {
+            mainActivity.pendingBankReload = false
+            android.util.Log.d("HomeFragment", "Calling reloadCurrentSongForBankSwap")
+            reloadCurrentSongForBankSwap()
+        }
+    }
+
+    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
+        // Attempt to restore last picked folder (only once)
+        if (pickedFolderUri == null) {
+            try {
+                val prefs = requireContext().getSharedPreferences("miniBAE_prefs", Context.MODE_PRIVATE)
+                val last = prefs.getString("lastFolderUri", null)
+                if (last != null) {
+                    val uri = Uri.parse(last)
+                    // Ensure we still hold persistable permission
+                    val hasPerm = requireContext().contentResolver.persistedUriPermissions.any { it.uri == uri }
+                    if (hasPerm) {
+                        pickedFolderUri = uri
+                    }
+                }
+                Mixer.setDefaultVelocityCurve(prefs.getInt("velocity_curve", 0))
+                Mixer.setDefaultReverb(prefs.getInt("default_reverb", 1))
+            } catch (_: Exception) { }
+        }
+        
+        return ComposeView(requireContext()).apply {
+            setContent {
+                viewModel = androidx.lifecycle.viewmodel.compose.viewModel(
+                    viewModelStoreOwner = requireActivity()
+                )
+                val loading = remember { mutableStateOf(false) }
+                loadingState = loading
+
+                // Restore saved volume and playlist on first launch
+                LaunchedEffect(Unit) {
+                    val prefs = requireContext().getSharedPreferences("miniBAE_prefs", Context.MODE_PRIVATE)
+                    viewModel.volumePercent = prefs.getInt("volume_percent", 75)
+                    
+                    if (viewModel.playlist.isEmpty()) {
+                        loadPlaylist()
+                    }
+                }
+
+                // Load folder contents into playlist if we have a folder
+                LaunchedEffect(pickedFolderUri) {
+                    if (pickedFolderUri != null) {
+                        loadFolderIntoPlaylist()
+                    }
+                }
+
+                // Update position periodically when playing
+                LaunchedEffect(viewModel.isPlaying, viewModel.isDraggingSeekBar) {
+                    while (viewModel.isPlaying && !viewModel.isDraggingSeekBar) {
+                        try {
+                            val pos = currentSong?.getPositionMs() ?: 0
+                            val len = currentSong?.getLengthMs() ?: 0
+                            viewModel.currentPositionMs = pos
+                            if (len > 0) viewModel.totalDurationMs = len
+                            
+                            // Auto-advance to next song when current ends
+                            if (len > 0 && pos >= len - 500 && viewModel.hasNext()) {
+                                delay(100)
+                                playNext()
+                            }
+                        } catch (_: Exception) {}
+                        delay(250)
+                    }
+                }
+
+                // Apply volume changes and save to preferences
+                LaunchedEffect(viewModel.volumePercent) {
+                    applyVolume()
+                    val prefs = requireContext().getSharedPreferences("miniBAE_prefs", Context.MODE_PRIVATE)
+                    prefs.edit().putInt("volume_percent", viewModel.volumePercent).apply()
+                }
+
+                MaterialTheme(
+                    colors = if (androidx.compose.foundation.isSystemInDarkTheme()) darkColors() else lightColors()
+                ) {
+                    MusicPlayerScreen(
+                        viewModel = viewModel,
+                        loading = loading.value,
+                        onPlayPause = { togglePlayPause() },
+                        onNext = { playNext() },
+                        onPrevious = { playPrevious() },
+                        onSeek = { ms ->
+                            viewModel.isDraggingSeekBar = false
+                            currentSong?.seekToMs(ms)
+                            viewModel.currentPositionMs = ms
+                        },
+                        onStartDrag = { viewModel.isDraggingSeekBar = true },
+                        onDrag = { ms -> viewModel.currentPositionMs = ms },
+                        onVolumeChange = { viewModel.volumePercent = it },
+                        onPlaylistItemClick = { index ->
+                            playAtIndex(index)
+                        },
+                        onRemoveFromPlaylist = { index ->
+                            // Stop playback if removing the currently playing song
+                            if (index == viewModel.currentIndex) {
+                                currentSong?.stop()
+                                setCurrentSong(null)
+                                viewModel.isPlaying = false
+                                viewModel.currentPositionMs = 0
+                            }
+                            viewModel.removeFromPlaylist(index)
+                            savePlaylist()
+                        },
+                        onAddFolder = {
+                            (activity as? MainActivity)?.requestFolderPicker()
+                        },
+                        onAddFile = {
+                            (activity as? MainActivity)?.requestFilePicker()
+                        },
+                        onSettings = {
+                            (activity as? MainActivity)?.showSettings()
+                        },
+                        onClearPlaylist = {
+                            currentSong?.stop()
+                            setCurrentSong(null)
+                            viewModel.currentPositionMs = 0
+                            viewModel.clearPlaylist()
+                            savePlaylist()
+                        }
+                    )
+                }
+            }
+        }
+    }
+    
+    private fun loadFolderIntoPlaylist() {
+        loadingState?.value = true
+        Thread {
+            try {
+                val files = getMediaFiles()
+                activity?.runOnUiThread {
+                    val items = files.map { PlaylistItem(it) }
+                    // Only add new files to avoid duplicates
+                    val newPath = getMusicDir()?.absolutePath
+                    if (newPath != lastFolderPath) {
+                        // Stop current playback before clearing
+                        currentSong?.stop()
+                        setCurrentSong(null)
+                        viewModel.currentPositionMs = 0
+                        viewModel.clearPlaylist()
+                        viewModel.addAllToPlaylist(items)
+                        lastFolderPath = newPath
+                        savePlaylist()
+                    }
+                    loadingState?.value = false
+                    Toast.makeText(requireContext(), "Loaded ${files.size} song(s)", Toast.LENGTH_SHORT).show()
+                }
+            } catch (_: Exception) {
+                activity?.runOnUiThread {
+                    loadingState?.value = false
+                }
+            }
+        }.start()
+    }
+
+    private fun togglePlayPause() {
+        if (viewModel.isPlaying) {
+            currentSong?.pause()
+            viewModel.isPlaying = false
+        } else {
+            if (viewModel.getCurrentItem() != null) {
+                if (currentSong != null && currentSong?.isPaused() == true) {
+                    // Resume paused song
+                    currentSong?.resume()
+                    viewModel.isPlaying = true
+                } else {
+                    // Start from beginning (song was stopped or null)
+                    viewModel.getCurrentItem()?.let { startPlayback(it.file) }
+                }
+            }
+        }
+    }
+    
+    private fun playNext() {
+        if (viewModel.hasNext()) {
+            viewModel.playNext()
+            viewModel.getCurrentItem()?.let { startPlayback(it.file) }
+        }
+    }
+    
+    private fun playPrevious() {
+        if (viewModel.currentPositionMs > 3000) {
+            // If more than 3 seconds in, restart current song
+            currentSong?.seekToMs(0)
+            viewModel.currentPositionMs = 0
+        } else if (viewModel.hasPrevious()) {
+            viewModel.playPrevious()
+            viewModel.getCurrentItem()?.let { startPlayback(it.file) }
+        }
+    }
+    
+    private fun playAtIndex(index: Int) {
+        if (index in viewModel.playlist.indices) {
+            viewModel.playAtIndex(index)
+            viewModel.getCurrentItem()?.let { startPlayback(it.file) }
+        }
+    }
+    
+    private fun startPlayback(file: File) {
+        try {
+            // Stop current song
+            currentSong?.stop()
+            setCurrentSong(null)
+            
+            // Reset position
+            viewModel.currentPositionMs = 0
+            
+            val song = Mixer.createSong()
+            if (song != null) {
+                setCurrentSong(song)
+                val bytes = file.readBytes()
+                val status = song.loadFromMemory(bytes)
+                if (status == 0) {
+                    applyVolume()
+                    val r = song.start()
+                    if (r == 0) {
+                        viewModel.isPlaying = true
+                        viewModel.currentTitle = file.nameWithoutExtension
+                        Toast.makeText(requireContext(), "Playing: ${file.nameWithoutExtension}", Toast.LENGTH_SHORT).show()
+                    } else {
+                        viewModel.isPlaying = false
+                        Toast.makeText(requireContext(), "Failed to start (err=$r)", Toast.LENGTH_SHORT).show()
+                    }
+                } else {
+                    viewModel.isPlaying = false
+                    Toast.makeText(requireContext(), "Failed to load (err=$status)", Toast.LENGTH_SHORT).show()
+                }
+            } else {
+                Toast.makeText(requireContext(), "Audio mixer not initialized", Toast.LENGTH_SHORT).show()
+            }
+        } catch (ex: Exception) {
+            viewModel.isPlaying = false
+            Toast.makeText(requireContext(), "Playback error: ${ex.localizedMessage}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun applyVolume() {
+        Mixer.setMasterVolumePercent(viewModel.volumePercent)
+        currentSong?.setVolumePercent(viewModel.volumePercent)
+    }
+    
+    private fun getMusicDir(): File? {
+        return if (pickedFolderUri != null) {
+            val docTree = DocumentFile.fromTreeUri(requireContext(), pickedFolderUri!!)
+            if (docTree != null) {
+                val targetDir = File(requireContext().cacheDir, "pickedFolder")
+                if (!targetDir.exists()) targetDir.mkdirs()
+                targetDir.listFiles()?.forEach { it.delete() }
+                docTree.listFiles().forEach { docFile ->
+                    val name = docFile.name ?: return@forEach
+                    val targetFile = File(targetDir, name)
+                    try {
+                        requireContext().contentResolver.openInputStream(docFile.uri)?.use { input ->
+                            targetFile.outputStream().use { output -> input.copyTo(output) }
+                        }
+                    } catch (_: Exception) { }
+                }
+                targetDir
+            } else null
+        } else null
+    }
+
+
+    private fun getMediaFiles(): List<File> {
+        val musicDir = getMusicDir() ?: File("/sdcard/Music")
+        val validExtensions = setOf("mid", "midi", "kar", "rmf", "rmi")
+        val map = LinkedHashMap<String, File>()
+        if (musicDir.exists() && musicDir.isDirectory) {
+            musicDir.listFiles { file -> file.isFile && file.extension.lowercase() in validExtensions }?.forEach { f ->
+                map[f.absolutePath] = f
+            }
+        }
+        return map.values.sortedBy { it.name.lowercase() }
+    }
+}
+
+@Composable
+fun MusicPlayerScreen(
+    viewModel: MusicPlayerViewModel,
+    loading: Boolean,
+    onPlayPause: () -> Unit,
+    onNext: () -> Unit,
+    onPrevious: () -> Unit,
+    onSeek: (Int) -> Unit,
+    onStartDrag: () -> Unit,
+    onDrag: (Int) -> Unit,
+    onVolumeChange: (Int) -> Unit,
+    onPlaylistItemClick: (Int) -> Unit,
+    onRemoveFromPlaylist: (Int) -> Unit,
+    onAddFolder: () -> Unit,
+    onAddFile: () -> Unit,
+    onSettings: () -> Unit,
+    onClearPlaylist: () -> Unit
+) {
+    Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colors.background)) {
+        // Add spacing at top to push player down
+        Spacer(modifier = Modifier.height(35.dp))
+        
+        // Winamp-inspired Player Section
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            elevation = 8.dp,
+            color = MaterialTheme.colors.surface
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                // Title display with retro LCD-style look
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp),
+                    shape = RoundedCornerShape(4.dp),
+                    color = Color(0xFF1a1a2e),
+                    elevation = 2.dp
+                ) {
+                    Box(
+                        modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp),
+                        contentAlignment = Alignment.CenterStart
+                    ) {
+                        Text(
+                            text = viewModel.currentTitle,
+                            color = Color(0xFF00ff41),
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                        )
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(12.dp))
+                
+                // Time display and seek bar
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = formatTime(viewModel.currentPositionMs),
+                        style = MaterialTheme.typography.caption,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colors.primary
+                    )
+                    Text(
+                        text = if (viewModel.totalDurationMs > 0) formatTime(viewModel.totalDurationMs) else "--:--",
+                        style = MaterialTheme.typography.caption,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colors.primary
+                    )
+                }
+                
+                // Seek slider
+                val progress = if (viewModel.totalDurationMs > 0) {
+                    viewModel.currentPositionMs.toFloat() / viewModel.totalDurationMs.toFloat()
+                } else 0f
+                
+                Slider(
+                    value = progress.coerceIn(0f, 1f),
+                    onValueChange = { frac ->
+                        onStartDrag()
+                        val newMs = (frac * viewModel.totalDurationMs).toInt()
+                        onDrag(newMs)
+                    },
+                    onValueChangeFinished = {
+                        onSeek(viewModel.currentPositionMs)
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = SliderDefaults.colors(
+                        thumbColor = MaterialTheme.colors.secondary,
+                        activeTrackColor = MaterialTheme.colors.secondary,
+                        inactiveTrackColor = MaterialTheme.colors.onSurface.copy(alpha = 0.2f)
+                    )
+                )
+                
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                // Transport controls
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(
+                        onClick = onPrevious,
+                        enabled = viewModel.hasPrevious() || viewModel.currentPositionMs > 3000
+                    ) {
+                        Icon(
+                            Icons.Filled.SkipPrevious,
+                            contentDescription = "Previous",
+                            tint = if (viewModel.hasPrevious() || viewModel.currentPositionMs > 3000) 
+                                MaterialTheme.colors.primary else MaterialTheme.colors.onSurface.copy(alpha = 0.3f)
+                        )
+                    }
+                    
+                    // Play/Pause button - larger and prominent
+                    Surface(
+                        modifier = Modifier.size(56.dp),
+                        shape = androidx.compose.foundation.shape.CircleShape,
+                        color = MaterialTheme.colors.secondary,
+                        elevation = 4.dp
+                    ) {
+                        IconButton(
+                            onClick = onPlayPause,
+                            enabled = viewModel.getCurrentItem() != null
+                        ) {
+                            Icon(
+                                if (viewModel.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                                contentDescription = if (viewModel.isPlaying) "Pause" else "Play",
+                                modifier = Modifier.size(32.dp),
+                                tint = Color.White
+                            )
+                        }
+                    }
+                    
+                    IconButton(
+                        onClick = onNext,
+                        enabled = viewModel.hasNext()
+                    ) {
+                        Icon(
+                            Icons.Filled.SkipNext,
+                            contentDescription = "Next",
+                            tint = if (viewModel.hasNext()) MaterialTheme.colors.primary 
+                                else MaterialTheme.colors.onSurface.copy(alpha = 0.3f)
+                        )
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                // Volume control
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        if (viewModel.volumePercent == 0) Icons.Filled.VolumeOff
+                        else if (viewModel.volumePercent < 50) Icons.Filled.VolumeDown
+                        else Icons.Filled.VolumeUp,
+                        contentDescription = "Volume",
+                        tint = MaterialTheme.colors.primary
+                    )
+                    Slider(
+                        value = viewModel.volumePercent.toFloat(),
+                        onValueChange = { onVolumeChange(it.toInt()) },
+                        valueRange = 0f..100f,
+                        modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
+                        colors = SliderDefaults.colors(
+                            thumbColor = MaterialTheme.colors.primary,
+                            activeTrackColor = MaterialTheme.colors.primary,
+                            inactiveTrackColor = MaterialTheme.colors.onSurface.copy(alpha = 0.2f)
+                        )
+                    )
+                    Text(
+                        text = "${viewModel.volumePercent}%",
+                        style = MaterialTheme.typography.caption,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.width(40.dp)
+                    )
+                }
+            }
+        }
+        
+        Spacer(modifier = Modifier.height(8.dp))
+        
+        // Action buttons
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            OutlinedButton(
+                onClick = onAddFolder,
+                modifier = Modifier.weight(1f),
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 12.dp)
+            ) {
+                Icon(Icons.Filled.Folder, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Folder", fontSize = 13.sp)
+            }
+            OutlinedButton(
+                onClick = onAddFile,
+                modifier = Modifier.weight(1f),
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 12.dp)
+            ) {
+                Icon(Icons.Filled.MusicNote, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Song", fontSize = 13.sp)
+            }
+            OutlinedButton(
+                onClick = onSettings,
+                modifier = Modifier.width(56.dp),
+                contentPadding = PaddingValues(8.dp)
+            ) {
+                Icon(Icons.Filled.Settings, contentDescription = "Settings", modifier = Modifier.size(20.dp))
+            }
+        }
+        
+        Spacer(modifier = Modifier.height(4.dp))
+        
+        // Playlist Section
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
+            elevation = 4.dp
+        ) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                // Playlist header
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colors.primary.copy(alpha = 0.1f))
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Playlist (${viewModel.playlist.size})",
+                        style = MaterialTheme.typography.subtitle1,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colors.primary
+                    )
+                    if (viewModel.playlist.isNotEmpty()) {
+                        IconButton(
+                            onClick = onClearPlaylist,
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                Icons.Filled.Clear,
+                                contentDescription = "Clear Playlist",
+                                tint = MaterialTheme.colors.error
+                            )
+                        }
+                    }
+                }
+                
+                Divider()
+                
+                // Playlist items
+                when {
+                    loading -> {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator()
+                        }
+                    }
+                    viewModel.playlist.isEmpty() -> {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(
+                                    Icons.Filled.QueueMusic,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(64.dp),
+                                    tint = MaterialTheme.colors.onSurface.copy(alpha = 0.3f)
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    "No songs in playlist",
+                                    style = MaterialTheme.typography.body1,
+                                    color = MaterialTheme.colors.onSurface.copy(alpha = 0.5f)
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    "Add songs using the buttons above",
+                                    style = MaterialTheme.typography.caption,
+                                    color = MaterialTheme.colors.onSurface.copy(alpha = 0.4f)
+                                )
+                            }
+                        }
+                    }
+                    else -> {
+                        LazyColumn(modifier = Modifier.fillMaxSize()) {
+                            itemsIndexed(viewModel.playlist) { index, item ->
+                                PlaylistItemRow(
+                                    item = item,
+                                    isPlaying = index == viewModel.currentIndex && viewModel.isPlaying,
+                                    isCurrent = index == viewModel.currentIndex,
+                                    onClick = { onPlaylistItemClick(index) },
+                                    onRemove = { onRemoveFromPlaylist(index) }
+                                )
+                                if (index < viewModel.playlist.size - 1) {
+                                    Divider()
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun PlaylistItemRow(
+    item: PlaylistItem,
+    isPlaying: Boolean,
+    isCurrent: Boolean,
+    onClick: () -> Unit,
+    onRemove: () -> Unit
+) {
+    val backgroundColor = when {
+        isCurrent -> MaterialTheme.colors.secondary.copy(alpha = 0.15f)
+        else -> Color.Transparent
+    }
+    
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        color = backgroundColor
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Playing indicator
+            Box(modifier = Modifier.width(32.dp)) {
+                if (isPlaying) {
+                    Icon(
+                        Icons.Filled.PlayArrow,
+                        contentDescription = "Playing",
+                        tint = MaterialTheme.colors.secondary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                } else if (isCurrent) {
+                    Icon(
+                        Icons.Filled.Pause,
+                        contentDescription = "Paused",
+                        tint = MaterialTheme.colors.onSurface.copy(alpha = 0.5f),
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+            
+            // Song title
+            Text(
+                text = item.title,
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.body1,
+                fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
+                color = if (isCurrent) MaterialTheme.colors.secondary else MaterialTheme.colors.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            
+            // Remove button
+            IconButton(
+                onClick = onRemove,
+                modifier = Modifier.size(32.dp)
+            ) {
+                Icon(
+                    Icons.Filled.Close,
+                    contentDescription = "Remove",
+                    tint = MaterialTheme.colors.onSurface.copy(alpha = 0.5f),
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+        }
+    }
+}
+
+private fun formatTime(ms: Int): String {
+    if (ms <= 0) return "0:00"
+    val totalSeconds = ms / 1000
+    val minutes = totalSeconds / 60
+    val seconds = totalSeconds % 60
+    return String.format("%d:%02d", minutes, seconds)
+}

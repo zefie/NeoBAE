@@ -14,6 +14,10 @@
 #include "org_minibae_Mixer.h"
 #include "MiniBAE.h"
 
+#if USE_SF2_SUPPORT == TRUE && _USING_FLUIDSYNTH == TRUE
+#include "GenSF2_FluidSynth.h"
+#endif
+
 //http://developer.android.com/training/articles/perf-jni.html
 
 static JavaVM* gJavaVM = NULL;
@@ -125,20 +129,54 @@ JNIEXPORT jint JNICALL Java_org_minibae_Mixer__1addBankFromFile
 		BAEMixer mixer = (BAEMixer)(intptr_t)reference;
 		if(!mixer) return -1;
 		const char* cpath = (*env)->GetStringUTFChars(env, path, NULL);
-		BAEBankToken token = 0;
-		BAEMixer_UnloadBanks(mixer);
-		BAEResult r = BAEMixer_AddBankFromFile(mixer, cpath, &token);
-		if(r == BAE_NO_ERROR) {
-			char friendlyBuf[256] = "";
-			if(BAE_GetBankFriendlyName(mixer, token, friendlyBuf, (uint32_t)sizeof(friendlyBuf)) == BAE_NO_ERROR) {
-				strncpy(g_lastBankFriendly, friendlyBuf, sizeof(g_lastBankFriendly)-1);
-				g_lastBankFriendly[sizeof(g_lastBankFriendly)-1] = '\0';
-			} else {
-				g_lastBankFriendly[0] = '\0';
-			}
-		}
+	
+	// Check if this is an SF2/DLS file (requires FluidSynth)
+	const char *ext = strrchr(cpath, '.');
+	
+#if USE_SF2_SUPPORT == TRUE && _USING_FLUIDSYNTH == TRUE
+	BAEMixer_UnloadBanks(mixer);
+	GM_UnloadSF2Soundfont();
+	GM_SetMixerSF2Mode(FALSE);
+	
+	if (ext && (strcasecmp(ext, ".sf2") == 0 || strcasecmp(ext, ".dls") == 0 || 
+	            strcasecmp(ext, ".sf3") == 0 || strcasecmp(ext, ".sfo") == 0))
+	{
+		// Load SF2/DLS bank
+		OPErr err = GM_LoadSF2Soundfont(cpath);
 		(*env)->ReleaseStringUTFChars(env, path, cpath);
-		return (jint)r;
+		if (err != NO_ERR)
+		{
+			__android_log_print(ANDROID_LOG_ERROR, "miniBAE", "SF2 bank load failed: %d", err);
+			return (jint)err;
+		}
+		GM_SetMixerSF2Mode(TRUE);
+		// Set friendly name to filename
+		const char *base = cpath;
+		for (const char *p = cpath; *p; ++p) {
+			if (*p == '/' || *p == '\\') base = p + 1;
+		}
+		strncpy(g_lastBankFriendly, base, sizeof(g_lastBankFriendly)-1);
+		g_lastBankFriendly[sizeof(g_lastBankFriendly)-1] = '\0';
+		__android_log_print(ANDROID_LOG_DEBUG, "miniBAE", "SF2 bank loaded: %s", cpath);
+		return 0;
+	}
+#endif
+	
+	// Standard HSB bank loading
+	BAEBankToken token = 0;
+	BAEMixer_UnloadBanks(mixer);
+	BAEResult r = BAEMixer_AddBankFromFile(mixer, cpath, &token);
+	if(r == BAE_NO_ERROR) {
+		char friendlyBuf[256] = "";
+		if(BAE_GetBankFriendlyName(mixer, token, friendlyBuf, (uint32_t)sizeof(friendlyBuf)) == BAE_NO_ERROR) {
+			strncpy(g_lastBankFriendly, friendlyBuf, sizeof(g_lastBankFriendly)-1);
+			g_lastBankFriendly[sizeof(g_lastBankFriendly)-1] = '\0';
+		} else {
+			g_lastBankFriendly[0] = '\0';
+		}
+	}
+	(*env)->ReleaseStringUTFChars(env, path, cpath);
+	return (jint)r;
 }
 
 JNIEXPORT jint JNICALL Java_org_minibae_Mixer__1setMasterVolume
@@ -199,7 +237,38 @@ JNIEXPORT jstring JNICALL Java_org_minibae_Mixer__1getBankFriendlyName
 		int32_t read_total = 0; int32_t r = 0;
 		while(read_total < asset_len && (r = AAsset_read(asset, mem + read_total, (size_t)(asset_len - read_total))) > 0){ read_total += r; }
 		AAsset_close(asset);
-
+#if USE_SF2_SUPPORT == TRUE && _USING_FLUIDSYNTH == TRUE
+	BAEMixer_UnloadBanks(mixer);
+	GM_UnloadSF2Soundfont();
+	GM_SetMixerSF2Mode(FALSE);
+	
+	// Check for SF2/DLS format by magic bytes
+	XBOOL isSF2 = FALSE;
+	if (read_total >= 12) {
+		if (mem[0] == 'R' && mem[1] == 'I' && mem[2] == 'F' && mem[3] == 'F') {
+			if ((mem[8] == 's' && mem[9] == 'f' && mem[10] == 'b' && mem[11] == 'k') ||
+			    (mem[8] == 'D' && mem[9] == 'L' && mem[10] == 'S' && mem[11] == ' ')) {
+				isSF2 = TRUE;
+			}
+		}
+	}
+	
+	if (isSF2) {
+		// Load as SF2/DLS soundfont
+		OPErr err = GM_LoadSF2SoundfontFromMemory((const unsigned char*)mem, (size_t)read_total);
+		free(mem);
+		(*env)->ReleaseStringUTFChars(env, assetName, aname);
+		if (err != NO_ERR) {
+			__android_log_print(ANDROID_LOG_ERROR, "miniBAE", "SF2 asset load failed: %d", err);
+			return (jint)err;
+		}
+		GM_SetMixerSF2Mode(TRUE);
+		strncpy(g_lastBankFriendly, aname, sizeof(g_lastBankFriendly)-1);
+		g_lastBankFriendly[sizeof(g_lastBankFriendly)-1] = '\0';
+		__android_log_print(ANDROID_LOG_DEBUG, "miniBAE", "SF2 asset loaded: %s", aname);
+		return 0;
+	}
+#endif
 		BAEBankToken token = 0;
 		BAEMixer_UnloadBanks(mixer);
 		BAEResult br = BAEMixer_AddBankFromMemory(mixer, (void*)mem, (uint32_t)read_total, &token);
@@ -238,6 +307,52 @@ JNIEXPORT jint JNICALL Java_org_minibae_Mixer__1addBankFromMemory
 	jbyte *bytes = (*env)->GetByteArrayElements(env, data, NULL);
 	if(!bytes) return (jint)BAE_MEMORY_ERR;
 
+	__android_log_print(ANDROID_LOG_DEBUG, "miniBAE", "addBankFromMemory: len=%d bytes", (int)len);
+
+	BAEMixer_UnloadBanks(mixer);
+#if USE_SF2_SUPPORT == TRUE && _USING_FLUIDSYNTH == TRUE
+	__android_log_print(ANDROID_LOG_DEBUG, "miniBAE", "SF2 support is enabled");
+	GM_UnloadSF2Soundfont();
+	GM_SetMixerSF2Mode(FALSE);
+	
+	// Try to detect if this is SF2/DLS format by checking magic bytes
+	// SF2 starts with "RIFF....sfbk" (offset 0 and 8)
+	// DLS starts with "RIFF....DLS " (offset 0 and 8)
+	XBOOL isSF2 = FALSE;
+	if (len >= 12) {
+		unsigned char *ubytes = (unsigned char*)bytes;
+		__android_log_print(ANDROID_LOG_DEBUG, "miniBAE", "Magic bytes: %02X %02X %02X %02X ... %02X %02X %02X %02X",
+			ubytes[0], ubytes[1], ubytes[2], ubytes[3], ubytes[8], ubytes[9], ubytes[10], ubytes[11]);
+		if (ubytes[0] == 'R' && ubytes[1] == 'I' && ubytes[2] == 'F' && ubytes[3] == 'F') {
+			if ((ubytes[8] == 's' && ubytes[9] == 'f' && ubytes[10] == 'b' && ubytes[11] == 'k') ||
+			    (ubytes[8] == 'D' && ubytes[9] == 'L' && ubytes[10] == 'S' && ubytes[11] == ' ')) {
+				isSF2 = TRUE;
+				__android_log_print(ANDROID_LOG_DEBUG, "miniBAE", "Detected SF2/DLS format");
+			}
+		}
+	}
+	
+	if (isSF2) {
+		__android_log_print(ANDROID_LOG_DEBUG, "miniBAE", "Loading SF2 soundfont from memory...");
+		// Load as SF2/DLS soundfont
+		OPErr err = GM_LoadSF2SoundfontFromMemory((const unsigned char*)bytes, (size_t)len);
+		(*env)->ReleaseByteArrayElements(env, data, bytes, JNI_ABORT);
+		if (err != NO_ERR) {
+			__android_log_print(ANDROID_LOG_ERROR, "miniBAE", "SF2 bank load from memory failed: %d", err);
+			return (jint)err;
+		}
+		GM_SetMixerSF2Mode(TRUE);
+		strncpy(g_lastBankFriendly, "SF2 Bank", sizeof(g_lastBankFriendly)-1);
+		g_lastBankFriendly[sizeof(g_lastBankFriendly)-1] = '\0';
+		__android_log_print(ANDROID_LOG_DEBUG, "miniBAE", "SF2 bank loaded from memory");
+		return 0;
+	} else {
+		__android_log_print(ANDROID_LOG_DEBUG, "miniBAE", "Not SF2/DLS format, trying HSB bank load");
+	}
+#else
+	__android_log_print(ANDROID_LOG_DEBUG, "miniBAE", "SF2 support is NOT enabled - USE_SF2_SUPPORT=%d _USING_FLUIDSYNTH=%d", USE_SF2_SUPPORT, _USING_FLUIDSYNTH);
+#endif
+
 	BAEBankToken token = 0;
 	BAEMixer_UnloadBanks(mixer);
 	BAEResult br = BAEMixer_AddBankFromMemory(mixer, (void*)bytes, (uint32_t)len, &token);
@@ -268,6 +383,11 @@ JNIEXPORT jint JNICALL Java_org_minibae_Mixer__1addBuiltInPatches
 
 	BAEBankToken token = 0;
 	BAEMixer_UnloadBanks(mixer);
+#if USE_SF2_SUPPORT == TRUE && _USING_FLUIDSYNTH == TRUE
+	__android_log_print(ANDROID_LOG_DEBUG, "miniBAE", "SF2 support is enabled");
+	GM_UnloadSF2Soundfont();
+	GM_SetMixerSF2Mode(FALSE);
+#endif
 	BAEResult br = BAEMixer_LoadBuiltinBank(mixer, &token);
 	if(br == BAE_NO_ERROR){
 		char friendlyBuf[256] = "";
@@ -283,3 +403,42 @@ JNIEXPORT jint JNICALL Java_org_minibae_Mixer__1addBuiltInPatches
 
 	// Note: JNI setter for native cache dir is implemented in org_minibae_Sound.c
 
+/*
+ * Class:     org_minibae_Mixer
+ * Method:    _getVersion
+ * Signature: ()Ljava/lang/String;
+ */
+JNIEXPORT jstring JNICALL Java_org_minibae_Mixer__1getVersion
+	(JNIEnv* env, jclass clazz)
+{
+	const char* version = BAE_GetVersion();
+	jstring result = (*env)->NewStringUTF(env, version);
+	free((void*)version); // BAE_GetVersion returns malloc'd string
+	return result;
+}
+
+/*
+ * Class:     org_minibae_Mixer
+ * Method:    _getCompileInfo
+ * Signature: ()Ljava/lang/String;
+ */
+JNIEXPORT jstring JNICALL Java_org_minibae_Mixer__1getCompileInfo
+	(JNIEnv* env, jclass clazz)
+{
+	const char* compileInfo = BAE_GetCompileInfo();
+	jstring result = (*env)->NewStringUTF(env, compileInfo);
+	free((void*)compileInfo); // BAE_GetCompileInfo returns malloc'd string
+	return result;
+}
+
+/*
+ * Class:     org_minibae_Mixer
+ * Method:    _getFeatureString
+ * Signature: ()Ljava/lang/String;
+ */
+JNIEXPORT jstring JNICALL Java_org_minibae_Mixer__1getFeatureString
+	(JNIEnv* env, jclass clazz)
+{
+	const char* features = BAE_GetFeatureString();
+	return (*env)->NewStringUTF(env, features); // BAE_GetFeatureString returns static string, no free needed
+}

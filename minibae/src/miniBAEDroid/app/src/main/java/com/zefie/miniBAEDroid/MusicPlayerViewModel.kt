@@ -21,6 +21,13 @@ class MusicPlayerViewModel : ViewModel() {
     // UI state
     var isDraggingSeekBar by mutableStateOf(false)
     
+    // Navigation state
+    var currentScreen by mutableStateOf(NavigationScreen.HOME)
+    var searchQuery by mutableStateOf("")
+    var currentFolderPath by mutableStateOf<String?>(null)
+    val favorites = mutableStateListOf<String>() // Store file paths of favorited songs
+    var showFullPlayer by mutableStateOf(false)
+    
     fun addToPlaylist(item: PlaylistItem) {
         if (playlist.none { it.id == item.id }) {
             playlist.add(item)
@@ -93,4 +100,20 @@ class MusicPlayerViewModel : ViewModel() {
             playlist[currentIndex]
         } else null
     }
+    
+    fun toggleFavorite(filePath: String) {
+        if (favorites.contains(filePath)) {
+            favorites.remove(filePath)
+        } else {
+            favorites.add(filePath)
+        }
+    }
+    
+    fun isFavorite(filePath: String): Boolean {
+        return favorites.contains(filePath)
+    }
+}
+
+enum class NavigationScreen {
+    HOME, SEARCH, FAVORITES, SETTINGS
 }

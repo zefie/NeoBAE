@@ -2,12 +2,16 @@ package com.zefie.miniBAEDroid
 
 import android.os.Bundle
 import android.content.Context
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.view.View
 import android.view.WindowInsets
 import android.view.WindowInsetsController
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import android.widget.Button
 import android.widget.Toast
 import org.minibae.Mixer
@@ -15,9 +19,9 @@ import org.minibae.Mixer
 class MainActivity : AppCompatActivity() {
     private lateinit var openFolderLauncher: androidx.activity.result.ActivityResultLauncher<Uri?>
     private lateinit var openFileLauncher: androidx.activity.result.ActivityResultLauncher<Array<String>>
-    var pendingBankReload = false // Flag to indicate bank was changed in settings
-    var currentSong: org.minibae.Song? = null // Current song instance that survives fragment transitions
-
+    private lateinit var permissionLauncher: androidx.activity.result.ActivityResultLauncher<Array<String>>
+    var pendingBankReload = false
+    var currentSong: org.minibae.Song? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -25,6 +29,17 @@ class MainActivity : AppCompatActivity() {
         
         // Hide system navigation bar
         hideSystemUI()
+        
+        // Register permission launcher
+        permissionLauncher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
+            val allGranted = permissions.entries.all { it.value }
+            if (!allGranted) {
+                Toast.makeText(this, "Storage permissions are required to access music files", Toast.LENGTH_LONG).show()
+            }
+        }
+        
+        // Request storage permissions
+        requestStoragePermissions()
 
         // Load native library (built by the module 'miniBAE')
         System.loadLibrary("miniBAE")
@@ -88,7 +103,6 @@ class MainActivity : AppCompatActivity() {
 
         // Setup fragments
         val homeTab = findViewById<Button>(R.id.tab_home)
-        val settingsTab = findViewById<Button>(R.id.tab_settings)
 
         // Register SAF launchers
         openFolderLauncher = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri: Uri? ->
@@ -114,9 +128,6 @@ class MainActivity : AppCompatActivity() {
         homeTab.setOnClickListener {
             supportFragmentManager.beginTransaction().replace(R.id.fragment_container, HomeFragment()).commit()
         }
-        settingsTab.setOnClickListener {
-            supportFragmentManager.beginTransaction().replace(R.id.fragment_container, SettingsFragment()).commit()
-        }
     }
     
     fun requestFolderPicker() {
@@ -125,14 +136,6 @@ class MainActivity : AppCompatActivity() {
     
     fun requestFilePicker() {
         openFileLauncher.launch(arrayOf("audio/midi", "audio/x-midi", "audio/*", "*/*"))
-    }
-    
-    fun showSettings() {
-        supportFragmentManager.beginTransaction().replace(R.id.fragment_container, SettingsFragment()).commit()
-    }
-    
-    fun showHome() {
-        supportFragmentManager.beginTransaction().replace(R.id.fragment_container, HomeFragment()).commit()
     }
     
     fun requestBankReload() {
@@ -225,18 +228,17 @@ class MainActivity : AppCompatActivity() {
     
     private fun hideSystemUI() {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
-            // Android 11 (API 30) and above
+            // Android 11 (API 30) and above - only hide navigation bar, keep status bar
             window.setDecorFitsSystemWindows(false)
             window.insetsController?.let {
-                it.hide(WindowInsets.Type.systemBars())
+                it.hide(WindowInsets.Type.navigationBars())
                 it.systemBarsBehavior = WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             }
         } else {
-            // Android 10 and below
+            // Android 10 and below - only hide navigation bar, keep status bar
             @Suppress("DEPRECATION")
             window.decorView.systemUiVisibility = (
                 View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
-                or View.SYSTEM_UI_FLAG_FULLSCREEN
                 or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
                 or View.SYSTEM_UI_FLAG_LAYOUT_STABLE
                 or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
@@ -252,16 +254,29 @@ class MainActivity : AppCompatActivity() {
         }
     }
     
+    private fun requestStoragePermissions() {
+        val permissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            arrayOf(android.Manifest.permission.READ_MEDIA_AUDIO)
+        } else {
+            arrayOf(
+                android.Manifest.permission.READ_EXTERNAL_STORAGE,
+                android.Manifest.permission.WRITE_EXTERNAL_STORAGE
+            )
+        }
+        
+        val needsPermission = permissions.any {
+            ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
+        }
+        
+        if (needsPermission) {
+            permissionLauncher.launch(permissions)
+        }
+    }
+    
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
-        val fragment = supportFragmentManager.findFragmentById(R.id.fragment_container)
-        if (fragment is SettingsFragment) {
-            // Return to player instead of exiting
-            showHome()
-        } else {
-            // On player screen, exit app
-            super.onBackPressed()
-        }
+        // Exit app on back pressed
+        super.onBackPressed()
     }
 
     override fun onDestroy() {

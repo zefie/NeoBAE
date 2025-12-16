@@ -1,0 +1,13 @@
+prefix=/home/zefie/dev/miniBAE/minibae/src/miniBAEDroid/app/src/main/jniLibs/armeabi-v7a/libsndfile
+exec_prefix=${prefix}
+libdir=/home/zefie/dev/miniBAE/minibae/src/miniBAEDroid/app/src/main/jniLibs/armeabi-v7a/libsndfile/lib
+includedir=/home/zefie/dev/miniBAE/minibae/src/miniBAEDroid/app/src/main/jniLibs/armeabi-v7a/libsndfile/include
+
+Name: sndfile
+Description: A library for reading and writing audio files
+Requires:
+Requires.private: flac ogg vorbis vorbisenc opus 
+Version: 1.2.2
+Libs: -L${libdir} -lsndfile
+Libs.private: 
+Cflags: -I${includedir}

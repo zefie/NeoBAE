@@ -79,6 +79,9 @@ public class Mixer
 	private static native int _setMasterVolume(long reference, int fixedVolume);
 	private static native int _setDefaultVelocityCurve(int curveType);
 	private static native String _getBankFriendlyName(long reference);
+	private static native String _getVersion();
+	private static native String _getCompileInfo();
+	private static native String _getFeatureString();
 
 	public static int setDefaultReverb(int reverbType){ if(mMixer==null) return -1; return _setDefaultReverb(mMixer.mReference, reverbType); }
 	public static int addBankFromFile(String path){ if(mMixer==null) return -1; return _addBankFromFile(mMixer.mReference, path); }
@@ -95,4 +98,7 @@ public class Mixer
 	}
 	public static int setDefaultVelocityCurve(int curveType){ return _setDefaultVelocityCurve(curveType); }
 	public static String getBankFriendlyName(){ if(mMixer==null) return null; return _getBankFriendlyName(mMixer.mReference); }
+	public static String getVersion(){ return _getVersion(); }
+	public static String getCompileInfo(){ return _getCompileInfo(); }
+	public static String getFeatureString(){ return _getFeatureString(); }
 }

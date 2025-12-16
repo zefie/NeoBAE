@@ -189,9 +189,11 @@ class SettingsFragment: Fragment(){
                         onVolumeChange = { value ->
                             masterVolume.value = value
                             Mixer.setMasterVolumePercent(value)
-                            prefs.edit().putInt(keyMasterVol, value).apply()                        },
+                            prefs.edit().putInt(keyMasterVol, value).apply()
+                        },
                         onClose = {
-                            (activity as? MainActivity)?.showHome()                        }
+                            requireActivity().onBackPressed()
+                        }
                     )
                 }
             }
