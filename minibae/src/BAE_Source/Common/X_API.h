@@ -517,7 +517,7 @@ typedef unsigned char   XBOOL;
 typedef uint16_t  XBOOL16;
 typedef int32_t            LOOPCOUNT;
 
-typedef char            XSBYTE;         // 8 bit signed
+typedef signed char     XSBYTE;         // 8 bit signed
 typedef unsigned char   XBYTE;          // 8 bit unsigned
 typedef int16_t           XSWORD;         // 16 bit signed
 typedef uint16_t  XWORD;          // 16 bit unsigned
@@ -1098,5 +1098,3 @@ XERR PV_CopyWithinFile(XFILE fileRef, int32_t srcPos, int32_t dstPos, int32_t si
 #endif
 
 #endif  // __X_API__
-
-

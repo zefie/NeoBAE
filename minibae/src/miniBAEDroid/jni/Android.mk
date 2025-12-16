@@ -59,10 +59,7 @@ LOCAL_SRC_FILES	:= \
 			../BAE_MPEG_Source_II/XMPEGFilesSun.c \
 			Platform/jni/org_minibae_Mixer.c \
 			Platform/jni/org_minibae_SongExt.c \
-			Platform/jni/org_minibae_Sound.c
-
-
-LOCAL_SRC_FILES += \
+			Platform/jni/org_minibae_Sound.c \
 			Platform/BAE_API_Android.c
 
 LOCAL_LDFLAGS += -Wl,-z,max-page-size=16384
@@ -71,10 +68,9 @@ LOCAL_C_INCLUDES	:= $(LOCAL_PATH)/Common
 LOCAL_C_INCLUDES	+= $(LOCAL_PATH)/Platform
 LOCAL_C_INCLUDES	+= $(LOCAL_PATH)/../BAE_MPEG_Source_II
 LOCAL_C_INCLUDES	+= $(LOCAL_PATH)/../thirdparty/minimp3/
-LOCAL_C_INCLUDES	+= $(LOCAL_PATH)/../banks/patches111/
 LOCAL_C_INCLUDES	+= $(LOCAL_PATH)/../miniBAEDroid
 
-LOCAL_CFLAGS := -DX_PLATFORM=X_ANDROID -D__ANDROID__=1 -D_BUILT_IN_PATCHES=1 -DUSE_MINIMP3_WRAPPER=1 -DUSE_MPEG_DECODER=1 -D_DEBUG=1 -Wno-pragma-pack
+LOCAL_CFLAGS := -O2 -DX_PLATFORM=X_ANDROID -D__ANDROID__=1 -D_BUILT_IN_PATCHES=1 -DUSE_MINIMP3_WRAPPER=1 -DUSE_MPEG_DECODER=1 -D_DEBUG=1 -Wall -fsigned-char
 
 # Only set ARM mode for 32-bit ARM builds; do not force for arm64
 ifeq ($(TARGET_ARCH_ABI), armeabi-v7a)
@@ -89,4 +85,3 @@ LOCAL_LDLIBS    += -llog
 LOCAL_LDLIBS    += -landroid
 
 include $(BUILD_SHARED_LIBRARY)
-

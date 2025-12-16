@@ -494,73 +494,49 @@ int32_t BAE_FileDelete(void *fileName)
 // Return -1 if error, otherwise file handle
 intptr_t BAE_FileOpenForRead(void *fileName)
 {
-#if 0
-    CFURLRef dataURL;
-    CFStringRef cfResourceName;
-    char fullPath[PATH_MAX];
-    Boolean ok = FALSE;
-
     if (fileName)
     {
-        fullPath[0] = 0;
-        cfResourceName = CFStringCreateWithCString(NULL, fileName, kCFStringEncodingASCII);
-        dataURL = CFBundleCopyResourceURL(CFBundleGetMainBundle(), cfResourceName, NULL, NULL);
-        if (dataURL)
-        {
-            ok = CFURLGetFileSystemRepresentation(dataURL, TRUE, (UInt8*)fullPath, PATH_MAX);
-            CFRelease(dataURL); 
-        }
-        CFRelease(cfResourceName);
-
-        if ((ok == TRUE) && (fullPath[0]))
-        {
-            return (intptr_t)open(fullPath, O_RDONLY);
-        }
+        return (intptr_t)open((char *)fileName, O_RDONLY);
     }
-#endif
     return -1;
 }
 
 intptr_t BAE_FileOpenForWrite(void *fileName)
 {
-#if 0
     if (fileName)
     {
-        return(open((char *)fileName, O_WRONLY | O_CREAT | O_TRUNC));
+        return (intptr_t)open((char *)fileName, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
     }
-#endif
     return -1;
 }
 
 intptr_t BAE_FileOpenForReadWrite(void *fileName)
 {
-#if 0
     if (fileName)
     {
-        return(open((char *)fileName, O_RDWR));
+        return (intptr_t)open((char *)fileName, O_RDWR);
     }
-#endif
     return -1;
 }
 
 // Close a file
 void BAE_FileClose(intptr_t fileReference)
 {
-#if 0
-    close(fileReference);
-#endif
+    if (fileReference != -1)
+    {
+        close((int)fileReference);
+    }
 }
 
 // Read a block of memory from a file.
 // Return -1 if error, otherwise length of data read.
 int32_t BAE_ReadFile(intptr_t fileReference, void *pBuffer, int32_t bufferLength)
 {
-#if 0
-    if ((pBuffer) && (bufferLength))
+    if (pBuffer && bufferLength)
     {
-        return(read(fileReference, (char *)pBuffer, bufferLength));
+        ssize_t bytesRead = read((int)fileReference, (char *)pBuffer, (size_t)bufferLength);
+        return (int32_t)bytesRead;
     }
-#endif
     return -1;
 }
 
@@ -568,12 +544,11 @@ int32_t BAE_ReadFile(intptr_t fileReference, void *pBuffer, int32_t bufferLength
 // Return -1 if error, otherwise length of data written.
 int32_t BAE_WriteFile(intptr_t fileReference, void *pBuffer, int32_t bufferLength)
 {
-#if 0
-    if ((pBuffer) && (bufferLength))
+    if (pBuffer && bufferLength)
     {
-        return(write(fileReference, (char *)pBuffer, bufferLength));
+        ssize_t bytesWritten = write((int)fileReference, (char *)pBuffer, (size_t)bufferLength);
+        return (int32_t)bytesWritten;
     }
-#endif
     return -1;
 }
 
@@ -581,38 +556,35 @@ int32_t BAE_WriteFile(intptr_t fileReference, void *pBuffer, int32_t bufferLengt
 // Return -1 if error, otherwise 0.
 int32_t BAE_SetFilePosition(intptr_t fileReference, uint32_t filePosition)
 {
-#if 0
-    return((lseek(fileReference, filePosition, SEEK_SET) == -1) ? -1 : 0);
-#endif
-    return -1;
+    off_t result = lseek((int)fileReference, (off_t)filePosition, SEEK_SET);
+    return (result == (off_t)-1) ? -1 : 0;
 }
 
 // get file position in absolute file bytes
 uint32_t BAE_GetFilePosition(intptr_t fileReference)
 {
-#if 0
-    return(lseek(fileReference, 0, SEEK_CUR));
-#endif
-    return -1;
+    off_t pos = lseek((int)fileReference, 0, SEEK_CUR);
+    return (pos == (off_t)-1) ? 0 : (uint32_t)pos;
 }
 
 // get length of file
 uint32_t BAE_GetFileLength(intptr_t fileReference)
 {
-#if 0
-    uint32_t pos;
-
-    pos = lseek(fileReference, 0, SEEK_END);
-    lseek(fileReference, 0, SEEK_SET);
-    return(pos);
-#endif
-    return -1;
+    off_t currentPos = lseek((int)fileReference, 0, SEEK_CUR);
+    if (currentPos == (off_t)-1) return 0;
+    
+    off_t length = lseek((int)fileReference, 0, SEEK_END);
+    if (length == (off_t)-1) return 0;
+    
+    lseek((int)fileReference, currentPos, SEEK_SET);
+    return (uint32_t)length;
 }
 
 // set the length of a file. Return 0, if ok, or -1 for error
 int BAE_SetFileLength(intptr_t fileReference, uint32_t newSize)
 {
-    return -1;
+    int result = ftruncate((int)fileReference, (off_t)newSize);
+    return (result == 0) ? 0 : -1;
 }
 
 // This function is called at render time with w route bus flag. If there's
