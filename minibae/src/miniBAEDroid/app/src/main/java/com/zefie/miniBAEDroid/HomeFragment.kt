@@ -89,6 +89,7 @@ class HomeFragment : Fragment() {
             viewModel.addToPlaylist(item)
             viewModel.playAtIndex(viewModel.playlist.size - 1)
             startPlayback(file)
+            savePlaylist()
             Toast.makeText(requireContext(), "Playing: ${file.name}", Toast.LENGTH_SHORT).show()
         } catch (ex: Exception) {
             Toast.makeText(requireContext(), "Failed to load file: ${ex.message}", Toast.LENGTH_SHORT).show()
@@ -102,6 +103,47 @@ class HomeFragment : Fragment() {
 
     private var loadingState: MutableState<Boolean>? = null
     private var lastFolderPath: String? = null
+
+    private fun savePlaylist() {
+        try {
+            val prefs = requireContext().getSharedPreferences("miniBAE_prefs", Context.MODE_PRIVATE)
+            val paths = viewModel.playlist.map { it.file.absolutePath }
+            val json = paths.joinToString("|||")
+            prefs.edit()
+                .putString("savedPlaylist", json)
+                .putInt("savedCurrentIndex", viewModel.currentIndex)
+                .apply()
+        } catch (ex: Exception) {
+            android.util.Log.e("HomeFragment", "Failed to save playlist: ${ex.message}")
+        }
+    }
+    
+    private fun loadPlaylist() {
+        try {
+            val prefs = requireContext().getSharedPreferences("miniBAE_prefs", Context.MODE_PRIVATE)
+            val json = prefs.getString("savedPlaylist", null)
+            if (json != null && json.isNotEmpty()) {
+                val paths = json.split("|||")
+                val items = paths.mapNotNull { path ->
+                    val file = File(path)
+                    if (file.exists()) PlaylistItem(file) else null
+                }
+                if (items.isNotEmpty()) {
+                    viewModel.addAllToPlaylist(items)
+                    val savedIndex = prefs.getInt("savedCurrentIndex", 0)
+                    if (savedIndex in viewModel.playlist.indices) {
+                        viewModel.currentIndex = savedIndex
+                        viewModel.getCurrentItem()?.let { item ->
+                            viewModel.currentTitle = item.title
+                        }
+                    }
+                    Toast.makeText(requireContext(), "Restored ${items.size} song(s)", Toast.LENGTH_SHORT).show()
+                }
+            }
+        } catch (ex: Exception) {
+            android.util.Log.e("HomeFragment", "Failed to load playlist: ${ex.message}")
+        }
+    }
 
     override fun onResume() {
         super.onResume()
@@ -142,6 +184,13 @@ class HomeFragment : Fragment() {
                 )
                 val loading = remember { mutableStateOf(false) }
                 loadingState = loading
+
+                // Restore saved playlist on first launch
+                LaunchedEffect(Unit) {
+                    if (viewModel.playlist.isEmpty()) {
+                        loadPlaylist()
+                    }
+                }
 
                 // Load folder contents into playlist if we have a folder
                 LaunchedEffect(pickedFolderUri) {
@@ -203,6 +252,7 @@ class HomeFragment : Fragment() {
                                 viewModel.currentPositionMs = 0
                             }
                             viewModel.removeFromPlaylist(index)
+                            savePlaylist()
                         },
                         onAddFolder = {
                             (activity as? MainActivity)?.requestFolderPicker()
@@ -218,6 +268,7 @@ class HomeFragment : Fragment() {
                             setCurrentSong(null)
                             viewModel.currentPositionMs = 0
                             viewModel.clearPlaylist()
+                            savePlaylist()
                         }
                     )
                 }
@@ -242,6 +293,7 @@ class HomeFragment : Fragment() {
                         viewModel.clearPlaylist()
                         viewModel.addAllToPlaylist(items)
                         lastFolderPath = newPath
+                        savePlaylist()
                     }
                     loadingState?.value = false
                     Toast.makeText(requireContext(), "Loaded ${files.size} song(s)", Toast.LENGTH_SHORT).show()

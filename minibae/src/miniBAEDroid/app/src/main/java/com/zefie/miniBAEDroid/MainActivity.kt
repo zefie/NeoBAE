@@ -37,13 +37,46 @@ class MainActivity : AppCompatActivity() {
         else {
             // Provide native code with a writable cache directory path to avoid permission issues when creating temp files
             Mixer.setNativeCacheDir(cacheDir.absolutePath)
-            // Ensure built-in instrument patches are loaded so MIDI/RMF playback produces sound.
-            // Many devices need at least one bank of patches; failure is non-fatal but will result in silent MIDI.
-            val br = Mixer.addBuiltInPatches()
-            if (br != 0) {
-                Toast.makeText(this, "Failed to load built-in patches: $br", Toast.LENGTH_SHORT).show()
+            
+            // Restore saved bank or use built-in patches
+            var bankLoaded = false
+            try {
+                val prefs = getSharedPreferences("miniBAE_prefs", Context.MODE_PRIVATE)
+                val lastBankPath = prefs.getString("last_bank_path", null)
+                
+                if (!lastBankPath.isNullOrEmpty() && lastBankPath != "__builtin__") {
+                    // Try to restore saved bank file
+                    val bankFile = java.io.File(lastBankPath)
+                    if (bankFile.exists()) {
+                        try {
+                            val bytes = bankFile.readBytes()
+                            val br = Mixer.addBankFromMemory(bytes)
+                            if (br == 0) {
+                                bankLoaded = true
+                                Toast.makeText(this, "Restored bank: ${Mixer.getBankFriendlyName() ?: bankFile.name}", Toast.LENGTH_SHORT).show()
+                            }
+                        } catch (ex: Exception) {
+                            android.util.Log.e("MainActivity", "Failed to restore saved bank: ${ex.message}")
+                        }
+                    } else {
+                        android.util.Log.w("MainActivity", "Saved bank file not found: $lastBankPath")
+                    }
+                }
+            } catch (ex: Exception) {
+                android.util.Log.e("MainActivity", "Error restoring bank: ${ex.message}")
             }
-            // Apply persisted reverb setting after song start so it affects playback
+            
+            // Fall back to built-in patches if no bank was loaded
+            if (!bankLoaded) {
+                val br = Mixer.addBuiltInPatches()
+                if (br != 0) {
+                    Toast.makeText(this, "Failed to load built-in patches: $br", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(this, "Using built-in patches", Toast.LENGTH_SHORT).show()
+                }
+            }
+            
+            // Apply persisted reverb and velocity curve settings
             try {
                 val prefs = getSharedPreferences("miniBAE_prefs", Context.MODE_PRIVATE)
                 val savedReverb = prefs.getInt("default_reverb", 1)

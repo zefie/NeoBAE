@@ -146,37 +146,11 @@ class SettingsFragment: Fragment(){
         velocityCurve.value = prefs.getInt(keyCurve, 0)
         masterVolume.value = prefs.getInt(keyMasterVol, 75)
         
-        // Initialize bank name
+        // Initialize bank name from current mixer state
         Thread {
             val friendly = Mixer.getBankFriendlyName()
             activity?.runOnUiThread {
-                if (!friendly.isNullOrEmpty()) {
-                    currentBankName.value = friendly
-                } else {
-                    // Try to restore saved bank
-                    val lastBank = prefs.getString(keyBankPath, null)
-                    if (lastBank.isNullOrEmpty() || lastBank == builtinMarker) {
-                        loadBuiltInPatches()
-                    } else {
-                        val f = File(lastBank)
-                        if (f.exists()) {
-                            try {
-                                val bytes = f.readBytes()
-                                val r = Mixer.addBankFromMemory(bytes)
-                                if (r == 0) {
-                                    val fn = Mixer.getBankFriendlyName()
-                                    currentBankName.value = fn ?: f.name
-                                } else {
-                                    loadBuiltInPatches()
-                                }
-                            } catch (ex: Exception) {
-                                loadBuiltInPatches()
-                            }
-                        } else {
-                            loadBuiltInPatches()
-                        }
-                    }
-                }
+                currentBankName.value = friendly ?: "Unknown Bank"
             }
         }.start()
         

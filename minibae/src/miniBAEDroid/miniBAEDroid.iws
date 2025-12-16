@@ -32,6 +32,7 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="db131c5e-54d9-46fb-97da-0859a92df4f1" name="Changes" comment="">
+      <change afterPath="$PROJECT_DIR$/app/miniBAEDroid.app.androidTest.iml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../../../.github/xmf_loader.ts" beforeDir="false" afterPath="$PROJECT_DIR$/../../../.github/xmf_loader.ts" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../../../content/mxmf/Hummingbird.mxmf" beforeDir="false" afterPath="$PROJECT_DIR$/../../../content/mxmf/Hummingbird.mxmf" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../../../content/mxmf/Streetwise.mxmf" beforeDir="false" afterPath="$PROJECT_DIR$/../../../content/mxmf/Streetwise.mxmf" afterDir="false" />
@@ -1152,6 +1153,7 @@
       <change beforePath="$PROJECT_DIR$/../BAE_Source/Platform/BAEBuildOptions_Android.h" beforeDir="false" afterPath="$PROJECT_DIR$/../BAE_Source/Platform/BAEBuildOptions_Android.h" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../BAE_Source/Platform/BAEBuildOptions_IOS.h" beforeDir="false" afterPath="$PROJECT_DIR$/../BAE_Source/Platform/BAEBuildOptions_IOS.h" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../BAE_Source/Platform/BAEBuildOptions_MacOSX.h" beforeDir="false" afterPath="$PROJECT_DIR$/../BAE_Source/Platform/BAEBuildOptions_MacOSX.h" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../BAE_Source/Platform/BAEBuildOptions_WASM.h" beforeDir="false" afterPath="$PROJECT_DIR$/../BAE_Source/Platform/BAEBuildOptions_WASM.h" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../BAE_Source/Platform/BAEBuildOptions_WinOS.h" beforeDir="false" afterPath="$PROJECT_DIR$/../BAE_Source/Platform/BAEBuildOptions_WinOS.h" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../BAE_Source/Platform/BAE_API.h" beforeDir="false" afterPath="$PROJECT_DIR$/../BAE_Source/Platform/BAE_API.h" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../BAE_Source/Platform/BAE_API_Android.c" beforeDir="false" afterPath="$PROJECT_DIR$/../BAE_Source/Platform/BAE_API_Android.c" afterDir="false" />
@@ -1162,6 +1164,7 @@
       <change beforePath="$PROJECT_DIR$/../BAE_Source/Platform/BAE_API_WinOS_Thread.c" beforeDir="false" afterPath="$PROJECT_DIR$/../BAE_Source/Platform/BAE_API_WinOS_Thread.c" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../BAE_Source/Platform/jni/org_minibae_Mixer.c" beforeDir="false" afterPath="$PROJECT_DIR$/../BAE_Source/Platform/jni/org_minibae_Mixer.c" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../BAE_Source/Platform/jni/org_minibae_SongExt.c" beforeDir="false" afterPath="$PROJECT_DIR$/../BAE_Source/Platform/jni/org_minibae_SongExt.c" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../BAE_Source/Platform/jni/org_minibae_Sound.c" beforeDir="false" afterPath="$PROJECT_DIR$/../BAE_Source/Platform/jni/org_minibae_Sound.c" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../banks/BankDevelopment/Final/small_bank_details.xls" beforeDir="false" afterPath="$PROJECT_DIR$/../banks/BankDevelopment/Final/small_bank_details.xls" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../banks/BankDevelopment/HruskaNokiaSoundsetRev1/Boston Rain.mid" beforeDir="false" afterPath="$PROJECT_DIR$/../banks/BankDevelopment/HruskaNokiaSoundsetRev1/Boston Rain.mid" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../banks/BankDevelopment/HruskaNokiaSoundsetRev1/BostonRain.rmf" beforeDir="false" afterPath="$PROJECT_DIR$/../banks/BankDevelopment/HruskaNokiaSoundsetRev1/BostonRain.rmf" afterDir="false" />
@@ -2367,18 +2370,22 @@
       <change beforePath="$PROJECT_DIR$/../banks/random/SCI FI AUDIO BANK.bsn" beforeDir="false" afterPath="$PROJECT_DIR$/../banks/random/SCI FI AUDIO BANK.bsn" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../banks/random/Underground Export Bank.bsn" beforeDir="false" afterPath="$PROJECT_DIR$/../banks/random/Underground Export Bank.bsn" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app/build.gradle" beforeDir="false" afterPath="$PROJECT_DIR$/app/build.gradle" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/miniBAEDroid.app.iml" beforeDir="false" afterPath="$PROJECT_DIR$/app/miniBAEDroid.app.iml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/miniBAEDroid.app.iml" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/app/src/main/AndroidManifest.xml" beforeDir="false" afterPath="$PROJECT_DIR$/app/src/main/AndroidManifest.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app/src/main/java/com/zefie/miniBAEDroid/HomeFragment.kt" beforeDir="false" afterPath="$PROJECT_DIR$/app/src/main/java/com/zefie/miniBAEDroid/HomeFragment.kt" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app/src/main/java/com/zefie/miniBAEDroid/MainActivity.kt" beforeDir="false" afterPath="$PROJECT_DIR$/app/src/main/java/com/zefie/miniBAEDroid/MainActivity.kt" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app/src/main/java/com/zefie/miniBAEDroid/SettingsFragment.kt" beforeDir="false" afterPath="$PROJECT_DIR$/app/src/main/java/com/zefie/miniBAEDroid/SettingsFragment.kt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/src/main/java/org/minibae/Mixer.java" beforeDir="false" afterPath="$PROJECT_DIR$/app/src/main/java/org/minibae/Mixer.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app/src/main/java/org/minibae/Song.java" beforeDir="false" afterPath="$PROJECT_DIR$/app/src/main/java/org/minibae/Song.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/src/main/java/org/minibae/Sound.java" beforeDir="false" afterPath="$PROJECT_DIR$/app/src/main/java/org/minibae/Sound.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app/src/main/res/layout/activity_main.xml" beforeDir="false" afterPath="$PROJECT_DIR$/app/src/main/res/layout/activity_main.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app/src/main/res/values/themes.xml" beforeDir="false" afterPath="$PROJECT_DIR$/app/src/main/res/values/themes.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/build.gradle" beforeDir="false" afterPath="$PROJECT_DIR$/build.gradle" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/jni/Android.mk" beforeDir="false" afterPath="$PROJECT_DIR$/jni/Android.mk" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/jni/org_minibae_Mixer.h" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/miniBAEDroid.ipr" beforeDir="false" afterPath="$PROJECT_DIR$/miniBAEDroid.ipr" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/miniBAEDroid.iws" beforeDir="false" afterPath="$PROJECT_DIR$/miniBAEDroid.iws" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/com/zefie/miniBAEDroid/StartActivity.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/com/zefie/miniBAEDroid/StartActivity.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../playbae/win_playbae.dsp" beforeDir="false" afterPath="$PROJECT_DIR$/../playbae/win_playbae.dsp" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../playbae/win_playbae.dsw" beforeDir="false" afterPath="$PROJECT_DIR$/../playbae/win_playbae.dsw" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../thirdparty/flac" beforeDir="false" afterPath="$PROJECT_DIR$/../thirdparty/flac" afterDir="false" />
@@ -2438,7 +2445,7 @@
   <component name="ClangdSettings">
     <option name="formatViaClangd" value="false" />
   </component>
-  <component name="ExecutionTargetManager" SELECTED_TARGET="device_and_snapshot_combo_box_target[DeviceId(pluginId=PhysicalDevice, isTemplate=false, identifier=serial=TANK300000054963)]" />
+  <component name="ExecutionTargetManager" SELECTED_TARGET="device_and_snapshot_combo_box_target[DeviceId(pluginId=LocalEmulator, isTemplate=false, identifier=path=C:\Users\zefie\.android\avd\Medium_Phone.avd)]" />
   <component name="ExternalProjectsData">
     <projectState path="$PROJECT_DIR$">
       <ProjectState />
@@ -2485,10 +2492,12 @@
     "RunOnceActivity.cidr.known.project.marker": "true",
     "RunOnceActivity.git.unshallow": "true",
     "RunOnceActivity.readMode.enableVisualFormatting": "true",
+    "android.gradle.sync.needed": "true",
     "cf.first.check.clang-format": "false",
     "cidr.known.project.marker": "true",
     "git-widget-placeholder": "main",
     "ignore.virus.scanning.warn.message": "true",
+    "kotlin-language-version-configured": "true",
     "last_opened_file_path": "C:/Users/zefie/Downloads/miniBAE/minibae/src/miniBAEDroid",
     "project.structure.last.edited": "Modules",
     "project.structure.proportion": "0.17",
