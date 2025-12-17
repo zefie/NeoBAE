@@ -986,12 +986,12 @@ intptr_t BAE_FileOpenForReadWrite(void *fileName)
     if (fileName)
     {
 #if USE_WIN32_FILE_IO == 0
-        return _open((char *)fileName, _O_RDWR | _O_BINARY);
+        return _open((char *)fileName, _O_RDWR | _O_CREAT | _O_BINARY, _S_IREAD | _S_IWRITE);
 #else
         HANDLE  file;
 
         file = CreateFile((LPCTSTR)fileName, GENERIC_READ | GENERIC_WRITE, 0, NULL, 
-                                    OPEN_EXISTING,
+                                    OPEN_ALWAYS,
                                     FILE_FLAG_RANDOM_ACCESS,
                                     NULL);
         if (file == INVALID_HANDLE_VALUE)

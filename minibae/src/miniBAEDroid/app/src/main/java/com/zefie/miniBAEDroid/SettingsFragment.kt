@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.*
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material.icons.filled.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -37,12 +38,14 @@ class SettingsFragment: Fragment(){
     private val keyMasterVol = "master_volume"
     private val keyCurve = "velocity_curve"
     private val keyReverb = "default_reverb"
+    private val keyExportCodec = "export_codec"
     
     private var currentBankName = mutableStateOf("Loading...")
     private var isLoadingBank = mutableStateOf(false)
     private var reverbType = mutableStateOf(1)
     private var velocityCurve = mutableStateOf(0)
     private var masterVolume = mutableStateOf(75)
+    private var exportCodec = mutableStateOf(1) // Default to OGG
 
     private val openHsbPicker = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
@@ -72,7 +75,7 @@ class SettingsFragment: Fragment(){
                     // Read bytes and call native memory loader to avoid filesystem path issues
                     val bytes = cached.readBytes()
                     android.util.Log.d("SettingsFragment", "Calling Mixer.addBankFromMemory with ${bytes.size} bytes")
-                    val r = Mixer.addBankFromMemory(bytes)
+                    val r = Mixer.addBankFromMemory(bytes, cached.name)
                     android.util.Log.d("SettingsFragment", "Mixer.addBankFromMemory returned: $r")
                     activity?.runOnUiThread {
                         if (r == 0) {
@@ -145,6 +148,7 @@ class SettingsFragment: Fragment(){
         reverbType.value = prefs.getInt(keyReverb, 1)
         velocityCurve.value = prefs.getInt(keyCurve, 0)
         masterVolume.value = prefs.getInt(keyMasterVol, 75)
+        exportCodec.value = prefs.getInt(keyExportCodec, 1) // Default to OGG
         
         // Initialize bank name from current mixer state
         Thread {
@@ -165,6 +169,7 @@ class SettingsFragment: Fragment(){
                         reverbType = reverbType.value,
                         velocityCurve = velocityCurve.value,
                         masterVolume = masterVolume.value,
+                        exportCodec = exportCodec.value,
                         onLoadBank = {
                             val i = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
                                 addCategory(Intent.CATEGORY_OPENABLE)
@@ -191,8 +196,12 @@ class SettingsFragment: Fragment(){
                             Mixer.setMasterVolumePercent(value)
                             prefs.edit().putInt(keyMasterVol, value).apply()
                         },
+                        onExportCodecChange = { value ->
+                            exportCodec.value = value
+                            prefs.edit().putInt(keyExportCodec, value).apply()
+                        },
                         onClose = {
-                            requireActivity().onBackPressed()
+                            parentFragmentManager.popBackStack()
                         }
                     )
                 }
@@ -223,11 +232,13 @@ fun SettingsScreen(
     reverbType: Int,
     velocityCurve: Int,
     masterVolume: Int,
+    exportCodec: Int,
     onLoadBank: () -> Unit,
     onLoadBuiltin: () -> Unit,
     onReverbChange: (Int) -> Unit,
     onCurveChange: (Int) -> Unit,
     onVolumeChange: (Int) -> Unit,
+    onExportCodecChange: (Int) -> Unit,
     onClose: () -> Unit
 ) {
     val reverbOptions = listOf(
@@ -237,9 +248,11 @@ fun SettingsScreen(
     )
     
     val curveOptions = listOf("Default", "Peaky", "WebTV", "Expo", "Linear")
+    val exportOptions = listOf("WAV", "OGG")
     
     var reverbExpanded by remember { mutableStateOf(false) }
     var curveExpanded by remember { mutableStateOf(false) }
+    var exportExpanded by remember { mutableStateOf(false) }
     
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -383,7 +396,7 @@ fun SettingsScreen(
             Spacer(modifier = Modifier.height(16.dp))
             
             // Velocity Curve Section
-            SettingCard(title = "Velocity Curve", icon = Icons.Filled.TrendingUp) {
+            SettingCard(title = "Velocity Curve", icon = Icons.AutoMirrored.Filled.TrendingUp) {
                 Column {
                     Box {
                         OutlinedButton(
@@ -416,7 +429,7 @@ fun SettingsScreen(
             Spacer(modifier = Modifier.height(16.dp))
             
             // Master Volume Section
-            SettingCard(title = "Master Volume", icon = Icons.Filled.VolumeUp) {
+            SettingCard(title = "Master Volume", icon = Icons.AutoMirrored.Filled.VolumeUp) {
                 Column {
                     Row(
                         modifier = Modifier.fillMaxWidth(),

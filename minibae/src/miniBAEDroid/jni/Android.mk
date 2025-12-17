@@ -14,6 +14,49 @@
 #
 
 # build miniBAE
+
+# Collect Git metadata
+ifeq ($(OS),Windows_NT)
+  COMMIT      := $(shell git rev-parse --short HEAD 2>NUL)
+  DIRTY       := $(shell powershell -Command "git status --porcelain | Select-Object -First 1")
+  TAG_COMMIT  := $(shell git rev-list --abbrev-commit --tags --max-count=1 2>NUL)
+  TAG         := $(shell git describe --abbrev=0 --tags $(TAG_COMMIT) 2>NUL)
+  DATE        := $(shell git log -1 --format=%cd --date=format:"%Y%m%d" 2>NUL)
+else
+  COMMIT      := $(shell git rev-parse --short HEAD 2>/dev/null)
+  DIRTY       := $(shell git status --porcelain 2>/dev/null | head -n 1)
+  TAG_COMMIT  := $(shell git rev-list --abbrev-commit --tags --max-count=1 2>/dev/null)
+  TAG         := $(shell git describe --abbrev=0 --tags $(TAG_COMMIT) 2>/dev/null || true)
+  DATE        := $(shell git log -1 --format=%cd --date=format:"%Y%m%d" 2>/dev/null)
+endif
+
+# Compute VERSION
+ifeq ($(COMMIT),)
+  ifeq ($(DATE),)
+    ifeq ($(OS),Windows_NT)
+      DATE := $(shell powershell -Command "Get-Date -Format yyyyMMdd")
+    else
+      DATE := $(shell date +%Y%m%d)
+    endif
+  endif
+  VERSION := $(DATE)
+else
+  ifneq ($(TAG),)
+    ifeq ($(COMMIT),$(TAG_COMMIT))
+      VERSION := $(TAG:v%=%)
+    else
+      VERSION := git-$(COMMIT)
+    endif
+  else
+    VERSION := git-$(COMMIT)
+  endif
+  ifneq ($(DIRTY),)
+    VERSION := $(VERSION)-dirty
+  endif
+endif
+
+$(info "Building miniBAE version $(VERSION)")
+
 NDK_TOOLCHAIN_VERSION=clang
 
 LOCAL_PATH := $(call my-dir)/../../BAE_Source
@@ -62,7 +105,32 @@ LOCAL_SRC_FILES	:= \
 			Platform/jni/org_minibae_Mixer.c \
 			Platform/jni/org_minibae_SongExt.c \
 			Platform/jni/org_minibae_Sound.c \
-			Platform/BAE_API_Android.c
+			Platform/BAE_API_Android.c \
+			../thirdparty/libogg/src/bitwise.c \
+			../thirdparty/libogg/src/framing.c \
+			../thirdparty/libvorbis/lib/analysis.c \
+            ../thirdparty/libvorbis/lib/bitrate.c \
+            ../thirdparty/libvorbis/lib/block.c \
+            ../thirdparty/libvorbis/lib/codebook.c \
+            ../thirdparty/libvorbis/lib/envelope.c \
+            ../thirdparty/libvorbis/lib/floor0.c \
+            ../thirdparty/libvorbis/lib/floor1.c \
+            ../thirdparty/libvorbis/lib/info.c \
+            ../thirdparty/libvorbis/lib/lookup.c \
+            ../thirdparty/libvorbis/lib/lsp.c \
+            ../thirdparty/libvorbis/lib/mapping0.c \
+            ../thirdparty/libvorbis/lib/mdct.c \
+            ../thirdparty/libvorbis/lib/psy.c \
+            ../thirdparty/libvorbis/lib/registry.c \
+            ../thirdparty/libvorbis/lib/res0.c \
+            ../thirdparty/libvorbis/lib/sharedbook.c \
+            ../thirdparty/libvorbis/lib/smallft.c \
+            ../thirdparty/libvorbis/lib/synthesis.c \
+            ../thirdparty/libvorbis/lib/vorbisfile.c \
+            Common/XVorbisFiles.c \
+            ../thirdparty/libvorbis/lib/lpc.c \
+            ../thirdparty/libvorbis/lib/window.c \
+		    ../thirdparty/libvorbis/lib/vorbisenc.c
 
 LOCAL_LDFLAGS += -Wl,-z,max-page-size=16384
 
@@ -72,8 +140,17 @@ LOCAL_C_INCLUDES	+= $(LOCAL_PATH)/../BAE_MPEG_Source_II
 LOCAL_C_INCLUDES	+= $(LOCAL_PATH)/../thirdparty/minimp3/
 LOCAL_C_INCLUDES	+= $(LOCAL_PATH)/../miniBAEDroid
 LOCAL_C_INCLUDES	+= $(LOCAL_PATH)/../miniBAEDroid/app/src/main/jniLibs/$(TARGET_ARCH_ABI)/fluidsynth/include
+LOCAL_C_INCLUDES    += $(LOCAL_PATH)/../thirdparty/config
+LOCAL_C_INCLUDES    += $(LOCAL_PATH)/../thirdparty/libogg/include
+LOCAL_C_INCLUDES    += $(LOCAL_PATH)/../thirdparty/libvorbis/include
+LOCAL_C_INCLUDES    += $(LOCAL_PATH)/../thirdparty/libvorbis/lib
 
-LOCAL_CFLAGS := -O2 -DX_PLATFORM=X_ANDROID -D__ANDROID__=1 -D_BUILT_IN_PATCHES=1 -DUSE_MINIMP3_WRAPPER=1 -DUSE_MPEG_DECODER=1 -D_DEBUG=1 -DUSE_SF2_SUPPORT=1 -D_USING_FLUIDSYNTH=1 -Wall -fsigned-char
+LOCAL_CFLAGS := -O2 -D_VERSION=\"$(VERSION)\" -DX_PLATFORM=X_ANDROID -D__ANDROID__=1 -D_BUILT_IN_PATCHES=1 -DUSE_MINIMP3_WRAPPER=1 -DUSE_MPEG_DECODER=1 -DUSE_SF2_SUPPORT=1 -DUSE_OGG_FORMAT=1 -DUSE_VORBIS_DECODER=1 -DUSE_VORBIS_ENCODER=1 -D_USING_FLUIDSYNTH=1 -DUSE_HIGHLEVEL_FILE_API=1 -DSUPPORT_KARAOKE=1 -Wall -fsigned-char
+
+ifeq ($(APP_OPTIM),debug)
+    LOCAL_CFLAGS += -D_DEBUG=1
+endif
+
 
 # Only set ARM mode for 32-bit ARM builds; do not force for arm64
 ifeq ($(TARGET_ARCH_ABI), armeabi-v7a)

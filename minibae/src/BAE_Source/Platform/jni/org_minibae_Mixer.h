@@ -46,6 +46,18 @@ JNIEXPORT jint JNICALL Java_org_minibae_Mixer__1setDefaultVelocityCurve
 JNIEXPORT jstring JNICALL Java_org_minibae_Mixer__1getBankFriendlyName
   (JNIEnv *, jclass, jlong);
 
+JNIEXPORT jint JNICALL Java_org_minibae_Mixer__1addBankFromMemoryWithFilename
+  (JNIEnv *, jclass, jlong, jbyteArray, jstring);
+
+JNIEXPORT jint JNICALL Java_org_minibae_Mixer__1startOutputToFile
+  (JNIEnv *, jclass, jlong, jstring, jint, jint);
+
+JNIEXPORT jint JNICALL Java_org_minibae_Mixer__1serviceOutputToFile
+  (JNIEnv *, jclass, jlong);
+
+JNIEXPORT jint JNICALL Java_org_minibae_Mixer__1stopOutputToFile
+  (JNIEnv *, jclass, jlong);
+
 #ifdef __cplusplus
 }
 #endif

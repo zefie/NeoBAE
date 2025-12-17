@@ -9,6 +9,7 @@ public class Song
 	private native int _loadSong(long songReference, String path);
 	private native int _startSong(long songReference);
 	private native void _stopSong(long songReference);
+	private static native int _setSongLoops(long songReference, int numLoops);
 
 	Song(Mixer mixer)
 	{
@@ -29,5 +30,10 @@ public class Song
 	public void stop()
 	{
 		_stopSong(mReference);
+	}
+	
+	public int setLoops(int numLoops)
+	{
+		return _setSongLoops(mReference, numLoops);
 	}
 }

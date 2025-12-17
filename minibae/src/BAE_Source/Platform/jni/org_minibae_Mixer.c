@@ -372,6 +372,110 @@ JNIEXPORT jint JNICALL Java_org_minibae_Mixer__1addBankFromMemory
 
 /*
  * Class:     org_minibae_Mixer
+ * Method:    _addBankFromMemoryWithFilename
+ * Signature: (J[BLjava/lang/String;)I
+ */
+JNIEXPORT jint JNICALL Java_org_minibae_Mixer__1addBankFromMemoryWithFilename
+	(JNIEnv* env, jclass clazz, jlong reference, jbyteArray data, jstring filename)
+{
+	BAEMixer mixer = (BAEMixer)(intptr_t)reference;
+	if(!mixer) return -1;
+	if(!data) return (jint)BAE_PARAM_ERR;
+
+	jsize len = (*env)->GetArrayLength(env, data);
+	jbyte *bytes = (*env)->GetByteArrayElements(env, data, NULL);
+	if(!bytes) return (jint)BAE_MEMORY_ERR;
+
+	__android_log_print(ANDROID_LOG_DEBUG, "miniBAE", "addBankFromMemoryWithFilename: len=%d bytes", (int)len);
+
+	BAEMixer_UnloadBanks(mixer);
+#if USE_SF2_SUPPORT == TRUE && _USING_FLUIDSYNTH == TRUE
+	__android_log_print(ANDROID_LOG_DEBUG, "miniBAE", "SF2 support is enabled");
+	GM_UnloadSF2Soundfont();
+	GM_SetMixerSF2Mode(FALSE);
+	
+	// Try to detect if this is SF2/DLS format by checking magic bytes
+	// SF2 starts with "RIFF....sfbk" (offset 0 and 8)
+	// DLS starts with "RIFF....DLS " (offset 0 and 8)
+	XBOOL isSF2 = FALSE;
+	if (len >= 12) {
+		unsigned char *ubytes = (unsigned char*)bytes;
+		__android_log_print(ANDROID_LOG_DEBUG, "miniBAE", "Magic bytes: %02X %02X %02X %02X ... %02X %02X %02X %02X",
+			ubytes[0], ubytes[1], ubytes[2], ubytes[3], ubytes[8], ubytes[9], ubytes[10], ubytes[11]);
+		if (ubytes[0] == 'R' && ubytes[1] == 'I' && ubytes[2] == 'F' && ubytes[3] == 'F') {
+			if ((ubytes[8] == 's' && ubytes[9] == 'f' && ubytes[10] == 'b' && ubytes[11] == 'k') ||
+			    (ubytes[8] == 'D' && ubytes[9] == 'L' && ubytes[10] == 'S' && ubytes[11] == ' ')) {
+				isSF2 = TRUE;
+				__android_log_print(ANDROID_LOG_DEBUG, "miniBAE", "Detected SF2/DLS format");
+			}
+		}
+	}
+	
+	if (isSF2) {
+		__android_log_print(ANDROID_LOG_DEBUG, "miniBAE", "Loading SF2 soundfont from memory...");
+		// Load as SF2/DLS soundfont
+		OPErr err = GM_LoadSF2SoundfontFromMemory((const unsigned char*)bytes, (size_t)len);
+		(*env)->ReleaseByteArrayElements(env, data, bytes, JNI_ABORT);
+		if (err != NO_ERR) {
+			__android_log_print(ANDROID_LOG_ERROR, "miniBAE", "SF2 bank load from memory failed: %d", err);
+			return (jint)err;
+		}
+		GM_SetMixerSF2Mode(TRUE);
+		// Use provided filename if available
+		if (filename) {
+			const char *fname = (*env)->GetStringUTFChars(env, filename, NULL);
+			if (fname) {
+				strncpy(g_lastBankFriendly, fname, sizeof(g_lastBankFriendly)-1);
+				g_lastBankFriendly[sizeof(g_lastBankFriendly)-1] = '\0';
+				(*env)->ReleaseStringUTFChars(env, filename, fname);
+			} else {
+				strncpy(g_lastBankFriendly, "SF2 Bank", sizeof(g_lastBankFriendly)-1);
+				g_lastBankFriendly[sizeof(g_lastBankFriendly)-1] = '\0';
+			}
+		} else {
+			strncpy(g_lastBankFriendly, "SF2 Bank", sizeof(g_lastBankFriendly)-1);
+			g_lastBankFriendly[sizeof(g_lastBankFriendly)-1] = '\0';
+		}
+		__android_log_print(ANDROID_LOG_DEBUG, "miniBAE", "SF2 bank loaded from memory: %s", g_lastBankFriendly);
+		return 0;
+	} else {
+		__android_log_print(ANDROID_LOG_DEBUG, "miniBAE", "Not SF2/DLS format, trying HSB bank load");
+	}
+#else
+	__android_log_print(ANDROID_LOG_DEBUG, "miniBAE", "SF2 support is NOT enabled - USE_SF2_SUPPORT=%d _USING_FLUIDSYNTH=%d", USE_SF2_SUPPORT, _USING_FLUIDSYNTH);
+#endif
+
+	BAEBankToken token = 0;
+	BAEMixer_UnloadBanks(mixer);
+	BAEResult br = BAEMixer_AddBankFromMemory(mixer, (void*)bytes, (uint32_t)len, &token);
+	if(br == BAE_NO_ERROR){
+		char friendlyBuf[256] = "";
+		if(BAE_GetBankFriendlyName(mixer, token, friendlyBuf, (uint32_t)sizeof(friendlyBuf)) == BAE_NO_ERROR) {
+			strncpy(g_lastBankFriendly, friendlyBuf, sizeof(g_lastBankFriendly)-1);
+			g_lastBankFriendly[sizeof(g_lastBankFriendly)-1] = '\0';
+		} else {
+			// No friendly name in bank, use filename if provided
+			if (filename) {
+				const char *fname = (*env)->GetStringUTFChars(env, filename, NULL);
+				if (fname) {
+					strncpy(g_lastBankFriendly, fname, sizeof(g_lastBankFriendly)-1);
+					g_lastBankFriendly[sizeof(g_lastBankFriendly)-1] = '\0';
+					(*env)->ReleaseStringUTFChars(env, filename, fname);
+				} else {
+					g_lastBankFriendly[0] = '\0';
+				}
+			} else {
+				g_lastBankFriendly[0] = '\0';
+			}
+		}
+	}
+
+	(*env)->ReleaseByteArrayElements(env, data, bytes, JNI_ABORT);
+	return (jint)br;
+}
+
+/*
+ * Class:     org_minibae_Mixer
  * Method:    _addBuiltInPatches
  * Signature: ()I
  */

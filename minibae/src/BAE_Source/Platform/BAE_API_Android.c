@@ -514,7 +514,7 @@ intptr_t BAE_FileOpenForReadWrite(void *fileName)
 {
     if (fileName)
     {
-        return (intptr_t)open((char *)fileName, O_RDWR);
+        return (intptr_t)open((char *)fileName, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
     }
     return -1;
 }
@@ -646,13 +646,13 @@ static void PV_ClearOutputBuffer(void *pBuffer, int16_t channels, int16_t bits, 
 // Return the number of 11 ms buffer blocks that are built at one time.
 int BAE_GetAudioBufferCount(void)
 {
-   return(sHardwareChannel->mSynthFramesPerBlock);
+   return(g_bufferFrames);
 }
 
 // Return the number of bytes used for audio buffer for output to card
 int32_t BAE_GetAudioByteBufferSize(void)
 {
-   return(sHardwareChannel->mAudioByteBufferSize);
+   return(g_bufferFrames * g_os_channels * (g_os_bits / 8));
 }
 
 // Mute/unmute audio. Shutdown amps, etc.
@@ -674,7 +674,6 @@ int BAE_Unmute(void)
 int BAE_AcquireAudioCard(void *threadContext, uint32_t sampleRate, uint32_t channels, uint32_t bits)
 {
     (void)threadContext;
-#if defined(__ANDROID__)
     SLresult r;
 #define MINI_BAE_LOGD(fmt, ...) __android_log_print(ANDROID_LOG_DEBUG, "miniBAE", "BAE_AcquireAudioCard: " fmt, ##__VA_ARGS__)
 #define MINI_BAE_LOGE(fmt, ...) __android_log_print(ANDROID_LOG_ERROR, "miniBAE", "BAE_AcquireAudioCard: " fmt, ##__VA_ARGS__)
@@ -698,9 +697,9 @@ int BAE_AcquireAudioCard(void *threadContext, uint32_t sampleRate, uint32_t chan
     g_bufferFrames = maxFrames;
     int channelsInt = (int)g_os_channels;
     size_t bufBytes = (size_t)g_bufferFrames * channelsInt * (g_os_bits/8);
-    // allocate two buffers
-    g_audioBufferA = (int16_t*)malloc(bufBytes);
-    g_audioBufferB = (int16_t*)malloc(bufBytes);
+    // allocate two buffers (zero-initialized to prevent pop on startup)
+    g_audioBufferA = (int16_t*)calloc(1, bufBytes);
+    g_audioBufferB = (int16_t*)calloc(1, bufBytes);
     if (!g_audioBufferA || !g_audioBufferB) {
         MINI_BAE_LOGE("buffer allocation failed frames=%d bytesPerBuf=%zu", (int)g_bufferFrames, bufBytes);
         if (g_audioBufferA) free(g_audioBufferA);
@@ -738,9 +737,6 @@ int BAE_AcquireAudioCard(void *threadContext, uint32_t sampleRate, uint32_t chan
     r = (*gPlayerPlay)->SetPlayState(gPlayerPlay, SL_PLAYSTATE_PLAYING); if (r != SL_RESULT_SUCCESS) { MINI_BAE_LOGE("SetPlayState PLAYING failed r=%lu", (unsigned long)r); return -1; }
     MINI_BAE_LOGD("successfully started playback (sampleRate=%u ch=%u bits=%u) gPlayerObject=%p", sampleRate, channels, bits, (void*)gPlayerObject);
     return 0;
-#else
-    return -1;
-#endif
 }
 
 // Release and free audio card.
@@ -748,7 +744,6 @@ int BAE_AcquireAudioCard(void *threadContext, uint32_t sampleRate, uint32_t chan
 int BAE_ReleaseAudioCard(void *threadContext)
 {
     (void)threadContext;
-#if defined(__ANDROID__)
     // Stop player
     if (gPlayerPlay) { (*gPlayerPlay)->SetPlayState(gPlayerPlay, SL_PLAYSTATE_STOPPED); }
     if (gPlayerObject) { (*gPlayerObject)->Destroy(gPlayerObject); gPlayerObject = NULL; gPlayerPlay = NULL; gBufferQueue = NULL; }
@@ -758,19 +753,12 @@ int BAE_ReleaseAudioCard(void *threadContext)
     if (g_audioBufferB) { free(g_audioBufferB); g_audioBufferB = NULL; }
     g_totalSamplesPlayed = 0;
     return 0;
-#else
-    return -1;
-#endif
 }
 
 // return device position in samples
 uint32_t BAE_GetDeviceSamplesPlayedPosition(void)
 {
-#if defined(__ANDROID__)
     return g_totalSamplesPlayed;
-#else
-    return(sHardwareChannel->mSamplesPlayed);
-#endif
 }
 
 

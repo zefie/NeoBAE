@@ -65,3 +65,24 @@ JNIEXPORT jboolean JNICALL Java_org_minibae_Song__1isSongPaused(JNIEnv* env, jcl
     if(r != BAE_NO_ERROR){ __android_log_print(ANDROID_LOG_WARN, LOG_TAG, "BAESong_IsPaused err=%d", r); return JNI_FALSE; }
     return (isPaused == TRUE) ? JNI_TRUE : JNI_FALSE;
 }
+
+// Check if song is done
+JNIEXPORT jboolean JNICALL Java_org_minibae_Song__1isSongDone(JNIEnv* env, jclass clazz, jlong songRef){
+    (void)env; (void)clazz;
+    if(songRef == 0){ return JNI_TRUE; }
+    BAESong song = (BAESong)(intptr_t)songRef;
+    BAE_BOOL isDone = FALSE;
+    BAEResult r = BAESong_IsDone(song, &isDone);
+    if(r != BAE_NO_ERROR){ __android_log_print(ANDROID_LOG_WARN, LOG_TAG, "BAESong_IsDone err=%d", r); return JNI_TRUE; }
+    return (isDone == TRUE) ? JNI_TRUE : JNI_FALSE;
+}
+
+// Set song loop count
+JNIEXPORT jint JNICALL Java_org_minibae_Song__1setSongLoops(JNIEnv* env, jclass clazz, jlong songRef, jint numLoops){
+    (void)env; (void)clazz;
+    if(songRef == 0){ return (jint)BAE_NULL_OBJECT; }
+    BAESong song = (BAESong)(intptr_t)songRef;
+    BAEResult r = BAESong_SetLoops(song, (int16_t)numLoops);
+    if(r != BAE_NO_ERROR){ __android_log_print(ANDROID_LOG_WARN, LOG_TAG, "BAESong_SetLoops err=%d", r); }
+    return (jint)r;
+}

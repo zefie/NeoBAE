@@ -65,7 +65,7 @@ class MainActivity : AppCompatActivity() {
                     if (bankFile.exists()) {
                         try {
                             val bytes = bankFile.readBytes()
-                            val br = Mixer.addBankFromMemory(bytes)
+                            val br = Mixer.addBankFromMemory(bytes, bankFile.name)
                             if (br == 0) {
                                 bankLoaded = true
                                 Toast.makeText(this, "Restored bank: ${Mixer.getBankFriendlyName() ?: bankFile.name}", Toast.LENGTH_SHORT).show()
@@ -100,6 +100,14 @@ class MainActivity : AppCompatActivity() {
                 Mixer.setDefaultVelocityCurve(savedCurve)
             } catch (ex: Exception) { }            
         }
+
+        // Setup OnBackPressedDispatcher instead of deprecated onBackPressed()
+        onBackPressedDispatcher.addCallback(this, object : androidx.activity.OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                // Exit app on back pressed
+                finish()
+            }
+        })
 
         // Setup fragments
         val homeTab = findViewById<Button>(R.id.tab_home)
@@ -160,7 +168,7 @@ class MainActivity : AppCompatActivity() {
         android.util.Log.d("MainActivity", "Reloading song: ${currentItem.title}, wasPlaying=$wasPlaying, wasPaused=$wasPaused, position=$savedPosition")
         
         // Stop current playback and ensure it fully stops
-        currentSong?.stop()
+        currentSong?.stop(true)
         currentSong = null
         viewModel.isPlaying = false
         
@@ -169,15 +177,24 @@ class MainActivity : AppCompatActivity() {
         
         // Reload the song with the new bank
         try {
-            val song = Mixer.createSong()
-            if (song != null) {
-                currentSong = song
-                val bytes = currentItem.file.readBytes()
-                val status = song.loadFromMemory(bytes)
-                if (status == 0) {
+            val bytes = currentItem.file.readBytes()
+            val loadResult = org.minibae.LoadResult()
+            
+            val status = Mixer.loadFromMemory(bytes, loadResult)
+            
+            if (status == 0 && loadResult.isSong) {
+                val song = loadResult.song
+                if (song != null) {
+                    currentSong = song
+                    android.util.Log.d("MainActivity", "Reloaded ${loadResult.fileTypeString} file")
+                    
                     // Apply volume
                     Mixer.setMasterVolumePercent(viewModel.volumePercent)
                     song.setVolumePercent(viewModel.volumePercent)
+                    
+                    // Set loop count based on repeat mode
+                    val loopCount = if (viewModel.repeatMode == RepeatMode.SONG) 32768 else 0
+                    song.setLoops(loopCount)
                     
                     // Start the song first (required before seeking)
                     val startResult = song.start()
@@ -229,7 +246,7 @@ class MainActivity : AppCompatActivity() {
     private fun hideSystemUI() {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
             // Android 11 (API 30) and above - only hide navigation bar, keep status bar
-            window.setDecorFitsSystemWindows(false)
+            androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, false)
             window.insetsController?.let {
                 it.hide(WindowInsets.Type.navigationBars())
                 it.systemBarsBehavior = WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
@@ -255,13 +272,14 @@ class MainActivity : AppCompatActivity() {
     }
     
     private fun requestStoragePermissions() {
-        val permissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            arrayOf(android.Manifest.permission.READ_MEDIA_AUDIO)
+        val permissions = mutableListOf<String>()
+        
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            permissions.add(android.Manifest.permission.READ_MEDIA_AUDIO)
+            permissions.add(android.Manifest.permission.POST_NOTIFICATIONS)
         } else {
-            arrayOf(
-                android.Manifest.permission.READ_EXTERNAL_STORAGE,
-                android.Manifest.permission.WRITE_EXTERNAL_STORAGE
-            )
+            permissions.add(android.Manifest.permission.READ_EXTERNAL_STORAGE)
+            permissions.add(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
         }
         
         val needsPermission = permissions.any {
@@ -269,14 +287,16 @@ class MainActivity : AppCompatActivity() {
         }
         
         if (needsPermission) {
-            permissionLauncher.launch(permissions)
+            permissionLauncher.launch(permissions.toTypedArray())
         }
     }
-    
-    @Deprecated("Deprecated in Java")
-    override fun onBackPressed() {
-        // Exit app on back pressed
-        super.onBackPressed()
+
+    override fun onPause() {
+        super.onPause()
+        // If no song is loaded when going to background, exit the app
+        if (currentSong == null) {
+            finish()
+        }
     }
 
     override fun onDestroy() {

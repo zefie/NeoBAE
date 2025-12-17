@@ -427,6 +427,19 @@ OPErr GM_LoadSF2SoundfontFromMemory(const unsigned char *data, size_t size) {
 
         snprintf(tmpl, sizeof(tmpl), "%sminibae_dls_XXXXXX", tempPath);
         fd = mkstemp(tmpl);
+#elif defined(__ANDROID__)
+        // On Android, use cache directory from TMPDIR environment variable
+        // or fallback to app-specific cache path
+        const char* tmpdir = getenv("TMPDIR");
+        if (!tmpdir || strlen(tmpdir) == 0) {
+            // Fallback to common Android cache locations
+            tmpdir = getenv("EXTERNAL_STORAGE");
+            if (!tmpdir || strlen(tmpdir) == 0) {
+                tmpdir = "/data/local/tmp";
+            }
+        }
+        snprintf(tmpl, sizeof(tmpl), "%s/minibae_dls_XXXXXX.dls", tmpdir);
+        fd = mkstemps(tmpl, 4);
 #else
         // On Linux/Unix, just use /tmp
         strcpy(tmpl, "/tmp/minibae_dls_XXXXXX.dls");

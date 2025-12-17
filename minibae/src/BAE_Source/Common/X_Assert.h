@@ -138,6 +138,7 @@
     #define BAE_STDERR(...) emscripten_log(EM_LOG_ERROR, __VA_ARGS__)
 #elif __ANDROID__
     #include <android/log.h>
+    #define BAE_STDERR(...) __android_log_print(ANDROID_LOG_ERROR, "miniBAE", __VA_ARGS__)
 #else 
     #define BAE_STDOUT		printf
     #define BAE_STDERR(...)         fprintf (stderr, __VA_ARGS__)
@@ -173,8 +174,7 @@
         #define BAE_VERIFY(exp)     assert(exp)                   
     #else
         #ifdef  __ANDROID__
-            #define BAE_STDOUT(...) __android_log_print(ANDROID_LOG_INFO, "miniBAE", __VA_ARGS__)
-            #define BAE_STDERR(...) __android_log_print(ANDROID_LOG_ERROR, "miniBAE", __VA_ARGS__)
+            #define BAE_STDOUT(...) __android_log_print(ANDROID_LOG_INFO, "miniBAE", __VA_ARGS__)            
             #define BAE_PRINTF(...) BAE_STDOUT(__VA_ARGS__)
         #endif    
         #include <assert.h>

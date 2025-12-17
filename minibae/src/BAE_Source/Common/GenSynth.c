@@ -941,6 +941,7 @@ void PV_SetPositionFromVoice(GM_Voice *pVoice, uint32_t pos)
 #if LOOPS_USED == U3232_LOOPS
 
 // return (22050.0 * notePitch) / mixerRate;
+#if USE_FLOAT == FALSE
 static INLINE XFIXED PV_GetWavePitchFixed(XFIXED notePitch)
 {
     XFIXED coef;
@@ -948,6 +949,7 @@ static INLINE XFIXED PV_GetWavePitchFixed(XFIXED notePitch)
     coef = XFixedDivide(22050L << 16L, mixerRate);
     return XFixedMultiply(coef, notePitch);
 }
+#endif
 
 #if USE_FLOAT != FALSE
 UFLOAT PV_GetWavePitchFloat(XFIXED notePitch)

@@ -15,7 +15,7 @@ public class Sound
 	Sound(Mixer mixer)
 	{
         mMixer = mixer;
-    mReference = _newNativeSound(mMixer.mReference);
+		mReference = _newNativeSound(mMixer.mReference);
         if (mReference == 0L)
 		{
             // good
@@ -24,6 +24,13 @@ public class Sound
         {
             // bad
         }
+	}
+	
+	// Package-private constructor for LoadResult to wrap existing native sound
+	Sound(Mixer mixer, long nativeReference)
+	{
+		mMixer = mixer;
+		mReference = nativeReference;
 	}
 
     int load(String resourceName)

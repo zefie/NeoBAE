@@ -345,6 +345,17 @@ doneLoad:
 	return (jint)r;
 }
 
+JNIEXPORT jint JNICALL Java_org_minibae_Song__1prerollSong
+	(JNIEnv* env, jobject jsong, jlong songReference)
+{
+	BAESong song = (BAESong)(intptr_t)songReference;
+	if(!song) return (jint)BAE_PARAM_ERR;
+	__android_log_print(ANDROID_LOG_DEBUG, "miniBAE", "_prerollSong song=%p", (void*)(intptr_t)songReference);
+	BAEResult r = BAESong_Preroll(song);
+	__android_log_print(ANDROID_LOG_DEBUG, "miniBAE", "BAESong_Preroll returned %d", r);
+	return (jint)r;
+}
+
 JNIEXPORT jint JNICALL Java_org_minibae_Song__1startSong
 	(JNIEnv* env, jobject jsong, jlong songReference)
 {
@@ -363,10 +374,34 @@ JNIEXPORT jint JNICALL Java_org_minibae_Song__1startSong
 }
 
 JNIEXPORT void JNICALL Java_org_minibae_Song__1stopSong
-	(JNIEnv* env, jobject jsong, jlong songReference)
+	(JNIEnv* env, jobject jsong, jlong songReference, jboolean deleteSong)
 {
 		BAESong song = (BAESong)(intptr_t)songReference;
-		if(song){ BAESong_Stop(song, FALSE); BAESong_Delete(song); }
+		if(song){ BAESong_Stop(song, FALSE); if(deleteSong) { BAESong_Delete(song); } }
+}
+
+JNIEXPORT jint JNICALL Java_org_minibae_Song__1loadRmiFromMemory
+	(JNIEnv* env, jobject jsong, jlong songReference, jbyteArray data, jboolean useEmbeddedBank)
+{
+	BAESong song = (BAESong)(intptr_t)songReference;
+	if(!song || !data) return (jint)BAE_PARAM_ERR;
+	
+	jsize len = (*env)->GetArrayLength(env, data);
+	jbyte* bytes = (*env)->GetByteArrayElements(env, data, NULL);
+	if(!bytes) return (jint)BAE_MEMORY_ERR;
+	
+	__android_log_print(ANDROID_LOG_DEBUG, "miniBAE", "Loading RMI from memory, size=%d, useEmbeddedBank=%d", len, useEmbeddedBank);
+	
+#if USE_SF2_SUPPORT == TRUE && _USING_FLUIDSYNTH == TRUE
+	BAEResult r = BAESong_LoadRmiFromMemory(song, (void const*)bytes, (uint32_t)len, TRUE, (BAE_BOOL)useEmbeddedBank);
+	__android_log_print(ANDROID_LOG_DEBUG, "miniBAE", "BAESong_LoadRmiFromMemory returned %d", r);
+#else
+	__android_log_print(ANDROID_LOG_ERROR, "miniBAE", "RMI loading not supported (FluidSynth required)");
+	BAEResult r = BAE_NOT_SETUP;
+#endif
+	
+	(*env)->ReleaseByteArrayElements(env, data, bytes, JNI_ABORT);
+	return (jint)r;
 }
 
 
@@ -400,4 +435,121 @@ JNIEXPORT jint JNICALL Java_org_minibae_Song__1getSongVolume
 	BAE_UNSIGNED_FIXED v = 0;
 	if(BAESong_GetVolume(song, &v) == BAE_NO_ERROR){ return (jint)v; }
 	return 0;
+}
+
+// Export functionality
+JNIEXPORT jint JNICALL Java_org_minibae_Mixer__1startOutputToFile
+	(JNIEnv* env, jclass clazz, jlong mixerReference, jstring filePath, jint outputType, jint compressionType)
+{
+	BAEMixer mixer = (BAEMixer)(intptr_t)mixerReference;
+	if(!mixer || !filePath) return (jint)BAE_PARAM_ERR;
+	
+	const char* path = (*env)->GetStringUTFChars(env, filePath, NULL);
+	if(!path) return (jint)BAE_MEMORY_ERR;
+	
+	__android_log_print(ANDROID_LOG_DEBUG, "miniBAE", "Starting output to file: %s, type: %d, compression: %d", path, outputType, compressionType);
+	
+	BAEResult result = BAEMixer_StartOutputToFile(mixer, (BAEPathName)path, (BAEFileType)outputType, (BAECompressionType)compressionType);
+	
+	(*env)->ReleaseStringUTFChars(env, filePath, path);
+	
+	__android_log_print(ANDROID_LOG_DEBUG, "miniBAE", "BAEMixer_StartOutputToFile returned %d", result);
+	return (jint)result;
+}
+
+JNIEXPORT jint JNICALL Java_org_minibae_Mixer__1serviceOutputToFile
+	(JNIEnv* env, jclass clazz, jlong mixerReference)
+{
+	BAEMixer mixer = (BAEMixer)(intptr_t)mixerReference;
+	if(!mixer) return (jint)BAE_PARAM_ERR;
+	
+	BAEResult result = BAEMixer_ServiceAudioOutputToFile(mixer);
+	return (jint)result;
+}
+
+JNIEXPORT jint JNICALL Java_org_minibae_Mixer__1stopOutputToFile
+	(JNIEnv* env, jclass clazz, jlong mixerReference)
+{
+	BAEMixer mixer = (BAEMixer)(intptr_t)mixerReference;
+	if(!mixer) return (jint)BAE_PARAM_ERR;
+	
+	__android_log_print(ANDROID_LOG_DEBUG, "miniBAE", "Stopping output to file");
+	
+	BAEMixer_StopOutputToFile();
+	
+	__android_log_print(ANDROID_LOG_DEBUG, "miniBAE", "BAEMixer_StopOutputToFile completed");
+	return (jint)BAE_NO_ERROR;
+}
+
+JNIEXPORT jint JNICALL Java_org_minibae_Mixer__1determineFileTypeByData
+	(JNIEnv* env, jclass clazz, jbyteArray data, jint length)
+{
+	if(!data || length <= 0) return (jint)BAE_INVALID_TYPE;
+	
+	jsize arrayLen = (*env)->GetArrayLength(env, data);
+	if(length > arrayLen) length = arrayLen;
+	
+	jbyte* bytes = (*env)->GetByteArrayElements(env, data, NULL);
+	if(!bytes) return (jint)BAE_INVALID_TYPE;
+	
+	BAEFileType fileType = X_DetermineFileTypeByData((const unsigned char*)bytes, (int32_t)length);
+	
+	(*env)->ReleaseByteArrayElements(env, data, bytes, JNI_ABORT);
+	
+	__android_log_print(ANDROID_LOG_DEBUG, "miniBAE", "X_DetermineFileTypeByData returned %d", fileType);
+	return (jint)fileType;
+}
+
+JNIEXPORT jint JNICALL Java_org_minibae_Mixer__1loadFromMemory
+	(JNIEnv* env, jclass clazz, jlong mixerReference, jbyteArray data, jobject resultObj)
+{
+	BAEMixer mixer = (BAEMixer)(intptr_t)mixerReference;
+	if(!mixer || !data || !resultObj) return (jint)BAE_PARAM_ERR;
+	
+	jsize len = (*env)->GetArrayLength(env, data);
+	jbyte* bytes = (*env)->GetByteArrayElements(env, data, NULL);
+	if(!bytes) return (jint)BAE_MEMORY_ERR;
+	
+	BAELoadResult result = {0};
+	BAEResult r = BAEMixer_LoadFromMemory(mixer, (void const*)bytes, (uint32_t)len, &result);
+	
+	(*env)->ReleaseByteArrayElements(env, data, bytes, JNI_ABORT);
+	
+	if(r == BAE_NO_ERROR)
+	{
+		// Get the LoadResult class and set its fields
+		jclass resultClass = (*env)->GetObjectClass(env, resultObj);
+		
+		// Set type field
+		jfieldID typeField = (*env)->GetFieldID(env, resultClass, "type", "I");
+		(*env)->SetIntField(env, resultObj, typeField, (jint)result.type);
+		
+		// Set fileType field
+		jfieldID fileTypeField = (*env)->GetFieldID(env, resultClass, "fileType", "I");
+		(*env)->SetIntField(env, resultObj, fileTypeField, (jint)result.fileType);
+		
+		// Set result field
+		jfieldID resultField = (*env)->GetFieldID(env, resultClass, "result", "I");
+		(*env)->SetIntField(env, resultObj, resultField, (jint)result.result);
+		
+		// Set the appropriate object reference
+		if(result.type == BAE_LOAD_TYPE_SONG && result.data.song)
+		{
+			jfieldID songField = (*env)->GetFieldID(env, resultClass, "songReference", "J");
+			(*env)->SetLongField(env, resultObj, songField, (jlong)(intptr_t)result.data.song);
+		}
+		else if(result.type == BAE_LOAD_TYPE_SOUND && result.data.sound)
+		{
+			jfieldID soundField = (*env)->GetFieldID(env, resultClass, "soundReference", "J");
+			(*env)->SetLongField(env, resultObj, soundField, (jlong)(intptr_t)result.data.sound);
+		}
+		
+		__android_log_print(ANDROID_LOG_DEBUG, "miniBAE", "BAEMixer_LoadFromMemory succeeded: type=%d, fileType=%d", result.type, result.fileType);
+	}
+	else
+	{
+		__android_log_print(ANDROID_LOG_ERROR, "miniBAE", "BAEMixer_LoadFromMemory failed: %d", r);
+	}
+	
+	return (jint)r;
 }

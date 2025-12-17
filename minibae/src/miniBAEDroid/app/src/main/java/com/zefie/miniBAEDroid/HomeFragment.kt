@@ -3,6 +3,10 @@ package com.zefie.miniBAEDroid
 import android.os.Bundle
 import android.content.Context
 import android.content.Intent
+import android.os.Build
+import android.os.Environment
+import android.os.storage.StorageManager
+import android.os.storage.StorageVolume
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -14,6 +18,7 @@ import androidx.documentfile.provider.DocumentFile
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -21,10 +26,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.background
 import androidx.compose.material.*
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material.icons.filled.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -34,6 +41,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.core.view.WindowCompat
@@ -46,6 +54,8 @@ class HomeFragment : Fragment() {
 
     private var pickedFolderUri: Uri? = null
     private lateinit var viewModel: MusicPlayerViewModel
+    private lateinit var notificationHelper: MusicNotificationHelper
+    private var isAppInForeground = mutableStateOf(true)
     
     private val currentSong: Song?
         get() = (activity as? MainActivity)?.currentSong
@@ -57,14 +67,26 @@ class HomeFragment : Fragment() {
     // Sound bank settings
     private var currentBankName = mutableStateOf("Loading...")
     private var isLoadingBank = mutableStateOf(false)
+    private var isExporting = mutableStateOf(false)
+    private var exportStatus = mutableStateOf("")
     private var reverbType = mutableStateOf(1)
     private var velocityCurve = mutableStateOf(0)
+    private var exportCodec = mutableStateOf(2) // Default to OGG
     
     private val openBankPicker = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
             val data: Intent? = result.data
             data?.data?.let { uri ->
                 loadBankFromUri(uri)
+            }
+        }
+    }
+    
+    private val saveFilePicker = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val data: Intent? = result.data
+            data?.data?.let { uri ->
+                exportToFile(uri)
             }
         }
     }
@@ -107,7 +129,6 @@ class HomeFragment : Fragment() {
             startPlayback(file)
             savePlaylist()
             saveFavorites()
-            Toast.makeText(requireContext(), "Playing: ${file.name}", Toast.LENGTH_SHORT).show()
         } catch (ex: Exception) {
             Toast.makeText(requireContext(), "Failed to load file: ${ex.message}", Toast.LENGTH_SHORT).show()
         }
@@ -116,9 +137,69 @@ class HomeFragment : Fragment() {
     fun reloadCurrentSongForBankSwap() {
         (activity as? MainActivity)?.reloadCurrentSongForBankSwap()
     }
+    
+    private fun checkStoragePermissions() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            // Android 11+ - check for MANAGE_EXTERNAL_STORAGE permission
+            if (!Environment.isExternalStorageManager()) {
+                try {
+                    val intent = Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
+                    intent.data = android.net.Uri.parse("package:${requireContext().packageName}")
+                    startActivity(intent)
+                    Toast.makeText(requireContext(), "Please enable 'All files access' permission to access external storage devices", Toast.LENGTH_LONG).show()
+                } catch (e: Exception) {
+                    val intent = Intent(android.provider.Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
+                    startActivity(intent)
+                }
+            }
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            // Android 6+ - check for READ_EXTERNAL_STORAGE permission
+            if (androidx.core.content.ContextCompat.checkSelfPermission(
+                requireContext(), 
+                android.Manifest.permission.READ_EXTERNAL_STORAGE
+            ) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                androidx.core.app.ActivityCompat.requestPermissions(
+                    requireActivity(),
+                    arrayOf(android.Manifest.permission.READ_EXTERNAL_STORAGE),
+                    1001
+                )
+            }
+        }
+    }
 
     private var loadingState: MutableState<Boolean>? = null
     private var lastFolderPath: String? = null
+    
+    override fun onResume() {
+        super.onResume()
+        isAppInForeground.value = true
+        
+        val mainActivity = activity as? MainActivity
+        android.util.Log.d("HomeFragment", "onResume: pendingBankReload=${mainActivity?.pendingBankReload}")
+        if (mainActivity?.pendingBankReload == true) {
+            mainActivity.pendingBankReload = false
+            android.util.Log.d("HomeFragment", "Calling reloadCurrentSongForBankSwap")
+            reloadCurrentSongForBankSwap()
+        }
+    }
+    
+    override fun onPause() {
+        super.onPause()
+        isAppInForeground.value = false
+    }
+    
+    override fun onDestroyView() {
+        super.onDestroyView()
+        // Don't hide notification on destroy - keep it if music is still playing
+        // Only hide if user explicitly closes via notification action
+    }
+    
+    override fun onDestroy() {
+        super.onDestroy()
+        if (::notificationHelper.isInitialized) {
+            notificationHelper.cleanup()
+        }
+    }
 
     private fun savePlaylist() {
         try {
@@ -177,23 +258,10 @@ class HomeFragment : Fragment() {
                             viewModel.currentTitle = item.title
                         }
                     }
-                    Toast.makeText(requireContext(), "Restored ${items.size} song(s)", Toast.LENGTH_SHORT).show()
                 }
             }
         } catch (ex: Exception) {
             android.util.Log.e("HomeFragment", "Failed to load playlist: ${ex.message}")
-        }
-    }
-
-    override fun onResume() {
-        super.onResume()
-        
-        val mainActivity = activity as? MainActivity
-        android.util.Log.d("HomeFragment", "onResume: pendingBankReload=${mainActivity?.pendingBankReload}")
-        if (mainActivity?.pendingBankReload == true) {
-            mainActivity.pendingBankReload = false
-            android.util.Log.d("HomeFragment", "Calling reloadCurrentSongForBankSwap")
-            reloadCurrentSongForBankSwap()
         }
     }
 
@@ -229,12 +297,16 @@ class HomeFragment : Fragment() {
                     // Load saved settings
                     reverbType.value = prefs.getInt("default_reverb", 1)
                     velocityCurve.value = prefs.getInt("velocity_curve", 0)
+                    exportCodec.value = prefs.getInt("export_codec", 2) // Default to OGG
                     
                     // Initialize bank name
                     Thread {
                         val friendly = Mixer.getBankFriendlyName()
                         currentBankName.value = friendly ?: "Unknown Bank"
                     }.start()
+                    
+                    // Don't check permissions on startup - only when user tries to access folders
+                    // This prevents the back button from returning to home screen
                     
                     // Set default folder to /sdcard if none exists
                     if (viewModel.currentFolderPath == null) {
@@ -246,6 +318,28 @@ class HomeFragment : Fragment() {
                     if (viewModel.favorites.isEmpty()) {
                         loadFavorites()
                     }
+                
+                    // Initialize notification helper
+                    notificationHelper = MusicNotificationHelper(requireContext())
+                    
+                    // Register notification action callbacks
+                    MusicNotificationReceiver.setCallbacks(
+                        onPlayPause = { togglePlayPause() },
+                        onNext = { playNext() },
+                        onPrevious = { playPrevious() },
+                        onClose = {
+                            currentSong?.stop(true)
+                            setCurrentSong(null)
+                            viewModel.isPlaying = false
+                            if (::notificationHelper.isInitialized) {
+                                notificationHelper.hideNotification()
+                            }
+                            // User closed playback - clean up mixer
+                            Mixer.delete()
+                        }
+                    )
+                    val savedRepeatMode = prefs.getInt("repeat_mode", 0)
+                    viewModel.repeatMode = RepeatMode.values().getOrNull(savedRepeatMode) ?: RepeatMode.NONE
                 }
 
                 LaunchedEffect(pickedFolderUri) {
@@ -262,9 +356,37 @@ class HomeFragment : Fragment() {
                             viewModel.currentPositionMs = pos
                             if (len > 0) viewModel.totalDurationMs = len
                             
-                            if (len > 0 && pos >= len - 500 && viewModel.hasNext()) {
+                            // Handle song completion
+                            if (len > 0 && pos >= len - 500) {
                                 delay(100)
-                                playNext()
+                                when (viewModel.repeatMode) {
+                                    RepeatMode.SONG -> {
+                                        // Repeat current song
+                                        currentSong?.seekToMs(0)
+                                        viewModel.currentPositionMs = 0
+                                    }
+                                    RepeatMode.PLAYLIST -> {
+                                        // Play next song, or loop back to first
+                                        if (viewModel.hasNext()) {
+                                            playNext()
+                                        } else if (viewModel.playlist.isNotEmpty()) {
+                                            viewModel.playAtIndex(0)
+                                            viewModel.getCurrentItem()?.let { startPlayback(it.file) }
+                                        }
+                                    }
+                                    RepeatMode.NONE -> {
+                                        // Just play next if available
+                                        if (viewModel.hasNext()) {
+                                            playNext()
+                                        } else {
+                                            viewModel.isPlaying = false
+                                            // No more songs to play - clean up mixer to free resources
+                                            currentSong?.stop(true)
+                                            setCurrentSong(null)
+                                            Mixer.delete()
+                                        }
+                                    }
+                                }
                             }
                         } catch (_: Exception) {}
                         delay(250)
@@ -275,6 +397,41 @@ class HomeFragment : Fragment() {
                     applyVolume()
                     val prefs = requireContext().getSharedPreferences("miniBAE_prefs", Context.MODE_PRIVATE)
                     prefs.edit().putInt("volume_percent", viewModel.volumePercent).apply()
+                }
+                
+                LaunchedEffect(viewModel.repeatMode) {
+                    val prefs = requireContext().getSharedPreferences("miniBAE_prefs", Context.MODE_PRIVATE)
+                    prefs.edit().putInt("repeat_mode", viewModel.repeatMode.ordinal).apply()
+                }
+                
+                // Update notification when playback state changes (only when backgrounded)
+                LaunchedEffect(viewModel.isPlaying, viewModel.currentTitle, viewModel.currentIndex, isAppInForeground.value) {
+                    if (!::notificationHelper.isInitialized) return@LaunchedEffect
+                    
+                    // Only show notification when app is in background
+                    if (!isAppInForeground.value) {
+                        val currentItem = viewModel.getCurrentItem()
+                        if (currentItem != null && (viewModel.isPlaying || viewModel.currentTitle != "No song loaded")) {
+                            val folderName = viewModel.currentFolderPath?.let { path ->
+                                File(path).name
+                            } ?: "Unknown Folder"
+                            
+                            notificationHelper.showNotification(
+                                title = viewModel.currentTitle,
+                                artist = folderName,
+                                isPlaying = viewModel.isPlaying,
+                                hasNext = viewModel.hasNext(),
+                                hasPrevious = viewModel.hasPrevious(),
+                                currentPosition = viewModel.currentPositionMs.toLong(),
+                                duration = viewModel.totalDurationMs.toLong()
+                            )
+                        } else {
+                            notificationHelper.hideNotification()
+                        }
+                    } else {
+                        // Hide notification when app is in foreground
+                        notificationHelper.hideNotification()
+                    }
                 }
 
                 MaterialTheme(
@@ -336,10 +493,33 @@ class HomeFragment : Fragment() {
                         onNavigateToFolder = { path ->
                             navigateToFolder(path)
                         },
+                        onAddToPlaylist = { file ->
+                            val item = PlaylistItem(file)
+                            if (!viewModel.playlist.any { it.id == item.id }) {
+                                viewModel.addToPlaylist(item)
+                                savePlaylist()
+                                Toast.makeText(requireContext(), "Added to playlist", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        onRemoveFromPlaylist = { index ->
+                            viewModel.removeFromPlaylist(index)
+                            savePlaylist()
+                        },
+                        onClearPlaylist = {
+                            viewModel.clearPlaylist()
+                            savePlaylist()
+                        },
+                        onMoveItem = { from, to ->
+                            viewModel.moveItem(from, to)
+                            savePlaylist()
+                        },
                         bankName = currentBankName.value,
                         isLoadingBank = isLoadingBank.value,
+                        isExporting = isExporting.value,
+                        exportStatus = exportStatus.value,
                         reverbType = reverbType.value,
                         velocityCurve = velocityCurve.value,
+                        exportCodec = exportCodec.value,
                         onLoadBank = {
                             val i = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
                                 addCategory(Intent.CATEGORY_OPENABLE)
@@ -362,6 +542,32 @@ class HomeFragment : Fragment() {
                             Mixer.setDefaultVelocityCurve(value)
                             val prefs = requireContext().getSharedPreferences("miniBAE_prefs", Context.MODE_PRIVATE)
                             prefs.edit().putInt("velocity_curve", value).apply()
+                        },
+                        onExportCodecChange = { value ->
+                            exportCodec.value = value
+                            val prefs = requireContext().getSharedPreferences("miniBAE_prefs", Context.MODE_PRIVATE)
+                            prefs.edit().putInt("export_codec", value).apply()
+                        },
+                        onExportRequest = { filename, codec ->
+                            val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                                addCategory(Intent.CATEGORY_OPENABLE)
+                                type = if (codec == 2) "audio/ogg" else "audio/wav"
+                                putExtra(Intent.EXTRA_TITLE, filename)
+                            }
+                            saveFilePicker.launch(intent)
+                        },
+                        onRefreshStorage = { 
+                            checkStoragePermissions()
+                            loadFolderContents("/")
+                        },
+                        onRepeatModeChange = {
+                            currentSong?.setLoops(if (viewModel.repeatMode == RepeatMode.SONG) 32768 else 0)
+                        },
+                        onAddAllMidi = {
+                            addAllMidiInDirectory()
+                        },
+                        onAddAllMidiRecursive = {
+                            addAllMidiRecursively()
                         }
                     )
                 }
@@ -378,17 +584,12 @@ class HomeFragment : Fragment() {
                     val items = files.map { PlaylistItem(it) }
                     val newPath = getMusicDir()?.absolutePath
                     if (newPath != lastFolderPath) {
-                        currentSong?.stop()
-                        setCurrentSong(null)
-                        viewModel.currentPositionMs = 0
-                        viewModel.clearPlaylist()
-                        viewModel.addAllToPlaylist(items)
+                        viewModel.folderFiles.clear()
+                        viewModel.folderFiles.addAll(items)
                         viewModel.currentFolderPath = newPath
                         lastFolderPath = newPath
-                        savePlaylist()
                     }
                     loadingState?.value = false
-                    Toast.makeText(requireContext(), "Loaded ${files.size} song(s)", Toast.LENGTH_SHORT).show()
                 }
             } catch (_: Exception) {
                 activity?.runOnUiThread {
@@ -432,17 +633,16 @@ class HomeFragment : Fragment() {
     }
     
     private fun playFileFromBrowser(file: File) {
-        val index = viewModel.playlist.indexOfFirst { it.file.absolutePath == file.absolutePath }
-        if (index >= 0) {
-            viewModel.playAtIndex(index)
-            startPlayback(file)
-        } else {
-            val item = PlaylistItem(file)
-            viewModel.addToPlaylist(item)
-            viewModel.playAtIndex(viewModel.playlist.size - 1)
-            startPlayback(file)
-            savePlaylist()
-        }
+        // Create a single-file playlist and play it
+        currentSong?.stop(true)
+        setCurrentSong(null)
+        Mixer.delete() // Clean up before loading new song
+        viewModel.clearPlaylist()
+        val item = PlaylistItem(file)
+        viewModel.addToPlaylist(item)
+        viewModel.playAtIndex(0)
+        startPlayback(file)
+        savePlaylist()
     }
     
     private fun shuffleAndPlay() {
@@ -455,32 +655,59 @@ class HomeFragment : Fragment() {
     
     private fun startPlayback(file: File) {
         try {
-            currentSong?.stop()
+            currentSong?.stop(true)
             setCurrentSong(null)
             viewModel.currentPositionMs = 0
             
-            val song = Mixer.createSong()
-            if (song != null) {
-                setCurrentSong(song)
-                val bytes = file.readBytes()
-                val status = song.loadFromMemory(bytes)
-                if (status == 0) {
-                    applyVolume()
-                    val r = song.start()
-                    if (r == 0) {
-                        viewModel.isPlaying = true
-                        viewModel.currentTitle = file.nameWithoutExtension
-                        Toast.makeText(requireContext(), "Playing: ${file.nameWithoutExtension}", Toast.LENGTH_SHORT).show()
+            // Ensure mixer exists before trying to load
+            if (!ensureMixerExists()) {
+                viewModel.isPlaying = false
+                Toast.makeText(requireContext(), "Mixer not available", Toast.LENGTH_SHORT).show()
+                return
+            }
+            
+            val bytes = file.readBytes()
+            val loadResult = org.minibae.LoadResult()
+            
+            val status = Mixer.loadFromMemory(bytes, loadResult)
+            
+            if (status == 0) {
+                android.util.Log.d("HomeFragment", "Loaded ${loadResult.fileTypeString} file: ${file.name}")
+                
+                if (loadResult.isSong) {
+                    val song = loadResult.song
+                    if (song != null) {
+                        setCurrentSong(song)
+                        applyVolume()
+                        
+                        // Set loop count based on repeat mode
+                        val loopCount = if (viewModel.repeatMode == RepeatMode.SONG) 32768 else 0
+                        song.setLoops(loopCount)
+                        
+                        val r = song.start()
+                        if (r == 0) {
+                            viewModel.isPlaying = true
+                            viewModel.currentTitle = file.nameWithoutExtension
+                        } else {
+                            viewModel.isPlaying = false
+                            Toast.makeText(requireContext(), "Failed to start (err=$r)", Toast.LENGTH_SHORT).show()
+                        }
                     } else {
                         viewModel.isPlaying = false
-                        Toast.makeText(requireContext(), "Failed to start (err=$r)", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(requireContext(), "Failed to get song object", Toast.LENGTH_SHORT).show()
                     }
+                } else if (loadResult.isSound) {
+                    // Audio files (WAV, MP3, etc.) are loaded as Sound objects
+                    // For now, we don't support direct playback of Sound objects in the player
+                    Toast.makeText(requireContext(), "Audio file playback not yet supported", Toast.LENGTH_SHORT).show()
+                    loadResult.cleanup()
                 } else {
                     viewModel.isPlaying = false
-                    Toast.makeText(requireContext(), "Failed to load (err=$status)", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(requireContext(), "Unknown file type", Toast.LENGTH_SHORT).show()
                 }
             } else {
-                Toast.makeText(requireContext(), "Audio mixer not initialized", Toast.LENGTH_SHORT).show()
+                viewModel.isPlaying = false
+                Toast.makeText(requireContext(), "Failed to load (err=$status)", Toast.LENGTH_SHORT).show()
             }
         } catch (ex: Exception) {
             viewModel.isPlaying = false
@@ -491,6 +718,47 @@ class HomeFragment : Fragment() {
     private fun applyVolume() {
         Mixer.setMasterVolumePercent(viewModel.volumePercent)
         currentSong?.setVolumePercent(viewModel.volumePercent)
+    }
+    
+    private fun ensureMixerExists(): Boolean {
+        // Check if mixer exists, recreate if needed
+        if (Mixer.getMixer() == null) {
+            val status = Mixer.create(requireActivity().assets, 44100, 2, 64, 8, 64)
+            if (status != 0) {
+                Toast.makeText(requireContext(), "Failed to recreate mixer: $status", Toast.LENGTH_SHORT).show()
+                return false
+            }
+            
+            // Set cache dir
+            Mixer.setNativeCacheDir(requireContext().cacheDir.absolutePath)
+            
+            // Restore bank settings
+            try {
+                val prefs = requireContext().getSharedPreferences("miniBAE_prefs", android.content.Context.MODE_PRIVATE)
+                val lastBankPath = prefs.getString("last_bank_path", null)
+                
+                if (!lastBankPath.isNullOrEmpty()) {
+                    if (lastBankPath == "__builtin__") {
+                        Mixer.addBuiltInPatches()
+                    } else {
+                        val bankFile = java.io.File(lastBankPath)
+                        if (bankFile.exists()) {
+                            val bytes = bankFile.readBytes()
+                            Mixer.addBankFromMemory(bytes, bankFile.name)
+                        }
+                    }
+                }
+                
+                // Restore reverb and velocity curve settings
+                val reverbType = prefs.getInt("default_reverb", 1)
+                val velocityCurve = prefs.getInt("velocity_curve", 1)
+                Mixer.setDefaultReverb(reverbType)
+                Mixer.setDefaultVelocityCurve(velocityCurve)
+            } catch (_: Exception) {
+                // If restoration fails, just use defaults
+            }
+        }
+        return true
     }
     
     private fun getMusicDir(): File? {
@@ -526,36 +794,259 @@ class HomeFragment : Fragment() {
         return map.values.sortedBy { it.name.lowercase() }
     }
     
+    private fun addAllMidiInDirectory() {
+        val currentPath = viewModel.currentFolderPath ?: return
+        val currentDir = File(currentPath)
+        if (!currentDir.exists() || !currentDir.isDirectory) return
+        
+        val validExtensions = setOf("mid", "midi", "kar", "rmf", "rmi", "xmf", "mxmf")
+        val midiFiles = currentDir.listFiles { file -> 
+            file.isFile && file.extension.lowercase() in validExtensions 
+        }?.sortedBy { it.name.lowercase() } ?: return
+        
+        if (midiFiles.isEmpty()) {
+            Toast.makeText(requireContext(), "No MIDI files found in this directory", Toast.LENGTH_SHORT).show()
+            return
+        }
+        
+        midiFiles.forEach { file ->
+            val item = PlaylistItem(file)
+            if (!viewModel.playlist.any { it.file.absolutePath == file.absolutePath }) {
+                viewModel.addToPlaylist(item)
+            }
+        }
+        savePlaylist()
+        Toast.makeText(requireContext(), "Added ${midiFiles.size} files to playlist", Toast.LENGTH_SHORT).show()
+    }
+    
+    private fun addAllMidiRecursively() {
+        val currentPath = viewModel.currentFolderPath ?: return
+        val currentDir = File(currentPath)
+        if (!currentDir.exists() || !currentDir.isDirectory) return
+        
+        val validExtensions = setOf("mid", "midi", "kar", "rmf", "rmi", "xmf", "mxmf")
+        val midiFiles = mutableListOf<File>()
+        
+        fun scanDirectory(dir: File) {
+            dir.listFiles()?.forEach { file ->
+                when {
+                    file.isFile && file.extension.lowercase() in validExtensions -> {
+                        midiFiles.add(file)
+                    }
+                    file.isDirectory -> {
+                        scanDirectory(file)
+                    }
+                }
+            }
+        }
+        
+        scanDirectory(currentDir)
+        midiFiles.sortBy { it.absolutePath.lowercase() }
+        
+        if (midiFiles.isEmpty()) {
+            return
+        }
+        
+        midiFiles.forEach { file ->
+            val item = PlaylistItem(file)
+            if (!viewModel.playlist.any { it.file.absolutePath == file.absolutePath }) {
+                viewModel.addToPlaylist(item)
+            }
+        }
+        savePlaylist()
+        Toast.makeText(requireContext(), "Added ${midiFiles.size} files to playlist (recursive scan)", Toast.LENGTH_SHORT).show()
+    }
+    
     private fun loadFolderContents(path: String) {
+        // Check permissions before loading folder contents
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            if (!Environment.isExternalStorageManager()) {
+                checkStoragePermissions()
+                return
+            }
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (androidx.core.content.ContextCompat.checkSelfPermission(
+                requireContext(), 
+                android.Manifest.permission.READ_EXTERNAL_STORAGE
+            ) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                checkStoragePermissions()
+                return
+            }
+        }
+        
         loadingState?.value = true
         Thread {
             try {
-                val folder = File(path)
+                // Redirect /storage to / since /storage can't be listed
+                val actualPath = if (path == "/storage") "/" else path
+                
+                // Special handling for root directory - show storage options
+                if (actualPath == "/") {
+                    activity?.runOnUiThread {
+                        viewModel.folderFiles.clear()
+                        
+                        // Add Internal Storage (/sdcard)
+                        val internalStorage = File("/sdcard")
+                        if (internalStorage.exists() && internalStorage.isDirectory) {
+                            val item = PlaylistItem(internalStorage)
+                            item.isFolder = true
+                            item.title = "Internal Storage"
+                            viewModel.folderFiles.add(item)
+                        }
+                        
+                        // Use Android's proper storage APIs to detect external storage
+                        try {
+                            val storageManager = requireContext().getSystemService(Context.STORAGE_SERVICE) as StorageManager
+                            
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                                // Use StorageVolume API for Android N+
+                                val storageVolumes = storageManager.storageVolumes
+                                storageVolumes.forEach { volume ->
+                                    if (volume.isRemovable && volume.state == Environment.MEDIA_MOUNTED) {
+                                        try {
+                                            // Try to get the path using reflection for older Android versions
+                                            val getPathMethod = volume.javaClass.getMethod("getPath")
+                                            val volumePath = getPathMethod.invoke(volume) as String?
+                                            
+                                            if (volumePath != null) {
+                                                val volumeFile = File(volumePath)
+                                                if (volumeFile.exists() && volumeFile.canRead()) {
+                                                    val item = PlaylistItem(volumeFile)
+                                                    item.isFolder = true
+                                                    item.title = volume.getDescription(requireContext())
+                                                        ?: if (volume.isPrimary) "Primary Storage" else "External Storage"
+                                                    viewModel.folderFiles.add(item)
+                                                }
+                                            }
+                                        } catch (_: Exception) {
+                                            // Reflection failed, skip this volume
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            // Also try Environment.getExternalFilesDirs() approach
+                            val externalDirs = requireContext().getExternalFilesDirs(null)
+                            externalDirs?.forEachIndexed { index, dir ->
+                                if (dir != null && index > 0) { // Skip index 0 (primary external storage)
+                                    // Navigate up to get the root of the external storage
+                                    var rootDir = dir
+                                    while (rootDir.parentFile != null && rootDir.name != "Android") {
+                                        rootDir = rootDir.parentFile!!
+                                    }
+                                    if (rootDir.parentFile != null) {
+                                        rootDir = rootDir.parentFile!! // Go one level above Android folder
+                                    }
+                                    
+                                    if (rootDir.exists() && rootDir.canRead() && 
+                                        !viewModel.folderFiles.any { it.file.absolutePath == rootDir.absolutePath }) {
+                                        try {
+                                            val testFiles = rootDir.listFiles()
+                                            if (testFiles != null && testFiles.isNotEmpty()) {
+                                                val item = PlaylistItem(rootDir)
+                                                item.isFolder = true
+                                                item.title = when {
+                                                    rootDir.absolutePath.contains("usb", ignoreCase = true) -> "USB Storage"
+                                                    rootDir.absolutePath.matches(Regex(".*[0-9A-F]{4}-[0-9A-F]{4}.*")) -> "SD Card"
+                                                    else -> "External Storage ${index}"
+                                                }
+                                                viewModel.folderFiles.add(item)
+                                            }
+                                        } catch (_: Exception) {
+                                            // Skip inaccessible storage
+                                        }
+                                    }
+                                }
+                            }
+                        } catch (_: Exception) {
+                            android.util.Log.w("HomeFragment", "Failed to detect external storage using APIs")
+                        }
+                        
+                        // Fallback: Try common external storage paths
+                        val commonExternalPaths = listOf(
+                            "/storage/sdcard1",
+                            "/storage/extSdCard",
+                            "/mnt/external_sd",
+                            "/mnt/extSdCard"
+                        )
+                        
+                        commonExternalPaths.forEach { path ->
+                            val extStorage = File(path)
+                            if (extStorage.exists() && extStorage.isDirectory && extStorage.canRead() &&
+                                !viewModel.folderFiles.any { it.file.absolutePath == extStorage.absolutePath }) {
+                                try {
+                                    val testFiles = extStorage.listFiles()
+                                    if (testFiles != null && testFiles.isNotEmpty()) {
+                                        val item = PlaylistItem(extStorage)
+                                        item.isFolder = true
+                                        item.title = when {
+                                            path.contains("sdcard1") || path.contains("extSdCard") || path.contains("external_sd") -> "SD Card"
+                                            else -> "External Storage"
+                                        }
+                                        viewModel.folderFiles.add(item)
+                                    }
+                                } catch (_: Exception) {
+                                    // Skip inaccessible storage
+                                }
+                            }
+                        }
+                        
+                        // Add a refresh button at the top
+                        val refreshItem = PlaylistItem(File("/"))
+                        refreshItem.isFolder = false
+                        refreshItem.title = "🔄 Refresh Storage List"
+                        viewModel.folderFiles.add(0, refreshItem)
+                        
+                        viewModel.currentFolderPath = actualPath
+                        
+                        // Save current folder for next launch
+                        val prefs = requireContext().getSharedPreferences("miniBAE_prefs", Context.MODE_PRIVATE)
+                        prefs.edit().putString("current_folder_path", actualPath).apply()
+                        
+                        loadingState?.value = false
+                    }
+                    return@Thread
+                }
+                
+                val folder = File(actualPath)
                 if (!folder.exists() || !folder.isDirectory) {
                     activity?.runOnUiThread {
                         loadingState?.value = false
-                        Toast.makeText(requireContext(), "Invalid folder: $path", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(requireContext(), "Invalid folder: $actualPath", Toast.LENGTH_SHORT).show()
                     }
                     return@Thread
                 }
                 
                 val validExtensions = setOf("mid", "midi", "kar", "rmf", "rmi")
-                val files = folder.listFiles { file -> 
-                    file.isFile && file.extension.lowercase() in validExtensions 
-                }?.sortedBy { it.name.lowercase() } ?: emptyList()
+                val allItems = folder.listFiles()?.let { allFiles ->
+                    val folders = allFiles.filter { it.isDirectory && it.canRead() }
+                        .sortedBy { it.name.lowercase() }
+                        .map { 
+                            val item = PlaylistItem(it)
+                            item.isFolder = true
+                            item
+                        }
+                    
+                    val musicFiles = allFiles.filter { file -> 
+                        file.isFile && file.extension.lowercase() in validExtensions 
+                    }.sortedBy { it.name.lowercase() }
+                        .map { PlaylistItem(it) }
+                    
+                    folders + musicFiles
+                } ?: emptyList()
                 
                 activity?.runOnUiThread {
-                    viewModel.clearPlaylist()
-                    val items = files.map { PlaylistItem(it) }
-                    viewModel.addAllToPlaylist(items)
-                    viewModel.currentFolderPath = path
+                    // Update folder files list (separate from playlist)
+                    viewModel.folderFiles.clear()
+                    viewModel.folderFiles.addAll(allItems)
+                    
+                    viewModel.currentFolderPath = actualPath
                     
                     // Save current folder for next launch
                     val prefs = requireContext().getSharedPreferences("miniBAE_prefs", Context.MODE_PRIVATE)
-                    prefs.edit().putString("current_folder_path", path).apply()
+                    prefs.edit().putString("current_folder_path", actualPath).apply()
                     
                     loadingState?.value = false
-                    Toast.makeText(requireContext(), "Loaded ${files.size} song(s)", Toast.LENGTH_SHORT).show()
                 }
             } catch (ex: Exception) {
                 activity?.runOnUiThread {
@@ -567,7 +1058,14 @@ class HomeFragment : Fragment() {
     }
     
     private fun navigateToFolder(path: String) {
-        loadFolderContents(path)
+        // Handle special refresh button
+        if (path == "/" && viewModel.currentFolderPath == "/") {
+            // Refresh storage list
+            checkStoragePermissions()
+            loadFolderContents("/")
+        } else {
+            loadFolderContents(path)
+        }
     }
     
     private fun loadBankFromUri(uri: Uri) {
@@ -594,7 +1092,7 @@ class HomeFragment : Fragment() {
                 }
                 
                 val bytes = cached.readBytes()
-                val r = Mixer.addBankFromMemory(bytes)
+                val r = Mixer.addBankFromMemory(bytes, originalName)
                 
                 activity?.runOnUiThread {
                     if (r == 0) {
@@ -607,7 +1105,6 @@ class HomeFragment : Fragment() {
                         // Hot-swap: reload current song
                         reloadCurrentSongForBankSwap()
                         
-                        Toast.makeText(requireContext(), "Bank loaded: ${friendly ?: originalName}", Toast.LENGTH_SHORT).show()
                     } else {
                         currentBankName.value = "Failed to load bank"
                         Toast.makeText(requireContext(), "Failed to load bank (err=$r)", Toast.LENGTH_SHORT).show()
@@ -647,6 +1144,288 @@ class HomeFragment : Fragment() {
             }
         }.start()
     }
+    
+    private fun exportToFile(uri: Uri) {
+        // Set exporting state on UI thread
+        activity?.runOnUiThread {
+            isExporting.value = true
+            exportStatus.value = "Preparing export..."
+        }
+        
+        Thread {
+            try {
+                val currentItem = viewModel.getCurrentItem()
+                if (currentItem == null) {
+                    activity?.runOnUiThread {
+                        Toast.makeText(requireContext(), "No song to export", Toast.LENGTH_SHORT).show()
+                    }
+                    return@Thread
+                }
+                
+                // Get export parameters
+                val isOgg = exportCodec.value == 2
+                val fileType = if (isOgg) Mixer.BAE_VORBIS_TYPE else Mixer.BAE_WAVE_TYPE
+                val compressionType = if (isOgg) Mixer.BAE_COMPRESSION_VORBIS_128 else Mixer.BAE_COMPRESSION_NONE
+                
+                // Create a temporary file path for export
+                val tempFile = File(requireContext().cacheDir, "export_temp.${if (isOgg) "ogg" else "wav"}")
+                
+                // Ensure the temp file can be created
+                try {
+                    if (tempFile.exists()) {
+                        tempFile.delete()
+                    }
+                    tempFile.createNewFile()
+                } catch (e: Exception) {
+                    android.util.Log.e("HomeFragment", "Error creating temp file: ${e.message}")
+                    activity?.runOnUiThread {
+                        Toast.makeText(requireContext(), "Error creating temporary export file", Toast.LENGTH_SHORT).show()
+                    }
+                    return@Thread
+                }
+                
+                android.util.Log.d("HomeFragment", "Starting export to: ${tempFile.absolutePath}, fileType: $fileType, compressionType: $compressionType")
+                
+                // We must use the existing mixer because creating a new mixer without audio 
+                // engagement causes crashes in platform-specific code (BAE_GetAudioByteBufferSize)
+                // that expects hardware to be initialized.
+                
+                // Ensure we have a valid song loaded
+                if (currentSong == null) {
+                    android.util.Log.e("HomeFragment", "No song currently loaded")
+                    activity?.runOnUiThread {
+                        Toast.makeText(requireContext(), "No song loaded for export", Toast.LENGTH_SHORT).show()
+                    }
+                    return@Thread
+                }
+                
+                // Get song length BEFORE stopping (some implementations need the song to be active)
+                val lengthMs = currentSong?.getLengthMs() ?: 0
+                if (lengthMs <= 0) {
+                    android.util.Log.e("HomeFragment", "Invalid song length: $lengthMs ms")
+                    activity?.runOnUiThread {
+                        Toast.makeText(requireContext(), "Cannot determine song length", Toast.LENGTH_SHORT).show()
+                    }
+                    return@Thread
+                }
+                
+                android.util.Log.d("HomeFragment", "Song length: $lengthMs ms")
+                
+                // Save current playback state
+                val wasPlaying = viewModel.isPlaying
+                val savedPosition = currentSong?.getPositionMs() ?: 0
+                
+                android.util.Log.d("HomeFragment", "Saved playback state: wasPlaying=$wasPlaying, position=$savedPosition ms")
+                
+                // Stop current playback and seek to start for export
+                currentSong?.stop(false)
+                currentSong?.seekToMs(0)
+                viewModel.isPlaying = false
+                
+                android.util.Log.d("HomeFragment", "Current song stopped and seeked to start for export")
+                    
+                try {
+                    // CORRECT ORDER: Start export FIRST, then start song
+                    // Start export to temporary file using the global mixer
+                    val r = Mixer.getMixer()?.startOutputToFile(tempFile.absolutePath, fileType, compressionType) ?: -1
+                    if (r == 0) {
+                        android.util.Log.d("HomeFragment", "Export started successfully, length: $lengthMs ms")
+                        
+                        // Stop and rewind again to ensure clean state
+                        currentSong?.stop(false)
+                        currentSong?.seekToMs(0)
+                        
+                        // Preroll then start song playback for export
+                        val prerollResult = currentSong?.preroll() ?: -1
+                        if (prerollResult != 0) {
+                            throw Exception("Failed to preroll song for export (err=$prerollResult)")
+                        }
+                        android.util.Log.d("HomeFragment", "Song prerolled for export")
+                        
+                        val startResult = currentSong?.start() ?: -1
+                        if (startResult != 0) {
+                            throw Exception("Failed to start song for export (err=$startResult)")
+                        }
+                        
+                        android.util.Log.d("HomeFragment", "Song started, letting first audio callback settle...")
+                        
+                        // CRITICAL: Give the mixer/song a moment to actually start processing
+                        // The first audio callback needs to happen before export will work
+                        Thread.sleep(100) // 100ms should be enough for initial scheduling
+                        
+                        android.util.Log.d("HomeFragment", "Priming export pipeline...")
+                        
+                        // CRITICAL: Prime the export pipeline (matching gui_export.c behavior)
+                        // Service several times to ensure audio engine starts processing
+                        for (prime in 0 until 8) {
+                            val primeResult = Mixer.getMixer()?.serviceOutputToFile() ?: -1
+                            if (primeResult != 0) {
+                                throw Exception("Export priming failed (err=$primeResult)")
+                            }
+                            Thread.sleep(1) // Small delay between primes
+                        }
+                        
+                        // Keep priming while song reports done (hasn't started processing yet)
+                        var primeCount = 0
+                        val maxPrimes = 32
+                        while (primeCount < maxPrimes) {
+                            val stillDone = currentSong?.isDone() ?: false
+                            if (!stillDone) break // Song is now active
+                            
+                            val primeResult = Mixer.getMixer()?.serviceOutputToFile() ?: -1
+                            if (primeResult != 0) {
+                                throw Exception("Export priming failed (err=$primeResult)")
+                            }
+                            Thread.sleep(2) // 2ms between priming attempts
+                            primeCount++
+                        }
+                        
+                        android.util.Log.d("HomeFragment", "Export pipeline primed after ${primeCount + 8} service calls")
+                        
+                        activity?.runOnUiThread {
+                            exportStatus.value = "Exporting audio... 0%"
+                        }
+                        
+                        // Service the export loop - check BAESong_IsDone(), not position
+                        // Export runs faster than real-time, so position won't track normally
+                        var isDone = false
+                        var iterCount = 0
+                        val maxIterations = lengthMs * 10 // Safety limit: assume ~100 iters per second of song
+                        var lastProgressPercent = 0
+                        
+                        while (!isDone && iterCount < maxIterations) {
+                            try {
+                                // Service the export (processes audio as fast as possible)
+                                val serviceResult = Mixer.getMixer()?.serviceOutputToFile() ?: -1
+                                if (serviceResult != 0) {
+                                    android.util.Log.e("HomeFragment", "serviceOutputToFile error: $serviceResult")
+                                    break
+                                }
+                                
+                                // Check if song is done (end of MIDI events reached)
+                                isDone = currentSong?.isDone() ?: false
+                                
+                                // Update progress every 5% to avoid excessive UI updates
+                                if (lengthMs > 0) {
+                                    val positionMs = currentSong?.getPositionMs() ?: 0
+                                    val progressPercent = ((positionMs * 100) / lengthMs).coerceIn(0, 100)
+                                    
+                                    if (progressPercent >= lastProgressPercent + 5) {
+                                        lastProgressPercent = progressPercent
+                                        activity?.runOnUiThread {
+                                            exportStatus.value = "Exporting audio... $progressPercent%"
+                                        }
+                                    }
+                                }
+                                
+                                iterCount++
+                                
+                                // Small yield to prevent tight loop from blocking everything
+                                if (iterCount % 100 == 0) {
+                                    Thread.sleep(1)
+                                }
+                            } catch (e: Exception) {
+                                android.util.Log.e("HomeFragment", "Error during export service: ${e.message}")
+                                break
+                            }
+                        }
+                        
+                        if (iterCount >= maxIterations) {
+                            android.util.Log.w("HomeFragment", "Export hit iteration limit (possible stall)")
+                        }
+                        
+                        android.util.Log.d("HomeFragment", "Export loop completed after $iterCount iterations, isDone=$isDone")
+                        
+                        // Drain period: service a few more times to capture trailing audio
+                        android.util.Log.d("HomeFragment", "Draining export buffer...")
+                        for (drain in 0 until 20) {
+                            Mixer.getMixer()?.serviceOutputToFile()
+                            Thread.sleep(5)
+                        }
+                        
+                        android.util.Log.d("HomeFragment", "Export playback completed")
+                        
+                    } else {
+                        throw Exception("Failed to start output to file (err=$r)")
+                    }
+                    
+                } catch (e: Exception) {
+                    android.util.Log.e("HomeFragment", "Error during export: ${e.message}")
+                    throw e
+                } finally {
+                    // Clean up export
+                    try {
+                        Mixer.getMixer()?.stopOutputToFile()
+                        android.util.Log.d("HomeFragment", "Export stopped")
+                    } catch (e: Exception) {
+                        android.util.Log.e("HomeFragment", "Error stopping export: ${e.message}")
+                    }
+                    
+                    // Stop the song and restore position if needed
+                    try {
+                        currentSong?.stop(false)
+                        android.util.Log.d("HomeFragment", "Song stopped after export")
+                    } catch (e: Exception) {
+                        android.util.Log.e("HomeFragment", "Error stopping song: ${e.message}")
+                    }
+                    
+                    // Restore playback if it was playing before
+                    if (wasPlaying) {
+                        try {
+                            android.util.Log.d("HomeFragment", "Restoring playback...")
+                            activity?.runOnUiThread {
+                                // Seek back to saved position
+                                currentSong?.seekToMs(savedPosition)
+                                viewModel.currentPositionMs = savedPosition
+                                currentSong?.start()
+                                viewModel.isPlaying = true
+                            }
+                        } catch (e: Exception) {
+                            android.util.Log.e("HomeFragment", "Error restoring playback: ${e.message}")
+                        }
+                    }
+                }
+                
+                // Check if export file was created and has content
+                if (!tempFile.exists() || tempFile.length() == 0L) {
+                    throw Exception("Export file was not created or is empty (size: ${tempFile.length()} bytes)")
+                }
+                
+                android.util.Log.d("HomeFragment", "Export file created successfully, size: ${tempFile.length()} bytes")
+                
+                activity?.runOnUiThread {
+                    exportStatus.value = "Finalizing export..."
+                }
+                
+                // Copy temp file to user's chosen location
+                var bytesCopied = 0L
+                requireContext().contentResolver.openOutputStream(uri)?.use { outputStream ->
+                    tempFile.inputStream().use { inputStream ->
+                        bytesCopied = inputStream.copyTo(outputStream)
+                    }
+                }
+                
+                android.util.Log.d("HomeFragment", "Copied $bytesCopied bytes to final destination")
+                
+                // Clean up temp file
+                tempFile.delete()
+                
+                activity?.runOnUiThread {
+                    isExporting.value = false
+                    exportStatus.value = ""
+                    Toast.makeText(requireContext(), "Export completed successfully (${bytesCopied} bytes)", Toast.LENGTH_SHORT).show()
+                }
+                
+            } catch (ex: Exception) {
+                android.util.Log.e("HomeFragment", "Export error: ${ex.message}")
+                activity?.runOnUiThread {
+                    isExporting.value = false
+                    exportStatus.value = ""
+                    Toast.makeText(requireContext(), "Export error: ${ex.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }.start()
+    }
 }
 
 @Composable
@@ -667,14 +1446,27 @@ fun NewMusicPlayerScreen(
     onNavigate: (NavigationScreen) -> Unit,
     onShufflePlay: () -> Unit,
     onNavigateToFolder: (String) -> Unit,
+    onAddToPlaylist: (File) -> Unit,
+    onRemoveFromPlaylist: (Int) -> Unit,
+    onClearPlaylist: () -> Unit,
+    onMoveItem: (Int, Int) -> Unit,
     bankName: String,
     isLoadingBank: Boolean,
+    isExporting: Boolean,
+    exportStatus: String,
     reverbType: Int,
     velocityCurve: Int,
+    exportCodec: Int,
     onLoadBank: () -> Unit,
     onLoadBuiltin: () -> Unit,
     onReverbChange: (Int) -> Unit,
-    onCurveChange: (Int) -> Unit
+    onCurveChange: (Int) -> Unit,
+    onExportCodecChange: (Int) -> Unit,
+    onExportRequest: (String, Int) -> Unit,
+    onRefreshStorage: () -> Unit,
+    onRepeatModeChange: () -> Unit,
+    onAddAllMidi: () -> Unit,
+    onAddAllMidiRecursive: () -> Unit
 ) {
     Scaffold(
         modifier = Modifier.systemBarsPadding(),
@@ -706,14 +1498,14 @@ fun NewMusicPlayerScreen(
         },
         bottomBar = {
             Column {
-                // Mini player
-                if (viewModel.getCurrentItem() != null) {
+                // Mini player (hidden when full player is shown)
+                if (!viewModel.showFullPlayer && viewModel.getCurrentItem() != null) {
                     Surface(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable { viewModel.showFullPlayer = true },
                         elevation = 8.dp,
-                        color = Color(0xFF2a2a2a)
+                        color = MaterialTheme.colors.surface
                     ) {
                         Column {
                             Row(
@@ -736,7 +1528,7 @@ fun NewMusicPlayerScreen(
                                         text = viewModel.currentTitle,
                                         fontSize = 14.sp,
                                         fontWeight = FontWeight.Bold,
-                                        color = Color.White,
+                                        color = MaterialTheme.colors.onSurface,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
@@ -746,7 +1538,7 @@ fun NewMusicPlayerScreen(
                                     Text(
                                         text = folderName,
                                         fontSize = 12.sp,
-                                        color = Color.Gray
+                                        color = MaterialTheme.colors.onSurface.copy(alpha = 0.6f)
                                     )
                                 }
                                 
@@ -771,7 +1563,7 @@ fun NewMusicPlayerScreen(
                                         Icon(
                                             if (viewModel.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
                                             contentDescription = "Play/Pause",
-                                            tint = Color.White,
+                                            tint = MaterialTheme.colors.onSurface,
                                             modifier = Modifier.size(28.dp)
                                         )
                                     }
@@ -781,7 +1573,7 @@ fun NewMusicPlayerScreen(
                                     Icon(
                                         Icons.Filled.SkipNext,
                                         contentDescription = "Next",
-                                        tint = if (viewModel.hasNext()) Color.White else Color.Gray,
+                                        tint = if (viewModel.hasNext()) MaterialTheme.colors.onSurface else MaterialTheme.colors.onSurface.copy(alpha = 0.3f),
                                         modifier = Modifier.size(28.dp)
                                     )
                                 }
@@ -797,29 +1589,51 @@ fun NewMusicPlayerScreen(
                 ) {
                     BottomNavigationItem(
                         icon = { Icon(Icons.Filled.Home, contentDescription = "Home") },
-                        selected = viewModel.currentScreen == NavigationScreen.HOME,
-                        onClick = { onNavigate(NavigationScreen.HOME) },
+                        selected = !viewModel.showFullPlayer && viewModel.currentScreen == NavigationScreen.HOME,
+                        onClick = { 
+                            viewModel.showFullPlayer = false
+                            onNavigate(NavigationScreen.HOME)
+                        },
                         selectedContentColor = MaterialTheme.colors.primary,
                         unselectedContentColor = Color.Gray
                     )
                     BottomNavigationItem(
                         icon = { Icon(Icons.Filled.Search, contentDescription = "Search") },
-                        selected = viewModel.currentScreen == NavigationScreen.SEARCH,
-                        onClick = { onNavigate(NavigationScreen.SEARCH) },
+                        selected = !viewModel.showFullPlayer && viewModel.currentScreen == NavigationScreen.SEARCH,
+                        onClick = {
+                            viewModel.showFullPlayer = false
+                            onNavigate(NavigationScreen.SEARCH)
+                        },
+                        selectedContentColor = MaterialTheme.colors.primary,
+                        unselectedContentColor = Color.Gray
+                    )
+                    BottomNavigationItem(
+                        icon = { Icon(Icons.AutoMirrored.Filled.QueueMusic, contentDescription = "Playlist") },
+                        selected = !viewModel.showFullPlayer && viewModel.currentScreen == NavigationScreen.PLAYLIST,
+                        onClick = {
+                            viewModel.showFullPlayer = false
+                            onNavigate(NavigationScreen.PLAYLIST)
+                        },
                         selectedContentColor = MaterialTheme.colors.primary,
                         unselectedContentColor = Color.Gray
                     )
                     BottomNavigationItem(
                         icon = { Icon(Icons.Filled.Favorite, contentDescription = "Favorites") },
-                        selected = viewModel.currentScreen == NavigationScreen.FAVORITES,
-                        onClick = { onNavigate(NavigationScreen.FAVORITES) },
+                        selected = !viewModel.showFullPlayer && viewModel.currentScreen == NavigationScreen.FAVORITES,
+                        onClick = {
+                            viewModel.showFullPlayer = false
+                            onNavigate(NavigationScreen.FAVORITES)
+                        },
                         selectedContentColor = MaterialTheme.colors.primary,
                         unselectedContentColor = Color.Gray
                     )
                     BottomNavigationItem(
                         icon = { Icon(Icons.Filled.Settings, contentDescription = "Settings") },
-                        selected = viewModel.currentScreen == NavigationScreen.SETTINGS,
-                        onClick = { onNavigate(NavigationScreen.SETTINGS) },
+                        selected = !viewModel.showFullPlayer && viewModel.currentScreen == NavigationScreen.SETTINGS,
+                        onClick = {
+                            viewModel.showFullPlayer = false
+                            onNavigate(NavigationScreen.SETTINGS)
+                        },
                         selectedContentColor = MaterialTheme.colors.primary,
                         unselectedContentColor = Color.Gray
                     )
@@ -827,20 +1641,7 @@ fun NewMusicPlayerScreen(
             }
         }
     ) { paddingValues ->
-        // Show full player overlay when requested
-        if (viewModel.showFullPlayer) {
-            FullPlayerScreen(
-                viewModel = viewModel,
-                onClose = { viewModel.showFullPlayer = false },
-                onPlayPause = onPlayPause,
-                onNext = onNext,
-                onPrevious = onPrevious,
-                onSeek = onSeek,
-                onStartDrag = onStartDrag,
-                onDrag = onDrag,
-                onVolumeChange = onVolumeChange
-            )
-        } else {
+        Box(modifier = Modifier.fillMaxSize()) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -855,29 +1656,92 @@ fun NewMusicPlayerScreen(
                     onToggleFavorite = onToggleFavorite,
                     onAddFolder = onAddFolder,
                     onShufflePlay = onShufflePlay,
-                    onNavigateToFolder = onNavigateToFolder
+                    onNavigateToFolder = onNavigateToFolder,
+                    onAddToPlaylist = onAddToPlaylist,
+                    onRefreshStorage = onRefreshStorage,
+                    onAddAllMidi = onAddAllMidi,
+                    onAddAllMidiRecursive = onAddAllMidiRecursive
                 )
                 NavigationScreen.SEARCH -> SearchScreenContent(
                     viewModel = viewModel,
                     onPlaylistItemClick = onPlaylistItemClick,
-                    onToggleFavorite = onToggleFavorite
+                    onToggleFavorite = onToggleFavorite,
+                    onAddToPlaylist = onAddToPlaylist
+                )
+                NavigationScreen.PLAYLIST -> PlaylistScreenContent(
+                    viewModel = viewModel,
+                    onPlaylistItemClick = onPlaylistItemClick,
+                    onToggleFavorite = onToggleFavorite,
+                    onRemoveFromPlaylist = onRemoveFromPlaylist,
+                    onClearPlaylist = onClearPlaylist,
+                    onMoveItem = onMoveItem
                 )
                 NavigationScreen.FAVORITES -> FavoritesScreenContent(
                     viewModel = viewModel,
                     onPlaylistItemClick = onPlaylistItemClick,
-                    onToggleFavorite = onToggleFavorite
+                    onToggleFavorite = onToggleFavorite,
+                    onAddToPlaylist = onAddToPlaylist
                 )
                 NavigationScreen.SETTINGS -> SettingsScreenContent(
                     bankName = bankName,
                     isLoadingBank = isLoadingBank,
                     reverbType = reverbType,
                     velocityCurve = velocityCurve,
+                    exportCodec = exportCodec,
                     onLoadBank = onLoadBank,
                     onLoadBuiltin = onLoadBuiltin,
                     onReverbChange = onReverbChange,
                     onCurveChange = onCurveChange,
-                    onVolumeChange = onVolumeChange
+                    onVolumeChange = onVolumeChange,
+                    onExportCodecChange = onExportCodecChange
                 )
+            }
+        }
+        
+        // Show full player overlay when requested
+        if (viewModel.showFullPlayer) {
+            FullPlayerScreen(
+                viewModel = viewModel,
+                onClose = { viewModel.showFullPlayer = false },
+                onPlayPause = onPlayPause,
+                onNext = onNext,
+                onPrevious = onPrevious,
+                onSeek = onSeek,
+                onStartDrag = onStartDrag,
+                onDrag = onDrag,
+                onVolumeChange = onVolumeChange,
+                onToggleFavorite = onToggleFavorite,
+                exportCodec = exportCodec,
+                onExportRequest = onExportRequest,
+                onRepeatModeChange = onRepeatModeChange
+            )
+        }
+        
+        // Show export overlay when exporting
+        if (isExporting) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.7f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(48.dp),
+                        color = MaterialTheme.colors.primary
+                    )
+                    if (exportStatus.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = exportStatus,
+                            style = MaterialTheme.typography.body1,
+                            color = Color.White
+                        )
+                    }
+                }
             }
         }
     }
@@ -894,7 +1758,11 @@ fun FullPlayerScreen(
     onSeek: (Int) -> Unit,
     onStartDrag: () -> Unit,
     onDrag: (Int) -> Unit,
-    onVolumeChange: (Int) -> Unit
+    onVolumeChange: (Int) -> Unit,
+    onToggleFavorite: (String) -> Unit,
+    exportCodec: Int,
+    onExportRequest: (String, Int) -> Unit,
+    onRepeatModeChange: () -> Unit
 ) {
     val currentPositionMs = viewModel.currentPositionMs
     val totalDurationMs = viewModel.totalDurationMs
@@ -913,8 +1781,9 @@ fun FullPlayerScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colors.background)
+            .verticalScroll(rememberScrollState())
     ) {
-        // Top bar with back button
+        // Top bar with back button and favorite
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -923,12 +1792,43 @@ fun FullPlayerScreen(
         ) {
             IconButton(onClick = onClose) {
                 Icon(
-                    Icons.Filled.ArrowBack,
+                    Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = "Back",
                     tint = MaterialTheme.colors.onBackground
                 )
             }
             Spacer(modifier = Modifier.weight(1f))
+            
+            // Export button (disabled when repeat mode is SONG to prevent infinite looping)
+            currentItem?.let { item ->
+                val isExportEnabled = viewModel.repeatMode != RepeatMode.SONG
+                IconButton(
+                    onClick = {
+                        val extension = if (exportCodec == 2) ".ogg" else ".wav"
+                        val defaultName = item.file.nameWithoutExtension + extension
+                        onExportRequest(defaultName, exportCodec)
+                    },
+                    enabled = isExportEnabled
+                ) {
+                    Icon(
+                        Icons.Filled.GetApp,
+                        contentDescription = "Export",
+                        tint = if (isExportEnabled) MaterialTheme.colors.onBackground else Color.Gray
+                    )
+                }
+            }
+            
+            // Favorite button
+            currentItem?.let { item ->
+                val isFavorite = viewModel.isFavorite(item.path)
+                IconButton(onClick = { onToggleFavorite(item.path) }) {
+                    Icon(
+                        if (isFavorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                        contentDescription = if (isFavorite) "Remove from favorites" else "Add to favorites",
+                        tint = if (isFavorite) MaterialTheme.colors.primary else MaterialTheme.colors.onBackground
+                    )
+                }
+            }
         }
         
         // Main content centered
@@ -939,12 +1839,36 @@ fun FullPlayerScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            // Album art placeholder
+            // Album art placeholder with swipe gesture
+            var offsetX by remember { mutableStateOf(0f) }
+            
             Box(
                 modifier = Modifier
-                    .size(280.dp)
+                    .size(120.dp)
+                    .offset(x = (offsetX / 5).dp) // Visual feedback when swiping
                     .clip(RoundedCornerShape(16.dp))
-                    .background(Color(0xFF3700B3)),
+                    .background(Color(0xFF3700B3))
+                    .pointerInput(Unit) {
+                        detectHorizontalDragGestures(
+                            onDragEnd = {
+                                if (offsetX > 100) {
+                                    // Swipe right - previous
+                                    if (viewModel.hasPrevious()) {
+                                        onPrevious()
+                                    }
+                                } else if (offsetX < -100) {
+                                    // Swipe left - next
+                                    if (viewModel.hasNext()) {
+                                        onNext()
+                                    }
+                                }
+                                offsetX = 0f
+                            },
+                            onHorizontalDrag = { _, dragAmount ->
+                                offsetX = (offsetX + dragAmount).coerceIn(-200f, 200f)
+                            }
+                        )
+                    },
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
@@ -1016,7 +1940,43 @@ fun FullPlayerScreen(
                 }
             }
             
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(24.dp))
+            
+            // Volume control
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.VolumeUp,
+                        contentDescription = "Volume",
+                        tint = MaterialTheme.colors.onBackground.copy(alpha = 0.7f),
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Slider(
+                        value = viewModel.volumePercent.toFloat(),
+                        onValueChange = { onVolumeChange(it.toInt()) },
+                        valueRange = 0f..100f,
+                        colors = SliderDefaults.colors(
+                            thumbColor = MaterialTheme.colors.primary,
+                            activeTrackColor = MaterialTheme.colors.primary,
+                            inactiveTrackColor = Color.Gray.copy(alpha = 0.3f)
+                        ),
+                        modifier = Modifier.weight(1f)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "${viewModel.volumePercent}%",
+                        style = MaterialTheme.typography.caption,
+                        color = MaterialTheme.colors.onBackground.copy(alpha = 0.7f),
+                        modifier = Modifier.width(40.dp)
+                    )
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(24.dp))
             
             // Playback controls
             Row(
@@ -1074,6 +2034,63 @@ fun FullPlayerScreen(
                     )
                 }
             }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            // Repeat and Shuffle buttons
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(
+                    onClick = {
+                        viewModel.repeatMode = when (viewModel.repeatMode) {
+                            RepeatMode.NONE -> RepeatMode.SONG
+                            RepeatMode.SONG -> RepeatMode.PLAYLIST
+                            RepeatMode.PLAYLIST -> RepeatMode.NONE
+                        }
+                        // Update loop count for currently playing song
+                        onRepeatModeChange()
+                    }
+                ) {
+                    Icon(
+                        when (viewModel.repeatMode) {
+                            RepeatMode.NONE -> Icons.Filled.Repeat
+                            RepeatMode.SONG -> Icons.Filled.RepeatOne
+                            RepeatMode.PLAYLIST -> Icons.Filled.Repeat
+                        },
+                        contentDescription = "Repeat: ${viewModel.repeatMode.name}",
+                        tint = if (viewModel.repeatMode == RepeatMode.NONE) {
+                            Color.Gray
+                        } else {
+                            MaterialTheme.colors.primary
+                        },
+                        modifier = Modifier.size(32.dp)
+                    )
+                }
+                
+                Spacer(modifier = Modifier.width(24.dp))
+                
+                IconButton(
+                    onClick = {
+                        viewModel.toggleShuffle()
+                    }
+                ) {
+                    Icon(
+                        Icons.Filled.Shuffle,
+                        contentDescription = "Shuffle: ${if (viewModel.isShuffled) "On" else "Off"}",
+                        tint = if (viewModel.isShuffled) {
+                            MaterialTheme.colors.primary
+                        } else {
+                            Color.Gray
+                        },
+                        modifier = Modifier.size(32.dp)
+                    )
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(24.dp))
         }
     }
 }
@@ -1086,43 +2103,13 @@ fun HomeScreenContent(
     onToggleFavorite: (String) -> Unit,
     onAddFolder: () -> Unit,
     onShufflePlay: () -> Unit,
-    onNavigateToFolder: (String) -> Unit
+    onNavigateToFolder: (String) -> Unit,
+    onAddToPlaylist: (File) -> Unit,
+    onRefreshStorage: () -> Unit,
+    onAddAllMidi: () -> Unit,
+    onAddAllMidiRecursive: () -> Unit
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
-        // Play and Shuffle buttons
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Button(
-                onClick = {
-                    if (viewModel.playlist.isNotEmpty()) {
-                        onPlaylistItemClick(viewModel.playlist[0].file)
-                    }
-                },
-                modifier = Modifier.weight(1f).height(48.dp),
-                colors = ButtonDefaults.buttonColors(backgroundColor = MaterialTheme.colors.primary),
-                shape = RoundedCornerShape(24.dp)
-            ) {
-                Icon(Icons.Filled.PlayArrow, contentDescription = null, tint = Color.White)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Play", color = Color.White, fontWeight = FontWeight.Bold)
-            }
-            
-            OutlinedButton(
-                onClick = onShufflePlay,
-                modifier = Modifier.weight(1f).height(48.dp),
-                shape = RoundedCornerShape(24.dp),
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
-            ) {
-                Icon(Icons.Filled.Shuffle, contentDescription = null)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Shuffle", fontWeight = FontWeight.Bold)
-            }
-        }
-        
         // File list
         when {
             loading -> {
@@ -1150,15 +2137,63 @@ fun HomeScreenContent(
             }
             else -> {
                 LazyColumn(modifier = Modifier.fillMaxSize()) {
+                    // Add all MIDI buttons (only show if there are songs in the folder)
+                    val songFiles = viewModel.folderFiles.filter { !it.isFolder && !it.title.startsWith("🔄") }
+                    if (songFiles.isNotEmpty()) {
+                        item {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Button(
+                                    onClick = onAddAllMidi,
+                                    modifier = Modifier.weight(1f),
+                                    colors = ButtonDefaults.buttonColors(
+                                        backgroundColor = MaterialTheme.colors.primary.copy(alpha = 0.1f),
+                                        contentColor = MaterialTheme.colors.primary
+                                    )
+                                ) {
+                                    Icon(
+                                        Icons.AutoMirrored.Filled.PlaylistAdd,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Add All", fontSize = 12.sp)
+                                }
+                                Button(
+                                    onClick = onAddAllMidiRecursive,
+                                    modifier = Modifier.weight(1f),
+                                    colors = ButtonDefaults.buttonColors(
+                                        backgroundColor = MaterialTheme.colors.primary.copy(alpha = 0.1f),
+                                        contentColor = MaterialTheme.colors.primary
+                                    )
+                                ) {
+                                    Icon(
+                                        Icons.AutoMirrored.Filled.PlaylistAdd,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("+ Subfolders", fontSize = 12.sp)
+                                }
+                            }
+                        }
+                    }
+                    
                     // Show parent directory ".." option
                     viewModel.currentFolderPath?.let { currentPath ->
                         val file = File(currentPath)
-                        if (file.parent != null) {
+                        val parentPath = file.parent
+                        // Show parent unless we're already at root or parent is null
+                        if (parentPath != null && currentPath != "/") {
                             item {
                                 Surface(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .clickable { onNavigateToFolder(file.parent!!) },
+                                        .clickable { onNavigateToFolder(parentPath) },
                                     color = Color.Transparent
                                 ) {
                                     Row(
@@ -1170,7 +2205,7 @@ fun HomeScreenContent(
                                         Icon(
                                             Icons.Filled.Folder,
                                             contentDescription = null,
-                                            tint = Color.Gray,
+                                            tint = MaterialTheme.colors.onBackground.copy(alpha = 0.6f),
                                             modifier = Modifier.size(40.dp)
                                         )
                                         Spacer(modifier = Modifier.width(12.dp))
@@ -1178,7 +2213,7 @@ fun HomeScreenContent(
                                             text = "..",
                                             fontSize = 14.sp,
                                             fontWeight = FontWeight.Bold,
-                                            color = Color.Gray
+                                            color = MaterialTheme.colors.onBackground.copy(alpha = 0.6f)
                                         )
                                     }
                                 }
@@ -1187,47 +2222,48 @@ fun HomeScreenContent(
                         }
                     }
                     
-                    // Show subfolders
-                    viewModel.currentFolderPath?.let { currentPath ->
-                        val folder = File(currentPath)
-                        val subfolders = folder.listFiles { f -> f.isDirectory }?.sortedBy { it.name.lowercase() } ?: emptyList()
-                        
-                        itemsIndexed(subfolders) { index, subfolder ->
-                            Surface(
+                    // Show folders and special items (refresh button and storage items)
+                    itemsIndexed(viewModel.folderFiles.filter { it.isFolder || it.title.startsWith("🔄") }) { _, item ->
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { 
+                                    if (item.title.startsWith("🔄")) {
+                                        // Handle refresh button
+                                        onRefreshStorage()
+                                    } else {
+                                        onNavigateToFolder(item.path)
+                                    }
+                                },
+                            color = Color.Transparent
+                        ) {
+                            Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clickable { onNavigateToFolder(subfolder.absolutePath) },
-                                color = Color.Transparent
+                                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 16.dp, vertical = 12.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        Icons.Filled.Folder,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colors.primary,
-                                        modifier = Modifier.size(40.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(12.dp))
-                                    Text(
-                                        text = subfolder.name,
-                                        fontSize = 14.sp,
-                                        fontWeight = FontWeight.Normal,
-                                        color = Color.White
-                                    )
-                                }
-                            }
-                            if (index < subfolders.size - 1 || viewModel.playlist.isNotEmpty()) {
-                                Divider(color = Color.Gray.copy(alpha = 0.2f))
+                                Icon(
+                                    if (item.title.startsWith("🔄")) Icons.Filled.Refresh 
+                                    else Icons.Filled.Folder,
+                                    contentDescription = null,
+                                    tint = if (item.title.startsWith("🔄")) Color.Green else MaterialTheme.colors.primary,
+                                    modifier = Modifier.size(40.dp)
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text(
+                                    text = item.title,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colors.onBackground
+                                )
                             }
                         }
+                        Divider(color = Color.Gray.copy(alpha = 0.2f))
                     }
                     
                     // Show songs
-                    if (viewModel.playlist.isEmpty()) {
+                    if (songFiles.isEmpty()) {
                         item {
                             Box(
                                 modifier = Modifier
@@ -1243,14 +2279,15 @@ fun HomeScreenContent(
                             }
                         }
                     } else {
-                        itemsIndexed(viewModel.playlist) { index, item ->
-                            SongListItem(
+                        itemsIndexed(songFiles) { index, item ->
+                            FolderSongListItem(
                                 item = item,
                                 isFavorite = viewModel.isFavorite(item.path),
                                 onClick = { onPlaylistItemClick(item.file) },
-                                onToggleFavorite = { onToggleFavorite(item.path) }
+                                onToggleFavorite = { onToggleFavorite(item.path) },
+                                onAddToPlaylist = { onAddToPlaylist(item.file) }
                             )
-                            if (index < viewModel.playlist.size - 1) {
+                            if (index < songFiles.size - 1) {
                                 Divider(color = Color.Gray.copy(alpha = 0.2f))
                             }
                         }
@@ -1262,10 +2299,72 @@ fun HomeScreenContent(
 }
 
 @Composable
+fun PlaylistScreenContent(
+    viewModel: MusicPlayerViewModel,
+    onPlaylistItemClick: (File) -> Unit,
+    onToggleFavorite: (String) -> Unit,
+    onRemoveFromPlaylist: (Int) -> Unit,
+    onClearPlaylist: () -> Unit,
+    onMoveItem: (Int, Int) -> Unit
+) {
+    Column(modifier = Modifier.fillMaxSize()) {
+        if (viewModel.playlist.isEmpty()) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(Icons.AutoMirrored.Filled.QueueMusic, contentDescription = null, modifier = Modifier.size(64.dp), tint = Color.Gray)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text("Playlist is empty", color = Color.Gray)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("Add songs from Home or Favorites", fontSize = 12.sp, color = Color.Gray)
+                }
+            }
+        } else {
+            // Header with clear button
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    "${viewModel.playlist.size} songs",
+                    style = MaterialTheme.typography.h6,
+                    color = MaterialTheme.colors.onBackground
+                )
+                OutlinedButton(onClick = onClearPlaylist) {
+                    Text("Clear All")
+                }
+            }
+            
+            LazyColumn(modifier = Modifier.fillMaxSize()) {
+                itemsIndexed(viewModel.playlist) { index, item ->
+                    PlaylistSongListItem(
+                        item = item,
+                        isCurrentlyPlaying = index == viewModel.currentIndex,
+                        isFavorite = viewModel.isFavorite(item.path),
+                        onClick = { 
+                            viewModel.playAtIndex(index)
+                            onPlaylistItemClick(item.file)
+                        },
+                        onToggleFavorite = { onToggleFavorite(item.path) },
+                        onRemove = { onRemoveFromPlaylist(index) }
+                    )
+                    if (index < viewModel.playlist.size - 1) {
+                        Divider(color = Color.Gray.copy(alpha = 0.2f))
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 fun SearchScreenContent(
     viewModel: MusicPlayerViewModel,
     onPlaylistItemClick: (File) -> Unit,
-    onToggleFavorite: (String) -> Unit
+    onToggleFavorite: (String) -> Unit,
+    onAddToPlaylist: (File) -> Unit
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
         // Search bar
@@ -1278,14 +2377,14 @@ fun SearchScreenContent(
             placeholder = { Text("Search songs...") },
             leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
             colors = TextFieldDefaults.textFieldColors(
-                backgroundColor = Color(0xFF2a2a2a),
-                textColor = Color.White
+                backgroundColor = MaterialTheme.colors.surface,
+                textColor = MaterialTheme.colors.onSurface
             ),
             shape = RoundedCornerShape(24.dp)
         )
         
         // Filtered results
-        val filteredSongs = viewModel.playlist.filter {
+        val filteredSongs = viewModel.folderFiles.filter {
             it.title.contains(viewModel.searchQuery, ignoreCase = true)
         }
         
@@ -1300,11 +2399,12 @@ fun SearchScreenContent(
         } else {
             LazyColumn(modifier = Modifier.fillMaxSize()) {
                 itemsIndexed(filteredSongs) { index, item ->
-                    SongListItem(
+                    FolderSongListItem(
                         item = item,
                         isFavorite = viewModel.isFavorite(item.path),
                         onClick = { onPlaylistItemClick(item.file) },
-                        onToggleFavorite = { onToggleFavorite(item.path) }
+                        onToggleFavorite = { onToggleFavorite(item.path) },
+                        onAddToPlaylist = { onAddToPlaylist(item.file) }
                     )
                     if (index < filteredSongs.size - 1) {
                         Divider(color = Color.Gray.copy(alpha = 0.2f))
@@ -1319,9 +2419,10 @@ fun SearchScreenContent(
 fun FavoritesScreenContent(
     viewModel: MusicPlayerViewModel,
     onPlaylistItemClick: (File) -> Unit,
-    onToggleFavorite: (String) -> Unit
+    onToggleFavorite: (String) -> Unit,
+    onAddToPlaylist: (File) -> Unit
 ) {
-    val favoriteSongs = viewModel.playlist.filter { viewModel.isFavorite(it.path) }
+    val favoriteSongs = viewModel.folderFiles.filter { viewModel.isFavorite(it.path) }
     
     Column(modifier = Modifier.fillMaxSize()) {
         if (favoriteSongs.isEmpty()) {
@@ -1337,11 +2438,12 @@ fun FavoritesScreenContent(
         } else {
             LazyColumn(modifier = Modifier.fillMaxSize()) {
                 itemsIndexed(favoriteSongs) { index, item ->
-                    SongListItem(
+                    FolderSongListItem(
                         item = item,
                         isFavorite = true,
                         onClick = { onPlaylistItemClick(item.file) },
-                        onToggleFavorite = { onToggleFavorite(item.path) }
+                        onToggleFavorite = { onToggleFavorite(item.path) },
+                        onAddToPlaylist = { onAddToPlaylist(item.file) }
                     )
                     if (index < favoriteSongs.size - 1) {
                         Divider(color = Color.Gray.copy(alpha = 0.2f))
@@ -1387,7 +2489,7 @@ fun SongListItem(
                     text = item.title,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Normal,
-                    color = Color.White,
+                    color = MaterialTheme.colors.onBackground,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -1397,7 +2499,7 @@ fun SongListItem(
             Text(
                 text = "-:--",
                 fontSize = 12.sp,
-                color = Color.Gray,
+                color = MaterialTheme.colors.onBackground.copy(alpha = 0.6f),
                 modifier = Modifier.padding(end = 12.dp)
             )
             
@@ -1407,6 +2509,135 @@ fun SongListItem(
                     if (isFavorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
                     contentDescription = "Favorite",
                     tint = if (isFavorite) MaterialTheme.colors.primary else Color.Gray
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun FolderSongListItem(
+    item: PlaylistItem,
+    isFavorite: Boolean,
+    onClick: () -> Unit,
+    onToggleFavorite: () -> Unit,
+    onAddToPlaylist: () -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = Color.Transparent
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Music icon (clickable to play)
+            IconButton(onClick = onClick) {
+                Icon(
+                    Icons.Filled.MusicNote,
+                    contentDescription = null,
+                    tint = MaterialTheme.colors.primary,
+                    modifier = Modifier.size(40.dp)
+                )
+            }
+            
+            // Song info (clickable to play)
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable(onClick = onClick)
+            ) {
+                Text(
+                    text = item.title,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Normal,
+                    color = MaterialTheme.colors.onBackground,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            
+            // Add to playlist button
+            IconButton(onClick = onAddToPlaylist) {
+                Icon(
+                    Icons.Filled.Add,
+                    contentDescription = "Add to playlist",
+                    tint = Color.Gray
+                )
+            }
+            
+            // Favorite button
+            IconButton(onClick = onToggleFavorite) {
+                Icon(
+                    if (isFavorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                    contentDescription = "Favorite",
+                    tint = if (isFavorite) MaterialTheme.colors.primary else Color.Gray
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun PlaylistSongListItem(
+    item: PlaylistItem,
+    isCurrentlyPlaying: Boolean,
+    isFavorite: Boolean,
+    onClick: () -> Unit,
+    onToggleFavorite: () -> Unit,
+    onRemove: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        color = if (isCurrentlyPlaying) MaterialTheme.colors.primary.copy(alpha = 0.1f) else Color.Transparent
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Music icon
+            Icon(
+                if (isCurrentlyPlaying) Icons.Filled.PlayArrow else Icons.Filled.MusicNote,
+                contentDescription = null,
+                tint = if (isCurrentlyPlaying) MaterialTheme.colors.primary else MaterialTheme.colors.onBackground.copy(alpha = 0.6f),
+                modifier = Modifier.size(40.dp)
+            )
+            
+            Spacer(modifier = Modifier.width(12.dp))
+            
+            // Song info
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = item.title,
+                    fontSize = 14.sp,
+                    fontWeight = if (isCurrentlyPlaying) FontWeight.Bold else FontWeight.Normal,
+                    color = if (isCurrentlyPlaying) MaterialTheme.colors.primary else MaterialTheme.colors.onBackground,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            
+            // Favorite button
+            IconButton(onClick = onToggleFavorite) {
+                Icon(
+                    if (isFavorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                    contentDescription = "Favorite",
+                    tint = if (isFavorite) MaterialTheme.colors.primary else MaterialTheme.colors.onBackground.copy(alpha = 0.6f)
+                )
+            }
+            
+            // Remove button
+            IconButton(onClick = onRemove) {
+                Icon(
+                    Icons.Filled.Close,
+                    contentDescription = "Remove",
+                    tint = MaterialTheme.colors.onBackground.copy(alpha = 0.6f)
                 )
             }
         }
@@ -1427,11 +2658,13 @@ fun SettingsScreenContent(
     isLoadingBank: Boolean,
     reverbType: Int,
     velocityCurve: Int,
+    exportCodec: Int,
     onLoadBank: () -> Unit,
     onLoadBuiltin: () -> Unit,
     onReverbChange: (Int) -> Unit,
     onCurveChange: (Int) -> Unit,
-    onVolumeChange: (Int) -> Unit
+    onVolumeChange: (Int) -> Unit,
+    onExportCodecChange: (Int) -> Unit
 ) {
     val reverbOptions = listOf(
         "None", "Igor's Closet", "Igor's Garage", "Igor's Acoustic Lab",
@@ -1439,10 +2672,12 @@ fun SettingsScreenContent(
         "Early Reflections", "Basement", "Banquet Hall", "Catacombs"
     )
     
-    val curveOptions = listOf("Default", "Peaky", "WebTV", "Expo", "Linear")
+    val curveOptions = listOf("Beatnik Default", "Peaky S Curve", "WebTV Curve", "2x Exponential", "2x Linear")
+    val exportCodecOptions = listOf("WAV", "OGG")
     
     var reverbExpanded by remember { mutableStateOf(false) }
     var curveExpanded by remember { mutableStateOf(false) }
+    var exportCodecExpanded by remember { mutableStateOf(false) }
     val scrollState = rememberScrollState()
     
     Column(
@@ -1619,14 +2854,14 @@ fun SettingsScreenContent(
                     modifier = Modifier.padding(bottom = 12.dp)
                 ) {
                     Icon(
-                        Icons.Filled.TrendingUp,
+                        Icons.AutoMirrored.Filled.TrendingUp,
                         contentDescription = null,
                         tint = MaterialTheme.colors.primary,
                         modifier = Modifier.size(24.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "Velocity Curve",
+                        text = "Velocity Curve (HSB Only)",
                         style = MaterialTheme.typography.h6,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colors.primary
@@ -1652,6 +2887,62 @@ fun SettingsScreenContent(
                             DropdownMenuItem(onClick = {
                                 onCurveChange(index)
                                 curveExpanded = false
+                            }) {
+                                Text(option)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        // Export Codec Section
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            elevation = 4.dp,
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(bottom = 12.dp)
+                ) {
+                    Icon(
+                        Icons.Filled.GetApp,
+                        contentDescription = null,
+                        tint = MaterialTheme.colors.primary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Export Codec",
+                        style = MaterialTheme.typography.h6,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colors.primary
+                    )
+                }
+                
+                Box {
+                    OutlinedButton(
+                        onClick = { exportCodecExpanded = true },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = exportCodecOptions.getOrNull(exportCodec - 1) ?: "OGG",
+                            modifier = Modifier.weight(1f)
+                        )
+                        Icon(Icons.Filled.ArrowDropDown, contentDescription = null)
+                    }
+                    DropdownMenu(
+                        expanded = exportCodecExpanded,
+                        onDismissRequest = { exportCodecExpanded = false }
+                    ) {
+                        exportCodecOptions.forEachIndexed { index, option ->
+                            DropdownMenuItem(onClick = {
+                                onExportCodecChange(index + 1)
+                                exportCodecExpanded = false
                             }) {
                                 Text(option)
                             }

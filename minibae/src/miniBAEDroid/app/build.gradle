@@ -36,6 +36,11 @@ android {
         compose true
     }
 
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+
     // It's also common to define the compiler version directly in the plugin block if needed,
     // or rely on the versions brought in by your Compose BOM.
 }
@@ -44,6 +49,7 @@ dependencies {
     implementation 'androidx.appcompat:appcompat:1.7.1'
     implementation 'org.jetbrains.kotlin:kotlin-stdlib:2.2.10' // You are using Kotlin 2.2.10
     implementation 'com.google.android.material:material:1.13.0'
+    implementation 'androidx.media:media:1.7.1'
 
     // Jetpack Compose core dependencies via BOM (removes explicit versions to avoid resolution mismatch)
     def composeBom = platform('androidx.compose:compose-bom:2025.12.00') // Keep updated with latest stable
@@ -65,9 +71,9 @@ dependencies {
     // implementation "androidx.compose.compiler:compiler:LATEST_COMPATIBLE_VERSION"
 }
 
-// Ensure Kotlin compiler produces Java 1.8 bytecode to match Java compile task
+// Ensure Kotlin compiler produces Java 11 bytecode to match Java compile task
 tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
     kotlinOptions {
-        jvmTarget = "1.8"
+        jvmTarget = "11"
     }
 }

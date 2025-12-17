@@ -471,7 +471,7 @@ intptr_t BAE_FileOpenForWrite(void *fileName)
 {
     if (fileName)
     {
-        return(open((char *)fileName, O_WRONLY | O_CREAT | O_TRUNC));
+        return(open((char *)fileName, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH));
     }
     return(-1);
 }
@@ -480,7 +480,7 @@ intptr_t BAE_FileOpenForReadWrite(void *fileName)
 {
     if (fileName)
     {
-        return(open((char *)fileName, O_RDWR));
+        return(open((char *)fileName, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH));
     }
     return(-1);
 }

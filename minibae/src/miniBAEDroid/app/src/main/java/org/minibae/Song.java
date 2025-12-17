@@ -8,22 +8,35 @@ public class Song
 	private native long _newNativeSong(long mixerReference);
 	private native int _loadSong(long songReference, String path);
 	private native int _loadSongFromMemory(long songReference, byte[] data);
+	private native int _loadRmiFromMemory(long songReference, byte[] data, boolean useEmbeddedBank);
+	private native int _prerollSong(long songReference);
 	private native int _startSong(long songReference);
-	private native void _stopSong(long songReference);
+	private native void _stopSong(long songReference, boolean deleteSong);
 	private native int _pauseSong(long songReference);
 	private native int _resumeSong(long songReference);
 	private native boolean _isSongPaused(long songReference);
+	private native boolean _isSongDone(long songReference);
 	private static native int _setSongVolume(long songReference, int fixedVolume);
 	private static native int _getSongVolume(long songReference);
 	// Extended position/length JNI (microseconds)
 	private static native int _getSongPositionUS(long songReference);
 	private static native int _setSongPositionUS(long songReference, int us);
 	private static native int _getSongLengthUS(long songReference);
+	private static native int _setSongLoops(long songReference, int numLoops);
 
 	Song(Mixer mixer)
 	{
 		mMixer = mixer;
-	mReference = _newNativeSong(mMixer.mReference);
+		mReference = _newNativeSong(mMixer.mReference);
+		// default full volume
+		_setSongVolume(mReference, 1 * 65536); // 1.0 in unsigned fixed (16.16)
+	}
+	
+	// Package-private constructor for LoadResult to wrap existing native song
+	Song(Mixer mixer, long nativeReference)
+	{
+		mMixer = mixer;
+		mReference = nativeReference;
 		// default full volume
 		_setSongVolume(mReference, 1 * 65536); // 1.0 in unsigned fixed (16.16)
 	}
@@ -38,14 +51,24 @@ public class Song
 		return _loadSongFromMemory(mReference, data);
 	}
 
+	public int loadRmiFromMemory(byte[] data, boolean useEmbeddedBank)
+	{
+		return _loadRmiFromMemory(mReference, data, useEmbeddedBank);
+	}
+
+	public int preroll()
+	{
+		return _prerollSong(mReference);
+	}
+
 	public int start()
 	{
 		return _startSong(mReference);
 	}
 
-	public void stop()
+	public void stop(boolean deleteSong)
 	{
-		_stopSong(mReference);
+		_stopSong(mReference, deleteSong);
 	}
 
 	public int pause()
@@ -63,6 +86,11 @@ public class Song
 		return _isSongPaused(mReference);
 	}
 
+	public boolean isDone()
+	{
+		return _isSongDone(mReference);
+	}
+
 	public int setVolumePercent(int percent){
 		if(percent<0) percent=0; if(percent>100) percent=100;
 		int fixed = (int)((percent * 65536L) / 100L);
@@ -76,4 +104,20 @@ public class Song
 	public int getPositionMs(){ int us = _getSongPositionUS(mReference); return us / 1000; }
 	public void seekToMs(int ms){ if(ms < 0) ms = 0; _setSongPositionUS(mReference, ms * 1000); }
 	public int getLengthMs(){ int us = _getSongLengthUS(mReference); return us / 1000; }
+	
+	// Loop control
+	public int setLoops(int numLoops){ return _setSongLoops(mReference, numLoops); }
+	
+	// Additional methods for export functionality
+	public boolean isPlaying() {
+		return !isPaused(); // If not paused, assume it's playing
+	}
+	
+	public void close() {
+		// Stop song if playing
+		if (mReference != 0L) {
+			stop(true);
+			mReference = 0L;
+		}
+	}
 }

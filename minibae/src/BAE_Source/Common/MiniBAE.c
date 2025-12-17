@@ -200,7 +200,7 @@ void process_and_send_audio(int16_t *rawAudio, int length)
 #endif
 
 // Fallback helper: scan RMF memory directly for SONG resource if cache lookup fails.
-static SongResource *PV_FallbackFindSongInRMFMemory(void *data, uint32_t totalLen, int16_t desiredIndex, XLongResourceID *outID, int32_t *outSize)
+static SongResource *PV_FallbackFindSongInRMFMemory(const void *data, uint32_t totalLen, int16_t desiredIndex, XLongResourceID *outID, int32_t *outSize)
 {
     if (!data || totalLen < 16 || desiredIndex < 0)
     {
@@ -1048,17 +1048,17 @@ AudioFileType BAE_TranslateBAEFileType(BAEFileType fileType)
     case BAE_WAVE_TYPE:
         haeFileType = FILE_WAVE_TYPE;
         break;
-#if USE_MPEG_DECODER != FALSE
+#if USE_MPEG_DECODER == TRUE || USE_MPEG_ENCODER == TRUE
     case BAE_MPEG_TYPE:
         haeFileType = FILE_MPEG_TYPE;
         break;
 #endif
-#if (USE_FLAC_DECODER != FALSE) || (USE_FLAC_ENCODER != FALSE)
+#if USE_FLAC_DECODER == TRUE || USE_FLAC_ENCODER == TRUE
     case BAE_FLAC_TYPE:
         haeFileType = FILE_FLAC_TYPE;
         break;
 #endif
-#if (USE_VORBIS_DECODER != FALSE) || (USE_VORBIS_ENCODER != FALSE)
+#if USE_VORBIS_DECODER == TRUE || USE_VORBIS_ENCODER == TRUE
     case BAE_VORBIS_TYPE:
         haeFileType = FILE_VORBIS_TYPE;
         break;
@@ -7151,6 +7151,65 @@ BAEResult BAESong_LoadMidiFromMemory(BAESong song, void const *pMidiData, uint32
 
 
 #if USE_SF2_SUPPORT == TRUE && _USING_FLUIDSYNTH == TRUE
+BAEResult BAESong_LoadRmiFromMemory(BAESong song, void const *pRmiData, uint32_t rmiSize, BAE_BOOL ignoreBadInstruments, BAE_BOOL useEmbeddedBank)
+{
+    OPErr theErr;
+    unsigned char *extractedMidi = NULL;
+    uint32_t extractedMidiLen = 0;
+
+    theErr = NO_ERR;
+    if ((song) && (song->mID == OBJECT_ID))
+    {
+        BAE_AcquireMutex(song->mLock);
+        
+        if (pRmiData)
+        {
+            // Check if this is an RMI file and extract MIDI + optional DLS
+            if (GM_IsRMIFile((const unsigned char *)pRmiData, rmiSize))
+            {
+                BAE_PRINTF("[BAE] Detected RMI file format, useEmbeddedBank=%d\n", useEmbeddedBank);
+                
+                // Load RMI and extract MIDI, optionally loading embedded DLS
+                theErr = GM_LoadRMIFromMemory((const unsigned char *)pRmiData, rmiSize,
+                                              &extractedMidi, &extractedMidiLen, useEmbeddedBank);
+                
+                if (theErr == NO_ERR && extractedMidi)
+                {
+                    BAE_PRINTF("[BAE] RMI processing complete, extracted %u bytes of MIDI\n", extractedMidiLen);
+                    
+                    // Now load the extracted MIDI data using LoadMidiFromMemory
+                    BAE_ReleaseMutex(song->mLock);
+                    BAEResult result = BAESong_LoadMidiFromMemory(song, extractedMidi, extractedMidiLen, ignoreBadInstruments);
+                    XDisposePtr(extractedMidi); // Clean up extracted MIDI
+                    return result;
+                }
+                else
+                {
+                    BAE_PRINTF("[BAE] Failed to parse RMI file (error %d)\n", theErr);
+                    theErr = BAD_FILE;
+                }
+            }
+            else
+            {
+                BAE_PRINTF("[BAE] Data is not RMI format\n");
+                theErr = BAD_FILE;
+            }
+        }
+        else
+        {
+            theErr = PARAM_ERR;
+        }
+        
+        BAE_ReleaseMutex(song->mLock);
+    }
+    else
+    {
+        theErr = NULL_OBJECT;
+    }
+    
+    return BAE_TranslateOPErr(theErr);
+}
+
 BAEResult BAESong_LoadRmiFromFile(BAESong song, BAEPathName filePath, BAE_BOOL ignoreBadInstruments, BAE_BOOL useEmbeddedBank)
 {
     XFILENAME name;
@@ -7322,7 +7381,7 @@ BAEResult BAESong_LoadMidiFromFile(BAESong song, BAEPathName filePath, BAE_BOOL 
 // --------------------------------------
 // was BAERmfSong::LoadFromMemory()
 //
-BAEResult BAESong_LoadRmfFromMemory(BAESong song, void *pRMFData, uint32_t rmfSize, int16_t songIndex, BAE_BOOL ignoreBadInstruments)
+BAEResult BAESong_LoadRmfFromMemory(BAESong song, void const *pRMFData, uint32_t rmfSize, int16_t songIndex, BAE_BOOL ignoreBadInstruments)
 {
 #if USE_FULL_RMF_SUPPORT == TRUE
     XFILE fileRef;
@@ -10367,6 +10426,12 @@ BAEResult BAEMixer_LoadFromFile(BAEMixer mixer, BAEPathName filePath, BAELoadRes
         {
             sr = BAESong_LoadRmfFromFile(result->data.song, filePath, 0, TRUE);
         }
+#if USE_SF2_SUPPORT == TRUE && _USING_FLUIDSYNTH == TRUJE
+        else if (ftype == BAE_RMI)
+        {
+            sr = BAESong_LoadRmiFromFile(result->data.song, filePath, 0, TRUE);
+        }
+#endif                
 #if USE_XMF_SUPPORT == TRUE
         else if (ftype == BAE_XMF)
         {
@@ -10418,7 +10483,129 @@ BAEResult BAELoadResult_Cleanup(BAELoadResult *result)
 
     result->type = BAE_LOAD_TYPE_NONE;
     result->result = BAE_NO_ERROR;
-    result->fileType = BAE_INVALID_TYPE;
 
     return BAE_NO_ERROR;
+}
+
+// BAEMixer_LoadFromMemory()
+// --------------------------------------
+// Universal memory loader that automatically detects file type and loads the appropriate
+// BAESong or BAESound object based on file content
+BAEResult BAEMixer_LoadFromMemory(BAEMixer mixer, void const *pData, uint32_t dataSize, BAELoadResult *result)
+{
+    if (!mixer || !pData || dataSize == 0 || !result)
+        return BAE_PARAM_ERR;
+
+    // Initialize result structure
+    result->type = BAE_LOAD_TYPE_NONE;
+    result->result = BAE_NO_ERROR;
+    result->fileType = BAE_INVALID_TYPE;
+    result->data.song = NULL;
+    result->data.sound = NULL;
+
+    // Detect file type from content
+    int32_t probeSize = (int32_t)dataSize;
+    if (probeSize > 64) probeSize = 64; // Only need first 64 bytes for detection
+    
+    BAEFileType ftype = X_DetermineFileTypeByData((const unsigned char *)pData, probeSize);
+    result->fileType = ftype;
+    
+    BAE_PRINTF("[BAEMixer_LoadFromMemory] Detected file type: %s\n", X_GetFileTypeString(ftype));
+    
+    if (ftype == BAE_INVALID_TYPE)
+    {
+        result->result = BAE_BAD_FILE;
+        return BAE_BAD_FILE;
+    }
+
+    // Determine if this is an audio file or a song file
+    BAE_BOOL isAudio = FALSE;
+    if (ftype == BAE_WAVE_TYPE || ftype == BAE_AIFF_TYPE || ftype == BAE_AU_TYPE
+#if USE_MPEG_DECODER == TRUE
+        || ftype == BAE_MPEG_TYPE
+#endif
+#if USE_FLAC_DECODER == TRUE
+        || ftype == BAE_FLAC_TYPE
+#endif
+#if USE_VORBIS_DECODER == TRUE
+        || ftype == BAE_VORBIS_TYPE
+#endif
+    )
+    {
+        isAudio = TRUE;
+    }
+
+    if (isAudio)
+    {
+        // Load as audio file using BAESound
+        result->data.sound = BAESound_New(mixer);
+        if (!result->data.sound)
+        {
+            result->result = BAE_MEMORY_ERR;
+            return BAE_MEMORY_ERR;
+        }
+
+        BAEResult sr = BAESound_LoadMemorySample(result->data.sound, (void *)pData, dataSize, ftype);
+        if (sr != BAE_NO_ERROR)
+        {
+            BAESound_Delete(result->data.sound);
+            result->data.sound = NULL;
+            result->result = sr;
+            return sr;
+        }
+
+        result->type = BAE_LOAD_TYPE_SOUND;
+        result->result = BAE_NO_ERROR;
+        return BAE_NO_ERROR;
+    }
+    else
+    {
+        // Load as song file using BAESong
+        result->data.song = BAESong_New(mixer);
+        if (!result->data.song)
+        {
+            result->result = BAE_MEMORY_ERR;
+            return BAE_MEMORY_ERR;
+        }
+
+        BAEResult sr = BAE_NO_ERROR;
+
+        if (ftype == BAE_RMF)
+        {
+            sr = BAESong_LoadRmfFromMemory(result->data.song, pData, dataSize, 0, TRUE);
+        }
+#if USE_SF2_SUPPORT == TRUE && _USING_FLUIDSYNTH == TRUE
+        else if (ftype == BAE_RMI)
+        {
+            sr = BAESong_LoadRmiFromMemory(result->data.song, pData, dataSize, TRUE, TRUE);
+        }
+#endif
+#if USE_XMF_SUPPORT == TRUE
+        else if (ftype == BAE_XMF)
+        {
+            sr = BAESong_LoadXmfFromMemory(result->data.song, pData, dataSize, TRUE);
+        }
+#endif
+        else if (ftype == BAE_MIDI_TYPE || ftype == BAE_RMI)
+        {
+            sr = BAESong_LoadMidiFromMemory(result->data.song, pData, dataSize, TRUE);
+        }
+        else
+        {
+            // Default to standard MIDI for any remaining cases
+            sr = BAESong_LoadMidiFromMemory(result->data.song, pData, dataSize, TRUE);
+        }
+
+        if (sr != BAE_NO_ERROR)
+        {
+            BAESong_Delete(result->data.song);
+            result->data.song = NULL;
+            result->result = sr;
+            return sr;
+        }
+
+        result->type = BAE_LOAD_TYPE_SONG;
+        result->result = BAE_NO_ERROR;
+        return BAE_NO_ERROR;
+    }
 }

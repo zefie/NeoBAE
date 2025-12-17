@@ -2256,7 +2256,7 @@ extern "C"
     //           BAE_BAD_FILE    -- Bad MIDI data
     // ------------------------------------
     BAEResult BAESong_LoadRmfFromMemory(BAESong song,
-                                        void *pRMFData,
+                                        void const *pRMFData,
                                         uint32_t rmfSize,
                                         int16_t songIndex,
                                         BAE_BOOL ignoreBadInstruments);
@@ -2731,6 +2731,28 @@ typedef struct
 // ------------------------------------
 BAEResult BAEMixer_LoadFromFile(BAEMixer mixer, BAEPathName filePath, BAELoadResult *result);
 
+// BAEMixer_LoadFromMemory()
+// ------------------------------------
+// Universal memory loader that automatically detects file type and loads
+// the appropriate BAESong or BAESound object from memory. Handles MIDI, RMF, XMF,
+// WAV, AIFF, AU, MP3, FLAC, and OGG files automatically.
+// ------------------------------------
+// Parameters:
+//           mixer      -- BAEMixer to load into
+//           pData      -- Pointer to file data in memory
+//           dataSize   -- Size of data in bytes
+//           result     -- Pointer to BAELoadResult structure to fill
+// ------------------------------------
+// BAEResult codes:
+//           BAE_NO_ERROR      -- Successfully loaded
+//           BAE_PARAM_ERR     -- Invalid parameters
+//           BAE_INVALID_TYPE  -- Unknown file type
+//           BAE_BAD_FILE      -- Data could not be parsed
+//           BAE_MEMORY_ERR    -- Could not allocate memory
+//           Other codes from specific loaders
+// ------------------------------------
+BAEResult BAEMixer_LoadFromMemory(BAEMixer mixer, void const *pData, uint32_t dataSize, BAELoadResult *result);
+
 // BAELoadResult_Cleanup()
 // ------------------------------------
 // Cleans up resources allocated by BAEMixer_LoadFromFile.
@@ -2739,6 +2761,7 @@ BAEResult BAEMixer_LoadFromFile(BAEMixer mixer, BAEPathName filePath, BAELoadRes
 BAEResult BAELoadResult_Cleanup(BAELoadResult *result);
 
 BAEResult BAESong_LoadRmiFromFile(BAESong song, BAEPathName filePath, BAE_BOOL ignoreBadInstruments, BAE_BOOL useEmbeddedBank);
+BAEResult BAESong_LoadRmiFromMemory(BAESong song, void const *pRmiData, uint32_t rmiSize, BAE_BOOL ignoreBadInstruments, BAE_BOOL useEmbeddedBank);
 
 #ifdef __cplusplus
 } // extern "C"
