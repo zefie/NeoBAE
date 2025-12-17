@@ -40,6 +40,8 @@ public class Song
 		}
 		if (listener != null) {
 			mCallbackHandle = _setMetaEventCallback(mReference, listener);
+		} else {
+			_setMetaEventCallback(mReference, null);
 		}
 	}
 
@@ -90,6 +92,7 @@ public class Song
 		if (mCallbackHandle != 0) {
 			_cleanupMetaEventCallback(mCallbackHandle);
 			mCallbackHandle = 0;
+			_setMetaEventCallback(mReference, null);
 		}
 		_stopSong(mReference, deleteSong);
 	}
