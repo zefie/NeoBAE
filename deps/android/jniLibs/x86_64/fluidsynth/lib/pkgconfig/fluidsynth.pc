@@ -1,0 +1,12 @@
+prefix=/home/zefie/dev/miniBAE/deps/android/jniLibs/x86_64/fluidsynth
+exec_prefix=${prefix}
+libdir=${exec_prefix}/lib
+includedir=${prefix}/include
+
+Name: FluidSynth
+Description: Software SoundFont synth
+Version: 2.5.1
+Requires.private: sndfile
+Libs: -L${libdir} -lfluidsynth
+Libs.private: -llog 
+Cflags: -I${includedir}

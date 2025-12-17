@@ -48,85 +48,15 @@ class MainActivity : AppCompatActivity() {
         requestStoragePermissions()
 
         // Load native library (built by the module 'miniBAE')
+        // Load sqlite3 first since miniBAE depends on it
+        System.loadLibrary("sqlite3")
         System.loadLibrary("miniBAE")
 
-        // Initialize Mixer for the app so fragments can create Songs
-        val status = Mixer.create(assets, 44100, 2, 64, 8, 64)
-        if (status != 0) {
-            Toast.makeText(this, "Mixer init failed: $status", Toast.LENGTH_SHORT).show()
-        }
-        else {
-            // Provide native code with a writable cache directory path to avoid permission issues when creating temp files
-            Mixer.setNativeCacheDir(cacheDir.absolutePath)
-            
-            // Restore saved bank or use built-in patches
-            var bankLoaded = false
-            try {
-                val prefs = getSharedPreferences("miniBAE_prefs", Context.MODE_PRIVATE)
-                val lastBankPath = prefs.getString("last_bank_path", null)
-                
-                // Load built-in patches if path is null, empty, or explicitly "__builtin__"
-                if (lastBankPath.isNullOrEmpty() || lastBankPath == "__builtin__") {
-                    val br = Mixer.addBuiltInPatches()
-                    if (br == 0) {
-                        bankLoaded = true
-                        prefs.edit().putString("last_bank_path", "__builtin__").apply()
-                        Toast.makeText(this, "Using built-in patches", Toast.LENGTH_SHORT).show()
-                    } else {
-                        Toast.makeText(this, "Failed to load built-in patches: $br", Toast.LENGTH_SHORT).show()
-                    }
-                } else {
-                    // Try to restore saved bank file
-                    if (lastBankPath == "__builtin__") {
-                        val br = Mixer.addBuiltInPatches()
-                        if (br == 0) {
-                            bankLoaded = true
-                            prefs.edit().putString("last_bank_path", "__builtin__").apply()
-                            Toast.makeText(this, "Using built-in patches", Toast.LENGTH_SHORT).show()
-                        } else {
-                            Toast.makeText(this, "Failed to load built-in patches: $br", Toast.LENGTH_SHORT).show()
-                        }   
-                    } else {
-                        val bankFile = java.io.File(lastBankPath)
-                        if (bankFile.exists()) {
-                            try {
-                                val bytes = bankFile.readBytes()
-                                val br = Mixer.addBankFromMemory(bytes, bankFile.name)
-                                if (br == 0) {
-                                    bankLoaded = true
-                                    Toast.makeText(this, "Restored bank: ${Mixer.getBankFriendlyName() ?: bankFile.name}", Toast.LENGTH_SHORT).show()
-                                }
-                            } catch (ex: Exception) {
-                                android.util.Log.e("MainActivity", "Failed to restore saved bank: ${ex.message}")
-                            }
-                        } else {
-                            android.util.Log.w("MainActivity", "Saved bank file not found: $lastBankPath")
-                        }
-                    }
-                }
-            } catch (ex: Exception) {
-                android.util.Log.e("MainActivity", "Error restoring bank: ${ex.message}")
-            }
-            
-            // Fall back to built-in patches if no bank was loaded
-            if (!bankLoaded) {
-                val br = Mixer.addBuiltInPatches()
-                if (br != 0) {
-                    Toast.makeText(this, "Failed to load built-in patches: $br", Toast.LENGTH_SHORT).show()
-                } else {
-                    Toast.makeText(this, "Using built-in patches", Toast.LENGTH_SHORT).show()
-                }
-            }
-            
-            // Apply persisted reverb and velocity curve settings
-            try {
-                val prefs = getSharedPreferences("miniBAE_prefs", Context.MODE_PRIVATE)
-                val savedReverb = prefs.getInt("default_reverb", 1)
-                val savedCurve = prefs.getInt("velocity_curve", 1)
-                Mixer.setDefaultReverb(savedReverb)
-                Mixer.setDefaultVelocityCurve(savedCurve)
-            } catch (ex: Exception) { }            
-        }
+        // Set cache directory for native code (before any mixer creation)
+        Mixer.setNativeCacheDir(cacheDir.absolutePath)
+        
+        // Don't initialize Mixer on launch - it will be created lazily when needed
+        // This prevents the audio callback from running and generating empty samples when idle
 
         // Setup OnBackPressedDispatcher instead of deprecated onBackPressed()
         onBackPressedDispatcher.addCallback(this, object : androidx.activity.OnBackPressedCallback(true) {

@@ -19,3 +19,6 @@ minibae/.vscode/
 minibae/.vs/
 minibae/src/miniBAEDroid/.gradle/
 minibae/src/thirdparty/bassmidi/
+# IntelliJ IDEA workspace file
+minibae/src/miniBAEDroid/miniBAEDroid.iws
+minibae/src/miniBAEDroid/app/release/

@@ -1,0 +1,15 @@
+# libvorbis pkg-config source file
+
+prefix=/home/zefie/dev/miniBAE/deps/android/jniLibs/x86_64/libvorbis
+exec_prefix=/home/zefie/dev/miniBAE/deps/android/jniLibs/x86_64/libvorbis/bin
+libdir=/home/zefie/dev/miniBAE/deps/android/jniLibs/x86_64/libvorbis/lib
+includedir=/home/zefie/dev/miniBAE/deps/android/jniLibs/x86_64/libvorbis/include
+
+Name: vorbis
+Description: vorbis is the primary Ogg Vorbis library
+Version: 1.3.7
+Requires.private: ogg
+Conflicts:
+Libs: -L${libdir} -lvorbis 
+Libs.private: 
+Cflags: -I${includedir}

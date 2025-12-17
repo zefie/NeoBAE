@@ -98,46 +98,48 @@ LOCAL_SRC_FILES	:= \
 			Common/g72x.c \
 			Common/sha1mini.c \
 			Common/XFileTypes.c \
+      Common/XVorbisFiles.c \
 			../BAE_MPEG_Source_II/XMPEG_minimp3_wrapper.c \
 			../BAE_MPEG_Source_II/XMPEGFilesSun.c \
 			Platform/jni/org_minibae_Mixer.c \
 			Platform/jni/org_minibae_SongExt.c \
 			Platform/jni/org_minibae_Sound.c \
+			Platform/jni/org_minibae_SQLiteHelper.c \
 			Platform/BAE_API_Android.c \
 			../thirdparty/libogg/src/bitwise.c \
 			../thirdparty/libogg/src/framing.c \
 			../thirdparty/libvorbis/lib/analysis.c \
-            ../thirdparty/libvorbis/lib/bitrate.c \
-            ../thirdparty/libvorbis/lib/block.c \
-            ../thirdparty/libvorbis/lib/codebook.c \
-            ../thirdparty/libvorbis/lib/envelope.c \
-            ../thirdparty/libvorbis/lib/floor0.c \
-            ../thirdparty/libvorbis/lib/floor1.c \
-            ../thirdparty/libvorbis/lib/info.c \
-            ../thirdparty/libvorbis/lib/lookup.c \
-            ../thirdparty/libvorbis/lib/lsp.c \
-            ../thirdparty/libvorbis/lib/mapping0.c \
-            ../thirdparty/libvorbis/lib/mdct.c \
-            ../thirdparty/libvorbis/lib/psy.c \
-            ../thirdparty/libvorbis/lib/registry.c \
-            ../thirdparty/libvorbis/lib/res0.c \
-            ../thirdparty/libvorbis/lib/sharedbook.c \
-            ../thirdparty/libvorbis/lib/smallft.c \
-            ../thirdparty/libvorbis/lib/synthesis.c \
-            ../thirdparty/libvorbis/lib/vorbisfile.c \
-            Common/XVorbisFiles.c \
-            ../thirdparty/libvorbis/lib/lpc.c \
-            ../thirdparty/libvorbis/lib/window.c \
-		    ../thirdparty/libvorbis/lib/vorbisenc.c
+      ../thirdparty/libvorbis/lib/bitrate.c \
+      ../thirdparty/libvorbis/lib/block.c \
+      ../thirdparty/libvorbis/lib/codebook.c \
+      ../thirdparty/libvorbis/lib/envelope.c \
+      ../thirdparty/libvorbis/lib/floor0.c \
+      ../thirdparty/libvorbis/lib/floor1.c \
+      ../thirdparty/libvorbis/lib/info.c \
+      ../thirdparty/libvorbis/lib/lookup.c \
+      ../thirdparty/libvorbis/lib/lsp.c \
+      ../thirdparty/libvorbis/lib/mapping0.c \
+      ../thirdparty/libvorbis/lib/mdct.c \
+      ../thirdparty/libvorbis/lib/psy.c \
+      ../thirdparty/libvorbis/lib/registry.c \
+      ../thirdparty/libvorbis/lib/res0.c \
+      ../thirdparty/libvorbis/lib/sharedbook.c \
+      ../thirdparty/libvorbis/lib/smallft.c \
+      ../thirdparty/libvorbis/lib/synthesis.c \
+      ../thirdparty/libvorbis/lib/vorbisfile.c \
+      ../thirdparty/libvorbis/lib/lpc.c \
+      ../thirdparty/libvorbis/lib/window.c \
+		  ../thirdparty/libvorbis/lib/vorbisenc.c
 
 LOCAL_LDFLAGS += -Wl,-z,max-page-size=16384
 
-LOCAL_C_INCLUDES	:= $(LOCAL_PATH)/Common
-LOCAL_C_INCLUDES	+= $(LOCAL_PATH)/Platform
-LOCAL_C_INCLUDES	+= $(LOCAL_PATH)/../BAE_MPEG_Source_II
-LOCAL_C_INCLUDES	+= $(LOCAL_PATH)/../thirdparty/minimp3/
-LOCAL_C_INCLUDES	+= $(LOCAL_PATH)/../miniBAEDroid
-LOCAL_C_INCLUDES	+= $(LOCAL_PATH)/../miniBAEDroid/app/src/main/jniLibs/$(TARGET_ARCH_ABI)/fluidsynth/include
+LOCAL_C_INCLUDES	  := $(LOCAL_PATH)/Common
+LOCAL_C_INCLUDES	  += $(LOCAL_PATH)/Platform
+LOCAL_C_INCLUDES	  += $(LOCAL_PATH)/../BAE_MPEG_Source_II
+LOCAL_C_INCLUDES	  += $(LOCAL_PATH)/../thirdparty/minimp3/
+LOCAL_C_INCLUDES	  += $(LOCAL_PATH)/../miniBAEDroid
+LOCAL_C_INCLUDES	  += $(LOCAL_PATH)/../../../deps/android/jniLibs/$(TARGET_ARCH_ABI)/fluidsynth/include
+LOCAL_C_INCLUDES	  += $(LOCAL_PATH)/../../../deps/android/jniLibs/$(TARGET_ARCH_ABI)/sqlite3/include
 LOCAL_C_INCLUDES    += $(LOCAL_PATH)/../thirdparty/config
 LOCAL_C_INCLUDES    += $(LOCAL_PATH)/../thirdparty/libogg/include
 LOCAL_C_INCLUDES    += $(LOCAL_PATH)/../thirdparty/libvorbis/include
@@ -161,52 +163,60 @@ LOCAL_LDLIBS    += -lOpenSLES
 LOCAL_LDLIBS    += -llog
 # for native asset manager
 LOCAL_LDLIBS    += -landroid
-# for OpenMP (fluidsynth)
+
+
 
 # Link against prebuilt FluidSynth
-LOCAL_SHARED_LIBRARIES := fluidsynth sndfile ogg vorbis vorbisenc FLAC opus
+LOCAL_SHARED_LIBRARIES := fluidsynth sndfile ogg vorbis vorbisenc FLAC opus sqlite3
 
 include $(BUILD_SHARED_LIBRARY)
 
 # Import prebuilt FluidSynth .so
 include $(CLEAR_VARS)
 LOCAL_MODULE := fluidsynth
-LOCAL_SRC_FILES := $(LOCAL_PATH)/../miniBAEDroid/app/src/main/jniLibs/$(TARGET_ARCH_ABI)/fluidsynth/lib/libfluidsynth.so
+LOCAL_SRC_FILES := $(LOCAL_PATH)/../../../deps/android/jniLibs/$(TARGET_ARCH_ABI)/fluidsynth/lib/libfluidsynth.so
 include $(PREBUILT_SHARED_LIBRARY)
 
 # Import prebuilt libsndfile .so
 include $(CLEAR_VARS)
 LOCAL_MODULE := sndfile
-LOCAL_SRC_FILES := $(LOCAL_PATH)/../miniBAEDroid/app/src/main/jniLibs/$(TARGET_ARCH_ABI)/libsndfile/lib/libsndfile.so
+LOCAL_SRC_FILES := $(LOCAL_PATH)/../../../deps/android/jniLibs/$(TARGET_ARCH_ABI)/libsndfile/lib/libsndfile.so
 include $(PREBUILT_SHARED_LIBRARY)
 
 # Import prebuilt libogg .so
 include $(CLEAR_VARS)
 LOCAL_MODULE := ogg
-LOCAL_SRC_FILES := $(LOCAL_PATH)/../miniBAEDroid/app/src/main/jniLibs/$(TARGET_ARCH_ABI)/libogg/lib/libogg.so
+LOCAL_SRC_FILES := $(LOCAL_PATH)/../../../deps/android/jniLibs/$(TARGET_ARCH_ABI)/libogg/lib/libogg.so
 include $(PREBUILT_SHARED_LIBRARY)
 
 # Import prebuilt libvorbis .so
 include $(CLEAR_VARS)
 LOCAL_MODULE := vorbis
-LOCAL_SRC_FILES := $(LOCAL_PATH)/../miniBAEDroid/app/src/main/jniLibs/$(TARGET_ARCH_ABI)/libvorbis/lib/libvorbis.so
+LOCAL_SRC_FILES := $(LOCAL_PATH)/../../../deps/android/jniLibs/$(TARGET_ARCH_ABI)/libvorbis/lib/libvorbis.so
 include $(PREBUILT_SHARED_LIBRARY)
 
 # Import prebuilt libvorbisenc .so
 include $(CLEAR_VARS)
 LOCAL_MODULE := vorbisenc
-LOCAL_SRC_FILES := $(LOCAL_PATH)/../miniBAEDroid/app/src/main/jniLibs/$(TARGET_ARCH_ABI)/libvorbis/lib/libvorbisenc.so
+LOCAL_SRC_FILES := $(LOCAL_PATH)/../../../deps/android/jniLibs/$(TARGET_ARCH_ABI)/libvorbis/lib/libvorbisenc.so
 include $(PREBUILT_SHARED_LIBRARY)
 
 # Import prebuilt FLAC .so
 include $(CLEAR_VARS)
 LOCAL_MODULE := FLAC
-LOCAL_SRC_FILES := $(LOCAL_PATH)/../miniBAEDroid/app/src/main/jniLibs/$(TARGET_ARCH_ABI)/libflac/lib/libFLAC.so
+LOCAL_SRC_FILES := $(LOCAL_PATH)/../../../deps/android/jniLibs/$(TARGET_ARCH_ABI)/libflac/lib/libFLAC.so
+include $(PREBUILT_SHARED_LIBRARY)
+
+# Import prebuilt opus .so
+include $(CLEAR_VARS)
+LOCAL_MODULE := sqlite3
+LOCAL_SRC_FILES := $(LOCAL_PATH)/../../../deps/android/jniLibs/$(TARGET_ARCH_ABI)/sqlite3/lib/libsqlite3.so
+LOCAL_EXPORT_C_INCLUDES := $(LOCAL_PATH)/../../../deps/android/jniLibs/$(TARGET_ARCH_ABI)/sqlite3/include
 include $(PREBUILT_SHARED_LIBRARY)
 
 # Import prebuilt opus .so
 include $(CLEAR_VARS)
 LOCAL_MODULE := opus
-LOCAL_SRC_FILES := $(LOCAL_PATH)/../miniBAEDroid/app/src/main/jniLibs/$(TARGET_ARCH_ABI)/libopus/lib/libopus.so
+LOCAL_SRC_FILES := $(LOCAL_PATH)/../../../deps/android/jniLibs/$(TARGET_ARCH_ABI)/libopus/lib/libopus.so
 include $(PREBUILT_SHARED_LIBRARY)
 

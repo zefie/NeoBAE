@@ -1,0 +1,11 @@
+prefix=/home/zefie/dev/miniBAE/deps/android/jniLibs/arm64-v8a/libflac
+exec_prefix=/home/zefie/dev/miniBAE/deps/android/jniLibs/arm64-v8a/libflac
+libdir=/home/zefie/dev/miniBAE/deps/android/jniLibs/arm64-v8a/libflac/lib
+includedir=/home/zefie/dev/miniBAE/deps/android/jniLibs/arm64-v8a/libflac/include
+
+Name: FLAC++
+Description: Free Lossless Audio Codec Library (C++ API)
+Version: 1.5.0
+Requires: flac
+Libs: -L${libdir} -lFLAC++
+Cflags: -I${includedir}

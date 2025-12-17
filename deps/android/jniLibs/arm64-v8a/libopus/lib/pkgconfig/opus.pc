@@ -1,0 +1,16 @@
+# Opus codec reference implementation pkg-config file
+
+prefix=/home/zefie/dev/miniBAE/deps/android/jniLibs/arm64-v8a/libopus
+exec_prefix=/home/zefie/dev/miniBAE/deps/android/jniLibs/arm64-v8a/libopus
+libdir=/home/zefie/dev/miniBAE/deps/android/jniLibs/arm64-v8a/libopus/lib
+includedir=/home/zefie/dev/miniBAE/deps/android/jniLibs/arm64-v8a/libopus/include
+
+Name: Opus
+Description: Opus IETF audio codec ( build)
+URL: https://opus-codec.org/
+Version: 1.5.2
+Requires:
+Conflicts:
+Libs: -L/home/zefie/dev/miniBAE/deps/android/jniLibs/arm64-v8a/libopus/lib -lopus
+Libs.private: -lm
+Cflags: -I/home/zefie/dev/miniBAE/deps/android/jniLibs/arm64-v8a/libopus/include/opus

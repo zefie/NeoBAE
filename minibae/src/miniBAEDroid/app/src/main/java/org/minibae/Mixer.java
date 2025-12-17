@@ -40,7 +40,7 @@ public class Mixer
 
 	public static void delete()
 	{
-        if (mMixer.mReference != 0L)
+        if (mMixer != null && mMixer.mReference != 0L)
 		{
 			_deleteMixer(mMixer.mReference);
 			mMixer.mReference = 0L;

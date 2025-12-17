@@ -41,10 +41,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.core.view.WindowCompat
+import androidx.compose.runtime.collectAsState
 import java.io.File
 import org.minibae.Mixer
 import org.minibae.Song
@@ -73,14 +75,11 @@ class HomeFragment : Fragment() {
     private var velocityCurve = mutableStateOf(0)
     private var exportCodec = mutableStateOf(2) // Default to OGG
     
-    private val openBankPicker = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            val data: Intent? = result.data
-            data?.data?.let { uri ->
-                loadBankFromUri(uri)
-            }
-        }
-    }
+    // Bank browser state (completely separate from main browser)
+    private var showBankBrowser = mutableStateOf(false)
+    private var bankBrowserPath = mutableStateOf("/sdcard") // Will be loaded from prefs
+    private var bankBrowserFiles = mutableStateListOf<PlaylistItem>()
+    private var bankBrowserLoading = mutableStateOf(false)
     
     private val saveFilePicker = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
@@ -284,8 +283,7 @@ class HomeFragment : Fragment() {
                         pickedFolderUri = uri
                     }
                 }
-                Mixer.setDefaultVelocityCurve(prefs.getInt("velocity_curve", 0))
-                Mixer.setDefaultReverb(prefs.getInt("default_reverb", 1))
+                // Don't set these on startup - they'll be set when mixer is created
             } catch (_: Exception) { }
         }
         
@@ -308,8 +306,22 @@ class HomeFragment : Fragment() {
                     
                     // Initialize bank name
                     Thread {
-                        val friendly = Mixer.getBankFriendlyName()
-                        currentBankName.value = friendly ?: "Unknown Bank"
+                        val prefs = requireContext().getSharedPreferences("miniBAE_prefs", Context.MODE_PRIVATE)
+                        val friendly = if (Mixer.getMixer() != null) {
+                            Mixer.getBankFriendlyName()
+                        } else {
+                            // Mixer doesn't exist, show saved bank preference
+                            val lastBankPath = prefs.getString("last_bank_path", null)
+                            when {
+                                lastBankPath == "__builtin__" -> "Built-in patches"
+                                !lastBankPath.isNullOrEmpty() -> {
+                                    val file = java.io.File(lastBankPath)
+                                    file.name
+                                }
+                                else -> null
+                            }
+                        }
+                        currentBankName.value = friendly ?: "No Bank Loaded"
                     }.start()
                     
                     // Don't check permissions on startup - only when user tries to access folders
@@ -527,26 +539,22 @@ class HomeFragment : Fragment() {
                         reverbType = reverbType.value,
                         velocityCurve = velocityCurve.value,
                         exportCodec = exportCodec.value,
-                        onLoadBank = {
-                            val i = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-                                addCategory(Intent.CATEGORY_OPENABLE)
-                                type = "*/*"
-                                putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("application/octet-stream", "application/hsb", "application/x-hsb"))
-                            }
-                            openBankPicker.launch(i)
-                        },
                         onLoadBuiltin = {
                             loadBuiltInPatches()
                         },
                         onReverbChange = { value ->
                             reverbType.value = value
-                            Mixer.setDefaultReverb(value)
+                            if (Mixer.getMixer() != null) {
+                                Mixer.setDefaultReverb(value)
+                            }
                             val prefs = requireContext().getSharedPreferences("miniBAE_prefs", Context.MODE_PRIVATE)
                             prefs.edit().putInt("default_reverb", value).apply()
                         },
                         onCurveChange = { value ->
                             velocityCurve.value = value
-                            Mixer.setDefaultVelocityCurve(value)
+                            if (Mixer.getMixer() != null) {
+                                Mixer.setDefaultVelocityCurve(value)
+                            }
                             val prefs = requireContext().getSharedPreferences("miniBAE_prefs", Context.MODE_PRIVATE)
                             prefs.edit().putInt("velocity_curve", value).apply()
                         },
@@ -575,6 +583,28 @@ class HomeFragment : Fragment() {
                         },
                         onAddAllMidiRecursive = {
                             addAllMidiRecursively()
+                        },
+                        showBankBrowser = showBankBrowser.value,
+                        bankBrowserPath = bankBrowserPath.value,
+                        bankBrowserFiles = bankBrowserFiles,
+                        bankBrowserLoading = bankBrowserLoading.value,
+                        onBrowseBanks = {
+                            checkStoragePermissions()
+                            // Load last bank browser path from preferences (separate from main browser)
+                            val prefs = requireContext().getSharedPreferences("miniBAE_prefs", Context.MODE_PRIVATE)
+                            val startPath = prefs.getString("last_bank_browser_path", "/") ?: "/"
+                            bankBrowserPath.value = startPath
+                            navigateToBankFolder(startPath)
+                            showBankBrowser.value = true
+                        },
+                        onBankBrowserNavigate = { path ->
+                            navigateToBankFolder(path)
+                        },
+                        onBankBrowserSelect = { file ->
+                            loadBankFromFile(file)
+                        },
+                        onBankBrowserClose = {
+                            showBankBrowser.value = false
                         }
                     )
                 }
@@ -594,6 +624,7 @@ class HomeFragment : Fragment() {
                         viewModel.folderFiles.clear()
                         viewModel.folderFiles.addAll(items)
                         viewModel.currentFolderPath = newPath
+                        viewModel.invalidateSearchCache() // Clear search cache when folder changes
                         lastFolderPath = newPath
                     }
                     loadingState?.value = false
@@ -740,20 +771,30 @@ class HomeFragment : Fragment() {
             Mixer.setNativeCacheDir(requireContext().cacheDir.absolutePath)
             
             // Restore bank settings
+            var bankLoaded = false
             try {
                 val prefs = requireContext().getSharedPreferences("miniBAE_prefs", android.content.Context.MODE_PRIVATE)
                 val lastBankPath = prefs.getString("last_bank_path", null)
                 
                 if (!lastBankPath.isNullOrEmpty()) {
                     if (lastBankPath == "__builtin__") {
-                        Mixer.addBuiltInPatches()
+                        if (Mixer.addBuiltInPatches() == 0) {
+                            bankLoaded = true
+                        }
                     } else {
                         val bankFile = java.io.File(lastBankPath)
                         if (bankFile.exists()) {
                             val bytes = bankFile.readBytes()
-                            Mixer.addBankFromMemory(bytes, bankFile.name)
+                            if (Mixer.addBankFromMemory(bytes, bankFile.name) == 0) {
+                                bankLoaded = true
+                            }
                         }
                     }
+                }
+                
+                // Fall back to built-in patches if no bank was loaded
+                if (!bankLoaded) {
+                    Mixer.addBuiltInPatches()
                 }
                 
                 // Restore reverb and velocity curve settings
@@ -762,7 +803,10 @@ class HomeFragment : Fragment() {
                 Mixer.setDefaultReverb(reverbType)
                 Mixer.setDefaultVelocityCurve(velocityCurve)
             } catch (_: Exception) {
-                // If restoration fails, just use defaults
+                // If restoration fails, use built-in patches
+                try {
+                    Mixer.addBuiltInPatches()
+                } catch (_: Exception) {}
             }
         }
         return true
@@ -799,6 +843,28 @@ class HomeFragment : Fragment() {
             }
         }
         return map.values.sortedBy { it.name.lowercase() }
+    }
+    
+    private fun getBankFiles(folder: File): List<PlaylistItem> {
+        val validExtensions = setOf("sf2", "hsb", "sf3", "sfo", "dls")
+        val allItems = folder.listFiles()?.let { allFiles ->
+            val folders = allFiles.filter { it.isDirectory && it.canRead() }
+                .sortedBy { it.name.lowercase() }
+                .map { 
+                    val item = PlaylistItem(it)
+                    item.isFolder = true
+                    item
+                }
+            
+            val bankFiles = allFiles.filter { file -> 
+                file.isFile && file.extension.lowercase() in validExtensions 
+            }.sortedBy { it.name.lowercase() }
+                .map { PlaylistItem(it) }
+            
+            folders + bankFiles
+        } ?: emptyList()
+        
+        return allItems
     }
     
     private fun addAllMidiInDirectory() {
@@ -1005,6 +1071,7 @@ class HomeFragment : Fragment() {
                         viewModel.folderFiles.add(0, refreshItem)
                         
                         viewModel.currentFolderPath = actualPath
+                        viewModel.invalidateSearchCache() // Clear search cache when folder changes
                         
                         // Save current folder for next launch
                         val prefs = requireContext().getSharedPreferences("miniBAE_prefs", Context.MODE_PRIVATE)
@@ -1048,6 +1115,7 @@ class HomeFragment : Fragment() {
                     viewModel.folderFiles.addAll(allItems)
                     
                     viewModel.currentFolderPath = actualPath
+                    viewModel.invalidateSearchCache() // Clear search cache when folder changes
                     
                     // Save current folder for next launch
                     val prefs = requireContext().getSharedPreferences("miniBAE_prefs", Context.MODE_PRIVATE)
@@ -1075,54 +1143,203 @@ class HomeFragment : Fragment() {
         }
     }
     
-    private fun loadBankFromUri(uri: Uri) {
-        isLoadingBank.value = true
+    private fun navigateToBankFolder(path: String) {
+        bankBrowserLoading.value = true
         Thread {
             try {
-                requireContext().contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                // Redirect /storage to / since /storage can't be listed
+                val actualPath = if (path == "/storage") "/" else path
                 
-                var originalName = uri.lastPathSegment ?: "selected_bank.hsb"
-                requireContext().contentResolver.query(uri, null, null, null, null)?.use { cursor ->
-                    if (cursor.moveToFirst()) {
-                        val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
-                        if (nameIndex >= 0) {
-                            cursor.getString(nameIndex)?.let { originalName = it }
+                // Special handling for root directory - show storage options
+                if (actualPath == "/") {
+                    activity?.runOnUiThread {
+                        bankBrowserFiles.clear()
+                        
+                        // Add Internal Storage (/sdcard)
+                        val internalStorage = File("/sdcard")
+                        if (internalStorage.exists() && internalStorage.isDirectory) {
+                            val item = PlaylistItem(internalStorage)
+                            item.isFolder = true
+                            item.title = "Internal Storage"
+                            bankBrowserFiles.add(item)
                         }
+                        
+                        // Use Android's proper storage APIs to detect external storage
+                        try {
+                            val storageManager = requireContext().getSystemService(Context.STORAGE_SERVICE) as StorageManager
+                            
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                                // Use StorageVolume API for Android N+
+                                val storageVolumes = storageManager.storageVolumes
+                                storageVolumes.forEach { volume ->
+                                    if (volume.isRemovable && volume.state == Environment.MEDIA_MOUNTED) {
+                                        try {
+                                            // Try to get the path using reflection for older Android versions
+                                            val getPathMethod = volume.javaClass.getMethod("getPath")
+                                            val volumePath = getPathMethod.invoke(volume) as String?
+                                            
+                                            if (volumePath != null) {
+                                                val volumeFile = File(volumePath)
+                                                if (volumeFile.exists() && volumeFile.canRead()) {
+                                                    val item = PlaylistItem(volumeFile)
+                                                    item.isFolder = true
+                                                    item.title = volume.getDescription(requireContext())
+                                                        ?: if (volume.isPrimary) "Primary Storage" else "External Storage"
+                                                    bankBrowserFiles.add(item)
+                                                }
+                                            }
+                                        } catch (_: Exception) {
+                                            // Reflection failed, skip this volume
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            // Also try Environment.getExternalFilesDirs() approach
+                            val externalDirs = requireContext().getExternalFilesDirs(null)
+                            externalDirs?.forEachIndexed { index, dir ->
+                                if (dir != null && index > 0) { // Skip index 0 (primary external storage)
+                                    // Navigate up to get the root of the external storage
+                                    var rootDir = dir
+                                    while (rootDir.parentFile != null && rootDir.name != "Android") {
+                                        rootDir = rootDir.parentFile!!
+                                    }
+                                    if (rootDir.parentFile != null) {
+                                        rootDir = rootDir.parentFile!! // Go one level above Android folder
+                                    }
+                                    
+                                    if (rootDir.exists() && rootDir.canRead() && 
+                                        !bankBrowserFiles.any { it.file.absolutePath == rootDir.absolutePath }) {
+                                        try {
+                                            val testFiles = rootDir.listFiles()
+                                            if (testFiles != null && testFiles.isNotEmpty()) {
+                                                val item = PlaylistItem(rootDir)
+                                                item.isFolder = true
+                                                item.title = when {
+                                                    rootDir.absolutePath.contains("usb", ignoreCase = true) -> "USB Storage"
+                                                    rootDir.absolutePath.matches(Regex(".*[0-9A-F]{4}-[0-9A-F]{4}.*")) -> "SD Card"
+                                                    else -> "External Storage ${index}"
+                                                }
+                                                bankBrowserFiles.add(item)
+                                            }
+                                        } catch (_: Exception) {
+                                            // Skip inaccessible storage
+                                        }
+                                    }
+                                }
+                            }
+                        } catch (_: Exception) {
+                            android.util.Log.w("HomeFragment", "Failed to detect external storage using APIs")
+                        }
+                        
+                        // Fallback: Try common external storage paths
+                        val commonExternalPaths = listOf(
+                            "/storage/sdcard1",
+                            "/storage/extSdCard",
+                            "/mnt/external_sd",
+                            "/mnt/extSdCard"
+                        )
+                        
+                        commonExternalPaths.forEach { path ->
+                            val extStorage = File(path)
+                            if (extStorage.exists() && extStorage.isDirectory && extStorage.canRead() &&
+                                !bankBrowserFiles.any { it.file.absolutePath == extStorage.absolutePath }) {
+                                try {
+                                    val testFiles = extStorage.listFiles()
+                                    if (testFiles != null && testFiles.isNotEmpty()) {
+                                        val item = PlaylistItem(extStorage)
+                                        item.isFolder = true
+                                        item.title = when {
+                                            path.contains("sdcard1") || path.contains("extSdCard") || path.contains("external_sd") -> "SD Card"
+                                            else -> "External Storage"
+                                        }
+                                        bankBrowserFiles.add(item)
+                                    }
+                                } catch (_: Exception) {
+                                    // Skip inaccessible storage
+                                }
+                            }
+                        }
+                        
+                        bankBrowserPath.value = actualPath
+                        bankBrowserLoading.value = false
                     }
+                    return@Thread
                 }
                 
-                val cached = File(requireContext().cacheDir, originalName)
-                requireContext().contentResolver.openInputStream(uri)?.use { input ->
-                    cached.outputStream().use { output ->
-                        input.copyTo(output)
+                val folder = File(actualPath)
+                if (!folder.exists() || !folder.isDirectory) {
+                    activity?.runOnUiThread {
+                        bankBrowserLoading.value = false
+                        Toast.makeText(requireContext(), "Invalid folder: $actualPath", Toast.LENGTH_SHORT).show()
                     }
+                    return@Thread
                 }
                 
-                val bytes = cached.readBytes()
-                val r = Mixer.addBankFromMemory(bytes, originalName)
+                val items = getBankFiles(folder)
                 
                 activity?.runOnUiThread {
-                    if (r == 0) {
-                        val friendly = Mixer.getBankFriendlyName()
-                        currentBankName.value = friendly ?: originalName
-                        
-                        val prefs = requireContext().getSharedPreferences("miniBAE_prefs", Context.MODE_PRIVATE)
-                        prefs.edit().putString("last_bank_path", cached.absolutePath).apply()
-                        
-                        // Hot-swap: reload current song
-                        reloadCurrentSongForBankSwap()
-                        
-                    } else {
-                        currentBankName.value = "Failed to load bank"
-                        Toast.makeText(requireContext(), "Failed to load bank (err=$r)", Toast.LENGTH_SHORT).show()
-                    }
-                    isLoadingBank.value = false
+                    bankBrowserFiles.clear()
+                    bankBrowserFiles.addAll(items)
+                    bankBrowserPath.value = actualPath
+                    bankBrowserLoading.value = false
                 }
             } catch (ex: Exception) {
                 activity?.runOnUiThread {
-                    currentBankName.value = "Error: ${ex.message}"
+                    bankBrowserLoading.value = false
+                    Toast.makeText(requireContext(), "Error loading folder: ${ex.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }.start()
+    }
+    
+    private fun loadBankFromFile(file: File) {
+        isLoadingBank.value = true
+        showBankBrowser.value = false
+        Thread {
+            try {
+                val bytes = file.readBytes()
+                val originalName = file.name
+                val prefs = requireContext().getSharedPreferences("miniBAE_prefs", Context.MODE_PRIVATE)
+                
+                // Save the parent directory for next time the bank browser is opened
+                val parentPath = file.parent ?: "/sdcard"
+                prefs.edit().putString("last_bank_browser_path", parentPath).apply()
+                
+                // If mixer doesn't exist, just save the path for lazy loading
+                if (Mixer.getMixer() == null) {
+                    prefs.edit().putString("last_bank_path", file.absolutePath).apply()
+                    activity?.runOnUiThread {
+                        currentBankName.value = originalName
+                        isLoadingBank.value = false
+                    }
+                    return@Thread
+                }
+                
+                // Mixer exists, load bank now
+                val r = Mixer.addBankFromMemory(bytes, originalName)
+                
+                if (r == 0) {
+                    prefs.edit().putString("last_bank_path", file.absolutePath).apply()
+                    
+                    activity?.runOnUiThread {
+                        currentBankName.value = originalName
+                        Toast.makeText(requireContext(), "Loaded: $originalName", Toast.LENGTH_SHORT).show()
+                    }
+                    
+                    // Hot-swap: reload current song
+                    reloadCurrentSongForBankSwap()
+                } else {
+                    activity?.runOnUiThread {
+                        currentBankName.value = "Failed to load: $originalName"
+                        Toast.makeText(requireContext(), "Failed to load bank (err=$r)", Toast.LENGTH_SHORT).show()
+                    }
+                }
+                isLoadingBank.value = false
+            } catch (ex: Exception) {
+                activity?.runOnUiThread {
                     isLoadingBank.value = false
-                    Toast.makeText(requireContext(), "Error loading bank: ${ex.message}", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(requireContext(), "Error: ${ex.message}", Toast.LENGTH_SHORT).show()
                 }
             }
         }.start()
@@ -1131,9 +1348,22 @@ class HomeFragment : Fragment() {
     private fun loadBuiltInPatches() {
         isLoadingBank.value = true
         Thread {
+            val prefs = requireContext().getSharedPreferences("miniBAE_prefs", Context.MODE_PRIVATE)
+            
+            // If mixer doesn't exist, just save the preference for lazy loading
+            if (Mixer.getMixer() == null) {
+                prefs.edit().putString("last_bank_path", "__builtin__").apply()
+                activity?.runOnUiThread {
+                    currentBankName.value = "Built-in patches"
+                    Toast.makeText(requireContext(), "Built-in patches will load when playback starts", Toast.LENGTH_SHORT).show()
+                    isLoadingBank.value = false
+                }
+                return@Thread
+            }
+            
+            // Mixer exists, load patches now
             val r = Mixer.addBuiltInPatches()
             activity?.runOnUiThread {
-                val prefs = requireContext().getSharedPreferences("miniBAE_prefs", Context.MODE_PRIVATE)
                 if (r == 0) {
                     val friendly = Mixer.getBankFriendlyName()
                     currentBankName.value = friendly ?: "Built-in patches"
@@ -1464,7 +1694,6 @@ fun NewMusicPlayerScreen(
     reverbType: Int,
     velocityCurve: Int,
     exportCodec: Int,
-    onLoadBank: () -> Unit,
     onLoadBuiltin: () -> Unit,
     onReverbChange: (Int) -> Unit,
     onCurveChange: (Int) -> Unit,
@@ -1473,7 +1702,15 @@ fun NewMusicPlayerScreen(
     onRefreshStorage: () -> Unit,
     onRepeatModeChange: () -> Unit,
     onAddAllMidi: () -> Unit,
-    onAddAllMidiRecursive: () -> Unit
+    onAddAllMidiRecursive: () -> Unit,
+    showBankBrowser: Boolean,
+    bankBrowserPath: String,
+    bankBrowserFiles: List<PlaylistItem>,
+    bankBrowserLoading: Boolean,
+    onBrowseBanks: () -> Unit,
+    onBankBrowserNavigate: (String) -> Unit,
+    onBankBrowserSelect: (File) -> Unit,
+    onBankBrowserClose: () -> Unit
 ) {
     Scaffold(
         modifier = Modifier.systemBarsPadding(),
@@ -1695,12 +1932,12 @@ fun NewMusicPlayerScreen(
                     reverbType = reverbType,
                     velocityCurve = velocityCurve,
                     exportCodec = exportCodec,
-                    onLoadBank = onLoadBank,
                     onLoadBuiltin = onLoadBuiltin,
                     onReverbChange = onReverbChange,
                     onCurveChange = onCurveChange,
                     onVolumeChange = onVolumeChange,
-                    onExportCodecChange = onExportCodecChange
+                    onExportCodecChange = onExportCodecChange,
+                    onBrowseBanks = onBrowseBanks
                 )
             }
         }
@@ -1749,6 +1986,24 @@ fun NewMusicPlayerScreen(
                         )
                     }
                 }
+            }
+        }
+        
+        // Show bank browser overlay when active
+        if (showBankBrowser) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colors.background)
+            ) {
+                BankBrowserScreen(
+                    currentPath = bankBrowserPath,
+                    files = bankBrowserFiles,
+                    isLoading = bankBrowserLoading,
+                    onNavigate = onBankBrowserNavigate,
+                    onSelectBank = onBankBrowserSelect,
+                    onClose = onBankBrowserClose
+                )
             }
         }
     }
@@ -2003,30 +2258,18 @@ fun FullPlayerScreen(
                     )
                 }
                 
-                // Play/Pause button with circular progress
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier.size(72.dp)
+                // Play/Pause button
+                FloatingActionButton(
+                    onClick = onPlayPause,
+                    backgroundColor = MaterialTheme.colors.primary,
+                    modifier = Modifier.size(64.dp)
                 ) {
-                    CircularProgressIndicator(
-                        progress = if (totalDurationMs > 0) currentPositionMs.toFloat() / totalDurationMs.toFloat() else 0f,
-                        modifier = Modifier.fillMaxSize(),
-                        color = MaterialTheme.colors.primary,
-                        strokeWidth = 4.dp
+                    Icon(
+                        if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                        contentDescription = if (isPlaying) "Pause" else "Play",
+                        modifier = Modifier.size(32.dp),
+                        tint = Color.White
                     )
-                    
-                    FloatingActionButton(
-                        onClick = onPlayPause,
-                        backgroundColor = MaterialTheme.colors.primary,
-                        modifier = Modifier.size(64.dp)
-                    ) {
-                        Icon(
-                            if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                            contentDescription = if (isPlaying) "Pause" else "Play",
-                            modifier = Modifier.size(32.dp),
-                            tint = Color.White
-                        )
-                    }
                 }
                 
                 IconButton(
@@ -2373,6 +2616,22 @@ fun SearchScreenContent(
     onToggleFavorite: (String) -> Unit,
     onAddToPlaylist: (File) -> Unit
 ) {
+    val context = LocalContext.current
+    val indexingProgress by viewModel.getIndexingProgress()?.collectAsState() ?: remember { mutableStateOf(IndexingProgress()) }
+    val searchResults by viewModel.searchResults.collectAsState()
+    
+    // Initialize database on first composition
+    LaunchedEffect(Unit) {
+        viewModel.initializeDatabase(context)
+    }
+    
+    // Trigger search when query changes
+    LaunchedEffect(viewModel.searchQuery) {
+        if (viewModel.searchQuery.length >= 3) {
+            viewModel.searchFilesInDatabase(viewModel.searchQuery, viewModel.currentFolderPath)
+        }
+    }
+    
     Column(modifier = Modifier.fillMaxSize()) {
         // Search bar
         TextField(
@@ -2381,40 +2640,226 @@ fun SearchScreenContent(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp),
-            placeholder = { Text("Search songs...") },
+            placeholder = { Text("Search songs... (min 3 chars)") },
             leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+            trailingIcon = {
+                if (viewModel.searchQuery.isNotEmpty()) {
+                    IconButton(onClick = { viewModel.searchQuery = "" }) {
+                        Icon(Icons.Filled.Clear, contentDescription = "Clear")
+                    }
+                }
+            },
             colors = TextFieldDefaults.textFieldColors(
                 backgroundColor = MaterialTheme.colors.surface,
                 textColor = MaterialTheme.colors.onSurface
             ),
-            shape = RoundedCornerShape(24.dp)
+            shape = RoundedCornerShape(24.dp),
+            enabled = !indexingProgress.isIndexing
         )
         
-        // Filtered results
-        val filteredSongs = viewModel.folderFiles.filter {
-            it.title.contains(viewModel.searchQuery, ignoreCase = true)
+        // Check if current path is indexed (recompute when database becomes ready)
+        val isCurrentPathIndexed = remember(viewModel.currentFolderPath, viewModel.isDatabaseReady) {
+            viewModel.isPathIndexed(viewModel.currentFolderPath)
         }
         
-        if (filteredSongs.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(Icons.Filled.SearchOff, contentDescription = null, modifier = Modifier.size(64.dp), tint = Color.Gray)
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text("No results found", color = Color.Gray)
+        // Show message if current directory is not indexed
+        if (!isCurrentPathIndexed && viewModel.currentFolderPath != null && viewModel.currentFolderPath != "/") {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                backgroundColor = MaterialTheme.colors.surface.copy(alpha = 0.7f)
+            ) {
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Filled.Info,
+                        contentDescription = null,
+                        tint = Color.Gray,
+                        modifier = Modifier.padding(end = 12.dp)
+                    )
+                    Text(
+                        "This directory is not indexed. Build an index to enable search.",
+                        fontSize = 14.sp,
+                        color = Color.Gray
+                    )
                 }
             }
-        } else {
-            LazyColumn(modifier = Modifier.fillMaxSize()) {
-                itemsIndexed(filteredSongs) { index, item ->
-                    FolderSongListItem(
-                        item = item,
-                        isFavorite = viewModel.isFavorite(item.path),
-                        onClick = { onPlaylistItemClick(item.file) },
-                        onToggleFavorite = { onToggleFavorite(item.path) },
-                        onAddToPlaylist = { onAddToPlaylist(item.file) }
+        }
+        
+        // Index status and rebuild button
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                // Only show count if current path is indexed or we're at root
+                val displayCount = if (isCurrentPathIndexed || viewModel.currentFolderPath == null || viewModel.currentFolderPath == "/") {
+                    viewModel.indexedFileCount
+                } else {
+                    0
+                }
+                
+                Text(
+                    "Indexed: $displayCount files",
+                    fontSize = 12.sp,
+                    color = if (displayCount > 0) Color.Gray else Color.Gray.copy(alpha = 0.5f)
+                )
+                if (indexingProgress.isIndexing) {
+                    Text(
+                        "Indexing: ${indexingProgress.filesIndexed} files, ${indexingProgress.foldersScanned} folders",
+                        fontSize = 10.sp,
+                        color = MaterialTheme.colors.primary
                     )
-                    if (index < filteredSongs.size - 1) {
-                        Divider(color = Color.Gray.copy(alpha = 0.2f))
+                    LinearProgressIndicator(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 4.dp)
+                    )
+                }
+            }
+            
+            Button(
+                onClick = {
+                    if (indexingProgress.isIndexing) {
+                        // Stop indexing
+                        viewModel.stopIndexing()
+                    } else {
+                        // Start indexing current directory and all subdirectories
+                        val rootPath = viewModel.currentFolderPath ?: "/sdcard"
+                        viewModel.rebuildIndex(rootPath) { files, folders, size ->
+                            // Show completion toast
+                            Toast.makeText(
+                                context,
+                                "Indexed $files files in $folders folders (${size / 1024 / 1024} MB)",
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
+                    }
+                },
+                enabled = viewModel.currentFolderPath != null && viewModel.currentFolderPath != "/",
+                colors = if (indexingProgress.isIndexing) {
+                    ButtonDefaults.buttonColors(backgroundColor = MaterialTheme.colors.error)
+                } else {
+                    ButtonDefaults.buttonColors()
+                },
+                modifier = Modifier.padding(start = 8.dp)
+            ) {
+                Icon(
+                    if (indexingProgress.isIndexing) Icons.Filled.Stop else Icons.Filled.Refresh,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(if (indexingProgress.isIndexing) "Stop" else "Build Index")
+            }
+        }
+        
+        Divider(color = Color.Gray.copy(alpha = 0.2f))
+        
+        // Search results
+        when {
+            indexingProgress.isIndexing -> {
+                // Show indexing progress
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        CircularProgressIndicator(modifier = Modifier.size(48.dp))
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text("Building file index...", color = Color.Gray)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            indexingProgress.currentPath.takeLast(50),
+                            fontSize = 10.sp,
+                            color = Color.Gray,
+                            maxLines = 2
+                        )
+                    }
+                }
+            }
+            viewModel.indexedFileCount == 0 -> {
+                // No index built yet
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(32.dp)) {
+                        Icon(Icons.Filled.Storage, contentDescription = null, modifier = Modifier.size(64.dp), tint = Color.Gray)
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text("No search index", color = Color.Gray, fontSize = 16.sp)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            "Click 'Build Index' to create a searchable database of your music files. This may take a few minutes for large collections.",
+                            fontSize = 12.sp,
+                            color = Color.Gray,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                    }
+                }
+            }
+            viewModel.searchQuery.isEmpty() -> {
+                // Show hint when nothing typed
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(Icons.Filled.Search, contentDescription = null, modifier = Modifier.size(64.dp), tint = Color.Gray)
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text("Enter at least 3 characters to search", color = Color.Gray, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("Instant search across all indexed files", fontSize = 12.sp, color = Color.Gray)
+                    }
+                }
+            }
+            viewModel.searchQuery.length < 3 -> {
+                // Show hint for more characters
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(Icons.Filled.Search, contentDescription = null, modifier = Modifier.size(64.dp), tint = Color.Gray)
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text("Type ${3 - viewModel.searchQuery.length} more character(s)...", color = Color.Gray)
+                    }
+                }
+            }
+            viewModel.isSearching -> {
+                // Searching
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
+                }
+            }
+            searchResults.isEmpty() -> {
+                // No results found
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(Icons.Filled.SearchOff, contentDescription = null, modifier = Modifier.size(64.dp), tint = Color.Gray)
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text("No results found", color = Color.Gray)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("Try a different search term", fontSize = 12.sp, color = Color.Gray)
+                    }
+                }
+            }
+            else -> {
+                // Show results with count
+                LazyColumn(modifier = Modifier.fillMaxSize()) {
+                    item {
+                        Text(
+                            "${searchResults.size} file(s) found",
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                            fontSize = 12.sp,
+                            color = Color.Gray
+                        )
+                    }
+                    itemsIndexed(searchResults) { index, item ->
+                        FolderSongListItem(
+                            item = item,
+                            isFavorite = viewModel.isFavorite(item.path),
+                            onClick = { onPlaylistItemClick(item.file) },
+                            onToggleFavorite = { onToggleFavorite(item.path) },
+                            onAddToPlaylist = { onAddToPlaylist(item.file) }
+                        )
+                        if (index < searchResults.size - 1) {
+                            Divider(color = Color.Gray.copy(alpha = 0.2f))
+                        }
                     }
                 }
             }
@@ -2429,7 +2874,14 @@ fun FavoritesScreenContent(
     onToggleFavorite: (String) -> Unit,
     onAddToPlaylist: (File) -> Unit
 ) {
-    val favoriteSongs = viewModel.folderFiles.filter { viewModel.isFavorite(it.path) }
+    val favoriteSongs = viewModel.favorites.mapNotNull { path ->
+        val file = File(path)
+        if (file.exists() && !file.isDirectory) {
+            PlaylistItem(file)
+        } else {
+            null
+        }
+    }
     
     Column(modifier = Modifier.fillMaxSize()) {
         if (favoriteSongs.isEmpty()) {
@@ -2666,12 +3118,12 @@ fun SettingsScreenContent(
     reverbType: Int,
     velocityCurve: Int,
     exportCodec: Int,
-    onLoadBank: () -> Unit,
     onLoadBuiltin: () -> Unit,
     onReverbChange: (Int) -> Unit,
     onCurveChange: (Int) -> Unit,
     onVolumeChange: (Int) -> Unit,
-    onExportCodecChange: (Int) -> Unit
+    onExportCodecChange: (Int) -> Unit,
+    onBrowseBanks: () -> Unit
 ) {
     val reverbOptions = listOf(
         "None", "Igor's Closet", "Igor's Garage", "Igor's Acoustic Lab",
@@ -2763,7 +3215,7 @@ fun SettingsScreenContent(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     OutlinedButton(
-                        onClick = onLoadBank,
+                        onClick = onBrowseBanks,
                         modifier = Modifier.weight(1f),
                         enabled = !isLoadingBank
                     ) {
@@ -3035,6 +3487,217 @@ fun SettingsScreenContent(
                         style = MaterialTheme.typography.caption,
                         color = MaterialTheme.colors.onSurface.copy(alpha = 0.6f)
                     )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun BankBrowserScreen(
+    currentPath: String,
+    files: List<PlaylistItem>,
+    isLoading: Boolean,
+    onNavigate: (String) -> Unit,
+    onSelectBank: (File) -> Unit,
+    onClose: () -> Unit
+) {
+    Column(modifier = Modifier.fillMaxSize()) {
+        // Header with path and close button
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            color = MaterialTheme.colors.primary,
+            elevation = 4.dp
+        ) {
+            Column {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = onClose) {
+                        Icon(
+                            Icons.Filled.Close,
+                            contentDescription = "Close",
+                            tint = Color.White
+                        )
+                    }
+                    Text(
+                        text = "Select Sound Bank",
+                        style = MaterialTheme.typography.h6,
+                        color = Color.White,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                
+                // Current path
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Filled.Folder,
+                        contentDescription = null,
+                        tint = Color.White.copy(alpha = 0.7f),
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = currentPath,
+                        style = MaterialTheme.typography.caption,
+                        color = Color.White.copy(alpha = 0.9f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+        }
+        
+        // File list
+        when {
+            isLoading -> {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = MaterialTheme.colors.primary)
+                }
+            }
+            files.isEmpty() -> {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            Icons.Filled.FolderOpen,
+                            contentDescription = null,
+                            modifier = Modifier.size(64.dp),
+                            tint = Color.Gray
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text("No bank files in this folder", color = Color.Gray)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            "Supported: .sf2, .sf3, .sfo, .hsb, .dls",
+                            fontSize = 12.sp,
+                            color = Color.Gray
+                        )
+                    }
+                }
+            }
+            else -> {
+                LazyColumn(modifier = Modifier.fillMaxSize()) {
+                    // Show parent directory ".." if not at root
+                    val file = File(currentPath)
+                    val parentPath = file.parent
+                    if (parentPath != null && currentPath != "/") {
+                        item {
+                            Surface(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onNavigate(parentPath) },
+                                color = Color.Transparent
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        Icons.Filled.Folder,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colors.onBackground.copy(alpha = 0.6f),
+                                        modifier = Modifier.size(40.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Text(
+                                        text = "..",
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colors.onBackground.copy(alpha = 0.6f)
+                                    )
+                                }
+                            }
+                            Divider(color = Color.Gray.copy(alpha = 0.2f))
+                        }
+                    }
+                    
+                    // Show folders
+                    itemsIndexed(files.filter { it.isFolder }) { _, item ->
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onNavigate(item.path) },
+                            color = Color.Transparent
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    Icons.Filled.Folder,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colors.primary,
+                                    modifier = Modifier.size(40.dp)
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text(
+                                    text = item.title,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colors.onBackground
+                                )
+                            }
+                        }
+                        Divider(color = Color.Gray.copy(alpha = 0.2f))
+                    }
+                    
+                    // Show bank files
+                    itemsIndexed(files.filter { !it.isFolder }) { _, item ->
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onSelectBank(item.file) },
+                            color = Color.Transparent
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    Icons.Filled.LibraryMusic,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colors.secondary,
+                                    modifier = Modifier.size(40.dp)
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = item.title,
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Normal,
+                                        color = MaterialTheme.colors.onBackground,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        text = item.file.extension.uppercase(),
+                                        fontSize = 12.sp,
+                                        color = MaterialTheme.colors.onBackground.copy(alpha = 0.6f)
+                                    )
+                                }
+                                Icon(
+                                    Icons.AutoMirrored.Filled.ArrowForward,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colors.onBackground.copy(alpha = 0.4f)
+                                )
+                            }
+                        }
+                        Divider(color = Color.Gray.copy(alpha = 0.2f))
+                    }
                 }
             }
         }

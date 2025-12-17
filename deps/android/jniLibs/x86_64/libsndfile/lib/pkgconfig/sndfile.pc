@@ -1,0 +1,13 @@
+prefix=/home/zefie/dev/miniBAE/deps/android/jniLibs/x86_64/libsndfile
+exec_prefix=${prefix}
+libdir=/home/zefie/dev/miniBAE/deps/android/jniLibs/x86_64/libsndfile/lib
+includedir=/home/zefie/dev/miniBAE/deps/android/jniLibs/x86_64/libsndfile/include
+
+Name: sndfile
+Description: A library for reading and writing audio files
+Requires:
+Requires.private: flac ogg vorbis vorbisenc opus 
+Version: 1.2.2
+Libs: -L${libdir} -lsndfile
+Libs.private: 
+Cflags: -I${includedir}

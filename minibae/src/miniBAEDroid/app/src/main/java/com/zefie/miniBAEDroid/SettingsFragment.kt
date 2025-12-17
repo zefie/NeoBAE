@@ -56,6 +56,42 @@ class SettingsFragment: Fragment(){
         }
     }
     
+    private fun ensureMixerExists(): Boolean {
+        // Check if mixer exists, create if needed
+        if (Mixer.getMixer() == null) {
+            val status = Mixer.create(requireActivity().assets, 44100, 2, 64, 8, 64)
+            if (status != 0) {
+                return false
+            }
+            Mixer.setNativeCacheDir(requireContext().cacheDir.absolutePath)
+            
+            // Load default bank
+            val prefs = requireContext().getSharedPreferences(prefName, Context.MODE_PRIVATE)
+            val lastBankPath = prefs.getString(keyBankPath, null)
+            
+            if (lastBankPath == builtinMarker || lastBankPath.isNullOrEmpty()) {
+                Mixer.addBuiltInPatches()
+            } else {
+                val bankFile = File(lastBankPath)
+                if (bankFile.exists()) {
+                    try {
+                        val bytes = bankFile.readBytes()
+                        Mixer.addBankFromMemory(bytes, bankFile.name)
+                    } catch (_: Exception) {
+                        Mixer.addBuiltInPatches()
+                    }
+                } else {
+                    Mixer.addBuiltInPatches()
+                }
+            }
+            
+            // Restore settings
+            Mixer.setDefaultReverb(prefs.getInt(keyReverb, 1))
+            Mixer.setDefaultVelocityCurve(prefs.getInt(keyCurve, 0))
+        }
+        return true
+    }
+    
     private fun loadBankFromUri(uri: Uri, hotSwap: Boolean) {
         isLoadingBank.value = true
         Thread {
@@ -74,13 +110,25 @@ class SettingsFragment: Fragment(){
                     
                     // Read bytes and call native memory loader to avoid filesystem path issues
                     val bytes = cached.readBytes()
+                    val fallback = uri.lastPathSegment ?: cached.name
+                    
+                    // If mixer doesn't exist, just save the path for lazy loading
+                    if (Mixer.getMixer() == null) {
+                        prefs.edit().putString(keyBankPath, cached.absolutePath).apply()
+                        activity?.runOnUiThread {
+                            currentBankName.value = fallback
+                            isLoadingBank.value = false
+                        }
+                        return@Thread
+                    }
+                    
+                    // Mixer exists, load bank now
                     android.util.Log.d("SettingsFragment", "Calling Mixer.addBankFromMemory with ${bytes.size} bytes")
                     val r = Mixer.addBankFromMemory(bytes, cached.name)
                     android.util.Log.d("SettingsFragment", "Mixer.addBankFromMemory returned: $r")
                     activity?.runOnUiThread {
                         if (r == 0) {
                             val friendly = Mixer.getBankFriendlyName()
-                            val fallback = uri.lastPathSegment ?: cached.name
                             currentBankName.value = friendly ?: fallback
                             prefs.edit().putString(keyBankPath, cached.absolutePath).apply()
                             
@@ -118,9 +166,22 @@ class SettingsFragment: Fragment(){
     private fun loadBuiltInPatches() {
         isLoadingBank.value = true
         Thread {
+            val prefs = requireContext().getSharedPreferences(prefName, Context.MODE_PRIVATE)
+            
+            // If mixer doesn't exist, just save the preference for lazy loading
+            if (Mixer.getMixer() == null) {
+                prefs.edit().putString(keyBankPath, builtinMarker).apply()
+                activity?.runOnUiThread {
+                    currentBankName.value = "Built-in patches"
+                    Toast.makeText(requireContext(), "Built-in patches will load when playback starts", Toast.LENGTH_SHORT).show()
+                    isLoadingBank.value = false
+                }
+                return@Thread
+            }
+            
+            // Mixer exists, load patches now
             val r = Mixer.addBuiltInPatches()
             activity?.runOnUiThread {
-                val prefs = requireContext().getSharedPreferences(prefName, Context.MODE_PRIVATE)
                 if (r == 0) {
                     val friendly = Mixer.getBankFriendlyName()
                     currentBankName.value = friendly ?: "Built-in patches"
@@ -150,11 +211,25 @@ class SettingsFragment: Fragment(){
         masterVolume.value = prefs.getInt(keyMasterVol, 75)
         exportCodec.value = prefs.getInt(keyExportCodec, 1) // Default to OGG
         
-        // Initialize bank name from current mixer state
+        // Initialize bank name from current mixer state or saved preference
         Thread {
-            val friendly = Mixer.getBankFriendlyName()
+            val prefs = requireContext().getSharedPreferences(prefName, Context.MODE_PRIVATE)
+            val friendly = if (Mixer.getMixer() != null) {
+                Mixer.getBankFriendlyName()
+            } else {
+                // Mixer doesn't exist, show saved bank preference
+                val lastBankPath = prefs.getString(keyBankPath, null)
+                when {
+                    lastBankPath == builtinMarker -> "Built-in patches"
+                    !lastBankPath.isNullOrEmpty() -> {
+                        val file = java.io.File(lastBankPath)
+                        file.name
+                    }
+                    else -> null
+                }
+            }
             activity?.runOnUiThread {
-                currentBankName.value = friendly ?: "Unknown Bank"
+                currentBankName.value = friendly ?: "No Bank Loaded"
             }
         }.start()
         
@@ -183,12 +258,16 @@ class SettingsFragment: Fragment(){
                         },
                         onReverbChange = { value ->
                             reverbType.value = value
-                            Mixer.setDefaultReverb(value)
+                            if (Mixer.getMixer() != null) {
+                                Mixer.setDefaultReverb(value)
+                            }
                             prefs.edit().putInt(keyReverb, value).apply()
                         },
                         onCurveChange = { value ->
                             velocityCurve.value = value
-                            Mixer.setDefaultVelocityCurve(value)
+                            if (Mixer.getMixer() != null) {
+                                Mixer.setDefaultVelocityCurve(value)
+                            }
                             prefs.edit().putInt(keyCurve, value).apply()
                         },
                         onVolumeChange = { value ->
