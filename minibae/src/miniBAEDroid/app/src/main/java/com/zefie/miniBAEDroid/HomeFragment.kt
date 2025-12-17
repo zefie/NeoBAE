@@ -52,6 +52,9 @@ import java.io.File
 import org.minibae.Mixer
 import org.minibae.Song
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import androidx.lifecycle.lifecycleScope
 
 class HomeFragment : Fragment() {
 
@@ -59,6 +62,7 @@ class HomeFragment : Fragment() {
         var velocityCurve = mutableStateOf(0)
     }
 
+    private var mixerIdleJob: Job? = null
     private var pickedFolderUri: Uri? = null
     private lateinit var viewModel: MusicPlayerViewModel
     private lateinit var notificationHelper: MusicNotificationHelper
@@ -498,8 +502,7 @@ class HomeFragment : Fragment() {
                             if (::notificationHelper.isInitialized) {
                                 notificationHelper.hideNotification()
                             }
-                            // User closed playback - clean up mixer
-                            Mixer.delete()
+                            // User closed playback - cleanup is scheduled by stopPlayback(true)
                         }
                     )
                     val savedRepeatMode = prefs.getInt("repeat_mode", 0)
@@ -520,14 +523,28 @@ class HomeFragment : Fragment() {
                             viewModel.currentPositionMs = pos
                             if (len > 0) viewModel.totalDurationMs = len
                             
-                            // Handle playback completion (only for Songs with length tracking)
-                            if (len > 0 && pos >= len - 500) {
+                            // Handle playback completion
+                            var playbackFinished = false
+                            
+                            if (currentSong != null) {
+                                if (currentSong?.isDone() == true) {
+                                    playbackFinished = true
+                                }
+                            } else if (currentSound != null) {
+                                if (len > 0 && pos >= len - 50) {
+                                    playbackFinished = true
+                                }
+                            }
+                            
+                            if (playbackFinished) {
                                 delay(100)
                                 when (viewModel.repeatMode) {
                                     RepeatMode.SONG -> {
                                         // Repeat current song
                                         seekPlaybackToMs(0)
                                         viewModel.currentPositionMs = 0
+                                        currentSong?.start()
+                                        currentSound?.start()
                                     }
                                     RepeatMode.PLAYLIST -> {
                                         // Play next song, or loop back to first
@@ -544,9 +561,8 @@ class HomeFragment : Fragment() {
                                             playNext()
                                         } else {
                                             viewModel.isPlaying = false
-                                            // No more songs to play - clean up mixer to free resources
-                                            stopPlayback(true)
-                                            Mixer.delete()
+                                            // No more songs to play - schedule cleanup
+                                            scheduleMixerCleanup()
                                         }
                                     }
                                 }
@@ -846,6 +862,7 @@ class HomeFragment : Fragment() {
     private fun startPlayback(file: File) {
         try {
             stopPlayback(true)
+            cancelMixerCleanup()
             viewModel.currentPositionMs = 0
             
             // Ensure mixer exists before trying to load
@@ -945,16 +962,27 @@ class HomeFragment : Fragment() {
         return currentSong?.isPaused() ?: currentSound?.isPaused() ?: false
     }
     
-    private fun isPlaybackDone(): Boolean {
-        return currentSong?.isDone() ?: currentSound?.isDone() ?: false
+    private fun scheduleMixerCleanup() {
+        mixerIdleJob?.cancel()
+        mixerIdleJob = lifecycleScope.launch {
+            delay(60000) // 1 minute
+            Mixer.delete()
+            android.util.Log.d("HomeFragment", "Mixer deleted due to inactivity")
+        }
     }
-    
+
+    private fun cancelMixerCleanup() {
+        mixerIdleJob?.cancel()
+        mixerIdleJob = null
+    }
+
     private fun pausePlayback() {
         currentSong?.pause()
         currentSound?.pause()
     }
     
     private fun resumePlayback() {
+        cancelMixerCleanup()
         currentSong?.resume()
         currentSound?.resume()
     }
@@ -965,6 +993,7 @@ class HomeFragment : Fragment() {
         if (delete) {
             setCurrentSong(null)
             setCurrentSound(null)
+            scheduleMixerCleanup()
         }
     }
     
