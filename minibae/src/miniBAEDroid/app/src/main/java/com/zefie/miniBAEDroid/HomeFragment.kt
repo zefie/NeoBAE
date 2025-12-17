@@ -820,8 +820,13 @@ class HomeFragment : Fragment() {
     
     private fun playFileFromBrowser(file: File) {
         // Create a single-file playlist and play it
-        stopPlayback(true)
-        Mixer.delete() // Clean up before loading new song
+        if (currentSong?.hasEmbeddedBank() == true) {
+            android.util.Log.d("HomeFragment", "The previous song had an embedded bank, restoring last known bank")
+            val prefs = requireContext().getSharedPreferences("miniBAE_prefs", Context.MODE_PRIVATE)
+            val lastBankPath = prefs.getString("last_bank_path", "__builtin__")
+            loadBankFromFile(java.io.File(lastBankPath))
+        }
+        stopPlayback(false)
         viewModel.clearPlaylist()
         val item = PlaylistItem(file)
         viewModel.addToPlaylist(item)
@@ -878,6 +883,9 @@ class HomeFragment : Fragment() {
                             song.setVelocityCurve(velocityCurve.value)
                         }
 
+                        song.seekToMs(0)
+                        song.preroll()
+                        song.seekToMs(0)
                         val r = song.start()
                         if (r == 0) {
                             viewModel.isPlaying = true

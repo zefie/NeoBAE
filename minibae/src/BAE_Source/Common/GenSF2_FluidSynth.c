@@ -1019,6 +1019,7 @@ void GM_SF2_RenderAudioSlice(GM_Song* pSong, int32_t* mixBuffer, int32_t frameCo
     {
         return;
     }
+
     
     // Update channel activity decay
     PV_SF2_DecayChannelActivity();

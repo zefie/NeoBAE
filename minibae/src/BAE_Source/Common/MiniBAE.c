@@ -162,12 +162,10 @@
 #include <limits.h>
 #include <stdint.h>
 #include "bankinfo.h" // embedded bank metadata (hash -> friendly)
-#if USE_SF2_SUPPORT == TRUE
-#if _USING_FLUIDSYNTH == TRUE
+#if USE_SF2_SUPPORT == TRUE && _USING_FLUIDSYNTH == TRUE
 #include "GenSF2_FluidSynth.h"
 #if USE_XMF_SUPPORT == TRUE
 #include "GenXMF.h"
-#endif
 #endif
 #endif
 
@@ -625,6 +623,7 @@ struct sBAESong
     int mRouteBus;
     BAE_BOOL mAutoBuzz;
     BAE_BOOL mAutoFlash;
+    BAE_BOOL mHasEmbeddedBank;
     char *mTitle;
 };
 
@@ -6557,6 +6556,7 @@ BAESong BAESong_New(BAEMixer mixer)
                 song->mVolume = MAX_SONG_VOLUME;
                 song->mixer = mixer;
                 song->mInMixer = FALSE;
+                song->mHasEmbeddedBank = FALSE;
                 result = PV_BAESong_InitLiveSong(song, FALSE);
                 if (result == BAE_NO_ERROR)
                 {
@@ -6918,6 +6918,15 @@ BAEResult BAESong_GetTitle(BAESong song, char *cName, int maxSize)
     return BAE_TranslateOPErr(err);
 }
 
+BAE_BOOL BAESong_HasEmbeddedBank(BAESong song)
+{
+    if ((song) && (song->mID == OBJECT_ID))
+    {
+        return song->mHasEmbeddedBank;
+    }
+    return FALSE;
+}
+
 // BAESong_LoadGroovoid()
 // --------------------------------------
 //
@@ -7170,6 +7179,12 @@ BAEResult BAESong_LoadRmiFromMemory(BAESong song, void const *pRmiData, uint32_t
                 
                 if (theErr == NO_ERR && extractedMidi)
                 {
+#if USE_SF2_SUPPORT == TRUE && _USING_FLUIDSYNTH == TRUE
+                    if (useEmbeddedBank && GM_LastRMIHadEmbeddedSoundbank())
+                    {
+                        song->mHasEmbeddedBank = TRUE;
+                    }
+#endif
                     BAE_PRINTF("[BAE] RMI processing complete, extracted %u bytes of MIDI\n", extractedMidiLen);
                     
                     // Now load the extracted MIDI data using LoadMidiFromMemory
@@ -7235,6 +7250,12 @@ BAEResult BAESong_LoadRmiFromFile(BAESong song, BAEPathName filePath, BAE_BOOL i
                 
                 if (theErr == NO_ERR && extractedMidi)
                 {
+#if USE_SF2_SUPPORT == TRUE && _USING_FLUIDSYNTH == TRUE
+                    if (useEmbeddedBank && GM_LastRMIHadEmbeddedSoundbank())
+                    {
+                        song->mHasEmbeddedBank = TRUE;
+                    }
+#endif
                     BAE_PRINTF("[BAE] RMI processing complete, extracted %u bytes of MIDI\n", extractedMidiLen);
                     
                     // Now load the extracted MIDI data using LoadMidiFromMemory
@@ -10574,12 +10595,12 @@ BAEResult BAEMixer_LoadFromMemory(BAEMixer mixer, void const *pData, uint32_t da
         {
             sr = BAESong_LoadRmiFromMemory(result->data.song, pData, dataSize, TRUE, TRUE);
         }
-#endif
 #if USE_XMF_SUPPORT == TRUE
         else if (ftype == BAE_XMF)
         {
             sr = BAESong_LoadXmfFromMemory(result->data.song, pData, dataSize, TRUE);
         }
+#endif
 #endif
         else if (ftype == BAE_MIDI_TYPE || ftype == BAE_RMI)
         {

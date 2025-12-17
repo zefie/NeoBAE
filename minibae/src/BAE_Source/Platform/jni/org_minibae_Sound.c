@@ -491,6 +491,14 @@ doneLoad:
 	return (jint)r;
 }
 
+JNIEXPORT jboolean JNICALL Java_org_minibae_Song__1hasEmbeddedBank
+	(JNIEnv* env, jobject jsong, jlong songReference)
+{
+	BAESong song = (BAESong)(intptr_t)songReference;
+	if(!song) return JNI_FALSE;
+	return (jboolean)BAESong_HasEmbeddedBank(song);
+}
+
 JNIEXPORT jint JNICALL Java_org_minibae_Song__1prerollSong
 	(JNIEnv* env, jobject jsong, jlong songReference)
 {

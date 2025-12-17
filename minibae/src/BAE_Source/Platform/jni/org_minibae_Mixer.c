@@ -141,7 +141,7 @@ JNIEXPORT jint JNICALL Java_org_minibae_Mixer__1addBankFromFile
 	            strcasecmp(ext, ".sf3") == 0 || strcasecmp(ext, ".sfo") == 0))
 	{
 		// Load SF2/DLS bank
-		OPErr err = GM_LoadSF2Soundfont(cpath);
+		OPErr err = GM_LoadSF2Soundfont(cpath);		
 		(*env)->ReleaseStringUTFChars(env, path, cpath);
 		if (err != NO_ERR)
 		{

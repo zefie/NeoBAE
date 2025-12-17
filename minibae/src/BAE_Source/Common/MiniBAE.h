@@ -1746,6 +1746,12 @@ extern "C"
     //
     BAEResult BAESong_GetTitle(BAESong song, char *cName, int maxSize);
 
+    // BAESong_HasEmbeddedBank
+    // ------------------------------------
+    // Returns TRUE if the song has an embedded bank, FALSE otherwise.
+    //
+    BAE_BOOL BAESong_HasEmbeddedBank(BAESong song);
+
     // BAESong_GetMemoryUsed()
     // --------------------------------------
     // Calculates amount of memory used by this song in bytes. Counts instruments, samples,

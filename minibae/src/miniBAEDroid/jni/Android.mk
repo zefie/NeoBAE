@@ -85,6 +85,7 @@ LOCAL_SRC_FILES	:= \
 			Common/GenSynthInterp2U3232.c \
 			Common/GenSF2_FluidSynth.c \
 			Common/GenRMI.c \
+      		Common/GenXMF.c \
 			Common/MiniBAE.c \
 			Common/NewNewLZSS.c \
 			Common/SampleTools.c \
@@ -98,7 +99,7 @@ LOCAL_SRC_FILES	:= \
 			Common/g72x.c \
 			Common/sha1mini.c \
 			Common/XFileTypes.c \
-      Common/XVorbisFiles.c \
+      		Common/XVorbisFiles.c \
 			../BAE_MPEG_Source_II/XMPEG_minimp3_wrapper.c \
 			../BAE_MPEG_Source_II/XMPEGFilesSun.c \
 			Platform/jni/org_minibae_Mixer.c \
@@ -109,28 +110,28 @@ LOCAL_SRC_FILES	:= \
 			../thirdparty/libogg/src/bitwise.c \
 			../thirdparty/libogg/src/framing.c \
 			../thirdparty/libvorbis/lib/analysis.c \
-      ../thirdparty/libvorbis/lib/bitrate.c \
-      ../thirdparty/libvorbis/lib/block.c \
-      ../thirdparty/libvorbis/lib/codebook.c \
-      ../thirdparty/libvorbis/lib/envelope.c \
-      ../thirdparty/libvorbis/lib/floor0.c \
-      ../thirdparty/libvorbis/lib/floor1.c \
-      ../thirdparty/libvorbis/lib/info.c \
-      ../thirdparty/libvorbis/lib/lookup.c \
-      ../thirdparty/libvorbis/lib/lsp.c \
-      ../thirdparty/libvorbis/lib/mapping0.c \
-      ../thirdparty/libvorbis/lib/mdct.c \
-      ../thirdparty/libvorbis/lib/psy.c \
-      ../thirdparty/libvorbis/lib/registry.c \
-      ../thirdparty/libvorbis/lib/res0.c \
-      ../thirdparty/libvorbis/lib/sharedbook.c \
-      ../thirdparty/libvorbis/lib/smallft.c \
-      ../thirdparty/libvorbis/lib/synthesis.c \
-      ../thirdparty/libvorbis/lib/vorbisfile.c \
-      ../thirdparty/libvorbis/lib/lpc.c \
-      ../thirdparty/libvorbis/lib/window.c \
-		  ../thirdparty/libvorbis/lib/vorbisenc.c \
-      ../thirdparty/flac/src/libFLAC/stream_decoder.c \
+      		../thirdparty/libvorbis/lib/bitrate.c \
+      		../thirdparty/libvorbis/lib/block.c \
+      		../thirdparty/libvorbis/lib/codebook.c \
+      		../thirdparty/libvorbis/lib/envelope.c \
+      		../thirdparty/libvorbis/lib/floor0.c \
+      		../thirdparty/libvorbis/lib/floor1.c \
+      		../thirdparty/libvorbis/lib/info.c \
+      		../thirdparty/libvorbis/lib/lookup.c \
+      		../thirdparty/libvorbis/lib/lsp.c \
+      		../thirdparty/libvorbis/lib/mapping0.c \
+      		../thirdparty/libvorbis/lib/mdct.c \
+      		../thirdparty/libvorbis/lib/psy.c \
+      		../thirdparty/libvorbis/lib/registry.c \
+      		../thirdparty/libvorbis/lib/res0.c \
+      		../thirdparty/libvorbis/lib/sharedbook.c \
+      		../thirdparty/libvorbis/lib/smallft.c \
+      		../thirdparty/libvorbis/lib/synthesis.c \
+      		../thirdparty/libvorbis/lib/vorbisfile.c \
+      		../thirdparty/libvorbis/lib/lpc.c \
+      		../thirdparty/libvorbis/lib/window.c \
+		  	../thirdparty/libvorbis/lib/vorbisenc.c \
+      		../thirdparty/flac/src/libFLAC/stream_decoder.c \
 			../thirdparty/flac/src/libFLAC/bitreader.c \
 			../thirdparty/flac/src/libFLAC/bitmath.c \
 			../thirdparty/flac/src/libFLAC/bitwriter.c \
@@ -148,8 +149,8 @@ LOCAL_SRC_FILES	:= \
 			../thirdparty/flac/src/libFLAC/ogg_decoder_aspect.c \
 			../thirdparty/flac/src/libFLAC/ogg_helper.c \
 			../thirdparty/flac/src/libFLAC/ogg_mapping.c \
-      ../thirdparty/flac/src/libFLAC/stream_encoder.c \
-		  ../thirdparty/flac/src/libFLAC/ogg_encoder_aspect.c  
+      		../thirdparty/flac/src/libFLAC/stream_encoder.c \
+		  	../thirdparty/flac/src/libFLAC/ogg_encoder_aspect.c
 
 LOCAL_LDFLAGS += -Wl,-z,max-page-size=16384
 
@@ -167,7 +168,7 @@ LOCAL_C_INCLUDES    += $(LOCAL_PATH)/../thirdparty/flac/include
 LOCAL_C_INCLUDES    += $(LOCAL_PATH)/../thirdparty/flac/src/libFLAC/include
 LOCAL_C_INCLUDES    += $(LOCAL_PATH)/../thirdparty/libvorbis/lib
 
-LOCAL_CFLAGS := -std=c99 -O2 -D_VERSION=\"$(VERSION)\" -DX_PLATFORM=X_ANDROID -D__ANDROID__=1 -D_BUILT_IN_PATCHES=1 -DUSE_MINIMP3_WRAPPER=1 -DUSE_MPEG_DECODER=1 -DUSE_SF2_SUPPORT=1 -DUSE_OGG_FORMAT=1 -DUSE_VORBIS_ENCODER=1 -DUSE_FLAC_ENCODER=1 -D_USING_FLUIDSYNTH=1 -DUSE_HIGHLEVEL_FILE_API=1 -DSUPPORT_KARAOKE=1 -DFLAC__NO_DLL -DHAVE_CONFIG_H=1 -Wall -fsigned-char
+LOCAL_CFLAGS := -std=c99 -O2 -D_VERSION=\"$(VERSION)\" -DX_PLATFORM=X_ANDROID -D__ANDROID__=1 -D_BUILT_IN_PATCHES=1 -DUSE_MINIMP3_WRAPPER=1 -DUSE_MPEG_DECODER=1 -DUSE_SF2_SUPPORT=1 -DUSE_OGG_FORMAT=1 -DUSE_VORBIS_ENCODER=1 -DUSE_FLAC_ENCODER=1 -D_USING_FLUIDSYNTH=1 -DUSE_XMF_SUPPORT=1 -DUSE_HIGHLEVEL_FILE_API=1 -DSUPPORT_KARAOKE=1 -DFLAC__NO_DLL -DHAVE_CONFIG_H=1 -Wall -fsigned-char
 
 ifeq ($(APP_OPTIM),debug)
     LOCAL_CFLAGS += -D_DEBUG=1
@@ -185,6 +186,8 @@ LOCAL_LDLIBS    += -lOpenSLES
 LOCAL_LDLIBS    += -llog
 # for native asset manager
 LOCAL_LDLIBS    += -landroid
+# for GenXMF zlib support
+LOCAL_LDLIBS    += -lz
 
 
 

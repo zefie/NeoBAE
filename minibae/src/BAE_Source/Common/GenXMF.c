@@ -10,19 +10,15 @@
 #include "GenXMF.h"
 #include <string.h>
 // zlib for MXMF packed content
-#if USE_XMF_SUPPORT == TRUE && _USING_FLUIDSYNTH == TRUE
-#include <zlib.h>
-#endif
+
 #include "X_Assert.h" // BAE_PRINTF
 // LZSS API (declared in NewNewLZSS.c)
 void LZSSUncompress(unsigned char* src, uint32_t srcBytes,
                     unsigned char* dst, uint32_t dstBytes);
 
 #if USE_XMF_SUPPORT == TRUE && _USING_FLUIDSYNTH == TRUE
-
-#if USE_SF2_SUPPORT == TRUE && _USING_FLUIDSYNTH == TRUE
+#include <zlib.h>
 #include "GenSF2_FluidSynth.h"
-#endif
 
 // Control verbose inflate failure logging during MXMF packed scans
 #ifndef MXMF_LOG_INFLATE_FAILURES
@@ -1154,6 +1150,17 @@ BAEResult BAESong_LoadXmfFromFile(BAESong song, BAEPathName filePath, BAE_BOOL i
 
     unsigned char *bytes = (unsigned char *)data;
     uint32_t ulen = (uint32_t)size;
+
+    return BAESong_LoadXmfFromMemory(song, (void *)bytes, ulen, ignoreBadInstruments);
+}
+
+BAEResult BAESong_LoadXmfFromMemory(BAESong song, void *data, uint32_t ulen, BAE_BOOL ignoreBadInstruments)
+{
+    if (!(song))
+        return BAE_NULL_OBJECT;
+    if (!data || ulen == 0)
+        return BAE_BAD_FILE;
+    const unsigned char *bytes = (const unsigned char *)data;
 
     const char smf_sig[4] = {'M','T','h','d'};
     const char rmf_sig[4] = {'I','R','E','Z'};
