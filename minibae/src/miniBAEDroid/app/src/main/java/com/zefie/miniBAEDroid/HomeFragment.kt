@@ -167,6 +167,13 @@ class HomeFragment : Fragment() {
         }
     }
 
+    fun refreshFolderAfterPermission() {
+        // Refresh the current folder now that permissions are granted
+        viewModel.currentFolderPath?.let { path ->
+            loadFolderContents(path)
+        }
+    }
+
     private var loadingState: MutableState<Boolean>? = null
     private var lastFolderPath: String? = null
     

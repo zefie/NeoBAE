@@ -35,6 +35,12 @@ class MainActivity : AppCompatActivity() {
             val allGranted = permissions.entries.all { it.value }
             if (!allGranted) {
                 Toast.makeText(this, "Storage permissions are required to access music files", Toast.LENGTH_LONG).show()
+            } else {
+                // Permissions granted - refresh the folder in HomeFragment
+                val fragment = supportFragmentManager.findFragmentById(R.id.fragment_container)
+                if (fragment is HomeFragment) {
+                    fragment.refreshFolderAfterPermission()
+                }
             }
         }
         
@@ -125,8 +131,13 @@ class MainActivity : AppCompatActivity() {
         // Setup OnBackPressedDispatcher instead of deprecated onBackPressed()
         onBackPressedDispatcher.addCallback(this, object : androidx.activity.OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
-                // Exit app on back pressed
-                finish()
+                // Check if fragment manager has back stack entries
+                if (supportFragmentManager.backStackEntryCount > 0) {
+                    supportFragmentManager.popBackStack()
+                } else {
+                    // Only finish if we're at the root
+                    finish()
+                }
             }
         })
 
@@ -314,10 +325,6 @@ class MainActivity : AppCompatActivity() {
 
     override fun onPause() {
         super.onPause()
-        // If no song is loaded when going to background, exit the app
-        if (currentSong == null) {
-            finish()
-        }
     }
 
     override fun onDestroy() {

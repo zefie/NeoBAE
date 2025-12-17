@@ -32,16 +32,7 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="db131c5e-54d9-46fb-97da-0859a92df4f1" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/app/build.gradle" beforeDir="false" afterPath="$PROJECT_DIR$/app/build.gradle" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/miniBAEDroid.app.androidTest.iml" beforeDir="false" afterPath="$PROJECT_DIR$/app/miniBAEDroid.app.androidTest.iml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/miniBAEDroid.app.iml" beforeDir="false" afterPath="$PROJECT_DIR$/app/miniBAEDroid.app.iml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/miniBAEDroid.app.main.iml" beforeDir="false" afterPath="$PROJECT_DIR$/app/miniBAEDroid.app.main.iml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/miniBAEDroid.app.unitTest.iml" beforeDir="false" afterPath="$PROJECT_DIR$/app/miniBAEDroid.app.unitTest.iml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app/src/main/java/com/zefie/miniBAEDroid/MainActivity.kt" beforeDir="false" afterPath="$PROJECT_DIR$/app/src/main/java/com/zefie/miniBAEDroid/MainActivity.kt" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/jni/Android.mk" beforeDir="false" afterPath="$PROJECT_DIR$/jni/Android.mk" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/miniBAEDroid.iml" beforeDir="false" afterPath="$PROJECT_DIR$/miniBAEDroid.iml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/miniBAEDroid.ipr" beforeDir="false" afterPath="$PROJECT_DIR$/miniBAEDroid.ipr" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/miniBAEDroid.iws" beforeDir="false" afterPath="$PROJECT_DIR$/miniBAEDroid.iws" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
