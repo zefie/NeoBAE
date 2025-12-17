@@ -13,6 +13,7 @@
 #include "org_minibae_Sound.h"
 #include "MiniBAE.h"
 #include "GenSnd.h"
+#include "GenSF2_FluidSynth.h"
 
 #include <android/asset_manager.h>
 #include <android/asset_manager_jni.h>
@@ -593,8 +594,9 @@ JNIEXPORT jint JNICALL Java_org_minibae_Mixer__1serviceOutputToFile
 {
 	BAEMixer mixer = (BAEMixer)(intptr_t)mixerReference;
 	if(!mixer) return (jint)BAE_PARAM_ERR;
-	
+
 	BAEResult result = BAEMixer_ServiceAudioOutputToFile(mixer);
+
 	return (jint)result;
 }
 

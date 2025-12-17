@@ -74,6 +74,7 @@ typedef struct {
 } XVorbisEncoder;
 #endif
 
+#if USE_VORBIS_DECODER == TRUE
 // Callback functions for libvorbisfile to read from XFILE
 static size_t vorbis_read_func(void *ptr, size_t size, size_t nmemb, void *datasource)
 {
@@ -158,6 +159,8 @@ static ov_callbacks vorbis_callbacks = {
     vorbis_close_func,
     vorbis_tell_func
 };
+#endif
+
 
 #if USE_VORBIS_DECODER == TRUE
 

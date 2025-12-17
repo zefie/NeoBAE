@@ -236,8 +236,8 @@ JNIEXPORT jstring JNICALL Java_org_minibae_Mixer__1getBankFriendlyName
 		int32_t read_total = 0; int32_t r = 0;
 		while(read_total < asset_len && (r = AAsset_read(asset, mem + read_total, (size_t)(asset_len - read_total))) > 0){ read_total += r; }
 		AAsset_close(asset);
-#if USE_SF2_SUPPORT == TRUE && _USING_FLUIDSYNTH == TRUE
 	BAEMixer_UnloadBanks(mixer);
+#if USE_SF2_SUPPORT == TRUE && _USING_FLUIDSYNTH == TRUE
 	GM_UnloadSF2Soundfont();
 	GM_SetMixerSF2Mode(FALSE);
 	
@@ -545,3 +545,4 @@ JNIEXPORT jstring JNICALL Java_org_minibae_Mixer__1getFeatureString
 	const char* features = BAE_GetFeatureString();
 	return (*env)->NewStringUTF(env, features); // BAE_GetFeatureString returns static string, no free needed
 }
+

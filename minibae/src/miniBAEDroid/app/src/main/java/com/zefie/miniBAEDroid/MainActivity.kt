@@ -33,8 +33,10 @@ class MainActivity : AppCompatActivity() {
         
         // Register permission launcher
         permissionLauncher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
-            val allGranted = permissions.entries.all { it.value }
-            if (!allGranted) {
+            // Check if essential storage/audio permissions are granted
+            // We don't strictly require POST_NOTIFICATIONS for the app to function
+
+            if (permissions[android.Manifest.permission.READ_EXTERNAL_STORAGE] != true) {
                 Toast.makeText(this, "Storage permissions are required to access music files", Toast.LENGTH_LONG).show()
             } else {
                 // Permissions granted - refresh the folder in HomeFragment
@@ -134,83 +136,62 @@ class MainActivity : AppCompatActivity() {
             return
         }
         
+        val song = currentSong
+        if (song == null) {
+            android.util.Log.d("MainActivity", "No song loaded")
+            return
+        }
+        
         val wasPlaying = viewModel.isPlaying
-        val wasPaused = currentSong?.isPaused() == true
         val savedPosition = viewModel.currentPositionMs
-        android.util.Log.d("MainActivity", "Reloading song: ${currentItem.title}, wasPlaying=$wasPlaying, wasPaused=$wasPaused, position=$savedPosition")
+        android.util.Log.d("MainActivity", "Restarting song with new bank: ${currentItem.title}, wasPlaying=$wasPlaying, position=$savedPosition")
         
-        // Stop current playback and ensure it fully stops
-        currentSong?.stop(true)
-        currentSong = null
-        viewModel.isPlaying = false
-        
-        // Small delay to ensure the old song is fully stopped
-        Thread.sleep(50)
-        
-        // Reload the song with the new bank
         try {
-            val bytes = currentItem.file.readBytes()
-            val loadResult = org.minibae.LoadResult()
+            // Stop current playback
+            song.stop(false)
+            viewModel.isPlaying = false
             
-            val status = Mixer.loadFromMemory(bytes, loadResult)
+            // Bank has already been loaded by the caller
+            // Just restart the song from the beginning to let it initialize controllers
+            song.seekToMs(0)
+            song.preroll()
             
-            if (status == 0 && loadResult.isSong) {
-                val song = loadResult.song
-                if (song != null) {
-                    currentSong = song
-                    android.util.Log.d("MainActivity", "Reloaded ${loadResult.fileTypeString} file")
-                    
-                    // Apply volume
-                    Mixer.setMasterVolumePercent(viewModel.volumePercent)
-                    song.setVolumePercent(viewModel.volumePercent)
-                    
-                    // Set loop count based on repeat mode
-                    val loopCount = if (viewModel.repeatMode == RepeatMode.SONG) 32768 else 0
-                    song.setLoops(loopCount)
-                    
-                    // Start the song first (required before seeking)
-                    val startResult = song.start()
-                    if (startResult != 0) {
-                        android.util.Log.e("MainActivity", "Failed to start song: $startResult")
-                        runOnUiThread {
-                            Toast.makeText(this, "Failed to start song (err=$startResult)", Toast.LENGTH_SHORT).show()
-                        }
-                        return
-                    }
-                    
-                    // Seek to saved position
-                    if (savedPosition > 0) {
-                        song.seekToMs(savedPosition)
-                        viewModel.currentPositionMs = savedPosition
-                    }
-                    
-                    // Handle playback state
-                    if (wasPlaying) {
-                        // Song was playing, keep it playing
-                        viewModel.isPlaying = true
-                        android.util.Log.d("MainActivity", "Song reloaded and playing")
-                    } else {
-                        // Song was stopped or paused, pause it now
-                        song.pause()
-                        viewModel.isPlaying = false
-                        android.util.Log.d("MainActivity", "Song reloaded and paused")
-                    }
-                    
-                    runOnUiThread {
-                        Toast.makeText(this, "Bank applied to current song", Toast.LENGTH_SHORT).show()
-                    }
-                } else {
-                    viewModel.isPlaying = false
-                    runOnUiThread {
-                        Toast.makeText(this, "Failed to reload song (err=$status)", Toast.LENGTH_SHORT).show()
-                    }
+            val startResult = song.start()
+            if (startResult != 0) {
+                android.util.Log.e("MainActivity", "Failed to start song: $startResult")
+                runOnUiThread {
+                    Toast.makeText(this, "Failed to start song (err=$startResult)", Toast.LENGTH_SHORT).show()
                 }
+                return
+            }
+            
+            // Give the MIDI a moment to initialize controllers before seeking
+            if (savedPosition > 0) {
+                Thread.sleep(100)
+                song.seekToMs(savedPosition)
+                viewModel.currentPositionMs = savedPosition
+            }
+            
+            // Handle playback state
+            if (wasPlaying) {
+                // Song was playing, keep it playing
+                viewModel.isPlaying = true
+                android.util.Log.d("MainActivity", "Song restarted and playing")
+            } else {
+                // Song was stopped or paused, pause it now
+                song.pause()
+                viewModel.isPlaying = false
+                android.util.Log.d("MainActivity", "Song restarted and paused")
+            }
+            
+            runOnUiThread {
+                Toast.makeText(this, "Bank applied to current song", Toast.LENGTH_SHORT).show()
             }
         } catch (ex: Exception) {
             viewModel.isPlaying = false
-            android.util.Log.e("MainActivity", "Reload error: ${ex.message}")
+            android.util.Log.e("MainActivity", "Restart error: ${ex.message}")
             runOnUiThread {
-                Toast.makeText(this, "Reload error: ${ex.localizedMessage}", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Restart error: ${ex.localizedMessage}", Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -247,11 +228,9 @@ class MainActivity : AppCompatActivity() {
         val permissions = mutableListOf<String>()
         
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            permissions.add(android.Manifest.permission.READ_MEDIA_AUDIO)
             permissions.add(android.Manifest.permission.POST_NOTIFICATIONS)
         } else {
             permissions.add(android.Manifest.permission.READ_EXTERNAL_STORAGE)
-            permissions.add(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
         }
         
         val needsPermission = permissions.any {

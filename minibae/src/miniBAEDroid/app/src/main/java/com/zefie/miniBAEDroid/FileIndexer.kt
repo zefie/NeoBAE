@@ -254,11 +254,8 @@ class FileIndexer(private val context: Context) {
     
     suspend fun getIndexedFileCount(): Int {
         return withContext(Dispatchers.IO) {
-            if (currentIndexPath.isEmpty()) {
-                database.getTotalFileCount()
-            } else {
-                database.getFileCount(currentIndexPath)
-            }
+            // Always return total count across all indexes to be consistent
+            database.getTotalFileCount()
         }
     }
 }

@@ -141,7 +141,9 @@ static BAEFileType PV_DetectOGGType(const unsigned char *buffer, int32_t bufferS
         
         if (payloadOffset + 8 <= bufferSize)
         {
+#if USE_VORBIS_DECODER == TRUE || USE_FLAC_DECODER == TRUE
             uint32_t magic = PV_ReadBigEndian32(&buffer[payloadOffset]);
+#endif
             
 #if USE_VORBIS_DECODER == TRUE
             // Check for Vorbis identification header

@@ -23,6 +23,8 @@ public class Song
 	private static native int _setSongPositionUS(long songReference, int us);
 	private static native int _getSongLengthUS(long songReference);
 	private static native int _setSongLoops(long songReference, int numLoops);
+	private static native int _setSongVelocityCurve(long songReference, int curve);
+	private static native boolean _isSF2Song(long songReference);
 
 	private static native long _setMetaEventCallback(long songReference, MetaEventListener listener);
 	private static native void _cleanupMetaEventCallback(long callbackRef);
@@ -133,6 +135,9 @@ public class Song
 	
 	// Loop control
 	public int setLoops(int numLoops){ return _setSongLoops(mReference, numLoops); }
+
+	public int setVelocityCurve(int curve) { return _setSongVelocityCurve(mReference, curve); }
+	public boolean isSF2Song() { return _isSF2Song(mReference); }
 	
 	// Additional methods for export functionality
 	public boolean isPlaying() {

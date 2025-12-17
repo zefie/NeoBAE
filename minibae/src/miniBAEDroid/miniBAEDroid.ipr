@@ -1178,6 +1178,16 @@
       </list>
     </option>
   </component>
+  <component name="DeviceTable">
+    <option name="columnSorters">
+      <list>
+        <ColumnSorterState>
+          <option name="column" value="Name" />
+          <option name="order" value="ASCENDING" />
+        </ColumnSorterState>
+      </list>
+    </option>
+  </component>
   <component name="ExternalStorageConfigurationManager" enabled="true" />
   <component name="GradleMigrationSettings" migrationVersion="1" />
   <component name="GradleSettings">

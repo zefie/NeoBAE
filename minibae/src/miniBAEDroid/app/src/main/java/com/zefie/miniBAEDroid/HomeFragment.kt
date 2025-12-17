@@ -1,5 +1,6 @@
 package com.zefie.miniBAEDroid
 
+import android.R
 import android.os.Bundle
 import android.content.Context
 import android.content.Intent
@@ -54,6 +55,10 @@ import kotlinx.coroutines.delay
 
 class HomeFragment : Fragment() {
 
+    companion object {
+        var velocityCurve = mutableStateOf(0)
+    }
+
     private var pickedFolderUri: Uri? = null
     private lateinit var viewModel: MusicPlayerViewModel
     private lateinit var notificationHelper: MusicNotificationHelper
@@ -83,7 +88,7 @@ class HomeFragment : Fragment() {
     private var isExporting = mutableStateOf(false)
     private var exportStatus = mutableStateOf("")
     private var reverbType = mutableStateOf(1)
-    private var velocityCurve = mutableStateOf(0)
+    // velocityCurve is now in companion object
     private var exportCodec = mutableStateOf(2) // Default to OGG
     
     // Bank browser state (completely separate from main browser)
@@ -282,8 +287,10 @@ class HomeFragment : Fragment() {
 
     fun refreshFolderAfterPermission() {
         // Refresh the current folder now that permissions are granted
-        viewModel.currentFolderPath?.let { path ->
-            loadFolderContents(path)
+        if (::viewModel.isInitialized) {
+            viewModel.currentFolderPath?.let { path ->
+                loadFolderContents(path)
+            }
         }
     }
 
@@ -293,6 +300,31 @@ class HomeFragment : Fragment() {
     override fun onResume() {
         super.onResume()
         isAppInForeground.value = true
+        
+        // Check if we need to refresh folder after permission grant
+        // If the list is empty or only contains the refresh button, try to reload
+        if (::viewModel.isInitialized) {
+            val isEmpty = viewModel.folderFiles.isEmpty() || 
+                         (viewModel.folderFiles.size == 1 && viewModel.folderFiles[0].title.contains("Refresh"))
+            
+            if (isEmpty) {
+                 var hasPerm = true
+                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                     if (!Environment.isExternalStorageManager()) hasPerm = false
+                 } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                     if (androidx.core.content.ContextCompat.checkSelfPermission(
+                         requireContext(), 
+                         android.Manifest.permission.READ_EXTERNAL_STORAGE
+                     ) != android.content.pm.PackageManager.PERMISSION_GRANTED) hasPerm = false
+                 }
+                 
+                 if (hasPerm) {
+                     viewModel.currentFolderPath?.let { path ->
+                         loadFolderContents(path)
+                     }
+                 }
+            }
+        }
         
         val mainActivity = activity as? MainActivity
         android.util.Log.d("HomeFragment", "onResume: pendingBankReload=${mainActivity?.pendingBankReload}")
@@ -425,7 +457,7 @@ class HomeFragment : Fragment() {
                             Mixer.getBankFriendlyName()
                         } else {
                             // Mixer doesn't exist, show saved bank preference
-                            val lastBankPath = prefs.getString("last_bank_path", null)
+                            val lastBankPath = prefs.getString("last_bank_path", "__builtin__")
                             when {
                                 lastBankPath == "__builtin__" -> "Built-in patches"
                                 !lastBankPath.isNullOrEmpty() -> {
@@ -821,6 +853,8 @@ class HomeFragment : Fragment() {
             val bytes = file.readBytes()
             val loadResult = org.minibae.LoadResult()
             
+
+
             val status = Mixer.loadFromMemory(bytes, loadResult)
             
             if (status == 0) {
@@ -836,7 +870,14 @@ class HomeFragment : Fragment() {
                         // Set loop count based on repeat mode
                         val loopCount = if (viewModel.repeatMode == RepeatMode.SONG) 32768 else 0
                         song.setLoops(loopCount)
-                        
+
+                        // Apply velocity curve
+                        if (song.isSF2Song()) {
+                            song.setVelocityCurve(0)
+                        } else {
+                            song.setVelocityCurve(velocityCurve.value)
+                        }
+
                         val r = song.start()
                         if (r == 0) {
                             viewModel.isPlaying = true
@@ -2880,10 +2921,8 @@ fun SearchScreenContent(
             enabled = !indexingProgress.isIndexing
         )
         
-        // Check if current path is indexed (recompute when database becomes ready)
-        val isCurrentPathIndexed = remember(viewModel.currentFolderPath, viewModel.isDatabaseReady) {
-            viewModel.isPathIndexed(viewModel.currentFolderPath)
-        }
+        // Check if current path is indexed
+        val isCurrentPathIndexed = viewModel.isCurrentPathIndexed
         
         // Show message if current directory is not indexed
         if (!isCurrentPathIndexed && viewModel.currentFolderPath != null && viewModel.currentFolderPath != "/") {

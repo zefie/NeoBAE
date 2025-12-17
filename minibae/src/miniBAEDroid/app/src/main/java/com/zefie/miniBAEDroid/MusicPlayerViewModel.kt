@@ -52,7 +52,17 @@ class MusicPlayerViewModel : ViewModel() {
     // Navigation state
     var currentScreen by mutableStateOf(NavigationScreen.HOME)
     var searchQuery by mutableStateOf("")
-    var currentFolderPath by mutableStateOf<String?>(null)
+    
+    private val _currentFolderPath = mutableStateOf<String?>(null)
+    var currentFolderPath: String?
+        get() = _currentFolderPath.value
+        set(value) {
+            _currentFolderPath.value = value
+            checkIfCurrentPathIndexed()
+        }
+        
+    var isCurrentPathIndexed by mutableStateOf(false)
+    
     val favorites = mutableStateListOf<String>() // Store file paths of favorited songs
     var showFullPlayer by mutableStateOf(false)
     var repeatMode by mutableStateOf(RepeatMode.NONE)
@@ -220,6 +230,7 @@ class MusicPlayerViewModel : ViewModel() {
             viewModelScope.launch {
                 indexedFileCount = fileIndexer?.getIndexedFileCount() ?: 0
                 isDatabaseReady = true
+                checkIfCurrentPathIndexed()
                 android.util.Log.d("MusicPlayerViewModel", "Database initialized, indexed files: $indexedFileCount")
             }
         } else {
@@ -229,7 +240,11 @@ class MusicPlayerViewModel : ViewModel() {
                 viewModelScope.launch {
                     indexedFileCount = fileIndexer?.getIndexedFileCount() ?: 0
                     isDatabaseReady = true
+                    checkIfCurrentPathIndexed()
                 }
+            } else {
+                // Even if ready, re-check current path status
+                checkIfCurrentPathIndexed()
             }
         }
     }
@@ -238,6 +253,15 @@ class MusicPlayerViewModel : ViewModel() {
     fun isPathIndexed(path: String?): Boolean {
         if (database == null || path == null || path == "/") return false
         return database!!.hasIndexForPath(path)
+    }
+    
+    fun checkIfCurrentPathIndexed() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val indexed = isPathIndexed(currentFolderPath)
+            withContext(Dispatchers.Main) {
+                isCurrentPathIndexed = indexed
+            }
+        }
     }
     
     // Database-backed search (instant results)
@@ -306,25 +330,18 @@ class MusicPlayerViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 fileIndexer?.let { indexer ->
-                    var hasCompleted = false
-                    
-                    // Collect progress
-                    val progressJob = launch {
-                        indexer.progress.collect { progress ->
-                            if (!progress.isIndexing && !hasCompleted) {
-                                hasCompleted = true
-                                // Update count when done
-                                indexedFileCount = indexer.getIndexedFileCount()
-                                onComplete(progress.filesIndexed, progress.foldersScanned, progress.totalSize)
-                            }
-                        }
-                    }
-                    
                     // Start indexing from specified directory
                     indexer.rebuildIndex(rootPath)
                     
-                    // Cancel progress collection after indexing completes
-                    progressJob.cancel()
+                    // Update count when done
+                    indexedFileCount = indexer.getIndexedFileCount()
+                    
+                    // Update indexed status for current path
+                    checkIfCurrentPathIndexed()
+                    
+                    // Get final progress to pass to callback
+                    val finalProgress = indexer.progress.value
+                    onComplete(finalProgress.filesIndexed, finalProgress.foldersScanned, finalProgress.totalSize)
                 }
             } catch (e: Exception) {
                 // Handle error (including cancellation)

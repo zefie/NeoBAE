@@ -43,7 +43,7 @@ class SettingsFragment: Fragment(){
     private var currentBankName = mutableStateOf("Loading...")
     private var isLoadingBank = mutableStateOf(false)
     private var reverbType = mutableStateOf(1)
-    private var velocityCurve = mutableStateOf(0)
+    // velocityCurve is now in HomeFragment
     private var masterVolume = mutableStateOf(75)
     private var exportCodec = mutableStateOf(1) // Default to OGG
 
@@ -207,7 +207,7 @@ class SettingsFragment: Fragment(){
         // Load saved preferences
         val prefs = requireContext().getSharedPreferences(prefName, Context.MODE_PRIVATE)
         reverbType.value = prefs.getInt(keyReverb, 1)
-        velocityCurve.value = prefs.getInt(keyCurve, 0)
+        HomeFragment.velocityCurve.value = prefs.getInt(keyCurve, 0)
         masterVolume.value = prefs.getInt(keyMasterVol, 75)
         exportCodec.value = prefs.getInt(keyExportCodec, 1) // Default to OGG
         
@@ -242,7 +242,7 @@ class SettingsFragment: Fragment(){
                         bankName = currentBankName.value,
                         isLoadingBank = isLoadingBank.value,
                         reverbType = reverbType.value,
-                        velocityCurve = velocityCurve.value,
+                        velocityCurve = HomeFragment.velocityCurve.value,
                         masterVolume = masterVolume.value,
                         exportCodec = exportCodec.value,
                         onLoadBank = {
@@ -264,7 +264,7 @@ class SettingsFragment: Fragment(){
                             prefs.edit().putInt(keyReverb, value).apply()
                         },
                         onCurveChange = { value ->
-                            velocityCurve.value = value
+                            HomeFragment.velocityCurve.value = value
                             if (Mixer.getMixer() != null) {
                                 Mixer.setDefaultVelocityCurve(value)
                             }

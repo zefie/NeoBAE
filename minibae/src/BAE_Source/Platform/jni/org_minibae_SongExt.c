@@ -153,3 +153,22 @@ JNIEXPORT void JNICALL Java_org_minibae_Song__1cleanupMetaEventCallback(JNIEnv* 
         (*env)->DeleteGlobalRef(env, globalRef);
     }
 }
+
+// Set velocity curve
+JNIEXPORT jint JNICALL Java_org_minibae_Song__1setSongVelocityCurve(JNIEnv* env, jclass clazz, jlong songRef, jint curve){
+    (void)env; (void)clazz;
+    if(songRef == 0){ return (jint)BAE_NULL_OBJECT; }
+    BAESong song = (BAESong)(intptr_t)songRef;
+    BAEResult r = BAESong_SetVelocityCurve(song, (int)curve);
+    if(r != BAE_NO_ERROR){ __android_log_print(ANDROID_LOG_WARN, LOG_TAG, "BAESong_SetVelocityCurve err=%d", r); }
+    return (jint)r;
+}
+
+// Check if song is SF2
+JNIEXPORT jboolean JNICALL Java_org_minibae_Song__1isSF2Song(JNIEnv* env, jclass clazz, jlong songRef){
+    (void)env; (void)clazz;
+    if(songRef == 0){ return JNI_FALSE; }
+    BAESong song = (BAESong)(intptr_t)songRef;
+    XBOOL isSF2 = BAESong_IsSF2Song(song);
+    return (isSF2) ? JNI_TRUE : JNI_FALSE;
+}
