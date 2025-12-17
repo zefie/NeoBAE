@@ -327,7 +327,7 @@ fun SettingsScreen(
     )
     
     val curveOptions = listOf("Default", "Peaky", "WebTV", "Expo", "Linear")
-    val exportOptions = listOf("WAV", "OGG")
+    val exportOptions = listOf("WAV", "OGG", "FLAC")
     
     var reverbExpanded by remember { mutableStateOf(false) }
     var curveExpanded by remember { mutableStateOf(false) }
@@ -496,6 +496,39 @@ fun SettingsScreen(
                                 DropdownMenuItem(onClick = {
                                     onCurveChange(index)
                                     curveExpanded = false
+                                }) {
+                                    Text(option)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            // Export Codec Section
+            SettingCard(title = "Export Codec", icon = Icons.Filled.GetApp) {
+                Column {
+                    Box {
+                        OutlinedButton(
+                            onClick = { exportExpanded = true },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = exportOptions.getOrNull(exportCodec - 1) ?: "OGG",
+                                modifier = Modifier.weight(1f)
+                            )
+                            Icon(Icons.Filled.ArrowDropDown, contentDescription = null)
+                        }
+                        DropdownMenu(
+                            expanded = exportExpanded,
+                            onDismissRequest = { exportExpanded = false }
+                        ) {
+                            exportOptions.forEachIndexed { index, option ->
+                                DropdownMenuItem(onClick = {
+                                    onExportCodecChange(index + 1)
+                                    exportExpanded = false
                                 }) {
                                     Text(option)
                                 }

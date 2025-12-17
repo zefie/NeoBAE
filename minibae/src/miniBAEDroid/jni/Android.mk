@@ -129,7 +129,27 @@ LOCAL_SRC_FILES	:= \
       ../thirdparty/libvorbis/lib/vorbisfile.c \
       ../thirdparty/libvorbis/lib/lpc.c \
       ../thirdparty/libvorbis/lib/window.c \
-		  ../thirdparty/libvorbis/lib/vorbisenc.c
+		  ../thirdparty/libvorbis/lib/vorbisenc.c \
+      ../thirdparty/flac/src/libFLAC/stream_decoder.c \
+			../thirdparty/flac/src/libFLAC/bitreader.c \
+			../thirdparty/flac/src/libFLAC/bitmath.c \
+			../thirdparty/flac/src/libFLAC/bitwriter.c \
+			../thirdparty/flac/src/libFLAC/cpu.c \
+			../thirdparty/flac/src/libFLAC/crc.c \
+			../thirdparty/flac/src/libFLAC/fixed.c \
+			../thirdparty/flac/src/libFLAC/format.c \
+			../thirdparty/flac/src/libFLAC/lpc.c \
+			../thirdparty/flac/src/libFLAC/md5.c \
+			../thirdparty/flac/src/libFLAC/memory.c \
+			../thirdparty/flac/src/libFLAC/metadata_iterators.c \
+			../thirdparty/flac/src/libFLAC/metadata_object.c \
+			../thirdparty/flac/src/libFLAC/stream_encoder_framing.c \
+			../thirdparty/flac/src/libFLAC/window.c \
+			../thirdparty/flac/src/libFLAC/ogg_decoder_aspect.c \
+			../thirdparty/flac/src/libFLAC/ogg_helper.c \
+			../thirdparty/flac/src/libFLAC/ogg_mapping.c \
+      ../thirdparty/flac/src/libFLAC/stream_encoder.c \
+		  ../thirdparty/flac/src/libFLAC/ogg_encoder_aspect.c  
 
 LOCAL_LDFLAGS += -Wl,-z,max-page-size=16384
 
@@ -143,9 +163,11 @@ LOCAL_C_INCLUDES	  += $(LOCAL_PATH)/../../../deps/android/jniLibs/$(TARGET_ARCH_
 LOCAL_C_INCLUDES    += $(LOCAL_PATH)/../thirdparty/config
 LOCAL_C_INCLUDES    += $(LOCAL_PATH)/../thirdparty/libogg/include
 LOCAL_C_INCLUDES    += $(LOCAL_PATH)/../thirdparty/libvorbis/include
+LOCAL_C_INCLUDES    += $(LOCAL_PATH)/../thirdparty/flac/include
+LOCAL_C_INCLUDES    += $(LOCAL_PATH)/../thirdparty/flac/src/libFLAC/include
 LOCAL_C_INCLUDES    += $(LOCAL_PATH)/../thirdparty/libvorbis/lib
 
-LOCAL_CFLAGS := -O2 -D_VERSION=\"$(VERSION)\" -DX_PLATFORM=X_ANDROID -D__ANDROID__=1 -D_BUILT_IN_PATCHES=1 -DUSE_MINIMP3_WRAPPER=1 -DUSE_MPEG_DECODER=1 -DUSE_SF2_SUPPORT=1 -DUSE_OGG_FORMAT=1 -DUSE_VORBIS_DECODER=1 -DUSE_VORBIS_ENCODER=1 -D_USING_FLUIDSYNTH=1 -DUSE_HIGHLEVEL_FILE_API=1 -DSUPPORT_KARAOKE=1 -Wall -fsigned-char
+LOCAL_CFLAGS := -std=c99 -O2 -D_VERSION=\"$(VERSION)\" -DX_PLATFORM=X_ANDROID -D__ANDROID__=1 -D_BUILT_IN_PATCHES=1 -DUSE_MINIMP3_WRAPPER=1 -DUSE_MPEG_DECODER=1 -DUSE_SF2_SUPPORT=1 -DUSE_OGG_FORMAT=1 -DUSE_VORBIS_ENCODER=1 -DUSE_FLAC_ENCODER=1 -D_USING_FLUIDSYNTH=1 -DUSE_HIGHLEVEL_FILE_API=1 -DSUPPORT_KARAOKE=1 -DFLAC__NO_DLL -DHAVE_CONFIG_H=1 -Wall -fsigned-char
 
 ifeq ($(APP_OPTIM),debug)
     LOCAL_CFLAGS += -D_DEBUG=1

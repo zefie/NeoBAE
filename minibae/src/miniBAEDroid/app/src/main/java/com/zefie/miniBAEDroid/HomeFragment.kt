@@ -678,7 +678,11 @@ class HomeFragment : Fragment() {
                         onExportRequest = { filename, codec ->
                             val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
                                 addCategory(Intent.CATEGORY_OPENABLE)
-                                type = if (codec == 2) "audio/ogg" else "audio/wav"
+                                type = when (codec) {
+                                    2 -> "audio/ogg"
+                                    3 -> "audio/flac"
+                                    else -> "audio/wav"
+                                }
                                 putExtra(Intent.EXTRA_TITLE, filename)
                             }
                             saveFilePicker.launch(intent)
@@ -1580,12 +1584,26 @@ class HomeFragment : Fragment() {
                 }
                 
                 // Get export parameters
-                val isOgg = exportCodec.value == 2
-                val fileType = if (isOgg) Mixer.BAE_VORBIS_TYPE else Mixer.BAE_WAVE_TYPE
-                val compressionType = if (isOgg) Mixer.BAE_COMPRESSION_VORBIS_128 else Mixer.BAE_COMPRESSION_NONE
+                val codec = exportCodec.value
+                val fileType = when (codec) {
+                    2 -> Mixer.BAE_VORBIS_TYPE
+                    3 -> Mixer.BAE_FLAC_TYPE
+                    else -> Mixer.BAE_WAVE_TYPE
+                }
+                val compressionType = when (codec) {
+                    2 -> Mixer.BAE_COMPRESSION_VORBIS_128
+                    3 -> Mixer.BAE_COMPRESSION_LOSSLESS
+                    else -> Mixer.BAE_COMPRESSION_NONE
+                }
+                
+                val ext = when (codec) {
+                    2 -> "ogg"
+                    3 -> "flac"
+                    else -> "wav"
+                }
                 
                 // Create a temporary file path for export
-                val tempFile = File(requireContext().cacheDir, "export_temp.${if (isOgg) "ogg" else "wav"}")
+                val tempFile = File(requireContext().cacheDir, "export_temp.$ext")
                 
                 // Ensure the temp file can be created
                 try {
@@ -2246,7 +2264,11 @@ fun FullPlayerScreen(
                 val isExportEnabled = viewModel.repeatMode != RepeatMode.SONG
                 IconButton(
                     onClick = {
-                        val extension = if (exportCodec == 2) ".ogg" else ".wav"
+                        val extension = when (exportCodec) {
+                            2 -> ".ogg"
+                            3 -> ".flac"
+                            else -> ".wav"
+                        }
                         val defaultName = item.file.nameWithoutExtension + extension
                         onExportRequest(defaultName, exportCodec)
                     },
@@ -3333,7 +3355,7 @@ fun SettingsScreenContent(
     )
     
     val curveOptions = listOf("Beatnik Default", "Peaky S Curve", "WebTV Curve", "2x Exponential", "2x Linear")
-    val exportCodecOptions = listOf("WAV", "OGG")
+    val exportCodecOptions = listOf("WAV", "OGG", "FLAC")
     
     var reverbExpanded by remember { mutableStateOf(false) }
     var curveExpanded by remember { mutableStateOf(false) }

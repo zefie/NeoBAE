@@ -143,6 +143,7 @@ public class Mixer
 	public static final int BAE_RAW_PCM = 12;
 
 	public static final int BAE_COMPRESSION_NONE = 0;
+	public static final int BAE_COMPRESSION_LOSSLESS = 1;
 	public static final int BAE_COMPRESSION_VORBIS_128 = 21;
 	
 	// Create a new mixer instance (not the singleton)
