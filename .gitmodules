@@ -10,3 +10,6 @@
 [submodule "minibae/src/thirdparty/libvorbis"]
 	path = minibae/src/thirdparty/libvorbis
 	url = https://github.com/xiph/vorbis
+[submodule "minibae/src/thirdparty/flac"]
+	path = minibae/src/thirdparty/flac
+	url = https://github.com/zefie/flac_android.git
