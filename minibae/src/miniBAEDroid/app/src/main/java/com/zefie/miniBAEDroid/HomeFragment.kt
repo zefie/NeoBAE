@@ -66,6 +66,13 @@ class HomeFragment : Fragment() {
         (activity as? MainActivity)?.currentSong = song
     }
     
+    private val currentSound: org.minibae.Sound?
+        get() = (activity as? MainActivity)?.currentSound
+        
+    private fun setCurrentSound(sound: org.minibae.Sound?) {
+        (activity as? MainActivity)?.currentSound = sound
+    }
+    
     // Sound bank settings
     private var currentBankName = mutableStateOf("Loading...")
     private var isLoadingBank = mutableStateOf(false)
@@ -347,8 +354,7 @@ class HomeFragment : Fragment() {
                         onNext = { playNext() },
                         onPrevious = { playPrevious() },
                         onClose = {
-                            currentSong?.stop(true)
-                            setCurrentSong(null)
+                            stopPlayback(true)
                             viewModel.isPlaying = false
                             if (::notificationHelper.isInitialized) {
                                 notificationHelper.hideNotification()
@@ -370,18 +376,18 @@ class HomeFragment : Fragment() {
                 LaunchedEffect(viewModel.isPlaying, viewModel.isDraggingSeekBar) {
                     while (viewModel.isPlaying && !viewModel.isDraggingSeekBar) {
                         try {
-                            val pos = currentSong?.getPositionMs() ?: 0
-                            val len = currentSong?.getLengthMs() ?: 0
+                            val pos = getPlaybackPositionMs()
+                            val len = getPlaybackLengthMs()
                             viewModel.currentPositionMs = pos
                             if (len > 0) viewModel.totalDurationMs = len
                             
-                            // Handle song completion
+                            // Handle playback completion (only for Songs with length tracking)
                             if (len > 0 && pos >= len - 500) {
                                 delay(100)
                                 when (viewModel.repeatMode) {
                                     RepeatMode.SONG -> {
                                         // Repeat current song
-                                        currentSong?.seekToMs(0)
+                                        seekPlaybackToMs(0)
                                         viewModel.currentPositionMs = 0
                                     }
                                     RepeatMode.PLAYLIST -> {
@@ -400,8 +406,7 @@ class HomeFragment : Fragment() {
                                         } else {
                                             viewModel.isPlaying = false
                                             // No more songs to play - clean up mixer to free resources
-                                            currentSong?.stop(true)
-                                            setCurrentSong(null)
+                                            stopPlayback(true)
                                             Mixer.delete()
                                         }
                                     }
@@ -484,7 +489,7 @@ class HomeFragment : Fragment() {
                         onPrevious = { playPrevious() },
                         onSeek = { ms ->
                             viewModel.isDraggingSeekBar = false
-                            currentSong?.seekToMs(ms)
+                            seekPlaybackToMs(ms)
                             viewModel.currentPositionMs = ms
                         },
                         onStartDrag = { viewModel.isDraggingSeekBar = true },
@@ -639,12 +644,12 @@ class HomeFragment : Fragment() {
 
     private fun togglePlayPause() {
         if (viewModel.isPlaying) {
-            currentSong?.pause()
+            pausePlayback()
             viewModel.isPlaying = false
         } else {
             if (viewModel.getCurrentItem() != null) {
-                if (currentSong != null && currentSong?.isPaused() == true) {
-                    currentSong?.resume()
+                if (hasActivePlayback() && isPlaybackPaused()) {
+                    resumePlayback()
                     viewModel.isPlaying = true
                 } else {
                     viewModel.getCurrentItem()?.let { startPlayback(it.file) }
@@ -662,7 +667,7 @@ class HomeFragment : Fragment() {
     
     private fun playPrevious() {
         if (viewModel.currentPositionMs > 3000) {
-            currentSong?.seekToMs(0)
+            seekPlaybackToMs(0)
             viewModel.currentPositionMs = 0
         } else if (viewModel.hasPrevious()) {
             viewModel.playPrevious()
@@ -672,8 +677,7 @@ class HomeFragment : Fragment() {
     
     private fun playFileFromBrowser(file: File) {
         // Create a single-file playlist and play it
-        currentSong?.stop(true)
-        setCurrentSong(null)
+        stopPlayback(true)
         Mixer.delete() // Clean up before loading new song
         viewModel.clearPlaylist()
         val item = PlaylistItem(file)
@@ -693,8 +697,7 @@ class HomeFragment : Fragment() {
     
     private fun startPlayback(file: File) {
         try {
-            currentSong?.stop(true)
-            setCurrentSong(null)
+            stopPlayback(true)
             viewModel.currentPositionMs = 0
             
             // Ensure mixer exists before trying to load
@@ -716,6 +719,7 @@ class HomeFragment : Fragment() {
                     val song = loadResult.song
                     if (song != null) {
                         setCurrentSong(song)
+                        setCurrentSound(null) // Clear sound reference
                         applyVolume()
                         
                         // Set loop count based on repeat mode
@@ -735,10 +739,27 @@ class HomeFragment : Fragment() {
                         Toast.makeText(requireContext(), "Failed to get song object", Toast.LENGTH_SHORT).show()
                     }
                 } else if (loadResult.isSound) {
-                    // Audio files (WAV, MP3, etc.) are loaded as Sound objects
-                    // For now, we don't support direct playback of Sound objects in the player
-                    Toast.makeText(requireContext(), "Audio file playback not yet supported", Toast.LENGTH_SHORT).show()
-                    loadResult.cleanup()
+                    // Audio files (WAV, MP3, FLAC, OGG, AIFF, AU) are loaded as Sound objects
+                    val sound = loadResult.sound
+                    if (sound != null) {
+                        setCurrentSound(sound)
+                        setCurrentSong(null) // Clear song reference
+                        applyVolume()
+                        
+                        val r = sound.start()
+                        if (r == 0) {
+                            viewModel.isPlaying = true
+                            viewModel.currentTitle = file.nameWithoutExtension
+                            android.util.Log.d("HomeFragment", "Started ${loadResult.fileTypeString} sound: ${file.name}")
+                        } else {
+                            viewModel.isPlaying = false
+                            Toast.makeText(requireContext(), "Failed to start sound (err=$r)", Toast.LENGTH_SHORT).show()
+                        }
+                    } else {
+                        viewModel.isPlaying = false
+                        Toast.makeText(requireContext(), "Failed to get sound object", Toast.LENGTH_SHORT).show()
+                        loadResult.cleanup()
+                    }
                 } else {
                     viewModel.isPlaying = false
                     Toast.makeText(requireContext(), "Unknown file type", Toast.LENGTH_SHORT).show()
@@ -756,6 +777,52 @@ class HomeFragment : Fragment() {
     private fun applyVolume() {
         Mixer.setMasterVolumePercent(viewModel.volumePercent)
         currentSong?.setVolumePercent(viewModel.volumePercent)
+        currentSound?.setVolumePercent(viewModel.volumePercent)
+    }
+    
+    // Helper functions to handle both Song and Sound uniformly
+    private fun isPlaybackPaused(): Boolean {
+        return currentSong?.isPaused() ?: currentSound?.isPaused() ?: false
+    }
+    
+    private fun isPlaybackDone(): Boolean {
+        return currentSong?.isDone() ?: currentSound?.isDone() ?: false
+    }
+    
+    private fun pausePlayback() {
+        currentSong?.pause()
+        currentSound?.pause()
+    }
+    
+    private fun resumePlayback() {
+        currentSong?.resume()
+        currentSound?.resume()
+    }
+    
+    private fun stopPlayback(delete: Boolean = true) {
+        currentSong?.stop(delete)
+        currentSound?.stop(delete)
+        if (delete) {
+            setCurrentSong(null)
+            setCurrentSound(null)
+        }
+    }
+    
+    private fun getPlaybackPositionMs(): Int {
+        return currentSong?.getPositionMs() ?: currentSound?.getPositionMs() ?: 0
+    }
+    
+    private fun getPlaybackLengthMs(): Int {
+        return currentSong?.getLengthMs() ?: currentSound?.getLengthMs() ?: 0
+    }
+    
+    private fun seekPlaybackToMs(ms: Int) {
+        // Sound doesn't support seeking yet
+        currentSong?.seekToMs(ms)
+    }
+    
+    private fun hasActivePlayback(): Boolean {
+        return currentSong != null || currentSound != null
     }
     
     private fun ensureMixerExists(): Boolean {
@@ -835,7 +902,7 @@ class HomeFragment : Fragment() {
 
     private fun getMediaFiles(): List<File> {
         val musicDir = getMusicDir() ?: File("/sdcard/Music")
-        val validExtensions = setOf("mid", "midi", "kar", "rmf", "rmi")
+        val validExtensions = setOf("mid", "midi", "kar", "rmf", "xmf", "mxmf", "rmi")
         val map = LinkedHashMap<String, File>()
         if (musicDir.exists() && musicDir.isDirectory) {
             musicDir.listFiles { file -> file.isFile && file.extension.lowercase() in validExtensions }?.forEach { f ->
@@ -1091,7 +1158,7 @@ class HomeFragment : Fragment() {
                     return@Thread
                 }
                 
-                val validExtensions = setOf("mid", "midi", "kar", "rmf", "rmi")
+                val validExtensions = setOf("mid", "midi", "kar", "rmf", "rmi", "xmf", "mxmf")
                 val allItems = folder.listFiles()?.let { allFiles ->
                     val folders = allFiles.filter { it.isDirectory && it.canRead() }
                         .sortedBy { it.name.lowercase() }
@@ -1383,6 +1450,12 @@ class HomeFragment : Fragment() {
     }
     
     private fun exportToFile(uri: Uri) {
+        // Export is only for Songs (MIDI/RMF), not Sound files (which are already audio)
+        if (currentSound != null) {
+            Toast.makeText(requireContext(), "Export is for MIDI/RMF files only. Sound files are already audio.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        
         // Set exporting state on UI thread
         activity?.runOnUiThread {
             isExporting.value = true

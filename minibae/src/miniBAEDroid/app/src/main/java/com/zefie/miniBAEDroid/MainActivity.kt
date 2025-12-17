@@ -22,6 +22,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var permissionLauncher: androidx.activity.result.ActivityResultLauncher<Array<String>>
     var pendingBankReload = false
     var currentSong: org.minibae.Song? = null
+    var currentSound: org.minibae.Sound? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -121,6 +122,15 @@ class MainActivity : AppCompatActivity() {
         val currentItem = viewModel.getCurrentItem()
         if (currentItem == null) {
             android.util.Log.d("MainActivity", "No current item to reload")
+            return
+        }
+        
+        // Only reload if it's a Song (Sound doesn't use banks)
+        if (currentSound != null) {
+            android.util.Log.d("MainActivity", "Current item is a Sound, bank change doesn't affect it")
+            runOnUiThread {
+                Toast.makeText(this, "Sound files don't use banks", Toast.LENGTH_SHORT).show()
+            }
             return
         }
         

@@ -166,7 +166,6 @@ typedef struct
 
 } AudioControlData;
 
-static AudioControlData* sHardwareChannel;
 
 // AAudio state (used on API >= 26)
 // OpenSL ES state
@@ -251,8 +250,6 @@ uint32_t BAE_GetMaxSizeOfMemoryUsed(void)
 // return 0 for valid, or 1 for bad pointer, or 2 for not supported.
 int BAE_IsBadReadPointer(void *memoryBlock, uint32_t size)
 {
-   memoryBlock = memoryBlock;
-   size        = size;
    return(2);           // not supported, so this assumes that we don't have memory protection and will
    // not get an access violation when accessing memory outside of a valid memory block
 }
@@ -594,55 +591,6 @@ void BAE_ProcessRouteBus(int currentRoute, int32_t *pChannels, int count)
 {
 }
 
-static void PV_ClearOutputBuffer(void *pBuffer, int16_t channels, int16_t bits, uint32_t frames)
-{
-    int16_t count;
-    char      *dest8;
-    int16_t *dest16;
-    
-    if (bits == 16)
-    {
-        // use 16 bit output
-        dest16 = (int16_t *)pBuffer;
-        for (count = 0; count < frames / 4; count++)
-        {
-            *dest16++ = 0;
-            *dest16++ = 0;
-            *dest16++ = 0;
-            *dest16++ = 0;
-            if (channels == 2)
-            {
-                // this is a slow way to do this!
-                *dest16++ = 0;
-                *dest16++ = 0;
-                *dest16++ = 0;
-                *dest16++ = 0;
-            }
-        }
-    }
-    else
-    {
-        // use 8 bit output
-        dest8 = (char *)pBuffer;
-        for (count = 0; count < frames / 4; count++)
-        {
-            *dest8++ = 0x80;
-            *dest8++ = 0x80;
-            *dest8++ = 0x80;
-            *dest8++ = 0x80;
-            if (channels == 2)
-            {
-                // this is a slow way to do this!
-                *dest8++ = 0x80;
-                *dest8++ = 0x80;
-                *dest8++ = 0x80;
-                *dest8++ = 0x80;
-            }
-        }
-    }
-}
-
-
 // Return the number of 11 ms buffer blocks that are built at one time.
 int BAE_GetAudioBufferCount(void)
 {
@@ -776,15 +724,13 @@ int32_t BAE_MaxDevices(void)
 //          in order for the change to take place.
 void BAE_SetDeviceID(int32_t deviceID, void *deviceParameter)
 {
-   deviceID;
-   deviceParameter;
+
 }
 
 // return current device ID
 // NOTE: This function needs to function before any other calls may have happened.
 int32_t BAE_GetDeviceID(void *deviceParameter)
 {
-   deviceParameter;
    return(0);
 }
 

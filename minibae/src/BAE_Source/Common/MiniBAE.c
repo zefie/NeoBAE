@@ -3591,11 +3591,6 @@ BAEResult BAEMixer_StartOutputToFile(BAEMixer theMixer,
             /* Can only encode 16bit data. */
             theErr = PARAM_ERR;
         }
-        /* Vorbis encoder not available in this build. */
-        compressionType;
-        outputType;
-        theModifiers;
-        theRate;
     }
     break;
 #endif

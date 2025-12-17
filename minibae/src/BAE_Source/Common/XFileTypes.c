@@ -52,7 +52,6 @@
 
 // Function prototypes for internal helpers
 static uint32_t PV_ReadBigEndian32(const unsigned char *data);
-static uint32_t PV_ReadLittleEndian32(const unsigned char *data);
 static BAEFileType PV_DetectRIFFType(const unsigned char *buffer, int32_t bufferSize);
 static BAEFileType PV_DetectOGGType(const unsigned char *buffer, int32_t bufferSize);
 static int PV_IsLikelyMPEGHeader(const unsigned char *header);
@@ -66,17 +65,6 @@ static uint32_t PV_ReadBigEndian32(const unsigned char *data)
            ((uint32_t)data[1] << 16) |
            ((uint32_t)data[2] << 8) |
            ((uint32_t)data[3]);
-}
-
-/**
- * Read a 32-bit little-endian value from a buffer
- */
-static uint32_t PV_ReadLittleEndian32(const unsigned char *data)
-{
-    return ((uint32_t)data[3] << 24) |
-           ((uint32_t)data[2] << 16) |
-           ((uint32_t)data[1] << 8) |
-           ((uint32_t)data[0]);
 }
 
 /**
@@ -134,7 +122,6 @@ static BAEFileType PV_DetectOGGType(const unsigned char *buffer, int32_t bufferS
     while (offset + 27 < bufferSize) // Minimum OGG page header size
     {
         // Skip OGG page header fields to get to the payload
-        unsigned char headerType = buffer[offset + 1];
         int segmentCount = buffer[offset + 22];
         
         if (segmentCount > 255 || offset + 27 + segmentCount >= bufferSize)

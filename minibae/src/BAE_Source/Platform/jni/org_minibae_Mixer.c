@@ -88,8 +88,8 @@ JNIEXPORT void JNICALL Java_org_minibae_Mixer__1deleteMixer
 JNIEXPORT jint JNICALL Java_org_minibae_Mixer__1openMixer
 	(JNIEnv* env, jclass clazz, jlong reference, jint sampleRate, jint terpMode, jint maxSongVoices, jint maxSoundVoices, jint mixLevel)
 {
-    BAEResult    err;
-		BAEMixer mixer = (BAEMixer)(intptr_t)reference;
+    BAEResult    err = BAE_NOT_SETUP;
+    BAEMixer mixer = (BAEMixer)(intptr_t)reference;
 	if (mixer)
 	{
         __android_log_print(ANDROID_LOG_DEBUG, "miniBAE", "_openMixer request: sr=%d terp=%d songVoices=%d soundVoices=%d mixLevel=%d engageAudio=TRUE", (int)sampleRate, (int)terpMode, (int)maxSongVoices, (int)maxSoundVoices, (int)mixLevel);
@@ -165,7 +165,7 @@ JNIEXPORT jint JNICALL Java_org_minibae_Mixer__1addBankFromFile
 	// Standard HSB bank loading
 	BAEBankToken token = 0;
 	BAEMixer_UnloadBanks(mixer);
-	BAEResult r = BAEMixer_AddBankFromFile(mixer, cpath, &token);
+	BAEResult r = BAEMixer_AddBankFromFile(mixer, (BAEPathName)cpath, &token);
 	if(r == BAE_NO_ERROR) {
 		char friendlyBuf[256] = "";
 		if(BAE_GetBankFriendlyName(mixer, token, friendlyBuf, (uint32_t)sizeof(friendlyBuf)) == BAE_NO_ERROR) {

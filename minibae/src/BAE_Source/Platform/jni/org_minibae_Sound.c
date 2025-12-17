@@ -12,6 +12,7 @@
 
 #include "org_minibae_Sound.h"
 #include "MiniBAE.h"
+#include "GenSnd.h"
 
 #include <android/asset_manager.h>
 #include <android/asset_manager_jni.h>
@@ -175,7 +176,6 @@ JNIEXPORT jint JNICALL Java_org_minibae_Sound__1loadSound__Landroid_content_res_
 			BAEResult sr = BAESound_LoadMemorySample(sound, (void*)mem, (uint32_t)read_total, ftype);
 			free(mem);
 			if(sr != BAE_NO_ERROR){ __android_log_print(ANDROID_LOG_ERROR, "miniBAE", "BAESound_LoadMemorySample failed %d", sr); return (jint)sr; }
-			BAESong_Preroll(sound);
 			sr = BAESound_Start(sound, 0, FLOAT_TO_UNSIGNED_FIXED(1.0), 0);
 			if(sr != BAE_NO_ERROR){ BAESound_Stop(sound, FALSE); __android_log_print(ANDROID_LOG_ERROR, "miniBAE", "BAESound_Start failed %d", sr); return (jint)sr; }
 			return (jint)BAE_NO_ERROR;
@@ -185,6 +185,151 @@ JNIEXPORT jint JNICALL Java_org_minibae_Sound__1loadSound__Landroid_content_res_
 
 	free(mem);
 	return (jint)BAE_UNSUPPORTED_FORMAT;
+}
+
+// Sound playback control JNI methods
+JNIEXPORT jint JNICALL Java_org_minibae_Sound__1startSound
+	(JNIEnv* env, jobject jsound, jlong soundReference, jint sampleFrames, jint fixedVolume)
+{
+	BAESound sound = (BAESound)(intptr_t)soundReference;
+	if(!sound) return (jint)BAE_PARAM_ERR;
+	
+	// Use the volume passed from Java (already boosted by setVolumePercent)
+	// BAESound_Start(sound, priority, volume, startOffsetFrame)
+	// priority: 0 = normal priority
+	// volume: current volume in 16.16 fixed point format (1.0 = 65536)
+	// startOffsetFrame: starting frame offset (0 = beginning)
+	BAE_UNSIGNED_FIXED volume = (BAE_UNSIGNED_FIXED)fixedVolume;
+	BAEResult r = BAESound_Start(sound, 0, volume, (uint32_t)sampleFrames);
+	return (jint)r;
+}
+
+JNIEXPORT jint JNICALL Java_org_minibae_Sound__1stopSound
+	(JNIEnv* env, jobject jsound, jlong soundReference, jboolean deleteSound)
+{
+	BAESound sound = (BAESound)(intptr_t)soundReference;
+	if(!sound) return (jint)BAE_PARAM_ERR;
+	__android_log_print(ANDROID_LOG_DEBUG, "miniBAE", "_stopSound sound=%p deleteSound=%d", (void*)(intptr_t)soundReference, deleteSound);
+	
+	BAEResult r = BAESound_Stop(sound, FALSE);
+	if(deleteSound && r == BAE_NO_ERROR) {
+		BAESound_Delete(sound);
+	}
+	__android_log_print(ANDROID_LOG_DEBUG, "miniBAE", "BAESound_Stop returned %d", r);
+	return (jint)r;
+}
+
+JNIEXPORT jint JNICALL Java_org_minibae_Sound__1pauseSound
+	(JNIEnv* env, jobject jsound, jlong soundReference)
+{
+	BAESound sound = (BAESound)(intptr_t)soundReference;
+	if(!sound) return (jint)BAE_PARAM_ERR;
+	__android_log_print(ANDROID_LOG_DEBUG, "miniBAE", "_pauseSound sound=%p", (void*)(intptr_t)soundReference);
+	
+	BAEResult r = BAESound_Pause(sound);
+	__android_log_print(ANDROID_LOG_DEBUG, "miniBAE", "BAESound_Pause returned %d", r);
+	return (jint)r;
+}
+
+JNIEXPORT jint JNICALL Java_org_minibae_Sound__1resumeSound
+	(JNIEnv* env, jobject jsound, jlong soundReference)
+{
+	BAESound sound = (BAESound)(intptr_t)soundReference;
+	if(!sound) return (jint)BAE_PARAM_ERR;
+	__android_log_print(ANDROID_LOG_DEBUG, "miniBAE", "_resumeSound sound=%p", (void*)(intptr_t)soundReference);
+	
+	BAEResult r = BAESound_Resume(sound);
+	__android_log_print(ANDROID_LOG_DEBUG, "miniBAE", "BAESound_Resume returned %d", r);
+	return (jint)r;
+}
+
+JNIEXPORT jboolean JNICALL Java_org_minibae_Sound__1isSoundPaused
+	(JNIEnv* env, jobject jsound, jlong soundReference)
+{
+	BAESound sound = (BAESound)(intptr_t)soundReference;
+	if(!sound) return JNI_FALSE;
+	
+	BAE_BOOL paused = FALSE;
+	BAEResult r = BAESound_IsPaused(sound, &paused);
+	if(r != BAE_NO_ERROR) {
+		__android_log_print(ANDROID_LOG_DEBUG, "miniBAE", "_isSoundPaused error %d", r);
+		return JNI_FALSE;
+	}
+	return paused ? JNI_TRUE : JNI_FALSE;
+}
+
+JNIEXPORT jboolean JNICALL Java_org_minibae_Sound__1isSoundDone
+	(JNIEnv* env, jobject jsound, jlong soundReference)
+{
+	BAESound sound = (BAESound)(intptr_t)soundReference;
+	if(!sound) return JNI_TRUE;
+	
+	BAE_BOOL done = FALSE;
+	BAEResult r = BAESound_IsDone(sound, &done);
+	if(r != BAE_NO_ERROR) {
+		__android_log_print(ANDROID_LOG_DEBUG, "miniBAE", "_isSoundDone error %d", r);
+		return JNI_TRUE;
+	}
+	return done ? JNI_TRUE : JNI_FALSE;
+}
+
+JNIEXPORT jint JNICALL Java_org_minibae_Sound__1setSoundVolume
+	(JNIEnv* env, jclass clazz, jlong soundReference, jint fixedVolume)
+{
+	BAESound sound = (BAESound)(intptr_t)soundReference;
+	if(!sound) return (jint)BAE_PARAM_ERR;
+	BAEResult r = BAESound_SetVolume(sound, (BAE_UNSIGNED_FIXED)fixedVolume);
+	return (jint)r;
+}
+
+JNIEXPORT jint JNICALL Java_org_minibae_Sound__1getSoundVolume
+	(JNIEnv* env, jclass clazz, jlong soundReference)
+{
+	BAESound sound = (BAESound)(intptr_t)soundReference;
+	if(!sound) return 0;
+	BAE_UNSIGNED_FIXED v = 0;
+	BAEResult r = BAESound_GetVolume(sound, &v);
+	if(r == BAE_NO_ERROR){ return (jint)v; }
+	return 0;
+}
+
+JNIEXPORT jint JNICALL Java_org_minibae_Sound__1getSoundPositionFrames
+	(JNIEnv* env, jclass clazz, jlong soundReference)
+{
+	BAESound sound = (BAESound)(intptr_t)soundReference;
+	if(!sound) return 0;
+	uint32_t pos = 0;
+	if(BAESound_GetSamplePlaybackPosition(sound, &pos) == BAE_NO_ERROR){ return (jint)pos; }
+	return 0;
+}
+
+JNIEXPORT jint JNICALL Java_org_minibae_Sound__1getSoundLengthFrames
+	(JNIEnv* env, jclass clazz, jlong soundReference)
+{
+	BAESound sound = (BAESound)(intptr_t)soundReference;
+	if(!sound) return 0;
+	uint32_t length = 0;
+	BAESound_GetSamplePlaybackPointer(sound, &length);
+	return (jint)length;
+}
+
+JNIEXPORT jint JNICALL Java_org_minibae_Sound__1getSoundSampleRate
+	(JNIEnv* env, jclass clazz, jlong soundReference)
+{
+	// BAESound structure definition (from MiniBAE.c line 631)
+	struct sBAESound_internal {
+		int32_t mID;
+		void* mixer; // BAEMixer
+		GM_Waveform *pWave;
+		// ... rest of structure not needed
+	};
+	
+	struct sBAESound_internal* sound = (struct sBAESound_internal*)(intptr_t)soundReference;
+	if(!sound || !sound->pWave) return 44100;
+	
+	// sampledRate is in 16.16 fixed point format (XFIXED)
+	// Convert to integer by right-shifting 16 bits
+	return (jint)(sound->pWave->sampledRate >> 16);
 }
 
 // Helper to get mixer from sound - forward declaration (if not present in header)
@@ -402,20 +547,6 @@ JNIEXPORT jint JNICALL Java_org_minibae_Song__1loadRmiFromMemory
 	
 	(*env)->ReleaseByteArrayElements(env, data, bytes, JNI_ABORT);
 	return (jint)r;
-}
-
-
-JNIEXPORT jlong JNICALL
-Java_org_minibae_Sound__1loadSound__ILjava_nio_ByteBuffer_2(JNIEnv *env, jobject thiz,
-                                                            jlong sound_reference,
-                                                            jobject file_data) {
-    // TODO: implement _loadSound()
-}
-
-JNIEXPORT jlong JNICALL
-Java_org_minibae_Sound__1loadSound__ILandroid_content_res_AssetManager_2Ljava_lang_String_2(
-        JNIEnv *env, jobject thiz, jlong sound_reference, jobject asset_manager, jstring file) {
-    // TODO: implement _loadSound()
 }
 
 JNIEXPORT jint JNICALL Java_org_minibae_Song__1setSongVolume

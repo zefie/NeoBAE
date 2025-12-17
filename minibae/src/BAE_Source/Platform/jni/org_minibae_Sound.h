@@ -31,6 +31,94 @@ JNIEXPORT jlong JNICALL Java_org_minibae_Sound__1loadSound__ILjava_nio_ByteBuffe
 JNIEXPORT jlong JNICALL Java_org_minibae_Sound__1loadSound__ILandroid_content_res_AssetManager_2Ljava_lang_String_2
   (JNIEnv *, jobject, jlong, jobject, jstring);
 
+/*
+ * Class:     org_minibae_Sound
+ * Method:    _startSound
+ * Signature: (JI)I
+ */
+JNIEXPORT jint JNICALL Java_org_minibae_Sound__1startSound
+  (JNIEnv *, jobject, jlong, jint, jint);
+
+/*
+ * Class:     org_minibae_Sound
+ * Method:    _stopSound
+ * Signature: (JZ)I
+ */
+JNIEXPORT jint JNICALL Java_org_minibae_Sound__1stopSound
+  (JNIEnv *, jobject, jlong, jboolean);
+
+/*
+ * Class:     org_minibae_Sound
+ * Method:    _pauseSound
+ * Signature: (J)I
+ */
+JNIEXPORT jint JNICALL Java_org_minibae_Sound__1pauseSound
+  (JNIEnv *, jobject, jlong);
+
+/*
+ * Class:     org_minibae_Sound
+ * Method:    _resumeSound
+ * Signature: (J)I
+ */
+JNIEXPORT jint JNICALL Java_org_minibae_Sound__1resumeSound
+  (JNIEnv *, jobject, jlong);
+
+/*
+ * Class:     org_minibae_Sound
+ * Method:    _isSoundPaused
+ * Signature: (J)Z
+ */
+JNIEXPORT jboolean JNICALL Java_org_minibae_Sound__1isSoundPaused
+  (JNIEnv *, jobject, jlong);
+
+/*
+ * Class:     org_minibae_Sound
+ * Method:    _isSoundDone
+ * Signature: (J)Z
+ */
+JNIEXPORT jboolean JNICALL Java_org_minibae_Sound__1isSoundDone
+  (JNIEnv *, jobject, jlong);
+
+/*
+ * Class:     org_minibae_Sound
+ * Method:    _setSoundVolume
+ * Signature: (JI)I
+ */
+JNIEXPORT jint JNICALL Java_org_minibae_Sound__1setSoundVolume
+  (JNIEnv *, jclass, jlong, jint);
+
+/*
+ * Class:     org_minibae_Sound
+ * Method:    _getSoundVolume
+ * Signature: (J)I
+ */
+JNIEXPORT jint JNICALL Java_org_minibae_Sound__1getSoundVolume
+  (JNIEnv *, jclass, jlong);
+
+/*
+ * Class:     org_minibae_Sound
+ * Method:    _getSoundPositionFrames
+ * Signature: (J)I
+ */
+JNIEXPORT jint JNICALL Java_org_minibae_Sound__1getSoundPositionFrames
+  (JNIEnv *, jclass, jlong);
+
+/*
+ * Class:     org_minibae_Sound
+ * Method:    _getSoundLengthFrames
+ * Signature: (J)I
+ */
+JNIEXPORT jint JNICALL Java_org_minibae_Sound__1getSoundLengthFrames
+  (JNIEnv *, jclass, jlong);
+
+/*
+ * Class:     org_minibae_Sound
+ * Method:    _getSoundSampleRate
+ * Signature: (J)I
+ */
+JNIEXPORT jint JNICALL Java_org_minibae_Sound__1getSoundSampleRate
+  (JNIEnv *, jclass, jlong);
+
 #ifdef __cplusplus
 }
 #endif
