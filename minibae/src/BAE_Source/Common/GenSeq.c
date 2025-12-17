@@ -965,7 +965,9 @@ static void PV_CallSongMetaEventCallback(void *threadContext, GM_Song *pSong, ch
         theCallback = pSong->metaEventCallbackPtr;
         if (theCallback)
         {
-            (*theCallback)(threadContext, pSong, markerType, pText, textLength, currentTrack);
+            // If a reference is provided, pass it as the context. Otherwise pass the threadContext.
+            void *context = pSong->metaEventCallbackReference ? pSong->metaEventCallbackReference : threadContext;
+            (*theCallback)(context, pSong, markerType, pText, textLength, currentTrack);
         }
     }
 }

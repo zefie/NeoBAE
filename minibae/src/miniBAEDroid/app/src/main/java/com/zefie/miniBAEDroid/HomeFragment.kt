@@ -63,6 +63,10 @@ class HomeFragment : Fragment() {
         get() = (activity as? MainActivity)?.currentSong
         
     private fun setCurrentSong(song: Song?) {
+        karaokeHandler.reset()
+        val ext = viewModel.getCurrentItem()?.file?.extension?.lowercase() ?: ""
+        karaokeHandler.setFileExtension(ext)
+        song?.setMetaEventListener(karaokeHandler)
         (activity as? MainActivity)?.currentSong = song
     }
     
@@ -88,6 +92,109 @@ class HomeFragment : Fragment() {
     private var bankBrowserFiles = mutableStateListOf<PlaylistItem>()
     private var bankBrowserLoading = mutableStateOf(false)
     
+    private val karaokeHandler = KaraokeHandler()
+
+    private inner class KaraokeHandler : Song.MetaEventListener {
+        private val currentLine = StringBuilder()
+        private var lastFragment = ""
+        private var haveMetaLyrics = false
+        private var currentExtension = ""
+
+        fun setFileExtension(ext: String) {
+            currentExtension = ext
+        }
+
+        override fun onMetaEvent(markerType: Int, data: ByteArray) {
+            if (isExporting.value) return
+            
+            if (markerType == 0x05) {
+                haveMetaLyrics = true
+            }
+
+            // Use ISO-8859-1 to avoid replacement chars for 8-bit data
+            var text = String(data, java.nio.charset.StandardCharsets.ISO_8859_1).replace("\u0000", "")
+            if (text.isEmpty()) return
+
+            if (markerType == 0x05) {
+                processFragment(text)
+            } else if (markerType == 0x01) {
+                val isKaraokeMarker = text.startsWith("@") || text.startsWith("/") || text.startsWith("\\")
+                
+                if (isKaraokeMarker) {
+                     if (text.startsWith("@")) {
+                         commitLine()
+                     } else {
+                         processFragment(text)
+                     }
+                } else if (!haveMetaLyrics) {
+                    // Plain text fallback - only if .kar file
+                    if (currentExtension == "kar") {
+                        processFragment(text)
+                    }
+                }
+            }
+        }
+
+        private fun processFragment(frag: String) {
+            var text = frag
+            var newlineBefore = false
+            var newlineAfter = false
+
+            if (text.startsWith("/") || text.startsWith("\\")) {
+                newlineBefore = true
+                text = text.substring(1)
+            }
+            
+            if (text.endsWith("\r") || text.endsWith("\n")) {
+                newlineAfter = true
+                text = text.replace("\r", "").replace("\n", "")
+            }
+
+            if (newlineBefore) {
+                commitLine()
+            }
+
+            if (text.isNotEmpty()) {
+                if (lastFragment.isNotEmpty() && text.length > lastFragment.length && text.startsWith(lastFragment)) {
+                    val lenToRemove = lastFragment.length
+                    if (currentLine.length >= lenToRemove) {
+                        currentLine.setLength(currentLine.length - lenToRemove)
+                    }
+                    currentLine.append(text)
+                } else {
+                    // Don't auto-add spaces for karaoke
+                    currentLine.append(text)
+                }
+                lastFragment = text
+                
+                activity?.runOnUiThread {
+                    viewModel.currentLyric = currentLine.toString()
+                }
+            }
+
+            if (newlineAfter) {
+                commitLine()
+            }
+        }
+
+        private fun commitLine() {
+            currentLine.setLength(0)
+            lastFragment = ""
+            activity?.runOnUiThread {
+                viewModel.currentLyric = ""
+            }
+        }
+        
+        fun reset() {
+            currentLine.setLength(0)
+            lastFragment = ""
+            haveMetaLyrics = false
+            activity?.runOnUiThread {
+                viewModel.currentLyric = ""
+            }
+        }
+    }
+
     private val saveFilePicker = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
             val data: Intent? = result.data
@@ -2226,7 +2333,28 @@ fun FullPlayerScreen(
                 textAlign = TextAlign.Center
             )
             
-            Spacer(modifier = Modifier.height(48.dp))
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            // Lyrics area
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                if (viewModel.currentLyric.isNotEmpty()) {
+                    Text(
+                        text = viewModel.currentLyric,
+                        style = MaterialTheme.typography.body1.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colors.primary,
+                        textAlign = TextAlign.Center,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(8.dp))
             
             // Seek bar
             Column(modifier = Modifier.fillMaxWidth()) {

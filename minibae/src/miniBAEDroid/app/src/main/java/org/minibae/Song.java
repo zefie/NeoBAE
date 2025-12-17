@@ -24,6 +24,25 @@ public class Song
 	private static native int _getSongLengthUS(long songReference);
 	private static native int _setSongLoops(long songReference, int numLoops);
 
+	private static native long _setMetaEventCallback(long songReference, MetaEventListener listener);
+	private static native void _cleanupMetaEventCallback(long callbackRef);
+
+	public interface MetaEventListener {
+		void onMetaEvent(int markerType, byte[] data);
+	}
+
+	private long mCallbackHandle = 0;
+
+	public void setMetaEventListener(MetaEventListener listener) {
+		if (mCallbackHandle != 0) {
+			_cleanupMetaEventCallback(mCallbackHandle);
+			mCallbackHandle = 0;
+		}
+		if (listener != null) {
+			mCallbackHandle = _setMetaEventCallback(mReference, listener);
+		}
+	}
+
 	Song(Mixer mixer)
 	{
 		mMixer = mixer;
@@ -68,6 +87,10 @@ public class Song
 
 	public void stop(boolean deleteSong)
 	{
+		if (mCallbackHandle != 0) {
+			_cleanupMetaEventCallback(mCallbackHandle);
+			mCallbackHandle = 0;
+		}
 		_stopSong(mReference, deleteSong);
 	}
 

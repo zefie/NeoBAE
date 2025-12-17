@@ -86,3 +86,70 @@ JNIEXPORT jint JNICALL Java_org_minibae_Song__1setSongLoops(JNIEnv* env, jclass 
     if(r != BAE_NO_ERROR){ __android_log_print(ANDROID_LOG_WARN, LOG_TAG, "BAESong_SetLoops err=%d", r); }
     return (jint)r;
 }
+
+extern JavaVM* gJavaVM;
+
+// Callback from engine
+void myMetaEventCallback(void *threadContext, struct GM_Song *pSong, char markerType, void *pMetaText, int32_t metaTextLength, short currentTrack)
+{
+    (void)pSong;
+    (void)currentTrack;
+
+    if (!gJavaVM) return;
+
+    JNIEnv *env;
+    int getEnvStat = (*gJavaVM)->GetEnv(gJavaVM, (void**)&env, JNI_VERSION_1_6);
+    int attached = 0;
+
+    if (getEnvStat == JNI_EDETACHED) {
+        if ((*gJavaVM)->AttachCurrentThread(gJavaVM, &env, NULL) != 0) {
+            return;
+        }
+        attached = 1;
+    } else if (getEnvStat != JNI_OK) {
+        return;
+    }
+
+    jobject listenerObj = (jobject)threadContext;
+
+    if (listenerObj) {
+        jclass cls = (*env)->GetObjectClass(env, listenerObj);
+        // void onMetaEvent(int markerType, byte[] data)
+        jmethodID mid = (*env)->GetMethodID(env, cls, "onMetaEvent", "(I[B)V");
+        if (mid) {
+            jbyteArray arr = (*env)->NewByteArray(env, metaTextLength);
+            if (arr) {
+                (*env)->SetByteArrayRegion(env, arr, 0, metaTextLength, (const jbyte*)pMetaText);
+                (*env)->CallVoidMethod(env, listenerObj, mid, (jint)markerType, arr);
+                (*env)->DeleteLocalRef(env, arr);
+            }
+        }
+        (*env)->DeleteLocalRef(env, cls);
+    }
+
+    if (attached) {
+        (*gJavaVM)->DetachCurrentThread(gJavaVM);
+    }
+}
+
+JNIEXPORT jlong JNICALL Java_org_minibae_Song__1setMetaEventCallback(JNIEnv* env, jclass clazz, jlong songRef, jobject listener)
+{
+    (void)clazz;
+    if(songRef == 0){ return 0; }
+    BAESong song = (BAESong)(intptr_t)songRef;
+    
+    jobject globalRef = (*env)->NewGlobalRef(env, listener);
+    
+    BAESong_SetMetaEventCallback(song, (GM_SongMetaCallbackProcPtr)myMetaEventCallback, globalRef);
+    
+    return (jlong)(intptr_t)globalRef;
+}
+
+JNIEXPORT void JNICALL Java_org_minibae_Song__1cleanupMetaEventCallback(JNIEnv* env, jclass clazz, jlong callbackRef)
+{
+    (void)clazz;
+    if (callbackRef != 0) {
+        jobject globalRef = (jobject)(intptr_t)callbackRef;
+        (*env)->DeleteGlobalRef(env, globalRef);
+    }
+}

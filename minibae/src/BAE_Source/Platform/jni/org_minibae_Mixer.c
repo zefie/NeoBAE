@@ -20,12 +20,11 @@
 
 //http://developer.android.com/training/articles/perf-jni.html
 
-static JavaVM* gJavaVM = NULL;
-
 // Cache the most-recently loaded bank's friendly name so Java callers that
 // don't track native bank tokens can still query a human-friendly string.
 static char g_lastBankFriendly[256] = "";
 
+JavaVM* gJavaVM = NULL;
 
 jint JNI_OnLoad(JavaVM* vm, void* reserved)
 {

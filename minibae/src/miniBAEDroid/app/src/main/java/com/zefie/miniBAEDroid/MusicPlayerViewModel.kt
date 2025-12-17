@@ -44,6 +44,7 @@ class MusicPlayerViewModel : ViewModel() {
     var totalDurationMs by mutableStateOf(0)
     var volumePercent by mutableStateOf(75)
     var currentTitle by mutableStateOf("No song loaded")
+    var currentLyric by mutableStateOf("")
     
     // UI state
     var isDraggingSeekBar by mutableStateOf(false)
