@@ -836,7 +836,7 @@ void GM_SF2_ProcessNoteOff(GM_Song* pSong, int16_t channel, int16_t note, int16_
     PV_SF2_UpdateChannelActivity(channel, 0, FALSE);
 }
 
-void GM_SF2_ProcessProgramChange(GM_Song* pSong, int16_t channel, int16_t program)
+void GM_SF2_ProcessProgramChange(GM_Song* pSong, int16_t channel, int32_t program)
 {
     if (!GM_IsSF2Song(pSong) || !g_fluidsynth_synth)
     {
@@ -847,7 +847,7 @@ void GM_SF2_ProcessProgramChange(GM_Song* pSong, int16_t channel, int16_t progra
     // miniBAE uses: instrument = (bank * 128) + program + note
     // For percussion: bank = (bank * 2) + 1, note is included
     // For melodic: bank = bank * 2, note = 0
-    int16_t midiBank = (uint16_t)(program / 128);    // Bank number (internal mapping)
+    int32_t midiBank = (int32_t)(program / 128);    // Bank number (internal mapping)
     int16_t midiProgram = (uint16_t)(program % 128); // Program number or note depending on mapping
 
     // Determine percussion intent from two signals:
@@ -905,40 +905,37 @@ void GM_SF2_ProcessProgramChange(GM_Song* pSong, int16_t channel, int16_t progra
     }
 
     BAE_PRINTF("final intepretation: midiBank: %i, midiProgram: %i, channel: %i\n", midiBank, midiProgram, channel);
-    if (midiBank == 2) {
-        pSong->channelType[channel] = CHANNEL_TYPE_RMF;
-    } else {
-        // Validate bank/program exist in current font; apply fallback if not
-        int useBank = midiBank;
-        int useProg = midiProgram;
-        if (!PV_SF2_PresetExists(useBank, useProg)) {
-            int altProg;
-            if (PV_SF2_FindFirstPresetInBank(useBank, &altProg)) {
-                // Use first program available in requested bank
-                BAE_PRINTF("[FluidMem] Fallback: bank %d has no prog %d; using prog %d\n", useBank, useProg, altProg);
-                useProg = altProg;
-            } else {
-                // If percussion intent, try bank 128; else try bank 0; finally pick any preset
-                XBOOL percIntent = (channel == BAE_PERCUSSION_CHANNEL) || (useBank == 128);
-                int fbBank = -1, fbProg = 0;
-                if (percIntent && PV_SF2_FindFirstPresetInBank(128, &fbProg)) {
-                    fbBank = 128;
-                } else if (!percIntent && PV_SF2_FindFirstPresetInBank(0, &fbProg)) {
-                    fbBank = 0;
-                } else if (PV_SF2_FindAnyPreset(&fbBank, &fbProg)) {
-                    // leave as found
-                }
-                if (fbBank >= 0) {
-                    BAE_PRINTF("[FluidMem] Fallback: no presets in bank %d; selecting %d:%d\n", useBank, fbBank, fbProg);
-                    useBank = fbBank; useProg = fbProg;
-                }
+
+    // Validate bank/program exist in current font; apply fallback if not
+    int useBank = midiBank;
+    int useProg = midiProgram;
+    if (!PV_SF2_PresetExists(useBank, useProg)) {
+        int altProg;
+        if (PV_SF2_FindFirstPresetInBank(useBank, &altProg)) {
+            // Use first program available in requested bank
+            BAE_PRINTF("[FluidMem] Fallback: bank %d has no prog %d; using prog %d\n", useBank, useProg, altProg);
+            useProg = altProg;
+        } else {
+            // If percussion intent, try bank 128; else try bank 0; finally pick any preset
+            XBOOL percIntent = (channel == BAE_PERCUSSION_CHANNEL) || (useBank == 128);
+            int fbBank = -1, fbProg = 0;
+            if (percIntent && PV_SF2_FindFirstPresetInBank(128, &fbProg)) {
+                fbBank = 128;
+            } else if (!percIntent && PV_SF2_FindFirstPresetInBank(0, &fbProg)) {
+                fbBank = 0;
+            } else if (PV_SF2_FindAnyPreset(&fbBank, &fbProg)) {
+                // leave as found
+            }
+            if (fbBank >= 0) {
+                BAE_PRINTF("[FluidMem] Fallback: no presets in bank %d; selecting %d:%d\n", useBank, fbBank, fbProg);
+                useBank = fbBank; useProg = fbProg;
             }
         }
-
-        // Send MIDI program change event to FluidSynth
-        fluid_synth_bank_select(g_fluidsynth_synth, channel, useBank);
-        fluid_synth_program_change(g_fluidsynth_synth, channel, useProg);
     }
+
+    // Send MIDI program change event to FluidSynth
+    fluid_synth_bank_select(g_fluidsynth_synth, channel, useBank);
+    fluid_synth_program_change(g_fluidsynth_synth, channel, useProg);
     
 }
 

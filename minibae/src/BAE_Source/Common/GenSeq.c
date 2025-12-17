@@ -1703,6 +1703,8 @@ void PV_FreePatchInfo(GM_Song *pSong)
 }
 #endif // USE_CREATION_API
 
+static INT16 PV_ConvertPatchBank(GM_Song *pSong, INT16 thePatch, INT16 theChannel);
+
 // Process midi program change
 static void PV_ProcessProgramChange(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTrack, INT16 program)
 {
@@ -1732,7 +1734,34 @@ static void PV_ProcessProgramChange(GM_Song *pSong, INT16 MIDIChannel, INT16 cur
                     }
                 }  
                 if (pSong->channelType[MIDIChannel] != CHANNEL_TYPE_RMF) {
-                    GM_SF2_ProcessProgramChange(pSong, MIDIChannel, program);
+                    // Calculate combined program manually to support banks > MAX_BANKS for SF2
+                    INT32 theBank = pSong->channelBank[MIDIChannel];
+                    INT32 thePatch = program;
+                    
+                    switch (pSong->channelBankMode[MIDIChannel])
+                    {
+                    default:
+                    case USE_GM_DEFAULT:
+                        if (MIDIChannel == PERCUSSION_CHANNEL)
+                        {
+                            theBank = (theBank * 2) + 1; // odd banks are percussion
+                        }
+                        else
+                        {
+                            theBank = theBank * 2 + 0; // even banks are for instruments
+                        }
+                        break;
+                    case USE_NON_GM_PERC_BANK:
+                    case USE_GM_PERC_BANK:
+                        theBank = (theBank * 2) + 1; // odd banks are percussion
+                        break;
+                    case USE_NORM_BANK:
+                        theBank = theBank * 2 + 0; // even banks are for instruments
+                        break;
+                    }
+                    
+                    INT32 combinedProgram = (theBank * 128) + thePatch;
+                    GM_SF2_ProcessProgramChange(pSong, MIDIChannel, combinedProgram);
                 }
             }
 #endif
@@ -2309,10 +2338,16 @@ void PV_ProcessController(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTrack,
 #endif            
             break;
         case B_BANK_MSB: // bank select LSB.
-            if (value > (MAX_BANKS / 2))
-            { // if we're selecting outside of our range, default to 0
-                value = 0;
+#if USE_SF2_SUPPORT == TRUE
+            if (!GM_IsSF2Song(pSong)) {
+#endif
+                if (value > (MAX_BANKS / 2))
+                { // if we're selecting outside of our range, default to 0
+                    value = 0;
+                }
+#if USE_SF2_SUPPORT == TRUE
             }
+#endif
             pSong->channelBank[MIDIChannel] = (SBYTE)value;
             break;
 

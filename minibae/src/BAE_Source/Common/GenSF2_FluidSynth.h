@@ -68,7 +68,7 @@ float GM_SF2_GetGain();
 // FluidSynth MIDI event processing (called from existing MIDI processors)
 void GM_SF2_ProcessNoteOn(GM_Song* pSong, int16_t channel, int16_t note, int16_t velocity);
 void GM_SF2_ProcessNoteOff(GM_Song* pSong, int16_t channel, int16_t note, int16_t velocity);
-void GM_SF2_ProcessProgramChange(GM_Song* pSong, int16_t channel, int16_t program);
+void GM_SF2_ProcessProgramChange(GM_Song* pSong, int16_t channel, int32_t program);
 void GM_SF2_ProcessController(GM_Song* pSong, int16_t channel, int16_t controller, int16_t value);
 void GM_SF2_ProcessPitchBend(GM_Song* pSong, int16_t channel, int16_t bendMSB, int16_t bendLSB);
 
