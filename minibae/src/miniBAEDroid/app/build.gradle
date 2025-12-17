@@ -17,6 +17,7 @@ android {
         ndk {
             abiFilters 'armeabi-v7a','arm64-v8a','x86','x86_64'
         }
+        ndkVersion "27.0.12077973"
     }
 
     buildTypes {
@@ -47,7 +48,7 @@ android {
 
 dependencies {
     implementation 'androidx.appcompat:appcompat:1.7.1'
-    implementation 'org.jetbrains.kotlin:kotlin-stdlib:2.2.10' // You are using Kotlin 2.2.10
+    implementation 'org.jetbrains.kotlin:kotlin-stdlib:2.3.0' // You are using Kotlin 2.2.10
     implementation 'com.google.android.material:material:1.13.0'
     implementation 'androidx.media:media:1.7.1'
 

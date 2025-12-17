@@ -11,7 +11,7 @@
       </configuration>
     </facet>
     <facet external-system-id="GRADLE" type="kotlin-language" name="Kotlin">
-      <configuration version="5" platform="JVM 1.8" allPlatforms="JVM [1.8]" useProjectSettings="false">
+      <configuration version="5" platform="JVM 11" allPlatforms="JVM [11]" useProjectSettings="false">
         <compilerSettings>
           <option name="additionalArguments" value="-Xallow-unstable-dependencies -Xuse-inline-scopes-numbers" />
         </compilerSettings>
@@ -23,7 +23,7 @@
           </flagArguments>
           <stringArguments>
             <stringArg name="destination" arg="$MODULE_DIR$/build/tmp/kotlin-classes/debug" />
-            <stringArg name="jvmTarget" arg="1.8" />
+            <stringArg name="jvmTarget" arg="11" />
             <stringArg name="moduleName" arg="app_debug" />
             <stringArg name="apiVersion" arg="2.2" />
             <stringArg name="languageVersion" arg="2.2" />
@@ -43,60 +43,34 @@
       </configuration>
     </facet>
   </component>
-  <component name="NewModuleRootManager" LANGUAGE_LEVEL="JDK_1_8">
+  <component name="NewModuleRootManager" LANGUAGE_LEVEL="JDK_11">
     <output url="file://$MODULE_DIR$/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes" />
     <exclude-output />
     <content url="file://$MODULE_DIR$/../../BAE_MPEG_Source_II">
       <sourceFolder url="file://$MODULE_DIR$/../../BAE_MPEG_Source_II" type="native-Source-root" />
     </content>
-    <content url="file://$MODULE_DIR$/../../BAE_MPEG_Source_II">
-      <sourceFolder url="file://$MODULE_DIR$/../../BAE_MPEG_Source_II" type="native-Source-root" />
-    </content>
     <content url="file://$MODULE_DIR$/../../BAE_Source">
       <sourceFolder url="file://$MODULE_DIR$/../../BAE_Source" type="native-Source-root" />
-    </content>
-    <content url="file://$MODULE_DIR$/../../BAE_Source">
-      <sourceFolder url="file://$MODULE_DIR$/../../BAE_Source" type="native-Source-root" />
-    </content>
-    <content url="file://$MODULE_DIR$/../../banks/patches111">
-      <sourceFolder url="file://$MODULE_DIR$/../../banks/patches111" type="native-header-root" />
-    </content>
-    <content url="file://$MODULE_DIR$/../../banks/patches111">
-      <sourceFolder url="file://$MODULE_DIR$/../../banks/patches111" type="native-header-root" />
     </content>
     <content url="file://$MODULE_DIR$/build/generated/ap_generated_sources/debug/out">
       <sourceFolder url="file://$MODULE_DIR$/build/generated/ap_generated_sources/debug/out" isTestSource="false" generated="true" />
-    </content>
-    <content url="file://$MODULE_DIR$/build/generated/ap_generated_sources/debug/out">
       <sourceFolder url="file://$MODULE_DIR$/build/generated/ap_generated_sources/debug/out" isTestSource="false" generated="true" />
     </content>
     <content url="file://$MODULE_DIR$/build/generated/res/resValues/debug">
       <sourceFolder url="file://$MODULE_DIR$/build/generated/res/resValues/debug" type="java-resource" generated="true" />
-    </content>
-    <content url="file://$MODULE_DIR$/build/generated/res/resValues/debug">
       <sourceFolder url="file://$MODULE_DIR$/build/generated/res/resValues/debug" type="java-resource" generated="true" />
     </content>
     <content url="file://$MODULE_DIR$/src/debug" />
-    <content url="file://$MODULE_DIR$/src/debug" />
     <content url="file://$MODULE_DIR$/src/main">
       <sourceFolder url="file://$MODULE_DIR$/src/main/java" isTestSource="false" />
-      <sourceFolder url="file://$MODULE_DIR$/src/main/res" type="java-resource" />
-    </content>
-    <content url="file://$MODULE_DIR$/src/main">
-      <sourceFolder url="file://$MODULE_DIR$/src/main/java" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/src/main/jniLibs/x86/fluidsynth/include" type="native-header-root" />
       <sourceFolder url="file://$MODULE_DIR$/src/main/res" type="java-resource" />
     </content>
     <content url="file://$MODULE_DIR$/../jni">
       <sourceFolder url="file://$MODULE_DIR$/../jni" type="native-Source-root" />
     </content>
-    <content url="file://$MODULE_DIR$/../jni">
-      <sourceFolder url="file://$MODULE_DIR$/../jni" type="native-Source-root" />
-    </content>
-    <content url="file://$MODULE_DIR$/../../thirdparty/minimp3">
-      <sourceFolder url="file://$MODULE_DIR$/../../thirdparty/minimp3" type="native-header-root" />
-    </content>
-    <content url="file://$MODULE_DIR$/../../thirdparty/minimp3">
-      <sourceFolder url="file://$MODULE_DIR$/../../thirdparty/minimp3" type="native-header-root" />
+    <content url="file://$MODULE_DIR$/../../thirdparty">
+      <sourceFolder url="file://$MODULE_DIR$/../../thirdparty" type="native-Source-root" />
     </content>
     <orderEntry type="jdk" jdkName="Android API 36.0, extension level 17 Platform" jdkType="Android SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
@@ -151,6 +125,7 @@
     <orderEntry type="library" name="Gradle: androidx.transition:transition:1.6.0@aar" level="project" />
     <orderEntry type="library" name="Gradle: androidx.viewpager2:viewpager2:1.0.0@aar" level="project" />
     <orderEntry type="library" name="Gradle: androidx.graphics:graphics-shapes-android:1.0.1@aar" level="project" />
+    <orderEntry type="library" name="Gradle: androidx.media:media:1.7.1@aar" level="project" />
     <orderEntry type="library" name="Gradle: androidx.activity:activity-compose:1.12.1@aar" level="project" />
     <orderEntry type="library" name="Gradle: androidx.navigationevent:navigationevent-compose-android:1.0.1@aar" level="project" />
     <orderEntry type="library" name="Gradle: androidx.lifecycle:lifecycle-viewmodel-compose-android:2.10.0@aar" level="project" />
@@ -164,7 +139,7 @@
     <orderEntry type="library" name="Gradle: androidx.compose.material:material-icons-core-android:1.7.8@aar" level="project" />
     <orderEntry type="library" name="Gradle: androidx.documentfile:documentfile:1.1.0@aar" level="project" />
     <orderEntry type="library" name="Gradle: androidx.annotation:annotation-jvm:1.9.1" level="project" />
-    <orderEntry type="library" name="Gradle: org.jetbrains.kotlin:kotlin-stdlib:2.2.10" level="project" />
+    <orderEntry type="library" name="Gradle: org.jetbrains.kotlin:kotlin-stdlib:2.3.0" level="project" />
     <orderEntry type="library" name="Gradle: org.jetbrains:annotations:23.0.0" level="project" />
     <orderEntry type="library" name="Gradle: org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0" level="project" />
     <orderEntry type="library" name="Gradle: org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:1.9.0" level="project" />

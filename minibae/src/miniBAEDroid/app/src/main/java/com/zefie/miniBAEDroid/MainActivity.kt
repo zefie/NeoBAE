@@ -59,22 +59,43 @@ class MainActivity : AppCompatActivity() {
                 val prefs = getSharedPreferences("miniBAE_prefs", Context.MODE_PRIVATE)
                 val lastBankPath = prefs.getString("last_bank_path", null)
                 
-                if (!lastBankPath.isNullOrEmpty() && lastBankPath != "__builtin__") {
-                    // Try to restore saved bank file
-                    val bankFile = java.io.File(lastBankPath)
-                    if (bankFile.exists()) {
-                        try {
-                            val bytes = bankFile.readBytes()
-                            val br = Mixer.addBankFromMemory(bytes, bankFile.name)
-                            if (br == 0) {
-                                bankLoaded = true
-                                Toast.makeText(this, "Restored bank: ${Mixer.getBankFriendlyName() ?: bankFile.name}", Toast.LENGTH_SHORT).show()
-                            }
-                        } catch (ex: Exception) {
-                            android.util.Log.e("MainActivity", "Failed to restore saved bank: ${ex.message}")
-                        }
+                // Load built-in patches if path is null, empty, or explicitly "__builtin__"
+                if (lastBankPath.isNullOrEmpty() || lastBankPath == "__builtin__") {
+                    val br = Mixer.addBuiltInPatches()
+                    if (br == 0) {
+                        bankLoaded = true
+                        prefs.edit().putString("last_bank_path", "__builtin__").apply()
+                        Toast.makeText(this, "Using built-in patches", Toast.LENGTH_SHORT).show()
                     } else {
-                        android.util.Log.w("MainActivity", "Saved bank file not found: $lastBankPath")
+                        Toast.makeText(this, "Failed to load built-in patches: $br", Toast.LENGTH_SHORT).show()
+                    }
+                } else {
+                    // Try to restore saved bank file
+                    if (lastBankPath == "__builtin__") {
+                        val br = Mixer.addBuiltInPatches()
+                        if (br == 0) {
+                            bankLoaded = true
+                            prefs.edit().putString("last_bank_path", "__builtin__").apply()
+                            Toast.makeText(this, "Using built-in patches", Toast.LENGTH_SHORT).show()
+                        } else {
+                            Toast.makeText(this, "Failed to load built-in patches: $br", Toast.LENGTH_SHORT).show()
+                        }   
+                    } else {
+                        val bankFile = java.io.File(lastBankPath)
+                        if (bankFile.exists()) {
+                            try {
+                                val bytes = bankFile.readBytes()
+                                val br = Mixer.addBankFromMemory(bytes, bankFile.name)
+                                if (br == 0) {
+                                    bankLoaded = true
+                                    Toast.makeText(this, "Restored bank: ${Mixer.getBankFriendlyName() ?: bankFile.name}", Toast.LENGTH_SHORT).show()
+                                }
+                            } catch (ex: Exception) {
+                                android.util.Log.e("MainActivity", "Failed to restore saved bank: ${ex.message}")
+                            }
+                        } else {
+                            android.util.Log.w("MainActivity", "Saved bank file not found: $lastBankPath")
+                        }
                     }
                 }
             } catch (ex: Exception) {

@@ -95,6 +95,18 @@
           <option name="screenY" value="2412" />
         </PersistentDeviceSelectionData>
         <PersistentDeviceSelectionData>
+          <option name="api" value="35" />
+          <option name="brand" value="OnePlus" />
+          <option name="codename" value="OP5552L1" />
+          <option name="id" value="OP5552L1" />
+          <option name="labId" value="google" />
+          <option name="manufacturer" value="OnePlus" />
+          <option name="name" value="CPH2415" />
+          <option name="screenDensity" value="480" />
+          <option name="screenX" value="1080" />
+          <option name="screenY" value="2412" />
+        </PersistentDeviceSelectionData>
+        <PersistentDeviceSelectionData>
           <option name="api" value="34" />
           <option name="brand" value="OPPO" />
           <option name="codename" value="OP573DL1" />
@@ -894,74 +906,6 @@
           <option name="screenY" value="2400" />
         </PersistentDeviceSelectionData>
         <PersistentDeviceSelectionData>
-          <option name="accessStatus">
-            <list>
-              <option value="EULA_NOT_ACCEPTED" />
-            </list>
-          </option>
-          <option name="api" value="34" />
-          <option name="brand" value="OPPO" />
-          <option name="codename" value="oplus_lab_op574fl1" />
-          <option name="id" value="oplus_lab_op574fl1" />
-          <option name="labId" value="oppo" />
-          <option name="manufacturer" value="OPPO" />
-          <option name="name" value="A58" />
-          <option name="screenDensity" value="480" />
-          <option name="screenX" value="1080" />
-          <option name="screenY" value="2400" />
-        </PersistentDeviceSelectionData>
-        <PersistentDeviceSelectionData>
-          <option name="accessStatus">
-            <list>
-              <option value="EULA_NOT_ACCEPTED" />
-            </list>
-          </option>
-          <option name="api" value="35" />
-          <option name="brand" value="OnePlus" />
-          <option name="codename" value="oplus_lab_op5961l1" />
-          <option name="id" value="oplus_lab_op5961l1" />
-          <option name="labId" value="oneplus" />
-          <option name="manufacturer" value="OnePlus" />
-          <option name="name" value="11R 5G" />
-          <option name="screenDensity" value="560" />
-          <option name="screenX" value="1240" />
-          <option name="screenY" value="2772" />
-        </PersistentDeviceSelectionData>
-        <PersistentDeviceSelectionData>
-          <option name="accessStatus">
-            <list>
-              <option value="EULA_NOT_ACCEPTED" />
-            </list>
-          </option>
-          <option name="api" value="34" />
-          <option name="brand" value="OPPO" />
-          <option name="codename" value="oplus_lab_op5abfl1" />
-          <option name="id" value="oplus_lab_op5abfl1" />
-          <option name="labId" value="oppo" />
-          <option name="manufacturer" value="OPPO" />
-          <option name="name" value="Reno11 5G" />
-          <option name="screenDensity" value="480" />
-          <option name="screenX" value="1080" />
-          <option name="screenY" value="2412" />
-        </PersistentDeviceSelectionData>
-        <PersistentDeviceSelectionData>
-          <option name="accessStatus">
-            <list>
-              <option value="EULA_NOT_ACCEPTED" />
-            </list>
-          </option>
-          <option name="api" value="34" />
-          <option name="brand" value="OPPO" />
-          <option name="codename" value="oplus_lab_op5b05l1" />
-          <option name="id" value="oplus_lab_op5b05l1" />
-          <option name="labId" value="oppo" />
-          <option name="manufacturer" value="OPPO" />
-          <option name="name" value="A3 Pro 5G" />
-          <option name="screenDensity" value="320" />
-          <option name="screenX" value="720" />
-          <option name="screenY" value="1604" />
-        </PersistentDeviceSelectionData>
-        <PersistentDeviceSelectionData>
           <option name="api" value="31" />
           <option name="brand" value="google" />
           <option name="codename" value="oriole" />
@@ -1120,146 +1064,6 @@
           <option name="screenY" value="2340" />
         </PersistentDeviceSelectionData>
         <PersistentDeviceSelectionData>
-          <option name="accessStatus">
-            <list>
-              <option value="EULA_NOT_ACCEPTED" />
-            </list>
-          </option>
-          <option name="api" value="33" />
-          <option name="brand" value="samsung" />
-          <option name="codename" value="samsung_lab_a13" />
-          <option name="id" value="samsung_lab_a13" />
-          <option name="labId" value="samsung" />
-          <option name="manufacturer" value="Samsung" />
-          <option name="name" value="Galaxy A13" />
-          <option name="screenDensity" value="450" />
-          <option name="screenX" value="1080" />
-          <option name="screenY" value="2408" />
-        </PersistentDeviceSelectionData>
-        <PersistentDeviceSelectionData>
-          <option name="accessStatus">
-            <list>
-              <option value="EULA_NOT_ACCEPTED" />
-            </list>
-          </option>
-          <option name="api" value="34" />
-          <option name="brand" value="samsung" />
-          <option name="codename" value="samsung_lab_b6q" />
-          <option name="id" value="samsung_lab_b6q" />
-          <option name="labId" value="samsung" />
-          <option name="manufacturer" value="Samsung" />
-          <option name="name" value="Galaxy Z Flip6" />
-          <option name="screenDensity" value="480" />
-          <option name="screenX" value="1080" />
-          <option name="screenY" value="2640" />
-        </PersistentDeviceSelectionData>
-        <PersistentDeviceSelectionData>
-          <option name="accessStatus">
-            <list>
-              <option value="EULA_NOT_ACCEPTED" />
-            </list>
-          </option>
-          <option name="api" value="34" />
-          <option name="brand" value="samsung" />
-          <option name="codename" value="samsung_lab_e3q" />
-          <option name="id" value="samsung_lab_e3q" />
-          <option name="labId" value="samsung" />
-          <option name="manufacturer" value="Samsung" />
-          <option name="name" value="Galaxy S24 Ultra" />
-          <option name="screenDensity" value="450" />
-          <option name="screenX" value="1440" />
-          <option name="screenY" value="3120" />
-        </PersistentDeviceSelectionData>
-        <PersistentDeviceSelectionData>
-          <option name="accessStatus">
-            <list>
-              <option value="EULA_NOT_ACCEPTED" />
-            </list>
-          </option>
-          <option name="api" value="33" />
-          <option name="brand" value="samsung" />
-          <option name="codename" value="samsung_lab_gta9p" />
-          <option name="formFactor" value="Tablet" />
-          <option name="id" value="samsung_lab_gta9p" />
-          <option name="labId" value="samsung" />
-          <option name="manufacturer" value="Samsung" />
-          <option name="name" value="Galaxy Tab A9+ 5G" />
-          <option name="screenDensity" value="240" />
-          <option name="screenX" value="1200" />
-          <option name="screenY" value="1920" />
-        </PersistentDeviceSelectionData>
-        <PersistentDeviceSelectionData>
-          <option name="accessStatus">
-            <list>
-              <option value="EULA_NOT_ACCEPTED" />
-            </list>
-          </option>
-          <option name="api" value="34" />
-          <option name="brand" value="samsung" />
-          <option name="codename" value="samsung_lab_gts9" />
-          <option name="formFactor" value="Tablet" />
-          <option name="id" value="samsung_lab_gts9" />
-          <option name="labId" value="samsung" />
-          <option name="manufacturer" value="Samsung" />
-          <option name="name" value="Galaxy Tab S9 5G" />
-          <option name="screenDensity" value="340" />
-          <option name="screenX" value="1600" />
-          <option name="screenY" value="2560" />
-        </PersistentDeviceSelectionData>
-        <PersistentDeviceSelectionData>
-          <option name="accessStatus">
-            <list>
-              <option value="EULA_NOT_ACCEPTED" />
-            </list>
-          </option>
-          <option name="api" value="34" />
-          <option name="brand" value="samsung" />
-          <option name="codename" value="samsung_lab_gts9p" />
-          <option name="formFactor" value="Tablet" />
-          <option name="id" value="samsung_lab_gts9p" />
-          <option name="labId" value="samsung" />
-          <option name="manufacturer" value="Samsung" />
-          <option name="name" value="Galaxy Tab S9+ 5G" />
-          <option name="screenDensity" value="340" />
-          <option name="screenX" value="1752" />
-          <option name="screenY" value="2800" />
-        </PersistentDeviceSelectionData>
-        <PersistentDeviceSelectionData>
-          <option name="accessStatus">
-            <list>
-              <option value="EULA_NOT_ACCEPTED" />
-            </list>
-          </option>
-          <option name="api" value="34" />
-          <option name="brand" value="samsung" />
-          <option name="codename" value="samsung_lab_gts9u" />
-          <option name="formFactor" value="Tablet" />
-          <option name="id" value="samsung_lab_gts9u" />
-          <option name="labId" value="samsung" />
-          <option name="manufacturer" value="Samsung" />
-          <option name="name" value="Galaxy Tab S9 Ultra 5G" />
-          <option name="screenDensity" value="300" />
-          <option name="screenX" value="1848" />
-          <option name="screenY" value="2960" />
-        </PersistentDeviceSelectionData>
-        <PersistentDeviceSelectionData>
-          <option name="accessStatus">
-            <list>
-              <option value="EULA_NOT_ACCEPTED" />
-            </list>
-          </option>
-          <option name="api" value="34" />
-          <option name="brand" value="samsung" />
-          <option name="codename" value="samsung_lab_q6q" />
-          <option name="id" value="samsung_lab_q6q" />
-          <option name="labId" value="samsung" />
-          <option name="manufacturer" value="Samsung" />
-          <option name="name" value="Galaxy Z Fold6" />
-          <option name="screenDensity" value="420" />
-          <option name="screenX" value="1856" />
-          <option name="screenY" value="2160" />
-        </PersistentDeviceSelectionData>
-        <PersistentDeviceSelectionData>
           <option name="api" value="34" />
           <option name="brand" value="google" />
           <option name="codename" value="shiba" />
@@ -1348,57 +1152,6 @@
           <option name="screenY" value="2424" />
         </PersistentDeviceSelectionData>
         <PersistentDeviceSelectionData>
-          <option name="accessStatus">
-            <list>
-              <option value="EULA_NOT_ACCEPTED" />
-            </list>
-          </option>
-          <option name="api" value="35" />
-          <option name="brand" value="TECNO" />
-          <option name="codename" value="transsion_lab_tecno-km4" />
-          <option name="id" value="transsion_lab_tecno-km4" />
-          <option name="labId" value="transsion" />
-          <option name="manufacturer" value="TECNO" />
-          <option name="name" value="Spark Go 2" />
-          <option name="screenDensity" value="280" />
-          <option name="screenX" value="720" />
-          <option name="screenY" value="1600" />
-        </PersistentDeviceSelectionData>
-        <PersistentDeviceSelectionData>
-          <option name="accessStatus">
-            <list>
-              <option value="EULA_NOT_ACCEPTED" />
-            </list>
-          </option>
-          <option name="api" value="35" />
-          <option name="brand" value="vivo" />
-          <option name="codename" value="vivo_lab_v2342" />
-          <option name="id" value="vivo_lab_v2342" />
-          <option name="labId" value="vivo" />
-          <option name="manufacturer" value="vivo" />
-          <option name="name" value="V40 Lite" />
-          <option name="screenDensity" value="440" />
-          <option name="screenX" value="1080" />
-          <option name="screenY" value="2400" />
-        </PersistentDeviceSelectionData>
-        <PersistentDeviceSelectionData>
-          <option name="accessStatus">
-            <list>
-              <option value="EULA_NOT_ACCEPTED" />
-            </list>
-          </option>
-          <option name="api" value="35" />
-          <option name="brand" value="vivo" />
-          <option name="codename" value="vivo_lab_v2348" />
-          <option name="id" value="vivo_lab_v2348" />
-          <option name="labId" value="vivo" />
-          <option name="manufacturer" value="vivo" />
-          <option name="name" value="V40" />
-          <option name="screenDensity" value="420" />
-          <option name="screenX" value="1080" />
-          <option name="screenY" value="2400" />
-        </PersistentDeviceSelectionData>
-        <PersistentDeviceSelectionData>
           <option name="api" value="34" />
           <option name="brand" value="samsung" />
           <option name="codename" value="xcover7" />
@@ -1409,76 +1162,6 @@
           <option name="screenDensity" value="450" />
           <option name="screenX" value="1080" />
           <option name="screenY" value="2408" />
-        </PersistentDeviceSelectionData>
-        <PersistentDeviceSelectionData>
-          <option name="accessStatus">
-            <list>
-              <option value="EULA_NOT_ACCEPTED" />
-            </list>
-          </option>
-          <option name="api" value="34" />
-          <option name="brand" value="Xiaomi" />
-          <option name="codename" value="xiaomi_lab_garnet" />
-          <option name="id" value="xiaomi_lab_garnet" />
-          <option name="labId" value="xiaomi" />
-          <option name="manufacturer" value="Xiaomi" />
-          <option name="name" value="Redmi Note 13 Pro 5G" />
-          <option name="screenDensity" value="480" />
-          <option name="screenX" value="1220" />
-          <option name="screenY" value="2712" />
-        </PersistentDeviceSelectionData>
-        <PersistentDeviceSelectionData>
-          <option name="accessStatus">
-            <list>
-              <option value="EULA_NOT_ACCEPTED" />
-            </list>
-          </option>
-          <option name="api" value="34" />
-          <option name="brand" value="Xiaomi" />
-          <option name="codename" value="xiaomi_lab_pipa" />
-          <option name="formFactor" value="Tablet" />
-          <option name="id" value="xiaomi_lab_pipa" />
-          <option name="labId" value="xiaomi" />
-          <option name="manufacturer" value="Xiaomi" />
-          <option name="name" value="Pad 6" />
-          <option name="screenDensity" value="480" />
-          <option name="screenX" value="1220" />
-          <option name="screenY" value="2712" />
-        </PersistentDeviceSelectionData>
-        <PersistentDeviceSelectionData>
-          <option name="accessStatus">
-            <list>
-              <option value="EULA_NOT_ACCEPTED" />
-            </list>
-          </option>
-          <option name="api" value="35" />
-          <option name="brand" value="Xiaomi" />
-          <option name="codename" value="xiaomi_lab_ruyi" />
-          <option name="id" value="xiaomi_lab_ruyi" />
-          <option name="labId" value="xiaomi" />
-          <option name="manufacturer" value="Xiaomi" />
-          <option name="name" value="MIX Flip" />
-          <option name="screenDensity" value="520" />
-          <option name="screenX" value="1224" />
-          <option name="screenY" value="2912" />
-        </PersistentDeviceSelectionData>
-        <PersistentDeviceSelectionData>
-          <option name="accessStatus">
-            <list>
-              <option value="EULA_NOT_ACCEPTED" />
-            </list>
-          </option>
-          <option name="api" value="35" />
-          <option name="brand" value="Xiaomi" />
-          <option name="codename" value="xiaomi_lab_sheng" />
-          <option name="formFactor" value="Tablet" />
-          <option name="id" value="xiaomi_lab_sheng" />
-          <option name="labId" value="xiaomi" />
-          <option name="manufacturer" value="Xiaomi" />
-          <option name="name" value="Pad 6S Pro 12.4" />
-          <option name="screenDensity" value="400" />
-          <option name="screenX" value="2032" />
-          <option name="screenY" value="3048" />
         </PersistentDeviceSelectionData>
         <PersistentDeviceSelectionData>
           <option name="api" value="33" />
@@ -2033,9 +1716,9 @@
   <component name="libraryTable">
     <library name="Gradle: androidx.activity:activity-compose:1.12.1@aar" external-system-id="GRADLE">
       <CLASSES>
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/3939008e70b8edc4e97cb824aec13c16/transformed/activity-compose-1.12.1/res" />
-        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/3939008e70b8edc4e97cb824aec13c16/transformed/activity-compose-1.12.1/jars/classes.jar!/" />
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/3939008e70b8edc4e97cb824aec13c16/transformed/activity-compose-1.12.1/AndroidManifest.xml" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/183c5c7f919231697a49fe3257f7fe86/transformed/activity-compose-1.12.1/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/183c5c7f919231697a49fe3257f7fe86/transformed/activity-compose-1.12.1/res" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/183c5c7f919231697a49fe3257f7fe86/transformed/activity-compose-1.12.1/AndroidManifest.xml" />
       </CLASSES>
       <JAVADOC />
       <SOURCES>
@@ -2045,9 +1728,9 @@
     </library>
     <library name="Gradle: androidx.activity:activity:1.12.1@aar" external-system-id="GRADLE">
       <CLASSES>
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/b9dbe2729ce4f5340285d427c2eb7e93/transformed/activity-1.12.1/res" />
-        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/b9dbe2729ce4f5340285d427c2eb7e93/transformed/activity-1.12.1/jars/classes.jar!/" />
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/b9dbe2729ce4f5340285d427c2eb7e93/transformed/activity-1.12.1/AndroidManifest.xml" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/db0e4a27554b48e148b94c4300156893/transformed/activity-1.12.1/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/db0e4a27554b48e148b94c4300156893/transformed/activity-1.12.1/res" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/db0e4a27554b48e148b94c4300156893/transformed/activity-1.12.1/AndroidManifest.xml" />
       </CLASSES>
       <JAVADOC />
       <SOURCES>
@@ -2056,9 +1739,9 @@
     </library>
     <library name="Gradle: androidx.annotation:annotation-experimental:1.4.1@aar" external-system-id="GRADLE">
       <CLASSES>
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/22520940bba78af1b03d4c5b31b9f8a1/transformed/annotation-experimental-1.4.1/AndroidManifest.xml" />
-        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/22520940bba78af1b03d4c5b31b9f8a1/transformed/annotation-experimental-1.4.1/jars/classes.jar!/" />
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/22520940bba78af1b03d4c5b31b9f8a1/transformed/annotation-experimental-1.4.1/res" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/51c7c08ca06b2e363794bdaddc313419/transformed/annotation-experimental-1.4.1/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/51c7c08ca06b2e363794bdaddc313419/transformed/annotation-experimental-1.4.1/res" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/51c7c08ca06b2e363794bdaddc313419/transformed/annotation-experimental-1.4.1/AndroidManifest.xml" />
       </CLASSES>
       <JAVADOC />
       <SOURCES>
@@ -2077,9 +1760,9 @@
     </library>
     <library name="Gradle: androidx.appcompat:appcompat-resources:1.7.1@aar" external-system-id="GRADLE">
       <CLASSES>
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/9374330025f1938c9285b4330554db0f/transformed/appcompat-resources-1.7.1/res" />
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/9374330025f1938c9285b4330554db0f/transformed/appcompat-resources-1.7.1/AndroidManifest.xml" />
-        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/9374330025f1938c9285b4330554db0f/transformed/appcompat-resources-1.7.1/jars/classes.jar!/" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/25c347b3f3233a42f8cbe90e35e1cfde/transformed/appcompat-resources-1.7.1/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/25c347b3f3233a42f8cbe90e35e1cfde/transformed/appcompat-resources-1.7.1/res" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/25c347b3f3233a42f8cbe90e35e1cfde/transformed/appcompat-resources-1.7.1/AndroidManifest.xml" />
       </CLASSES>
       <JAVADOC />
       <SOURCES>
@@ -2088,12 +1771,12 @@
     </library>
     <library name="Gradle: androidx.appcompat:appcompat:1.7.1@aar" external-system-id="GRADLE">
       <ANNOTATIONS>
-        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/4543783f680731685b4b7077ae096955/transformed/appcompat-1.7.1/annotations.zip!/" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/3bb2045290ff27a51e596710d54b1319/transformed/appcompat-1.7.1/annotations.zip!/" />
       </ANNOTATIONS>
       <CLASSES>
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/4543783f680731685b4b7077ae096955/transformed/appcompat-1.7.1/res" />
-        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/4543783f680731685b4b7077ae096955/transformed/appcompat-1.7.1/jars/classes.jar!/" />
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/4543783f680731685b4b7077ae096955/transformed/appcompat-1.7.1/AndroidManifest.xml" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/3bb2045290ff27a51e596710d54b1319/transformed/appcompat-1.7.1/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/3bb2045290ff27a51e596710d54b1319/transformed/appcompat-1.7.1/res" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/3bb2045290ff27a51e596710d54b1319/transformed/appcompat-1.7.1/AndroidManifest.xml" />
       </CLASSES>
       <JAVADOC />
       <SOURCES>
@@ -2112,9 +1795,9 @@
     </library>
     <library name="Gradle: androidx.arch.core:core-runtime:2.2.0@aar" external-system-id="GRADLE">
       <CLASSES>
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/e306181481c174c7fcaf4ea2cfd8ea3b/transformed/core-runtime-2.2.0/AndroidManifest.xml" />
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/e306181481c174c7fcaf4ea2cfd8ea3b/transformed/core-runtime-2.2.0/res" />
-        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/e306181481c174c7fcaf4ea2cfd8ea3b/transformed/core-runtime-2.2.0/jars/classes.jar!/" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/5125bf48c2f046eb43bc05c54da17faa/transformed/core-runtime-2.2.0/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/5125bf48c2f046eb43bc05c54da17faa/transformed/core-runtime-2.2.0/res" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/5125bf48c2f046eb43bc05c54da17faa/transformed/core-runtime-2.2.0/AndroidManifest.xml" />
       </CLASSES>
       <JAVADOC />
       <SOURCES>
@@ -2123,9 +1806,9 @@
     </library>
     <library name="Gradle: androidx.cardview:cardview:1.0.0@aar" external-system-id="GRADLE">
       <CLASSES>
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/413e9353d92f6f523fe2e88730e5869c/transformed/cardview-1.0.0/AndroidManifest.xml" />
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/413e9353d92f6f523fe2e88730e5869c/transformed/cardview-1.0.0/res" />
-        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/413e9353d92f6f523fe2e88730e5869c/transformed/cardview-1.0.0/jars/classes.jar!/" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/ad77e73049c6e7b83951f1441ff1dbf5/transformed/cardview-1.0.0/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/ad77e73049c6e7b83951f1441ff1dbf5/transformed/cardview-1.0.0/res" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/ad77e73049c6e7b83951f1441ff1dbf5/transformed/cardview-1.0.0/AndroidManifest.xml" />
       </CLASSES>
       <JAVADOC />
       <SOURCES>
@@ -2144,8 +1827,8 @@
     </library>
     <library name="Gradle: androidx.compose.animation:animation-android:1.10.0@aar" external-system-id="GRADLE">
       <CLASSES>
-        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/4662f5cacd1987c4b54ea558808a13d3/transformed/animation/jars/classes.jar!/" />
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/4662f5cacd1987c4b54ea558808a13d3/transformed/animation/AndroidManifest.xml" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/2e2f050b2c0f28f7db5eda2eed04b6a1/transformed/animation/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/2e2f050b2c0f28f7db5eda2eed04b6a1/transformed/animation/AndroidManifest.xml" />
       </CLASSES>
       <JAVADOC />
       <SOURCES>
@@ -2155,8 +1838,8 @@
     </library>
     <library name="Gradle: androidx.compose.animation:animation-core-android:1.10.0@aar" external-system-id="GRADLE">
       <CLASSES>
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/2943eab5eb4288d9874f1b964632b034/transformed/animation-core/AndroidManifest.xml" />
-        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/2943eab5eb4288d9874f1b964632b034/transformed/animation-core/jars/classes.jar!/" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/7e7ea4af640c4555ca8797b67611ea59/transformed/animation-core/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/7e7ea4af640c4555ca8797b67611ea59/transformed/animation-core/AndroidManifest.xml" />
       </CLASSES>
       <JAVADOC />
       <SOURCES>
@@ -2166,9 +1849,9 @@
     </library>
     <library name="Gradle: androidx.compose.foundation:foundation-android:1.10.0@aar" external-system-id="GRADLE">
       <CLASSES>
-        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/8921442c6e374de02c55efb77ac903f1/transformed/foundation/jars/classes.jar!/" />
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/8921442c6e374de02c55efb77ac903f1/transformed/foundation/AndroidManifest.xml" />
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/8921442c6e374de02c55efb77ac903f1/transformed/foundation/res" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/092753121aba5e613a4a67e372608fb5/transformed/foundation/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/092753121aba5e613a4a67e372608fb5/transformed/foundation/res" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/092753121aba5e613a4a67e372608fb5/transformed/foundation/AndroidManifest.xml" />
       </CLASSES>
       <JAVADOC />
       <SOURCES>
@@ -2178,8 +1861,8 @@
     </library>
     <library name="Gradle: androidx.compose.foundation:foundation-layout-android:1.10.0@aar" external-system-id="GRADLE">
       <CLASSES>
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/92c71ae4e210aad238c0f78093c24715/transformed/foundation-layout/AndroidManifest.xml" />
-        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/92c71ae4e210aad238c0f78093c24715/transformed/foundation-layout/jars/classes.jar!/" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/550b0211bd0aa393481774c827a0a11b/transformed/foundation-layout/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/550b0211bd0aa393481774c827a0a11b/transformed/foundation-layout/AndroidManifest.xml" />
       </CLASSES>
       <JAVADOC />
       <SOURCES>
@@ -2189,9 +1872,9 @@
     </library>
     <library name="Gradle: androidx.compose.material:material-android:1.10.0@aar" external-system-id="GRADLE">
       <CLASSES>
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/53eece28b89dcc0907a1dc8e2bab7f13/transformed/material/res" />
-        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/53eece28b89dcc0907a1dc8e2bab7f13/transformed/material/jars/classes.jar!/" />
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/53eece28b89dcc0907a1dc8e2bab7f13/transformed/material/AndroidManifest.xml" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/a7ae6b4f0e706c21f9f6710f62a5f45a/transformed/material/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/a7ae6b4f0e706c21f9f6710f62a5f45a/transformed/material/res" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/a7ae6b4f0e706c21f9f6710f62a5f45a/transformed/material/AndroidManifest.xml" />
       </CLASSES>
       <JAVADOC />
       <SOURCES>
@@ -2201,9 +1884,9 @@
     </library>
     <library name="Gradle: androidx.compose.material:material-icons-core-android:1.7.8@aar" external-system-id="GRADLE">
       <CLASSES>
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/088b0b83eb7acd953ef435b7ec6be181/transformed/material-icons-core-release/AndroidManifest.xml" />
-        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/088b0b83eb7acd953ef435b7ec6be181/transformed/material-icons-core-release/jars/classes.jar!/" />
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/088b0b83eb7acd953ef435b7ec6be181/transformed/material-icons-core-release/res" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/93f54a4ff654c13668e02e84560cc2b8/transformed/material-icons-core-release/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/93f54a4ff654c13668e02e84560cc2b8/transformed/material-icons-core-release/res" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/93f54a4ff654c13668e02e84560cc2b8/transformed/material-icons-core-release/AndroidManifest.xml" />
       </CLASSES>
       <JAVADOC />
       <SOURCES>
@@ -2213,9 +1896,9 @@
     </library>
     <library name="Gradle: androidx.compose.material:material-icons-extended-android:1.7.8@aar" external-system-id="GRADLE">
       <CLASSES>
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/e3efb95a11cff86d0e38e98104e38ecc/transformed/material-icons-extended-release/AndroidManifest.xml" />
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/e3efb95a11cff86d0e38e98104e38ecc/transformed/material-icons-extended-release/res" />
-        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/e3efb95a11cff86d0e38e98104e38ecc/transformed/material-icons-extended-release/jars/classes.jar!/" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/61dded9fa966b5598f0baefd79e541d6/transformed/material-icons-extended-release/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/61dded9fa966b5598f0baefd79e541d6/transformed/material-icons-extended-release/res" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/61dded9fa966b5598f0baefd79e541d6/transformed/material-icons-extended-release/AndroidManifest.xml" />
       </CLASSES>
       <JAVADOC />
       <SOURCES>
@@ -2224,8 +1907,8 @@
     </library>
     <library name="Gradle: androidx.compose.material:material-ripple-android:1.10.0@aar" external-system-id="GRADLE">
       <CLASSES>
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/17d2889dc28d4091f72ed853562cfa6c/transformed/material-ripple/AndroidManifest.xml" />
-        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/17d2889dc28d4091f72ed853562cfa6c/transformed/material-ripple/jars/classes.jar!/" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/dc933d47a3978263f5cb2bf1fb335d17/transformed/material-ripple/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/dc933d47a3978263f5cb2bf1fb335d17/transformed/material-ripple/AndroidManifest.xml" />
       </CLASSES>
       <JAVADOC />
       <SOURCES>
@@ -2234,8 +1917,8 @@
     </library>
     <library name="Gradle: androidx.compose.runtime:runtime-android:1.10.0@aar" external-system-id="GRADLE">
       <CLASSES>
-        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/509837a54cec0cbf0161aa61a64a8566/transformed/runtime/jars/classes.jar!/" />
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/509837a54cec0cbf0161aa61a64a8566/transformed/runtime/AndroidManifest.xml" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/b54ba10926b268b284120f82b6748c99/transformed/runtime/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/b54ba10926b268b284120f82b6748c99/transformed/runtime/AndroidManifest.xml" />
       </CLASSES>
       <JAVADOC />
       <SOURCES>
@@ -2245,8 +1928,8 @@
     </library>
     <library name="Gradle: androidx.compose.runtime:runtime-annotation-android:1.10.0@aar" external-system-id="GRADLE">
       <CLASSES>
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/7de03201ae986913453e01b8fcd289c8/transformed/runtime-annotation/AndroidManifest.xml" />
-        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/7de03201ae986913453e01b8fcd289c8/transformed/runtime-annotation/jars/classes.jar!/" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/4462497dc52b903421942e4b8e97e935/transformed/runtime-annotation/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/4462497dc52b903421942e4b8e97e935/transformed/runtime-annotation/AndroidManifest.xml" />
       </CLASSES>
       <JAVADOC />
       <SOURCES>
@@ -2256,8 +1939,8 @@
     </library>
     <library name="Gradle: androidx.compose.runtime:runtime-retain-android:1.10.0@aar" external-system-id="GRADLE">
       <CLASSES>
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/d2c595be8b4e81bf44fa4d12616e01d1/transformed/runtime-retain/AndroidManifest.xml" />
-        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/d2c595be8b4e81bf44fa4d12616e01d1/transformed/runtime-retain/jars/classes.jar!/" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/a482473cbfdec7b654a9e7f1f03c55ab/transformed/runtime-retain/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/a482473cbfdec7b654a9e7f1f03c55ab/transformed/runtime-retain/AndroidManifest.xml" />
       </CLASSES>
       <JAVADOC />
       <SOURCES>
@@ -2267,9 +1950,9 @@
     </library>
     <library name="Gradle: androidx.compose.runtime:runtime-saveable-android:1.10.0@aar" external-system-id="GRADLE">
       <CLASSES>
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/f6cd49de896479458c7fdb74ad3dc227/transformed/runtime-saveable/AndroidManifest.xml" />
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/f6cd49de896479458c7fdb74ad3dc227/transformed/runtime-saveable/res" />
-        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/f6cd49de896479458c7fdb74ad3dc227/transformed/runtime-saveable/jars/classes.jar!/" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/507afc5ebe3b9da2e080dbf8d8405bcc/transformed/runtime-saveable/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/507afc5ebe3b9da2e080dbf8d8405bcc/transformed/runtime-saveable/res" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/507afc5ebe3b9da2e080dbf8d8405bcc/transformed/runtime-saveable/AndroidManifest.xml" />
       </CLASSES>
       <JAVADOC />
       <SOURCES>
@@ -2279,12 +1962,12 @@
     </library>
     <library name="Gradle: androidx.compose.ui:ui-android:1.10.0@aar" external-system-id="GRADLE">
       <ANNOTATIONS>
-        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/89f87758ed2dcbda95bd9a1dd2154174/transformed/ui/annotations.zip!/" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/3995ef22028eac49d72ced99145258d8/transformed/ui/annotations.zip!/" />
       </ANNOTATIONS>
       <CLASSES>
-        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/89f87758ed2dcbda95bd9a1dd2154174/transformed/ui/jars/classes.jar!/" />
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/89f87758ed2dcbda95bd9a1dd2154174/transformed/ui/AndroidManifest.xml" />
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/89f87758ed2dcbda95bd9a1dd2154174/transformed/ui/res" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/3995ef22028eac49d72ced99145258d8/transformed/ui/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/3995ef22028eac49d72ced99145258d8/transformed/ui/res" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/3995ef22028eac49d72ced99145258d8/transformed/ui/AndroidManifest.xml" />
       </CLASSES>
       <JAVADOC />
       <SOURCES>
@@ -2294,8 +1977,8 @@
     </library>
     <library name="Gradle: androidx.compose.ui:ui-geometry-android:1.10.0@aar" external-system-id="GRADLE">
       <CLASSES>
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/2f99f1e22d8f66a587515955ce1e5e1b/transformed/ui-geometry/AndroidManifest.xml" />
-        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/2f99f1e22d8f66a587515955ce1e5e1b/transformed/ui-geometry/jars/classes.jar!/" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/e3d9c3875d721eefcb91ac3b72420b66/transformed/ui-geometry/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/e3d9c3875d721eefcb91ac3b72420b66/transformed/ui-geometry/AndroidManifest.xml" />
       </CLASSES>
       <JAVADOC />
       <SOURCES>
@@ -2304,9 +1987,9 @@
     </library>
     <library name="Gradle: androidx.compose.ui:ui-graphics-android:1.10.0@aar" external-system-id="GRADLE">
       <CLASSES>
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/de9040e50a2cf7d1548405e9ba32fa8c/transformed/ui-graphics/AndroidManifest.xml" />
-        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/de9040e50a2cf7d1548405e9ba32fa8c/transformed/ui-graphics/jars/classes.jar!/" />
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/de9040e50a2cf7d1548405e9ba32fa8c/transformed/ui-graphics/res" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/093f3244ffa6b33b0a16ad713f89b69b/transformed/ui-graphics/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/093f3244ffa6b33b0a16ad713f89b69b/transformed/ui-graphics/res" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/093f3244ffa6b33b0a16ad713f89b69b/transformed/ui-graphics/AndroidManifest.xml" />
       </CLASSES>
       <JAVADOC />
       <SOURCES>
@@ -2316,9 +1999,9 @@
     </library>
     <library name="Gradle: androidx.compose.ui:ui-text-android:1.10.0@aar" external-system-id="GRADLE">
       <CLASSES>
-        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/d6e6e5a7b806be7e78ce034667dfb5e3/transformed/ui-text/jars/classes.jar!/" />
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/d6e6e5a7b806be7e78ce034667dfb5e3/transformed/ui-text/AndroidManifest.xml" />
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/d6e6e5a7b806be7e78ce034667dfb5e3/transformed/ui-text/res" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/2901afa976319b94028f9370c2516a53/transformed/ui-text/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/2901afa976319b94028f9370c2516a53/transformed/ui-text/res" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/2901afa976319b94028f9370c2516a53/transformed/ui-text/AndroidManifest.xml" />
       </CLASSES>
       <JAVADOC />
       <SOURCES>
@@ -2328,9 +2011,9 @@
     </library>
     <library name="Gradle: androidx.compose.ui:ui-tooling-android:1.10.0@aar" external-system-id="GRADLE">
       <CLASSES>
-        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/c04997fa4de61e44aba27f8e3488071b/transformed/ui-tooling/jars/classes.jar!/" />
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/c04997fa4de61e44aba27f8e3488071b/transformed/ui-tooling/res" />
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/c04997fa4de61e44aba27f8e3488071b/transformed/ui-tooling/AndroidManifest.xml" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/f5cde1b2ac386058cfd5543c2ce1c6d7/transformed/ui-tooling/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/f5cde1b2ac386058cfd5543c2ce1c6d7/transformed/ui-tooling/res" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/f5cde1b2ac386058cfd5543c2ce1c6d7/transformed/ui-tooling/AndroidManifest.xml" />
       </CLASSES>
       <JAVADOC />
       <SOURCES>
@@ -2340,8 +2023,8 @@
     </library>
     <library name="Gradle: androidx.compose.ui:ui-tooling-data-android:1.10.0@aar" external-system-id="GRADLE">
       <CLASSES>
-        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/ecac5190060c422c01d7edcc01091b38/transformed/ui-tooling-data/jars/classes.jar!/" />
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/ecac5190060c422c01d7edcc01091b38/transformed/ui-tooling-data/AndroidManifest.xml" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/c2ce12fd482789187b39e3b52084f317/transformed/ui-tooling-data/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/c2ce12fd482789187b39e3b52084f317/transformed/ui-tooling-data/AndroidManifest.xml" />
       </CLASSES>
       <JAVADOC />
       <SOURCES>
@@ -2350,8 +2033,8 @@
     </library>
     <library name="Gradle: androidx.compose.ui:ui-tooling-preview-android:1.10.0@aar" external-system-id="GRADLE">
       <CLASSES>
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/8d74c82b82e547c051e6ca7653c73426/transformed/ui-tooling-preview/AndroidManifest.xml" />
-        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/8d74c82b82e547c051e6ca7653c73426/transformed/ui-tooling-preview/jars/classes.jar!/" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/9f6706c72eaa238224651f73639be550/transformed/ui-tooling-preview/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/9f6706c72eaa238224651f73639be550/transformed/ui-tooling-preview/AndroidManifest.xml" />
       </CLASSES>
       <JAVADOC />
       <SOURCES>
@@ -2360,8 +2043,8 @@
     </library>
     <library name="Gradle: androidx.compose.ui:ui-unit-android:1.10.0@aar" external-system-id="GRADLE">
       <CLASSES>
-        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/5f0d27edf6cdfbe429ffd48fc1d40d3c/transformed/ui-unit/jars/classes.jar!/" />
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/5f0d27edf6cdfbe429ffd48fc1d40d3c/transformed/ui-unit/AndroidManifest.xml" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/0c3e16761835205fd155489cbca5f1cb/transformed/ui-unit/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/0c3e16761835205fd155489cbca5f1cb/transformed/ui-unit/AndroidManifest.xml" />
       </CLASSES>
       <JAVADOC />
       <SOURCES>
@@ -2371,8 +2054,8 @@
     </library>
     <library name="Gradle: androidx.compose.ui:ui-util-android:1.10.0@aar" external-system-id="GRADLE">
       <CLASSES>
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/10be42fb2ea4096e747594ddaa90abb5/transformed/ui-util/AndroidManifest.xml" />
-        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/10be42fb2ea4096e747594ddaa90abb5/transformed/ui-util/jars/classes.jar!/" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/9e82063da038efcf6b6fcdbd05548b78/transformed/ui-util/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/9e82063da038efcf6b6fcdbd05548b78/transformed/ui-util/AndroidManifest.xml" />
       </CLASSES>
       <JAVADOC />
       <SOURCES>
@@ -2381,21 +2064,21 @@
     </library>
     <library name="Gradle: androidx.constraintlayout:constraintlayout:2.1.0@aar" external-system-id="GRADLE">
       <CLASSES>
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/93d8d4bc6cdfdc1047d6032cff962b8e/transformed/constraintlayout-2.1.0/res" />
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/93d8d4bc6cdfdc1047d6032cff962b8e/transformed/constraintlayout-2.1.0/AndroidManifest.xml" />
-        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/93d8d4bc6cdfdc1047d6032cff962b8e/transformed/constraintlayout-2.1.0/jars/classes.jar!/" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/4bf86f6d09ae33e89afd7c2fe1d74ceb/transformed/constraintlayout-2.1.0/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/4bf86f6d09ae33e89afd7c2fe1d74ceb/transformed/constraintlayout-2.1.0/res" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/4bf86f6d09ae33e89afd7c2fe1d74ceb/transformed/constraintlayout-2.1.0/AndroidManifest.xml" />
       </CLASSES>
       <JAVADOC />
       <SOURCES />
     </library>
     <library name="Gradle: androidx.coordinatorlayout:coordinatorlayout:1.1.0@aar" external-system-id="GRADLE">
       <ANNOTATIONS>
-        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/354d2d69cf1321b5c60811107b0dd2c4/transformed/coordinatorlayout-1.1.0/annotations.zip!/" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/9ce8b952f0f24968baae1e7f481102f6/transformed/coordinatorlayout-1.1.0/annotations.zip!/" />
       </ANNOTATIONS>
       <CLASSES>
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/354d2d69cf1321b5c60811107b0dd2c4/transformed/coordinatorlayout-1.1.0/res" />
-        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/354d2d69cf1321b5c60811107b0dd2c4/transformed/coordinatorlayout-1.1.0/jars/classes.jar!/" />
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/354d2d69cf1321b5c60811107b0dd2c4/transformed/coordinatorlayout-1.1.0/AndroidManifest.xml" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/9ce8b952f0f24968baae1e7f481102f6/transformed/coordinatorlayout-1.1.0/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/9ce8b952f0f24968baae1e7f481102f6/transformed/coordinatorlayout-1.1.0/res" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/9ce8b952f0f24968baae1e7f481102f6/transformed/coordinatorlayout-1.1.0/AndroidManifest.xml" />
       </CLASSES>
       <JAVADOC />
       <SOURCES>
@@ -2404,9 +2087,9 @@
     </library>
     <library name="Gradle: androidx.core:core-ktx:1.16.0@aar" external-system-id="GRADLE">
       <CLASSES>
-        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/f634614b0a2702708b7784bf23c93f04/transformed/core-ktx-1.16.0/jars/classes.jar!/" />
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/f634614b0a2702708b7784bf23c93f04/transformed/core-ktx-1.16.0/res" />
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/f634614b0a2702708b7784bf23c93f04/transformed/core-ktx-1.16.0/AndroidManifest.xml" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/884a2ddff893d3e6335cf74e27b370f0/transformed/core-ktx-1.16.0/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/884a2ddff893d3e6335cf74e27b370f0/transformed/core-ktx-1.16.0/res" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/884a2ddff893d3e6335cf74e27b370f0/transformed/core-ktx-1.16.0/AndroidManifest.xml" />
       </CLASSES>
       <JAVADOC />
       <SOURCES>
@@ -2415,9 +2098,9 @@
     </library>
     <library name="Gradle: androidx.core:core-viewtree:1.0.0@aar" external-system-id="GRADLE">
       <CLASSES>
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/10e5b5006e060561eb5ae13114e4dc75/transformed/core-viewtree-1.0.0/res" />
-        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/10e5b5006e060561eb5ae13114e4dc75/transformed/core-viewtree-1.0.0/jars/classes.jar!/" />
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/10e5b5006e060561eb5ae13114e4dc75/transformed/core-viewtree-1.0.0/AndroidManifest.xml" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/1c96375d8f0c5c0f6863d8d93a4f3067/transformed/core-viewtree-1.0.0/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/1c96375d8f0c5c0f6863d8d93a4f3067/transformed/core-viewtree-1.0.0/res" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/1c96375d8f0c5c0f6863d8d93a4f3067/transformed/core-viewtree-1.0.0/AndroidManifest.xml" />
       </CLASSES>
       <JAVADOC />
       <SOURCES>
@@ -2426,12 +2109,12 @@
     </library>
     <library name="Gradle: androidx.core:core:1.16.0@aar" external-system-id="GRADLE">
       <ANNOTATIONS>
-        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/8510b8c6404631f633feaf840906a024/transformed/core-1.16.0/annotations.zip!/" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/79ef0e72f85ce79e9b0264533109a14a/transformed/core-1.16.0/annotations.zip!/" />
       </ANNOTATIONS>
       <CLASSES>
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/8510b8c6404631f633feaf840906a024/transformed/core-1.16.0/AndroidManifest.xml" />
-        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/8510b8c6404631f633feaf840906a024/transformed/core-1.16.0/jars/classes.jar!/" />
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/8510b8c6404631f633feaf840906a024/transformed/core-1.16.0/res" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/79ef0e72f85ce79e9b0264533109a14a/transformed/core-1.16.0/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/79ef0e72f85ce79e9b0264533109a14a/transformed/core-1.16.0/res" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/79ef0e72f85ce79e9b0264533109a14a/transformed/core-1.16.0/AndroidManifest.xml" />
       </CLASSES>
       <JAVADOC />
       <SOURCES>
@@ -2441,8 +2124,8 @@
     </library>
     <library name="Gradle: androidx.cursoradapter:cursoradapter:1.0.0@aar" external-system-id="GRADLE">
       <CLASSES>
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/56776e3e5c92768b90a4370487204d04/transformed/cursoradapter-1.0.0/AndroidManifest.xml" />
-        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/56776e3e5c92768b90a4370487204d04/transformed/cursoradapter-1.0.0/jars/classes.jar!/" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/c41f4739482d78ca9346e2e775cca6c4/transformed/cursoradapter-1.0.0/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/c41f4739482d78ca9346e2e775cca6c4/transformed/cursoradapter-1.0.0/AndroidManifest.xml" />
       </CLASSES>
       <JAVADOC />
       <SOURCES>
@@ -2451,8 +2134,8 @@
     </library>
     <library name="Gradle: androidx.customview:customview:1.1.0@aar" external-system-id="GRADLE">
       <CLASSES>
-        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/ac2190d0a804ff5fbd900ba7c5722ae4/transformed/customview-1.1.0/jars/classes.jar!/" />
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/ac2190d0a804ff5fbd900ba7c5722ae4/transformed/customview-1.1.0/AndroidManifest.xml" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/e1c2945571f7d95fe1d9d9fe2cb90a8c/transformed/customview-1.1.0/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/e1c2945571f7d95fe1d9d9fe2cb90a8c/transformed/customview-1.1.0/AndroidManifest.xml" />
       </CLASSES>
       <JAVADOC />
       <SOURCES>
@@ -2461,9 +2144,9 @@
     </library>
     <library name="Gradle: androidx.documentfile:documentfile:1.1.0@aar" external-system-id="GRADLE">
       <CLASSES>
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/f6c08f36b09f858cbe8a7abc9baa90cd/transformed/documentfile-1.1.0/res" />
-        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/f6c08f36b09f858cbe8a7abc9baa90cd/transformed/documentfile-1.1.0/jars/classes.jar!/" />
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/f6c08f36b09f858cbe8a7abc9baa90cd/transformed/documentfile-1.1.0/AndroidManifest.xml" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/a04a7ce5cf6d60a484821d0de575ef64/transformed/documentfile-1.1.0/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/a04a7ce5cf6d60a484821d0de575ef64/transformed/documentfile-1.1.0/res" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/a04a7ce5cf6d60a484821d0de575ef64/transformed/documentfile-1.1.0/AndroidManifest.xml" />
       </CLASSES>
       <JAVADOC />
       <SOURCES>
@@ -2472,12 +2155,12 @@
     </library>
     <library name="Gradle: androidx.drawerlayout:drawerlayout:1.1.1@aar" external-system-id="GRADLE">
       <ANNOTATIONS>
-        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/cba4491ce02a65d3dcd1aaf963f301f3/transformed/drawerlayout-1.1.1/annotations.zip!/" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/4430f07b5e1d3199020fe3d86d1fbfe6/transformed/drawerlayout-1.1.1/annotations.zip!/" />
       </ANNOTATIONS>
       <CLASSES>
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/cba4491ce02a65d3dcd1aaf963f301f3/transformed/drawerlayout-1.1.1/AndroidManifest.xml" />
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/cba4491ce02a65d3dcd1aaf963f301f3/transformed/drawerlayout-1.1.1/res" />
-        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/cba4491ce02a65d3dcd1aaf963f301f3/transformed/drawerlayout-1.1.1/jars/classes.jar!/" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/4430f07b5e1d3199020fe3d86d1fbfe6/transformed/drawerlayout-1.1.1/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/4430f07b5e1d3199020fe3d86d1fbfe6/transformed/drawerlayout-1.1.1/res" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/4430f07b5e1d3199020fe3d86d1fbfe6/transformed/drawerlayout-1.1.1/AndroidManifest.xml" />
       </CLASSES>
       <JAVADOC />
       <SOURCES>
@@ -2486,9 +2169,9 @@
     </library>
     <library name="Gradle: androidx.dynamicanimation:dynamicanimation:1.1.0@aar" external-system-id="GRADLE">
       <CLASSES>
-        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/e540db01aab5e5908cdbca60e278d377/transformed/dynamicanimation-1.1.0/jars/classes.jar!/" />
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/e540db01aab5e5908cdbca60e278d377/transformed/dynamicanimation-1.1.0/AndroidManifest.xml" />
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/e540db01aab5e5908cdbca60e278d377/transformed/dynamicanimation-1.1.0/res" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/632235b9c4fe260a2862ef6103dc6038/transformed/dynamicanimation-1.1.0/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/632235b9c4fe260a2862ef6103dc6038/transformed/dynamicanimation-1.1.0/res" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/632235b9c4fe260a2862ef6103dc6038/transformed/dynamicanimation-1.1.0/AndroidManifest.xml" />
       </CLASSES>
       <JAVADOC />
       <SOURCES>
@@ -2497,12 +2180,12 @@
     </library>
     <library name="Gradle: androidx.fragment:fragment:1.5.4@aar" external-system-id="GRADLE">
       <ANNOTATIONS>
-        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/bccf86ceef1adeb8b1d0551fa70df13d/transformed/fragment-1.5.4/annotations.zip!/" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/92d076ac5e25ee0317405a8c56c2dc1c/transformed/fragment-1.5.4/annotations.zip!/" />
       </ANNOTATIONS>
       <CLASSES>
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/bccf86ceef1adeb8b1d0551fa70df13d/transformed/fragment-1.5.4/res" />
-        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/bccf86ceef1adeb8b1d0551fa70df13d/transformed/fragment-1.5.4/jars/classes.jar!/" />
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/bccf86ceef1adeb8b1d0551fa70df13d/transformed/fragment-1.5.4/AndroidManifest.xml" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/92d076ac5e25ee0317405a8c56c2dc1c/transformed/fragment-1.5.4/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/92d076ac5e25ee0317405a8c56c2dc1c/transformed/fragment-1.5.4/res" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/92d076ac5e25ee0317405a8c56c2dc1c/transformed/fragment-1.5.4/AndroidManifest.xml" />
       </CLASSES>
       <JAVADOC />
       <SOURCES>
@@ -2511,9 +2194,9 @@
     </library>
     <library name="Gradle: androidx.graphics:graphics-shapes-android:1.0.1@aar" external-system-id="GRADLE">
       <CLASSES>
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/9931fee25c35b5b2bbbe2f8821f5d279/transformed/graphics-shapes-release/res" />
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/9931fee25c35b5b2bbbe2f8821f5d279/transformed/graphics-shapes-release/AndroidManifest.xml" />
-        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/9931fee25c35b5b2bbbe2f8821f5d279/transformed/graphics-shapes-release/jars/classes.jar!/" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/85d9a523d1a6d725883f74e03276a39b/transformed/graphics-shapes-release/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/85d9a523d1a6d725883f74e03276a39b/transformed/graphics-shapes-release/res" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/85d9a523d1a6d725883f74e03276a39b/transformed/graphics-shapes-release/AndroidManifest.xml" />
       </CLASSES>
       <JAVADOC />
       <SOURCES>
@@ -2522,8 +2205,8 @@
     </library>
     <library name="Gradle: androidx.interpolator:interpolator:1.0.0@aar" external-system-id="GRADLE">
       <CLASSES>
-        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/a28da9d250601b092e9d3b856e4ada91/transformed/interpolator-1.0.0/jars/classes.jar!/" />
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/a28da9d250601b092e9d3b856e4ada91/transformed/interpolator-1.0.0/AndroidManifest.xml" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/2fccdf345249488709b68e7311bdaf88/transformed/interpolator-1.0.0/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/2fccdf345249488709b68e7311bdaf88/transformed/interpolator-1.0.0/AndroidManifest.xml" />
       </CLASSES>
       <JAVADOC />
       <SOURCES />
@@ -2540,9 +2223,9 @@
     </library>
     <library name="Gradle: androidx.lifecycle:lifecycle-livedata-core-ktx:2.10.0@aar" external-system-id="GRADLE">
       <CLASSES>
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/fa83280a725d0f4aa0a648f0ad6d50f4/transformed/lifecycle-livedata-core-ktx-2.10.0/res" />
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/fa83280a725d0f4aa0a648f0ad6d50f4/transformed/lifecycle-livedata-core-ktx-2.10.0/AndroidManifest.xml" />
-        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/fa83280a725d0f4aa0a648f0ad6d50f4/transformed/lifecycle-livedata-core-ktx-2.10.0/jars/classes.jar!/" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/f449718dafac500e86f7e9b41853976a/transformed/lifecycle-livedata-core-ktx-2.10.0/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/f449718dafac500e86f7e9b41853976a/transformed/lifecycle-livedata-core-ktx-2.10.0/res" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/f449718dafac500e86f7e9b41853976a/transformed/lifecycle-livedata-core-ktx-2.10.0/AndroidManifest.xml" />
       </CLASSES>
       <JAVADOC />
       <SOURCES>
@@ -2551,9 +2234,9 @@
     </library>
     <library name="Gradle: androidx.lifecycle:lifecycle-livedata-core:2.10.0@aar" external-system-id="GRADLE">
       <CLASSES>
-        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/e64715af87462bab74697f8c70a5c230/transformed/lifecycle-livedata-core-2.10.0/jars/classes.jar!/" />
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/e64715af87462bab74697f8c70a5c230/transformed/lifecycle-livedata-core-2.10.0/res" />
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/e64715af87462bab74697f8c70a5c230/transformed/lifecycle-livedata-core-2.10.0/AndroidManifest.xml" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/3d70ac8434b5cff802946364b0aba523/transformed/lifecycle-livedata-core-2.10.0/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/3d70ac8434b5cff802946364b0aba523/transformed/lifecycle-livedata-core-2.10.0/res" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/3d70ac8434b5cff802946364b0aba523/transformed/lifecycle-livedata-core-2.10.0/AndroidManifest.xml" />
       </CLASSES>
       <JAVADOC />
       <SOURCES>
@@ -2562,18 +2245,18 @@
     </library>
     <library name="Gradle: androidx.lifecycle:lifecycle-livedata:2.10.0@aar" external-system-id="GRADLE">
       <CLASSES>
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/3d8c16b8c25e54a35968d72628b492f7/transformed/lifecycle-livedata-2.10.0/AndroidManifest.xml" />
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/3d8c16b8c25e54a35968d72628b492f7/transformed/lifecycle-livedata-2.10.0/res" />
-        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/3d8c16b8c25e54a35968d72628b492f7/transformed/lifecycle-livedata-2.10.0/jars/classes.jar!/" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/c0f43634ebe0fe3a07be3addd6d18470/transformed/lifecycle-livedata-2.10.0/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/c0f43634ebe0fe3a07be3addd6d18470/transformed/lifecycle-livedata-2.10.0/res" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/c0f43634ebe0fe3a07be3addd6d18470/transformed/lifecycle-livedata-2.10.0/AndroidManifest.xml" />
       </CLASSES>
       <JAVADOC />
       <SOURCES />
     </library>
     <library name="Gradle: androidx.lifecycle:lifecycle-runtime-android:2.10.0@aar" external-system-id="GRADLE">
       <CLASSES>
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/aa3ff68d9adcf1b9a2842d54716e7a78/transformed/lifecycle-runtime/res" />
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/aa3ff68d9adcf1b9a2842d54716e7a78/transformed/lifecycle-runtime/AndroidManifest.xml" />
-        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/aa3ff68d9adcf1b9a2842d54716e7a78/transformed/lifecycle-runtime/jars/classes.jar!/" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/9f3f559944a6ecffe6c94caf0d35e555/transformed/lifecycle-runtime/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/9f3f559944a6ecffe6c94caf0d35e555/transformed/lifecycle-runtime/res" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/9f3f559944a6ecffe6c94caf0d35e555/transformed/lifecycle-runtime/AndroidManifest.xml" />
       </CLASSES>
       <JAVADOC />
       <SOURCES>
@@ -2582,8 +2265,8 @@
     </library>
     <library name="Gradle: androidx.lifecycle:lifecycle-runtime-compose-android:2.10.0@aar" external-system-id="GRADLE">
       <CLASSES>
-        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/5e75b5457b1f54c0d6df2ffe05683a26/transformed/lifecycle-runtime-compose/jars/classes.jar!/" />
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/5e75b5457b1f54c0d6df2ffe05683a26/transformed/lifecycle-runtime-compose/AndroidManifest.xml" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/13fa9c29618b7b31fe2fca03d07b9a6a/transformed/lifecycle-runtime-compose/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/13fa9c29618b7b31fe2fca03d07b9a6a/transformed/lifecycle-runtime-compose/AndroidManifest.xml" />
       </CLASSES>
       <JAVADOC />
       <SOURCES>
@@ -2593,8 +2276,8 @@
     </library>
     <library name="Gradle: androidx.lifecycle:lifecycle-runtime-ktx-android:2.10.0@aar" external-system-id="GRADLE">
       <CLASSES>
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/37320c8bd498092c4b39a2d1b16b33c7/transformed/lifecycle-runtime-ktx/AndroidManifest.xml" />
-        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/37320c8bd498092c4b39a2d1b16b33c7/transformed/lifecycle-runtime-ktx/jars/classes.jar!/" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/c24586f20efb32ed7ff7d0e2e5ed34fa/transformed/lifecycle-runtime-ktx/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/c24586f20efb32ed7ff7d0e2e5ed34fa/transformed/lifecycle-runtime-ktx/AndroidManifest.xml" />
       </CLASSES>
       <JAVADOC />
       <SOURCES>
@@ -2603,9 +2286,9 @@
     </library>
     <library name="Gradle: androidx.lifecycle:lifecycle-viewmodel-android:2.10.0@aar" external-system-id="GRADLE">
       <CLASSES>
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/23e7358a821527c6b6d3948d395882ab/transformed/lifecycle-viewmodel/res" />
-        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/23e7358a821527c6b6d3948d395882ab/transformed/lifecycle-viewmodel/jars/classes.jar!/" />
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/23e7358a821527c6b6d3948d395882ab/transformed/lifecycle-viewmodel/AndroidManifest.xml" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/6e1d658b9e791237326ac35be12c11be/transformed/lifecycle-viewmodel/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/6e1d658b9e791237326ac35be12c11be/transformed/lifecycle-viewmodel/res" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/6e1d658b9e791237326ac35be12c11be/transformed/lifecycle-viewmodel/AndroidManifest.xml" />
       </CLASSES>
       <JAVADOC />
       <SOURCES>
@@ -2614,8 +2297,8 @@
     </library>
     <library name="Gradle: androidx.lifecycle:lifecycle-viewmodel-compose-android:2.10.0@aar" external-system-id="GRADLE">
       <CLASSES>
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/ce324e1ca8457c8f54894d59ebbc0e4a/transformed/lifecycle-viewmodel-compose/AndroidManifest.xml" />
-        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/ce324e1ca8457c8f54894d59ebbc0e4a/transformed/lifecycle-viewmodel-compose/jars/classes.jar!/" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/597482738bbaef9e621ab597a894a333/transformed/lifecycle-viewmodel-compose/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/597482738bbaef9e621ab597a894a333/transformed/lifecycle-viewmodel-compose/AndroidManifest.xml" />
       </CLASSES>
       <JAVADOC />
       <SOURCES>
@@ -2625,8 +2308,8 @@
     </library>
     <library name="Gradle: androidx.lifecycle:lifecycle-viewmodel-savedstate-android:2.10.0@aar" external-system-id="GRADLE">
       <CLASSES>
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/970be80feca428ed8aa1c6cfd1ccb896/transformed/lifecycle-viewmodel-savedstate/AndroidManifest.xml" />
-        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/970be80feca428ed8aa1c6cfd1ccb896/transformed/lifecycle-viewmodel-savedstate/jars/classes.jar!/" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/28fb03bb711abd3101e4bc2e01e0477a/transformed/lifecycle-viewmodel-savedstate/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/28fb03bb711abd3101e4bc2e01e0477a/transformed/lifecycle-viewmodel-savedstate/AndroidManifest.xml" />
       </CLASSES>
       <JAVADOC />
       <SOURCES>
@@ -2636,19 +2319,33 @@
     </library>
     <library name="Gradle: androidx.loader:loader:1.0.0@aar" external-system-id="GRADLE">
       <CLASSES>
-        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/652a407f7ca45d4927f54ef3fe515f56/transformed/loader-1.0.0/jars/classes.jar!/" />
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/652a407f7ca45d4927f54ef3fe515f56/transformed/loader-1.0.0/AndroidManifest.xml" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/2ac38f644981e2a6a47ca1228108b7bc/transformed/loader-1.0.0/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/2ac38f644981e2a6a47ca1228108b7bc/transformed/loader-1.0.0/AndroidManifest.xml" />
       </CLASSES>
       <JAVADOC />
       <SOURCES>
         <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.loader/loader/1.0.0/b9ef587f3e46c7fe5b00264989764e43ff45cada/loader-1.0.0-sources.jar!/" />
       </SOURCES>
     </library>
+    <library name="Gradle: androidx.media:media:1.7.1@aar" external-system-id="GRADLE">
+      <ANNOTATIONS>
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/1a9b10158309d9060c8b83dfbed31ba6/transformed/media-1.7.1/annotations.zip!/" />
+      </ANNOTATIONS>
+      <CLASSES>
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/1a9b10158309d9060c8b83dfbed31ba6/transformed/media-1.7.1/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/1a9b10158309d9060c8b83dfbed31ba6/transformed/media-1.7.1/res" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/1a9b10158309d9060c8b83dfbed31ba6/transformed/media-1.7.1/AndroidManifest.xml" />
+      </CLASSES>
+      <JAVADOC />
+      <SOURCES>
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/androidx.media/media/1.7.1/24977782d96ffe2d70bb976794c182b5ea6d8f97/media-1.7.1-sources.jar!/" />
+      </SOURCES>
+    </library>
     <library name="Gradle: androidx.navigationevent:navigationevent-android:1.0.1@aar" external-system-id="GRADLE">
       <CLASSES>
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/d45c09f397d1739b073fabf85fcce1ee/transformed/navigationevent/AndroidManifest.xml" />
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/d45c09f397d1739b073fabf85fcce1ee/transformed/navigationevent/res" />
-        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/d45c09f397d1739b073fabf85fcce1ee/transformed/navigationevent/jars/classes.jar!/" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/9a25b6f7cec0276336b9d54e6359c05b/transformed/navigationevent/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/9a25b6f7cec0276336b9d54e6359c05b/transformed/navigationevent/res" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/9a25b6f7cec0276336b9d54e6359c05b/transformed/navigationevent/AndroidManifest.xml" />
       </CLASSES>
       <JAVADOC />
       <SOURCES>
@@ -2658,8 +2355,8 @@
     </library>
     <library name="Gradle: androidx.navigationevent:navigationevent-compose-android:1.0.1@aar" external-system-id="GRADLE">
       <CLASSES>
-        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/19bfc2f4ea26f6e394143ebce58618c7/transformed/navigationevent-compose/jars/classes.jar!/" />
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/19bfc2f4ea26f6e394143ebce58618c7/transformed/navigationevent-compose/AndroidManifest.xml" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/d71730ecfcd2ff5e347cccb2bb9d7e6a/transformed/navigationevent-compose/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/d71730ecfcd2ff5e347cccb2bb9d7e6a/transformed/navigationevent-compose/AndroidManifest.xml" />
       </CLASSES>
       <JAVADOC />
       <SOURCES>
@@ -2669,12 +2366,12 @@
     </library>
     <library name="Gradle: androidx.recyclerview:recyclerview:1.2.1@aar" external-system-id="GRADLE">
       <ANNOTATIONS>
-        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/2a632520abe8adb33e1dd9f47e25e800/transformed/recyclerview-1.2.1/annotations.zip!/" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/c1cf1d1ca61e4ce0873d256d9b1233ad/transformed/recyclerview-1.2.1/annotations.zip!/" />
       </ANNOTATIONS>
       <CLASSES>
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/2a632520abe8adb33e1dd9f47e25e800/transformed/recyclerview-1.2.1/res" />
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/2a632520abe8adb33e1dd9f47e25e800/transformed/recyclerview-1.2.1/AndroidManifest.xml" />
-        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/2a632520abe8adb33e1dd9f47e25e800/transformed/recyclerview-1.2.1/jars/classes.jar!/" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/c1cf1d1ca61e4ce0873d256d9b1233ad/transformed/recyclerview-1.2.1/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/c1cf1d1ca61e4ce0873d256d9b1233ad/transformed/recyclerview-1.2.1/res" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/c1cf1d1ca61e4ce0873d256d9b1233ad/transformed/recyclerview-1.2.1/AndroidManifest.xml" />
       </CLASSES>
       <JAVADOC />
       <SOURCES>
@@ -2693,9 +2390,9 @@
     </library>
     <library name="Gradle: androidx.savedstate:savedstate-android:1.4.0@aar" external-system-id="GRADLE">
       <CLASSES>
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/641469afdf5a7fa0fcd7599bcdd6bb00/transformed/savedstate/AndroidManifest.xml" />
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/641469afdf5a7fa0fcd7599bcdd6bb00/transformed/savedstate/res" />
-        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/641469afdf5a7fa0fcd7599bcdd6bb00/transformed/savedstate/jars/classes.jar!/" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/55c2b7bf04816df9cb705d146f5e4a5e/transformed/savedstate/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/55c2b7bf04816df9cb705d146f5e4a5e/transformed/savedstate/res" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/55c2b7bf04816df9cb705d146f5e4a5e/transformed/savedstate/AndroidManifest.xml" />
       </CLASSES>
       <JAVADOC />
       <SOURCES>
@@ -2705,8 +2402,8 @@
     </library>
     <library name="Gradle: androidx.savedstate:savedstate-compose-android:1.4.0@aar" external-system-id="GRADLE">
       <CLASSES>
-        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/bc452b0ee00a5ba3431f3afac0c1bf76/transformed/savedstate-compose/jars/classes.jar!/" />
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/bc452b0ee00a5ba3431f3afac0c1bf76/transformed/savedstate-compose/AndroidManifest.xml" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/e04b8366b03f1179edd98f5c9eb8761b/transformed/savedstate-compose/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/e04b8366b03f1179edd98f5c9eb8761b/transformed/savedstate-compose/AndroidManifest.xml" />
       </CLASSES>
       <JAVADOC />
       <SOURCES>
@@ -2716,12 +2413,12 @@
     </library>
     <library name="Gradle: androidx.transition:transition:1.5.0@aar" external-system-id="GRADLE">
       <ANNOTATIONS>
-        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/1e5ceb4fa85cc42a874ab153bc885c6d/transformed/transition-1.5.0/annotations.zip!/" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/67ab07facfb2522b1252b8fb5bb197fd/transformed/transition-1.5.0/annotations.zip!/" />
       </ANNOTATIONS>
       <CLASSES>
-        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/1e5ceb4fa85cc42a874ab153bc885c6d/transformed/transition-1.5.0/jars/classes.jar!/" />
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/1e5ceb4fa85cc42a874ab153bc885c6d/transformed/transition-1.5.0/res" />
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/1e5ceb4fa85cc42a874ab153bc885c6d/transformed/transition-1.5.0/AndroidManifest.xml" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/67ab07facfb2522b1252b8fb5bb197fd/transformed/transition-1.5.0/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/67ab07facfb2522b1252b8fb5bb197fd/transformed/transition-1.5.0/res" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/67ab07facfb2522b1252b8fb5bb197fd/transformed/transition-1.5.0/AndroidManifest.xml" />
       </CLASSES>
       <JAVADOC />
       <SOURCES>
@@ -2730,12 +2427,12 @@
     </library>
     <library name="Gradle: androidx.transition:transition:1.6.0@aar" external-system-id="GRADLE">
       <ANNOTATIONS>
-        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/2dc28544a331b1a318604e962d46920f/transformed/transition-1.6.0/annotations.zip!/" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/dcbbd1940b2c5ebc58ac5b0c947a1951/transformed/transition-1.6.0/annotations.zip!/" />
       </ANNOTATIONS>
       <CLASSES>
-        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/2dc28544a331b1a318604e962d46920f/transformed/transition-1.6.0/jars/classes.jar!/" />
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/2dc28544a331b1a318604e962d46920f/transformed/transition-1.6.0/AndroidManifest.xml" />
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/2dc28544a331b1a318604e962d46920f/transformed/transition-1.6.0/res" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/dcbbd1940b2c5ebc58ac5b0c947a1951/transformed/transition-1.6.0/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/dcbbd1940b2c5ebc58ac5b0c947a1951/transformed/transition-1.6.0/res" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/dcbbd1940b2c5ebc58ac5b0c947a1951/transformed/transition-1.6.0/AndroidManifest.xml" />
       </CLASSES>
       <JAVADOC />
       <SOURCES>
@@ -2744,8 +2441,8 @@
     </library>
     <library name="Gradle: androidx.vectordrawable:vectordrawable-animated:1.1.0@aar" external-system-id="GRADLE">
       <CLASSES>
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/1060fa50e5516eb49f64059066e878ae/transformed/vectordrawable-animated-1.1.0/AndroidManifest.xml" />
-        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/1060fa50e5516eb49f64059066e878ae/transformed/vectordrawable-animated-1.1.0/jars/classes.jar!/" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/ee8ebe6079e58de03714c7f1a36fbae2/transformed/vectordrawable-animated-1.1.0/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/ee8ebe6079e58de03714c7f1a36fbae2/transformed/vectordrawable-animated-1.1.0/AndroidManifest.xml" />
       </CLASSES>
       <JAVADOC />
       <SOURCES>
@@ -2754,8 +2451,8 @@
     </library>
     <library name="Gradle: androidx.vectordrawable:vectordrawable:1.1.0@aar" external-system-id="GRADLE">
       <CLASSES>
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/3e5eb917999253dbf5bd31ef114c1db0/transformed/vectordrawable-1.1.0/AndroidManifest.xml" />
-        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/3e5eb917999253dbf5bd31ef114c1db0/transformed/vectordrawable-1.1.0/jars/classes.jar!/" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/ade4b7e3cc6560660cf7e41cdb82986b/transformed/vectordrawable-1.1.0/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/ade4b7e3cc6560660cf7e41cdb82986b/transformed/vectordrawable-1.1.0/AndroidManifest.xml" />
       </CLASSES>
       <JAVADOC />
       <SOURCES>
@@ -2764,8 +2461,8 @@
     </library>
     <library name="Gradle: androidx.versionedparcelable:versionedparcelable:1.1.1@aar" external-system-id="GRADLE">
       <CLASSES>
-        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/4e44ef6d837fe602ff27acc869e0b4a7/transformed/versionedparcelable-1.1.1/jars/classes.jar!/" />
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/4e44ef6d837fe602ff27acc869e0b4a7/transformed/versionedparcelable-1.1.1/AndroidManifest.xml" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/c670ff0af0837bcd6b23708bd9751c6f/transformed/versionedparcelable-1.1.1/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/c670ff0af0837bcd6b23708bd9751c6f/transformed/versionedparcelable-1.1.1/AndroidManifest.xml" />
       </CLASSES>
       <JAVADOC />
       <SOURCES>
@@ -2774,12 +2471,12 @@
     </library>
     <library name="Gradle: androidx.viewpager2:viewpager2:1.0.0@aar" external-system-id="GRADLE">
       <ANNOTATIONS>
-        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/5e70cb22c78ec2e32dc7db730bc61ccb/transformed/viewpager2-1.0.0/annotations.zip!/" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/f7402e562a46850cb98d1f0cd3519a28/transformed/viewpager2-1.0.0/annotations.zip!/" />
       </ANNOTATIONS>
       <CLASSES>
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/5e70cb22c78ec2e32dc7db730bc61ccb/transformed/viewpager2-1.0.0/AndroidManifest.xml" />
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/5e70cb22c78ec2e32dc7db730bc61ccb/transformed/viewpager2-1.0.0/res" />
-        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/5e70cb22c78ec2e32dc7db730bc61ccb/transformed/viewpager2-1.0.0/jars/classes.jar!/" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/f7402e562a46850cb98d1f0cd3519a28/transformed/viewpager2-1.0.0/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/f7402e562a46850cb98d1f0cd3519a28/transformed/viewpager2-1.0.0/res" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/f7402e562a46850cb98d1f0cd3519a28/transformed/viewpager2-1.0.0/AndroidManifest.xml" />
       </CLASSES>
       <JAVADOC />
       <SOURCES>
@@ -2788,8 +2485,8 @@
     </library>
     <library name="Gradle: androidx.viewpager:viewpager:1.0.0@aar" external-system-id="GRADLE">
       <CLASSES>
-        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/d45fd48b3789e369cdac53a6d8ba0ce3/transformed/viewpager-1.0.0/jars/classes.jar!/" />
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/d45fd48b3789e369cdac53a6d8ba0ce3/transformed/viewpager-1.0.0/AndroidManifest.xml" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/87a560183cc4ebdf6edb9141d0b6c26e/transformed/viewpager-1.0.0/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/87a560183cc4ebdf6edb9141d0b6c26e/transformed/viewpager-1.0.0/AndroidManifest.xml" />
       </CLASSES>
       <JAVADOC />
       <SOURCES>
@@ -2798,24 +2495,24 @@
     </library>
     <library name="Gradle: com.google.android.material:material:1.13.0@aar" external-system-id="GRADLE">
       <ANNOTATIONS>
-        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/d48ec6edee9d62bc0e547b36aefc01b3/transformed/material-1.13.0/annotations.zip!/" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/1a9101e5cfd763a96865f932fb873cd6/transformed/material-1.13.0/annotations.zip!/" />
       </ANNOTATIONS>
       <CLASSES>
-        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/d48ec6edee9d62bc0e547b36aefc01b3/transformed/material-1.13.0/jars/classes.jar!/" />
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/d48ec6edee9d62bc0e547b36aefc01b3/transformed/material-1.13.0/res" />
-        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/d48ec6edee9d62bc0e547b36aefc01b3/transformed/material-1.13.0/AndroidManifest.xml" />
+        <root url="jar://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/1a9101e5cfd763a96865f932fb873cd6/transformed/material-1.13.0/jars/classes.jar!/" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/1a9101e5cfd763a96865f932fb873cd6/transformed/material-1.13.0/res" />
+        <root url="file://$USER_HOME$/.gradle/caches/9.0-milestone-1/transforms/1a9101e5cfd763a96865f932fb873cd6/transformed/material-1.13.0/AndroidManifest.xml" />
       </CLASSES>
       <JAVADOC />
       <SOURCES />
     </library>
-    <library name="Gradle: org.jetbrains.kotlin:kotlin-stdlib:2.2.10" type="java-imported" external-system-id="GRADLE">
-      <properties groupId="org.jetbrains.kotlin" artifactId="kotlin-stdlib" version="2.2.10" baseVersion="2.2.10" />
+    <library name="Gradle: org.jetbrains.kotlin:kotlin-stdlib:2.3.0" type="java-imported" external-system-id="GRADLE">
+      <properties groupId="org.jetbrains.kotlin" artifactId="kotlin-stdlib" version="2.3.0" baseVersion="2.3.0" />
       <CLASSES>
-        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-stdlib/2.2.10/30de6faa127a4a012db8e71bf1b9c0a99b1402b2/kotlin-stdlib-2.2.10.jar!/" />
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-stdlib/2.3.0/ebc4eb2b6e6c91b6c844c1e3183920d86f2ef656/kotlin-stdlib-2.3.0.jar!/" />
       </CLASSES>
       <JAVADOC />
       <SOURCES>
-        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-stdlib/2.2.10/dda98d7e091155886352a100dbca778315baa0f7/kotlin-stdlib-2.2.10-sources.jar!/" />
+        <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-stdlib/2.3.0/7056b959f91689b8aaf9f1e018b010fc0c4b6f47/kotlin-stdlib-2.3.0-sources.jar!/" />
       </SOURCES>
     </library>
     <library name="Gradle: org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0" type="java-imported" external-system-id="GRADLE">

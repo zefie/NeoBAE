@@ -55,8 +55,6 @@ else
   endif
 endif
 
-$(info "Building miniBAE version $(VERSION)")
-
 NDK_TOOLCHAIN_VERSION=clang
 
 LOCAL_PATH := $(call my-dir)/../../BAE_Source
