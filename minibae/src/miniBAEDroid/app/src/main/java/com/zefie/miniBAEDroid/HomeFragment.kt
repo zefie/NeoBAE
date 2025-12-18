@@ -3653,15 +3653,42 @@ fun FolderSongListItem(
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Music icon (clickable to play)
-            IconButton(onClick = onClick) {
-                Icon(
-                    Icons.Filled.MusicNote,
-                    contentDescription = null,
-                    tint = MaterialTheme.colors.primary,
-                    modifier = Modifier.size(40.dp)
-                )
+            // File type badge (clickable to play)
+            Box(
+                modifier = Modifier
+                    .size(width = 50.dp, height = 40.dp)
+                    .clickable(onClick = onClick),
+                contentAlignment = Alignment.Center
+            ) {
+                Surface(
+                    modifier = Modifier
+                        .wrapContentSize()
+                        .padding(4.dp),
+                    shape = RoundedCornerShape(4.dp),
+                    color = MaterialTheme.colors.primary.copy(alpha = 0.15f)
+                ) {
+                    val fileExt = item.file.extension.uppercase()
+                    val displayText = when (fileExt) {
+                        "MID" -> "MIDI"
+                        "MIDI" -> "MIDI"
+                        "RMI" -> "RMI"
+                        "RMF" -> "RMF"
+                        "XMF" -> "XMF"
+                        "MXMF" -> "MXMF"
+                        "KAR" -> "KAR"
+                        else -> fileExt
+                    }
+                    Text(
+                        text = displayText,
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colors.primary,
+                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                    )
+                }
             }
+            
+            Spacer(modifier = Modifier.width(4.dp))
             
             // Song info (clickable to play)
             Column(
