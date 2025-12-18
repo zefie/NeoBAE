@@ -65,6 +65,7 @@ static XBOOL g_temp_sf_is_tempfile = FALSE;
 // When loading DLS banks, FluidSynth will emit an error log
 // "Not a SoundFont file". This is expected; ignore it.
 static XBOOL g_suppress_not_sf2_error = FALSE;
+static XBOOL g_fluidsynth_soundfont_is_dls = FALSE;
 // Flag to prevent audio thread from accessing synth during unload (prevents race condition crashes)
 static volatile XBOOL g_fluidsynth_unloading = FALSE;
 
@@ -184,6 +185,7 @@ OPErr GM_InitializeSF2(void)
     fluid_settings_setint(g_fluidsynth_settings, "synth.midi-channels", BAE_MAX_MIDI_CHANNELS);
     fluid_settings_setnum(g_fluidsynth_settings, "synth.gain", XFIXED_TO_FLOAT(g_fluidsynth_master_volume));
     fluid_settings_setint(g_fluidsynth_settings, "synth.audio-channels", 1);  // Sets the number of stereo channel pairs. So 1 is actually 2 channels (a stereo pair).
+    fluid_settings_setint(g_fluidsynth_settings, "synth.reverb.active", 0);
     
     // Create FluidSynth synthesizer
     g_fluidsynth_synth = new_fluid_synth(g_fluidsynth_settings);
@@ -410,8 +412,10 @@ OPErr GM_LoadSF2SoundfontFromMemory(const unsigned char *data, size_t size) {
         //isSF2 = (type[0]=='s' && type[1]=='f' && type[2]=='b' && type[3]=='k');
         isDLS = (type[0]=='D' && type[1]=='L' && type[2]=='S' && type[3]==' ');
     }
+    g_fluidsynth_soundfont_is_dls = FALSE;
     //if (isDLS && is_libinstpatch_loaded()) {
-    if (isDLS) {    
+    if (isDLS) {
+        g_fluidsynth_soundfont_is_dls = TRUE;    
         // fluidsynth requires a path-based load for DLS files
         GM_UnloadSF2Soundfont();
         int fd;
@@ -540,13 +544,37 @@ OPErr GM_LoadSF2Soundfont(const char* sf2_path)
     
     // Unload any existing soundfont
     GM_UnloadSF2Soundfont();
-    
+
+    // Try to open the file and read first 16 bytes
+    FILE *sf2_file = fopen(sf2_path, "rb");
+    if (!sf2_file) {
+        BAE_PRINTF("[FluidMem] Failed to open SF2 file: %s\n", sf2_path);
+        return BAD_FILE;
+    }
+    unsigned char sf2_header[16] = {0};
+    size_t bytes_read = fread(sf2_header, 1, 16, sf2_file);
+    fclose(sf2_file);
+    if (bytes_read < 16) {
+        BAE_PRINTF("[FluidMem] Could not read 16 bytes from SF2 file: %s\n", sf2_path);
+        return BAD_FILE;
+    }
+    BAE_PRINTF("[FluidMem] First 16 bytes of SF2 file (hex): ");
+    for (size_t i = 0; i < 16; i++) {
+        BAE_PRINTF("%02X ", sf2_header[i]);
+    }
+    BAE_PRINTF("\n");
 
     // Load new soundfont
     g_fluidsynth_soundfont_id = fluid_synth_sfload(g_fluidsynth_synth, sf2_path, TRUE);
     if (g_fluidsynth_soundfont_id == FLUID_FAILED)
     {
         return GENERAL_BAD;
+    }
+    XBOOL isRIFF = (sf2_header[0]=='R' && sf2_header[1]=='I' && sf2_header[2]=='F' && sf2_header[3]=='F');
+    XBOOL isDLS = FALSE;
+    if (isRIFF) {
+        const unsigned char *type = sf2_header + 8;
+        g_fluidsynth_soundfont_is_dls = (type[0]=='D' && type[1]=='L' && type[2]=='S' && type[3]==' ');
     }
     
     // Store path
@@ -917,7 +945,7 @@ void GM_SF2_ProcessProgramChange(GM_Song* pSong, int16_t channel, int32_t progra
         // This is the standard GM fallback: if variation is missing, use standard instrument
         if (!percIntent && useBank != 0) {
             if (PV_SF2_PresetExists(0, useProg)) {
-                BAE_PRINTF("[FluidMem] Fallback: bank %d prog %d not found; using bank 0 prog %d\n", useBank, useProg, useProg);
+                BAE_PRINTF("[FluidProgChange] Fallback: bank %d prog %d not found; using bank 0 prog %d\n", useBank, useProg, useProg);
                 useBank = 0;
                 found = TRUE;
             }
@@ -928,7 +956,7 @@ void GM_SF2_ProcessProgramChange(GM_Song* pSong, int16_t channel, int32_t progra
             int altProg;
             if (PV_SF2_FindFirstPresetInBank(useBank, &altProg)) {
                 // Use first program available in requested bank
-                BAE_PRINTF("[FluidMem] Fallback: bank %d has no prog %d; using prog %d\n", useBank, useProg, altProg);
+                BAE_PRINTF("[FluidProgChange] Fallback: bank %d has no prog %d; using prog %d\n", useBank, useProg, altProg);
                 useProg = altProg;
                 found = TRUE;
             }
@@ -937,7 +965,17 @@ void GM_SF2_ProcessProgramChange(GM_Song* pSong, int16_t channel, int32_t progra
         // 3. If still not found, try bank 0 (or 128) default
         if (!found) {
             int fbBank = -1, fbProg = 0;
-            if (percIntent && PV_SF2_FindFirstPresetInBank(128, &fbProg)) {
+            if (g_fluidsynth_soundfont_is_dls) {
+                // DLS special case: try bank 121/120 first
+                fbProg = useProg;
+                if (!percIntent && PV_SF2_FindFirstPresetInBank(121, &fbProg)) {
+                    fbBank = 121;
+                    fbProg = useProg;
+                } else if (percIntent && PV_SF2_FindFirstPresetInBank(120, &fbProg)) {
+                    fbBank = 120;
+                    fbProg = useProg;
+                }
+            } else if (percIntent && PV_SF2_FindFirstPresetInBank(128, &fbProg)) {
                 fbBank = 128;
             } else if (!percIntent && PV_SF2_FindFirstPresetInBank(0, &fbProg)) {
                 fbBank = 0;
@@ -945,7 +983,7 @@ void GM_SF2_ProcessProgramChange(GM_Song* pSong, int16_t channel, int32_t progra
                 // leave as found
             }
             if (fbBank >= 0) {
-                BAE_PRINTF("[FluidMem] Fallback: no presets in bank %d; selecting %d:%d\n", useBank, fbBank, fbProg);
+                BAE_PRINTF("[FluidProgChange] Fallback: no presets in bank %d; selecting %d:%d\n", useBank, fbBank, fbProg);
                 useBank = fbBank; useProg = fbProg;
             }
         }
