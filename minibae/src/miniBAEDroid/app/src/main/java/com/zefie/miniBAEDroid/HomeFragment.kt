@@ -248,7 +248,6 @@ class HomeFragment : Fragment() {
             viewModel.addToPlaylist(item)
             viewModel.playAtIndex(viewModel.playlist.size - 1)
             startPlayback(file)
-            savePlaylist()
             saveFavorites()
         } catch (ex: Exception) {
             Toast.makeText(requireContext(), "Failed to load file: ${ex.message}", Toast.LENGTH_SHORT).show()
@@ -353,20 +352,6 @@ class HomeFragment : Fragment() {
         super.onDestroy()
     }
 
-    private fun savePlaylist() {
-        try {
-            val prefs = requireContext().getSharedPreferences("miniBAE_prefs", Context.MODE_PRIVATE)
-            val paths = viewModel.playlist.map { it.file.absolutePath }
-            val json = paths.joinToString("|||")
-            prefs.edit()
-                .putString("savedPlaylist", json)
-                .putInt("savedCurrentIndex", viewModel.currentIndex)
-                .apply()
-        } catch (ex: Exception) {
-            android.util.Log.e("HomeFragment", "Failed to save playlist: ${ex.message}")
-        }
-    }
-    
     private fun saveFavorites() {
         try {
             val prefs = requireContext().getSharedPreferences("miniBAE_prefs", Context.MODE_PRIVATE)
@@ -391,32 +376,6 @@ class HomeFragment : Fragment() {
         }
     }
     
-    private fun loadPlaylist() {
-        try {
-            val prefs = requireContext().getSharedPreferences("miniBAE_prefs", Context.MODE_PRIVATE)
-            val json = prefs.getString("savedPlaylist", null)
-            if (json != null && json.isNotEmpty()) {
-                val paths = json.split("|||")
-                val items = paths.mapNotNull { path ->
-                    val file = File(path)
-                    if (file.exists()) PlaylistItem(file) else null
-                }
-                if (items.isNotEmpty()) {
-                    viewModel.addAllToPlaylist(items)
-                    val savedIndex = prefs.getInt("savedCurrentIndex", 0)
-                    if (savedIndex in viewModel.playlist.indices) {
-                        viewModel.currentIndex = savedIndex
-                        viewModel.getCurrentItem()?.let { item ->
-                            viewModel.currentTitle = item.title
-                        }
-                    }
-                }
-            }
-        } catch (ex: Exception) {
-            android.util.Log.e("HomeFragment", "Failed to load playlist: ${ex.message}")
-        }
-    }
-
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         if (pickedFolderUri == null) {
             try {
@@ -659,21 +618,8 @@ class HomeFragment : Fragment() {
                             val item = PlaylistItem(file)
                             if (!viewModel.playlist.any { it.id == item.id }) {
                                 viewModel.addToPlaylist(item)
-                                savePlaylist()
                                 Toast.makeText(requireContext(), "Added to playlist", Toast.LENGTH_SHORT).show()
                             }
-                        },
-                        onRemoveFromPlaylist = { index ->
-                            viewModel.removeFromPlaylist(index)
-                            savePlaylist()
-                        },
-                        onClearPlaylist = {
-                            viewModel.clearPlaylist()
-                            savePlaylist()
-                        },
-                        onMoveItem = { from, to ->
-                            viewModel.moveItem(from, to)
-                            savePlaylist()
                         },
                         bankName = currentBankName.value,
                         isLoadingBank = isLoadingBank.value,
@@ -818,7 +764,7 @@ class HomeFragment : Fragment() {
     }
     
     private fun playFileFromBrowser(file: File) {
-        // Create a single-file playlist and play it
+        // Use the current folder or search results as the playlist
         if (currentSong?.hasEmbeddedBank() == true) {
             android.util.Log.d("HomeFragment", "The previous song had an embedded bank, restoring last known bank")
             val prefs = requireContext().getSharedPreferences("miniBAE_prefs", Context.MODE_PRIVATE)
@@ -827,11 +773,46 @@ class HomeFragment : Fragment() {
         }
         stopPlayback(true)
         viewModel.clearPlaylist()
-        val item = PlaylistItem(file)
-        viewModel.addToPlaylist(item)
-        viewModel.playAtIndex(0)
-        startPlayback(file)
-        savePlaylist()
+        
+        // Determine the source list based on current screen
+        val sourceList = when (viewModel.currentScreen) {
+            NavigationScreen.SEARCH -> {
+                // For search, we need to get the current results
+                val results = viewModel.searchResults.value
+                results.filter { !it.isFolder }
+            }
+            NavigationScreen.FAVORITES -> {
+                // Get favorites as PlaylistItems
+                viewModel.favorites.mapNotNull { path ->
+                    val f = File(path)
+                    if (f.exists() && !f.isDirectory) {
+                        PlaylistItem(f)
+                    } else {
+                        null
+                    }
+                }
+            }
+            else -> {
+                // Use folder files as playlist (HOME screen)
+                viewModel.folderFiles.filter { !it.isFolder }
+            }
+        }
+        
+        // Add all files from source list to playlist
+        viewModel.addAllToPlaylist(sourceList)
+        
+        // Find the index of the clicked file in the playlist
+        val index = viewModel.playlist.indexOfFirst { it.file.absolutePath == file.absolutePath }
+        if (index >= 0) {
+            viewModel.playAtIndex(index)
+            startPlayback(file)
+        } else {
+            // Fallback: if file not found, just play it as a single item
+            val item = PlaylistItem(file)
+            viewModel.addToPlaylist(item)
+            viewModel.playAtIndex(viewModel.playlist.size - 1)
+            startPlayback(file)
+        }
     }
     
     private fun shuffleAndPlay() {
@@ -1169,7 +1150,6 @@ class HomeFragment : Fragment() {
                 viewModel.addToPlaylist(item)
             }
         }
-        savePlaylist()
         Toast.makeText(requireContext(), "Added ${midiFiles.size} files to playlist", Toast.LENGTH_SHORT).show()
     }
     
@@ -1207,7 +1187,6 @@ class HomeFragment : Fragment() {
                 viewModel.addToPlaylist(item)
             }
         }
-        savePlaylist()
         Toast.makeText(requireContext(), "Added ${midiFiles.size} files to playlist (recursive scan)", Toast.LENGTH_SHORT).show()
     }
     
@@ -1985,9 +1964,6 @@ fun NewMusicPlayerScreen(
     onShufflePlay: () -> Unit,
     onNavigateToFolder: (String) -> Unit,
     onAddToPlaylist: (File) -> Unit,
-    onRemoveFromPlaylist: (Int) -> Unit,
-    onClearPlaylist: () -> Unit,
-    onMoveItem: (Int, Int) -> Unit,
     bankName: String,
     isLoadingBank: Boolean,
     isExporting: Boolean,
@@ -2153,16 +2129,6 @@ fun NewMusicPlayerScreen(
                         unselectedContentColor = Color.Gray
                     )
                     BottomNavigationItem(
-                        icon = { Icon(Icons.AutoMirrored.Filled.QueueMusic, contentDescription = "Playlist") },
-                        selected = !viewModel.showFullPlayer && viewModel.currentScreen == NavigationScreen.PLAYLIST,
-                        onClick = {
-                            viewModel.showFullPlayer = false
-                            onNavigate(NavigationScreen.PLAYLIST)
-                        },
-                        selectedContentColor = MaterialTheme.colors.primary,
-                        unselectedContentColor = Color.Gray
-                    )
-                    BottomNavigationItem(
                         icon = { Icon(Icons.Filled.Favorite, contentDescription = "Favorites") },
                         selected = !viewModel.showFullPlayer && viewModel.currentScreen == NavigationScreen.FAVORITES,
                         onClick = {
@@ -2212,14 +2178,6 @@ fun NewMusicPlayerScreen(
                     onPlaylistItemClick = onPlaylistItemClick,
                     onToggleFavorite = onToggleFavorite,
                     onAddToPlaylist = onAddToPlaylist
-                )
-                NavigationScreen.PLAYLIST -> PlaylistScreenContent(
-                    viewModel = viewModel,
-                    onPlaylistItemClick = onPlaylistItemClick,
-                    onToggleFavorite = onToggleFavorite,
-                    onRemoveFromPlaylist = onRemoveFromPlaylist,
-                    onClearPlaylist = onClearPlaylist,
-                    onMoveItem = onMoveItem
                 )
                 NavigationScreen.FAVORITES -> FavoritesScreenContent(
                     viewModel = viewModel,
@@ -2875,67 +2833,6 @@ fun HomeScreenContent(
 }
 
 @Composable
-fun PlaylistScreenContent(
-    viewModel: MusicPlayerViewModel,
-    onPlaylistItemClick: (File) -> Unit,
-    onToggleFavorite: (String) -> Unit,
-    onRemoveFromPlaylist: (Int) -> Unit,
-    onClearPlaylist: () -> Unit,
-    onMoveItem: (Int, Int) -> Unit
-) {
-    Column(modifier = Modifier.fillMaxSize()) {
-        if (viewModel.playlist.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(Icons.AutoMirrored.Filled.QueueMusic, contentDescription = null, modifier = Modifier.size(64.dp), tint = Color.Gray)
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text("Playlist is empty", color = Color.Gray)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text("Add songs from Home or Favorites", fontSize = 12.sp, color = Color.Gray)
-                }
-            }
-        } else {
-            // Header with clear button
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    "${viewModel.playlist.size} songs",
-                    style = MaterialTheme.typography.h6,
-                    color = MaterialTheme.colors.onBackground
-                )
-                OutlinedButton(onClick = onClearPlaylist) {
-                    Text("Clear All")
-                }
-            }
-            
-            LazyColumn(modifier = Modifier.fillMaxSize()) {
-                itemsIndexed(viewModel.playlist) { index, item ->
-                    PlaylistSongListItem(
-                        item = item,
-                        isCurrentlyPlaying = index == viewModel.currentIndex,
-                        isFavorite = viewModel.isFavorite(item.path),
-                        onClick = { 
-                            viewModel.playAtIndex(index)
-                            onPlaylistItemClick(item.file)
-                        },
-                        onToggleFavorite = { onToggleFavorite(item.path) },
-                        onRemove = { onRemoveFromPlaylist(index) }
-                    )
-                    if (index < viewModel.playlist.size - 1) {
-                        Divider(color = Color.Gray.copy(alpha = 0.2f))
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
 fun SearchScreenContent(
     viewModel: MusicPlayerViewModel,
     onPlaylistItemClick: (File) -> Unit,
@@ -3364,69 +3261,6 @@ fun FolderSongListItem(
 }
 
 @Composable
-fun PlaylistSongListItem(
-    item: PlaylistItem,
-    isCurrentlyPlaying: Boolean,
-    isFavorite: Boolean,
-    onClick: () -> Unit,
-    onToggleFavorite: () -> Unit,
-    onRemove: () -> Unit
-) {
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-        color = if (isCurrentlyPlaying) MaterialTheme.colors.primary.copy(alpha = 0.1f) else Color.Transparent
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Music icon
-            Icon(
-                if (isCurrentlyPlaying) Icons.Filled.PlayArrow else Icons.Filled.MusicNote,
-                contentDescription = null,
-                tint = if (isCurrentlyPlaying) MaterialTheme.colors.primary else MaterialTheme.colors.onBackground.copy(alpha = 0.6f),
-                modifier = Modifier.size(40.dp)
-            )
-            
-            Spacer(modifier = Modifier.width(12.dp))
-            
-            // Song info
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = item.title,
-                    fontSize = 14.sp,
-                    fontWeight = if (isCurrentlyPlaying) FontWeight.Bold else FontWeight.Normal,
-                    color = if (isCurrentlyPlaying) MaterialTheme.colors.primary else MaterialTheme.colors.onBackground,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            
-            // Favorite button
-            IconButton(onClick = onToggleFavorite) {
-                Icon(
-                    if (isFavorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
-                    contentDescription = "Favorite",
-                    tint = if (isFavorite) MaterialTheme.colors.primary else MaterialTheme.colors.onBackground.copy(alpha = 0.6f)
-                )
-            }
-            
-            // Remove button
-            IconButton(onClick = onRemove) {
-                Icon(
-                    Icons.Filled.Close,
-                    contentDescription = "Remove",
-                    tint = MaterialTheme.colors.onBackground.copy(alpha = 0.6f)
-                )
-            }
-        }
-    }
-}
-
 private fun formatTime(ms: Int): String {
     if (ms <= 0) return "0:00"
     val totalSeconds = ms / 1000

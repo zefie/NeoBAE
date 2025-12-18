@@ -2016,9 +2016,6 @@ static void PV_ProcessNoteOn(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTra
                         return;
                     }
                     uint32_t bankId = 0, progId = 0, noteId = 0;
-                    BAE_PRINTF("[NoteOn] songFlags=0x%X, RMFInstrumentIDs[0]=%u, checking RMF=%s\n", 
-                               pSong->songFlags, pSong->RMFInstrumentIDs[0],
-                               (pSong->songFlags == SONG_FLAG_IS_RMF) ? "YES" : "NO");
                     if (pSong->songFlags == SONG_FLAG_IS_RMF) {
                         INT16 thePatch = PV_ConvertPatchBank(pSong, note, MIDIChannel);                        
                         TranslateInstrumentToBankProgram(thePatch, &bankId, &progId, &noteId);

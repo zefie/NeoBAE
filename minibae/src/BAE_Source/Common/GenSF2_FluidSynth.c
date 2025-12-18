@@ -392,16 +392,7 @@ OPErr GM_LoadSF2SoundfontFromMemory(const unsigned char *data, size_t size) {
     }
 
     // Debug: Print first 16 bytes of the buffer
-    BAE_PRINTF("[FluidMem] Loading %zu bytes from memory. First 16 bytes (hex): ", size);
-    for (size_t i = 0; i < 16 && i < size; i++) {
-        BAE_PRINTF("%02X ", data[i]);
-    }
-    BAE_PRINTF("\n[FluidMem] First 16 bytes (ASCII): ");
-    for (size_t i = 0; i < 16 && i < size; i++) {
-        char c = (data[i] >= 32 && data[i] <= 126) ? (char)data[i] : '.';
-        BAE_PRINTF("%c", c);
-    }
-    BAE_PRINTF("\n");
+    BAE_PRINTF("[FluidMem] Loading %zu bytes from memory", size);
     
     // Detect container type
     XBOOL isRIFF = (size >= 12 && data[0]=='R' && data[1]=='I' && data[2]=='F' && data[3]=='F');
@@ -564,17 +555,18 @@ OPErr GM_LoadSF2Soundfont(const char* sf2_path)
     }
     BAE_PRINTF("\n");
 
+    g_fluidsynth_soundfont_is_dls = false;
+    XBOOL isRIFF = (sf2_header[0]=='R' && sf2_header[1]=='I' && sf2_header[2]=='F' && sf2_header[3]=='F');
+    if (isRIFF) {
+        const unsigned char *type = sf2_header + 8;
+        g_fluidsynth_soundfont_is_dls = (type[0]=='D' && type[1]=='L' && type[2]=='S' && type[3]==' ');
+    }
+
     // Load new soundfont
     g_fluidsynth_soundfont_id = fluid_synth_sfload(g_fluidsynth_synth, sf2_path, TRUE);
     if (g_fluidsynth_soundfont_id == FLUID_FAILED)
     {
         return GENERAL_BAD;
-    }
-    XBOOL isRIFF = (sf2_header[0]=='R' && sf2_header[1]=='I' && sf2_header[2]=='F' && sf2_header[3]=='F');
-    XBOOL isDLS = FALSE;
-    if (isRIFF) {
-        const unsigned char *type = sf2_header + 8;
-        g_fluidsynth_soundfont_is_dls = (type[0]=='D' && type[1]=='L' && type[2]=='S' && type[3]==' ');
     }
     
     // Store path
