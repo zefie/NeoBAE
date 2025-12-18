@@ -972,13 +972,16 @@ class HomeFragment : Fragment() {
     
     // Helper functions to handle both Song and Sound uniformly
     private fun isPlaybackPaused(): Boolean {
+        if (!ensureMixerExists()) {
+            return false
+        }
         return currentSong?.isPaused() ?: currentSound?.isPaused() ?: false
     }
     
     private fun scheduleMixerCleanup() {
         mixerIdleJob?.cancel()
         mixerIdleJob = lifecycleScope.launch {
-            delay(60000) // 1 minute
+            delay(6000) // 1 minute
             Mixer.delete()
             android.util.Log.d("HomeFragment", "Mixer deleted due to inactivity")
         }
@@ -990,17 +993,26 @@ class HomeFragment : Fragment() {
     }
 
     private fun pausePlayback() {
+        if (!ensureMixerExists()) {
+            return
+        }
         currentSong?.pause()
         currentSound?.pause()
     }
     
     private fun resumePlayback() {
+        if (!ensureMixerExists()) {
+            return
+        }
         cancelMixerCleanup()
         currentSong?.resume()
         currentSound?.resume()
     }
     
     private fun stopPlayback(delete: Boolean = true) {
+        if (!ensureMixerExists()) {
+            return
+        }
         currentSong?.stop(delete)
         currentSound?.stop(delete)
         if (delete) {
@@ -1011,19 +1023,33 @@ class HomeFragment : Fragment() {
     }
     
     private fun getPlaybackPositionMs(): Int {
+        if (!ensureMixerExists()) {
+            return 0
+        }
         return currentSong?.getPositionMs() ?: currentSound?.getPositionMs() ?: 0
     }
     
     private fun getPlaybackLengthMs(): Int {
+        if (!ensureMixerExists()) {
+            return 0
+        }
         return currentSong?.getLengthMs() ?: currentSound?.getLengthMs() ?: 0
     }
     
     private fun seekPlaybackToMs(ms: Int) {
         // Sound doesn't support seeking yet
-        currentSong?.seekToMs(ms)
+        if (!ensureMixerExists()) {
+            return
+        }
+        if (hasActivePlayback() && currentSong?.isDone == false) {
+            currentSong?.seekToMs(ms)
+        }
     }
     
     private fun hasActivePlayback(): Boolean {
+        if (!ensureMixerExists()) {
+            return false
+        }
         return currentSong != null || currentSound != null
     }
     
