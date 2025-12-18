@@ -3258,7 +3258,13 @@ fun SearchScreenContent(
     }
     
     // Trigger search when query changes or when showing all results
-    LaunchedEffect(viewModel.searchQuery, searchResultLimit) {
+    // IMPORTANT: Wait for database to be ready before searching
+    LaunchedEffect(viewModel.searchQuery, searchResultLimit, viewModel.isDatabaseReady) {
+        // Only search if database is initialized
+        if (!viewModel.isDatabaseReady) {
+            return@LaunchedEffect
+        }
+        
         if (viewModel.searchQuery.isNotEmpty()) {
             viewModel.searchFilesInDatabase(viewModel.searchQuery, viewModel.currentFolderPath, searchResultLimit)
         } else {
