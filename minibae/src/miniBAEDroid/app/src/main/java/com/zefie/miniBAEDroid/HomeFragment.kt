@@ -754,13 +754,8 @@ class HomeFragment : Fragment() {
     }
     
     private fun playPrevious() {
-        if (viewModel.currentPositionMs > 3000) {
-            seekPlaybackToMs(0)
-            viewModel.currentPositionMs = 0
-        } else if (viewModel.hasPrevious()) {
-            viewModel.playPrevious()
-            viewModel.getCurrentItem()?.let { startPlayback(it.file) }
-        }
+        viewModel.playPrevious()
+        viewModel.getCurrentItem()?.let { startPlayback(it.file) }
     }
     
     private fun playFileFromBrowser(file: File) {
