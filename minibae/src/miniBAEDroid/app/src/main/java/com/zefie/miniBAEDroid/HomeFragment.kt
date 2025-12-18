@@ -3377,7 +3377,10 @@ fun SearchScreenContent(
                     },
                     colors = TextFieldDefaults.textFieldColors(
                         backgroundColor = MaterialTheme.colors.surface,
-                        textColor = MaterialTheme.colors.onSurface
+                        textColor = MaterialTheme.colors.onSurface,
+                        focusedIndicatorColor = Color.Transparent,
+                        unfocusedIndicatorColor = Color.Transparent,
+                        disabledIndicatorColor = Color.Transparent
                     ),
                     shape = RoundedCornerShape(24.dp),
                     enabled = !indexingProgress.isIndexing,
@@ -3397,6 +3400,8 @@ fun SearchScreenContent(
                     )
                 }
             }
+            
+            Divider(color = Color.Gray.copy(alpha = 0.2f))
         } else {
             // Portrait: vertical layout
             TextField(
