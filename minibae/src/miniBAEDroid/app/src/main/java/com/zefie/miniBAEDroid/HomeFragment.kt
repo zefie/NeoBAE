@@ -905,6 +905,19 @@ class HomeFragment : Fragment() {
                         song.seekToMs(0)
                         val r = song.start()
                         if (r == 0) {
+                            if (song.hasEmbeddedBank()) {
+                                currentBankName.value = "Embedded Bank"
+                            }
+                            if (song.isSF2Song()) {
+                                song.pause()
+                                song.seekToMs(0)
+                                // Workaround for Fluidsynth drop: call start() again after 250ms
+                                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                                    try {
+                                        song.resume()
+                                    } catch (_: Exception) {}
+                                }, 250)
+                            }
                             viewModel.isPlaying = true
                             viewModel.currentTitle = file.nameWithoutExtension
                         } else {

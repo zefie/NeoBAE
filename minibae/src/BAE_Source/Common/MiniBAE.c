@@ -7076,9 +7076,9 @@ BAEResult BAESong_LoadMidiFromMemory(BAESong song, void const *pMidiData, uint32
                 {
                     PV_BAESong_Unload(song);
 #if USE_SF2_SUPPORT == TRUE
-                    // if (GM_SF2_IsActive()) {
-                    //    GM_ResetSF2();
-                    // }
+                    if (GM_SF2_IsActive()) {
+                        GM_ResetSF2();
+                    }
 #endif                     
                     pSong = GM_LoadSong(song->mixer->pMixer,
                                         NULL,
@@ -7423,9 +7423,9 @@ BAEResult BAESong_LoadRmfFromMemory(BAESong song, void const *pRMFData, uint32_t
                     {
                         PV_BAESong_Unload(song);
 #if USE_SF2_SUPPORT == TRUE
-                        // if (GM_SF2_IsActive()) {
-                        //    GM_ResetSF2();
-                        // }
+                        if (GM_SF2_IsActive()) {
+                            GM_ResetSF2();
+                        }
 #endif                         
                         pSong = GM_LoadSong(song->mixer->pMixer,
                                             NULL,
@@ -7488,7 +7488,6 @@ BAEResult BAESong_LoadRmfFromMemory(BAESong song, void const *pRMFData, uint32_t
                         if (song->pSong)
                         {
                             PV_BAESong_Unload(song);
-                            // if (GM_SF2_IsActive()) { GM_ResetSF2(); }
                             pSong = GM_LoadSong(song->mixer->pMixer,
                                                 NULL,
                                                 song,
@@ -7610,9 +7609,9 @@ BAEResult BAESong_LoadRmfFromFile(BAESong song, BAEPathName filePath, int16_t so
                 {
                     PV_BAESong_Unload(song);
 #if USE_SF2_SUPPORT == TRUE
-                    // if (GM_SF2_IsActive()) {
-                    //    GM_ResetSF2();
-                    // }
+                    if (GM_SF2_IsActive()) {
+                        GM_ResetSF2();
+                    }
 #endif                    
                     pSong = GM_LoadSong(song->mixer->pMixer,
                                         NULL,

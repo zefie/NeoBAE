@@ -132,8 +132,8 @@ JNIEXPORT jint JNICALL Java_org_minibae_Mixer__1addBankFromFile
 	// Check if this is an SF2/DLS file (requires FluidSynth)
 	const char *ext = strrchr(cpath, '.');
 	
-#if USE_SF2_SUPPORT == TRUE && _USING_FLUIDSYNTH == TRUE
 	BAEMixer_UnloadBanks(mixer);
+#if USE_SF2_SUPPORT == TRUE && _USING_FLUIDSYNTH == TRUE
 	GM_UnloadSF2Soundfont();
 	GM_SetMixerSF2Mode(FALSE);
 	
@@ -163,7 +163,6 @@ JNIEXPORT jint JNICALL Java_org_minibae_Mixer__1addBankFromFile
 	
 	// Standard HSB bank loading
 	BAEBankToken token = 0;
-	BAEMixer_UnloadBanks(mixer);
 	BAEResult r = BAEMixer_AddBankFromFile(mixer, (BAEPathName)cpath, &token);
 	if(r == BAE_NO_ERROR) {
 		char friendlyBuf[256] = "";
@@ -269,7 +268,6 @@ JNIEXPORT jstring JNICALL Java_org_minibae_Mixer__1getBankFriendlyName
 	}
 #endif
 		BAEBankToken token = 0;
-		BAEMixer_UnloadBanks(mixer);
 		BAEResult br = BAEMixer_AddBankFromMemory(mixer, (void*)mem, (uint32_t)read_total, &token);
 		if(br == BAE_NO_ERROR){
 			// After a successful add, try to resolve a friendly name for this token
@@ -353,7 +351,6 @@ JNIEXPORT jint JNICALL Java_org_minibae_Mixer__1addBankFromMemory
 #endif
 
 	BAEBankToken token = 0;
-	BAEMixer_UnloadBanks(mixer);
 	BAEResult br = BAEMixer_AddBankFromMemory(mixer, (void*)bytes, (uint32_t)len, &token);
 	if(br == BAE_NO_ERROR){
 		char friendlyBuf[256] = "";
@@ -445,7 +442,6 @@ JNIEXPORT jint JNICALL Java_org_minibae_Mixer__1addBankFromMemoryWithFilename
 #endif
 
 	BAEBankToken token = 0;
-	BAEMixer_UnloadBanks(mixer);
 	BAEResult br = BAEMixer_AddBankFromMemory(mixer, (void*)bytes, (uint32_t)len, &token);
 	if(br == BAE_NO_ERROR){
 		char friendlyBuf[256] = "";
