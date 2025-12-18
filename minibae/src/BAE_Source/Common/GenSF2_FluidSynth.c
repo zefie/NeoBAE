@@ -910,14 +910,32 @@ void GM_SF2_ProcessProgramChange(GM_Song* pSong, int16_t channel, int32_t progra
     int useBank = midiBank;
     int useProg = midiProgram;
     if (!PV_SF2_PresetExists(useBank, useProg)) {
-        int altProg;
-        if (PV_SF2_FindFirstPresetInBank(useBank, &altProg)) {
-            // Use first program available in requested bank
-            BAE_PRINTF("[FluidMem] Fallback: bank %d has no prog %d; using prog %d\n", useBank, useProg, altProg);
-            useProg = altProg;
-        } else {
-            // If percussion intent, try bank 128; else try bank 0; finally pick any preset
-            XBOOL percIntent = (channel == BAE_PERCUSSION_CHANNEL) || (useBank == 128);
+        XBOOL percIntent = (channel == BAE_PERCUSSION_CHANNEL) || (useBank == 128);
+        XBOOL found = FALSE;
+
+        // 1. Try fallback to Bank 0 (Capital Tone) with same program
+        // This is the standard GM fallback: if variation is missing, use standard instrument
+        if (!percIntent && useBank != 0) {
+            if (PV_SF2_PresetExists(0, useProg)) {
+                BAE_PRINTF("[FluidMem] Fallback: bank %d prog %d not found; using bank 0 prog %d\n", useBank, useProg, useProg);
+                useBank = 0;
+                found = TRUE;
+            }
+        }
+
+        // 2. If still not found, try finding ANY program in the requested bank
+        if (!found) {
+            int altProg;
+            if (PV_SF2_FindFirstPresetInBank(useBank, &altProg)) {
+                // Use first program available in requested bank
+                BAE_PRINTF("[FluidMem] Fallback: bank %d has no prog %d; using prog %d\n", useBank, useProg, altProg);
+                useProg = altProg;
+                found = TRUE;
+            }
+        }
+
+        // 3. If still not found, try bank 0 (or 128) default
+        if (!found) {
             int fbBank = -1, fbProg = 0;
             if (percIntent && PV_SF2_FindFirstPresetInBank(128, &fbProg)) {
                 fbBank = 128;
