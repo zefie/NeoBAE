@@ -258,8 +258,11 @@ class MusicPlayerViewModel : ViewModel() {
     fun checkIfCurrentPathIndexed() {
         viewModelScope.launch(Dispatchers.IO) {
             val indexed = isPathIndexed(currentFolderPath)
+            // Update the indexed file count for the current path's database
+            val count = fileIndexer?.getIndexedFileCountForPath(currentFolderPath) ?: 0
             withContext(Dispatchers.Main) {
                 isCurrentPathIndexed = indexed
+                indexedFileCount = count
             }
         }
     }

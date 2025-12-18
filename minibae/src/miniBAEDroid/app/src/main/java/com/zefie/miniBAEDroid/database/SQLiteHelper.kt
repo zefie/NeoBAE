@@ -234,6 +234,17 @@ class SQLiteHelper private constructor(private val context: Context) {
         return indexPath != null
     }
     
+    /**
+     * Get file count for the database that covers the given path
+     */
+    fun getFileCountForPath(searchPath: String): Int {
+        val indexPath = findParentIndex(searchPath)
+        if (indexPath != null) {
+            return getFileCount(indexPath)
+        }
+        return 0
+    }
+    
     fun clearAll(indexPath: String) {
         val dbPtr = getOrCreateDatabase(indexPath)
         if (dbPtr == 0L) return

@@ -258,4 +258,11 @@ class FileIndexer(private val context: Context) {
             database.getTotalFileCount()
         }
     }
+    
+    suspend fun getIndexedFileCountForPath(path: String?): Int {
+        return withContext(Dispatchers.IO) {
+            if (path == null) return@withContext 0
+            database.getFileCountForPath(path)
+        }
+    }
 }
