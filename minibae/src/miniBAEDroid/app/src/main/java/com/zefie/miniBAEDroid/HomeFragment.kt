@@ -2003,16 +2003,37 @@ fun NewMusicPlayerScreen(
             TopAppBar(
                 title = {
                     Column {
+                        // Dynamic title based on current screen
+                        val titleText = when (viewModel.currentScreen) {
+                            NavigationScreen.HOME -> "Home"
+                            NavigationScreen.SEARCH -> "Search"
+                            NavigationScreen.FAVORITES -> "Favorites"
+                            NavigationScreen.SETTINGS -> "Settings"
+                        }
                         Text(
-                            text = "Home",
+                            text = titleText,
                             fontSize = 20.sp,
                             fontWeight = FontWeight.Bold
                         )
-                        val folderName = viewModel.currentFolderPath?.let { path ->
-                            File(path).name
-                        } ?: "No folder selected"
+                        
+                        // Dynamic subtitle based on current screen
+                        val subtitleText = when (viewModel.currentScreen) {
+                            NavigationScreen.HOME -> {
+                                viewModel.currentFolderPath ?: "No folder selected"
+                            }
+                            NavigationScreen.SEARCH -> {
+                                val searchResults by viewModel.searchResults.collectAsState()
+                                val count = searchResults.size
+                                if (count == 0) "No results" else "$count result${if (count != 1) "s" else ""}"
+                            }
+                            NavigationScreen.FAVORITES -> {
+                                val count = viewModel.favorites.size
+                                "$count favorite${if (count != 1) "s" else ""}"
+                            }
+                            NavigationScreen.SETTINGS -> "Configure miniBAE"
+                        }
                         Text(
-                            text = folderName,
+                            text = subtitleText,
                             fontSize = 12.sp,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
