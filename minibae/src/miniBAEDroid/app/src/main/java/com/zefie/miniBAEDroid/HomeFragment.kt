@@ -3363,11 +3363,16 @@ fun SearchScreenContent(
                 },
                 colors = TextFieldDefaults.textFieldColors(
                     backgroundColor = MaterialTheme.colors.surface,
-                    textColor = MaterialTheme.colors.onSurface
+                    textColor = MaterialTheme.colors.onSurface,
+                    focusedIndicatorColor = Color.Transparent,
+                    unfocusedIndicatorColor = Color.Transparent,
+                    disabledIndicatorColor = Color.Transparent
                 ),
                 shape = RoundedCornerShape(24.dp),
                 enabled = !indexingProgress.isIndexing
             )
+            
+            Divider(color = Color.Gray.copy(alpha = 0.2f))
             
             // Show message if current directory is not indexed
             if (!isCurrentPathIndexed && viewModel.currentFolderPath != null && viewModel.currentFolderPath != "/") {
@@ -3468,9 +3473,9 @@ fun SearchScreenContent(
                     Text(if (indexingProgress.isIndexing) "Stop" else "Build Index")
                 }
             }
+            
+            Divider(color = Color.Gray.copy(alpha = 0.2f))
         }
-        
-        Divider(color = Color.Gray.copy(alpha = 0.2f))
         
         // Search results
         when {
