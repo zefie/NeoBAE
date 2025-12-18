@@ -43,11 +43,14 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.horizontalScroll
 import androidx.core.view.WindowCompat
 import androidx.compose.runtime.collectAsState
+import android.content.res.Configuration
 import java.io.File
 import org.minibae.Mixer
 import org.minibae.Song
@@ -2296,6 +2299,8 @@ fun FullPlayerScreen(
     val totalDurationMs = viewModel.totalDurationMs
     val currentItem = viewModel.getCurrentItem()
     val isPlaying = viewModel.isPlaying
+    val configuration = LocalConfiguration.current
+    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
     
     // Update position in real-time
     LaunchedEffect(isPlaying) {
@@ -2305,6 +2310,69 @@ fun FullPlayerScreen(
         }
     }
     
+    if (isLandscape) {
+        LandscapePlayerLayout(
+            viewModel = viewModel,
+            currentPositionMs = currentPositionMs,
+            totalDurationMs = totalDurationMs,
+            currentItem = currentItem,
+            isPlaying = isPlaying,
+            onClose = onClose,
+            onPlayPause = onPlayPause,
+            onNext = onNext,
+            onPrevious = onPrevious,
+            onSeek = onSeek,
+            onStartDrag = onStartDrag,
+            onDrag = onDrag,
+            onVolumeChange = onVolumeChange,
+            onToggleFavorite = onToggleFavorite,
+            exportCodec = exportCodec,
+            onExportRequest = onExportRequest,
+            onRepeatModeChange = onRepeatModeChange
+        )
+    } else {
+        PortraitPlayerLayout(
+            viewModel = viewModel,
+            currentPositionMs = currentPositionMs,
+            totalDurationMs = totalDurationMs,
+            currentItem = currentItem,
+            isPlaying = isPlaying,
+            onClose = onClose,
+            onPlayPause = onPlayPause,
+            onNext = onNext,
+            onPrevious = onPrevious,
+            onSeek = onSeek,
+            onStartDrag = onStartDrag,
+            onDrag = onDrag,
+            onVolumeChange = onVolumeChange,
+            onToggleFavorite = onToggleFavorite,
+            exportCodec = exportCodec,
+            onExportRequest = onExportRequest,
+            onRepeatModeChange = onRepeatModeChange
+        )
+    }
+}
+
+@Composable
+private fun PortraitPlayerLayout(
+    viewModel: MusicPlayerViewModel,
+    currentPositionMs: Int,
+    totalDurationMs: Int,
+    currentItem: PlaylistItem?,
+    isPlaying: Boolean,
+    onClose: () -> Unit,
+    onPlayPause: () -> Unit,
+    onNext: () -> Unit,
+    onPrevious: () -> Unit,
+    onSeek: (Int) -> Unit,
+    onStartDrag: () -> Unit,
+    onDrag: (Int) -> Unit,
+    onVolumeChange: (Int) -> Unit,
+    onToggleFavorite: (String) -> Unit,
+    exportCodec: Int,
+    onExportRequest: (String, Int) -> Unit,
+    onRepeatModeChange: () -> Unit
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -2632,6 +2700,361 @@ fun FullPlayerScreen(
             }
             
             Spacer(modifier = Modifier.height(24.dp))
+        }
+    }
+}
+
+@Composable
+private fun LandscapePlayerLayout(
+    viewModel: MusicPlayerViewModel,
+    currentPositionMs: Int,
+    totalDurationMs: Int,
+    currentItem: PlaylistItem?,
+    isPlaying: Boolean,
+    onClose: () -> Unit,
+    onPlayPause: () -> Unit,
+    onNext: () -> Unit,
+    onPrevious: () -> Unit,
+    onSeek: (Int) -> Unit,
+    onStartDrag: () -> Unit,
+    onDrag: (Int) -> Unit,
+    onVolumeChange: (Int) -> Unit,
+    onToggleFavorite: (String) -> Unit,
+    exportCodec: Int,
+    onExportRequest: (String, Int) -> Unit,
+    onRepeatModeChange: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colors.background)
+    ) {
+        // Top bar with back button and actions
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onClose) {
+                Icon(
+                    Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Back",
+                    tint = MaterialTheme.colors.onBackground
+                )
+            }
+            
+            Spacer(modifier = Modifier.weight(1f))
+            
+            // Export button
+            currentItem?.let { item ->
+                val isExportEnabled = viewModel.repeatMode != RepeatMode.SONG
+                IconButton(
+                    onClick = {
+                        val extension = when (exportCodec) {
+                            2 -> ".ogg"
+                            3 -> ".flac"
+                            else -> ".wav"
+                        }
+                        val defaultName = item.file.nameWithoutExtension + extension
+                        onExportRequest(defaultName, exportCodec)
+                    },
+                    enabled = isExportEnabled
+                ) {
+                    Icon(
+                        Icons.Filled.GetApp,
+                        contentDescription = "Export",
+                        tint = if (isExportEnabled) MaterialTheme.colors.onBackground else Color.Gray
+                    )
+                }
+            }
+            
+            // Favorite button
+            currentItem?.let { item ->
+                val isFavorite = viewModel.isFavorite(item.path)
+                IconButton(onClick = { onToggleFavorite(item.path) }) {
+                    Icon(
+                        if (isFavorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                        contentDescription = if (isFavorite) "Remove from favorites" else "Add to favorites",
+                        tint = if (isFavorite) MaterialTheme.colors.primary else MaterialTheme.colors.onBackground
+                    )
+                }
+            }
+        }
+        
+        // Main content in horizontal layout
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 24.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Left side: Album art and title
+            Column(
+                modifier = Modifier
+                    .width(200.dp)
+                    .padding(end = 24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                // Album art with swipe gesture
+                var offsetX by remember { mutableStateOf(0f) }
+                
+                Box(
+                    modifier = Modifier
+                        .size(160.dp)
+                        .offset(x = (offsetX / 5).dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(Color(0xFF3700B3))
+                        .pointerInput(Unit) {
+                            detectHorizontalDragGestures(
+                                onDragEnd = {
+                                    if (offsetX > 100) {
+                                        if (viewModel.hasPrevious()) {
+                                            onPrevious()
+                                        }
+                                    } else if (offsetX < -100) {
+                                        if (viewModel.hasNext()) {
+                                            onNext()
+                                        }
+                                    }
+                                    offsetX = 0f
+                                },
+                                onHorizontalDrag = { _, dragAmount ->
+                                    offsetX = (offsetX + dragAmount).coerceIn(-200f, 200f)
+                                }
+                            )
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Filled.MusicNote,
+                        contentDescription = null,
+                        modifier = Modifier.size(120.dp),
+                        tint = Color.White.copy(alpha = 0.5f)
+                    )
+                }
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                // Song title
+                Text(
+                    text = currentItem?.title ?: "No song playing",
+                    style = MaterialTheme.typography.subtitle1,
+                    color = MaterialTheme.colors.onBackground,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.Center
+                )
+            }
+            
+            // Right side: Controls and seek bar
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight(),
+                verticalArrangement = Arrangement.Center
+            ) {
+                // Lyrics area (compact)
+                if (viewModel.currentLyric.isNotEmpty()) {
+                    Text(
+                        text = viewModel.currentLyric,
+                        style = MaterialTheme.typography.body2.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colors.primary,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+                
+                // Playback controls
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(
+                        onClick = onPrevious,
+                        modifier = Modifier.size(48.dp)
+                    ) {
+                        Icon(
+                            Icons.Filled.SkipPrevious,
+                            contentDescription = "Previous",
+                            tint = MaterialTheme.colors.onBackground,
+                            modifier = Modifier.size(40.dp)
+                        )
+                    }
+                    
+                    Spacer(modifier = Modifier.width(16.dp))
+                    
+                    // Play/Pause button
+                    FloatingActionButton(
+                        onClick = onPlayPause,
+                        backgroundColor = MaterialTheme.colors.primary,
+                        modifier = Modifier.size(56.dp)
+                    ) {
+                        Icon(
+                            if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                            contentDescription = if (isPlaying) "Pause" else "Play",
+                            modifier = Modifier.size(28.dp),
+                            tint = Color.White
+                        )
+                    }
+                    
+                    Spacer(modifier = Modifier.width(16.dp))
+                    
+                    IconButton(
+                        onClick = onNext,
+                        modifier = Modifier.size(48.dp)
+                    ) {
+                        Icon(
+                            Icons.Filled.SkipNext,
+                            contentDescription = "Next",
+                            tint = MaterialTheme.colors.onBackground,
+                            modifier = Modifier.size(40.dp)
+                        )
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(12.dp))
+                
+                // Repeat and Shuffle buttons
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(
+                        onClick = {
+                            viewModel.repeatMode = when (viewModel.repeatMode) {
+                                RepeatMode.NONE -> RepeatMode.SONG
+                                RepeatMode.SONG -> RepeatMode.PLAYLIST
+                                RepeatMode.PLAYLIST -> RepeatMode.NONE
+                            }
+                            onRepeatModeChange()
+                        }
+                    ) {
+                        Icon(
+                            when (viewModel.repeatMode) {
+                                RepeatMode.NONE -> Icons.Filled.Repeat
+                                RepeatMode.SONG -> Icons.Filled.RepeatOne
+                                RepeatMode.PLAYLIST -> Icons.Filled.Repeat
+                            },
+                            contentDescription = "Repeat: ${viewModel.repeatMode.name}",
+                            tint = if (viewModel.repeatMode == RepeatMode.NONE) {
+                                Color.Gray
+                            } else {
+                                MaterialTheme.colors.primary
+                            },
+                            modifier = Modifier.size(28.dp)
+                        )
+                    }
+                    
+                    Spacer(modifier = Modifier.width(16.dp))
+                    
+                    IconButton(
+                        onClick = {
+                            viewModel.toggleShuffle()
+                        }
+                    ) {
+                        Icon(
+                            Icons.Filled.Shuffle,
+                            contentDescription = "Shuffle: ${if (viewModel.isShuffled) "On" else "Off"}",
+                            tint = if (viewModel.isShuffled) {
+                                MaterialTheme.colors.primary
+                            } else {
+                                Color.Gray
+                            },
+                            modifier = Modifier.size(28.dp)
+                        )
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(12.dp))
+                
+                // Seek bar
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    var isDragging by remember { mutableStateOf(false) }
+                    var dragPosition by remember { mutableStateOf(0f) }
+                    
+                    Slider(
+                        value = if (isDragging) dragPosition else currentPositionMs.toFloat(),
+                        onValueChange = {
+                            if (!isDragging) {
+                                isDragging = true
+                                onStartDrag()
+                            }
+                            dragPosition = it
+                            onDrag(it.toInt())
+                        },
+                        onValueChangeFinished = {
+                            isDragging = false
+                            onSeek(dragPosition.toInt())
+                        },
+                        valueRange = 0f..totalDurationMs.toFloat().coerceAtLeast(1f),
+                        colors = SliderDefaults.colors(
+                            thumbColor = MaterialTheme.colors.primary,
+                            activeTrackColor = MaterialTheme.colors.primary,
+                            inactiveTrackColor = Color.Gray.copy(alpha = 0.3f)
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    
+                    // Time labels
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = formatTime(currentPositionMs),
+                            style = MaterialTheme.typography.caption,
+                            color = MaterialTheme.colors.onBackground.copy(alpha = 0.7f),
+                            modifier = Modifier.clickable { onSeek(0) }
+                        )
+                        Text(
+                            text = formatTime(totalDurationMs),
+                            style = MaterialTheme.typography.caption,
+                            color = MaterialTheme.colors.onBackground.copy(alpha = 0.7f)
+                        )
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(12.dp))
+                
+                // Volume control
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.VolumeUp,
+                        contentDescription = "Volume",
+                        tint = MaterialTheme.colors.onBackground.copy(alpha = 0.7f),
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Slider(
+                        value = viewModel.volumePercent.toFloat(),
+                        onValueChange = { onVolumeChange(it.toInt()) },
+                        valueRange = 0f..100f,
+                        colors = SliderDefaults.colors(
+                            thumbColor = MaterialTheme.colors.primary,
+                            activeTrackColor = MaterialTheme.colors.primary,
+                            inactiveTrackColor = Color.Gray.copy(alpha = 0.3f)
+                        ),
+                        modifier = Modifier.weight(1f)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "${viewModel.volumePercent}%",
+                        style = MaterialTheme.typography.caption,
+                        color = MaterialTheme.colors.onBackground.copy(alpha = 0.7f),
+                        modifier = Modifier.width(40.dp)
+                    )
+                }
+            }
         }
     }
 }
