@@ -2023,8 +2023,14 @@ fun NewMusicPlayerScreen(
                             }
                             NavigationScreen.SEARCH -> {
                                 val searchResults by viewModel.searchResults.collectAsState()
-                                val count = searchResults.size
-                                if (count == 0) "No results" else "$count result${if (count != 1) "s" else ""}"
+                                val resultCount = searchResults.size
+                                val totalResults = viewModel.indexedFileCount
+                                val limitText = if (searchResultLimit == -1) "all" else "$searchResultLimit"
+                                if (resultCount == 0) {
+                                    "No results"
+                                } else {
+                                    "Showing $resultCount of $totalResults result${if (totalResults != 1) "s" else ""} (max $limitText)"
+                                }
                             }
                             NavigationScreen.FAVORITES -> {
                                 val count = viewModel.favorites.size
@@ -2039,6 +2045,43 @@ fun NewMusicPlayerScreen(
                             overflow = TextOverflow.Ellipsis,
                             color = Color.Gray
                         )
+                    }
+                },
+                actions = {
+                    // Build Index button for Search screen
+                    if (viewModel.currentScreen == NavigationScreen.SEARCH) {
+                        val indexingProgress by viewModel.getIndexingProgress()?.collectAsState() ?: remember { mutableStateOf(IndexingProgress()) }
+                        val context = LocalContext.current
+                        
+                        IconButton(
+                            onClick = {
+                                if (indexingProgress.isIndexing) {
+                                    viewModel.stopIndexing()
+                                } else {
+                                    val rootPath = viewModel.currentFolderPath ?: "/sdcard"
+                                    viewModel.rebuildIndex(rootPath) { files, folders, size ->
+                                        Toast.makeText(
+                                            context,
+                                            "Indexed $files files in $folders folders (${size / 1024 / 1024} MB)",
+                                            Toast.LENGTH_LONG
+                                        ).show()
+                                        // Load the search results after indexing completes
+                                        if (viewModel.searchQuery.isNotEmpty()) {
+                                            viewModel.searchFilesInDatabase(viewModel.searchQuery, viewModel.currentFolderPath, searchResultLimit)
+                                        } else {
+                                            viewModel.getAllFilesInDatabase(viewModel.currentFolderPath, searchResultLimit)
+                                        }
+                                    }
+                                }
+                            },
+                            enabled = viewModel.currentFolderPath != null && viewModel.currentFolderPath != "/"
+                        ) {
+                            Icon(
+                                if (indexingProgress.isIndexing) Icons.Filled.Stop else Icons.Filled.Refresh,
+                                contentDescription = if (indexingProgress.isIndexing) "Stop Indexing" else "Build Index",
+                                tint = if (indexingProgress.isIndexing) MaterialTheme.colors.error else MaterialTheme.colors.onSurface
+                            )
+                        }
                     }
                 },
                 backgroundColor = MaterialTheme.colors.surface,
@@ -3309,7 +3352,7 @@ fun SearchScreenContent(
                     singleLine = true
                 )
                 
-                // Index status and button
+                // Show indexing status in landscape
                 if (indexingProgress.isIndexing) {
                     CircularProgressIndicator(
                         modifier = Modifier.size(20.dp),
@@ -3320,55 +3363,6 @@ fun SearchScreenContent(
                         fontSize = 12.sp,
                         color = MaterialTheme.colors.primary
                     )
-                } else {
-                    val displayCount = if (isCurrentPathIndexed || viewModel.currentFolderPath == null || viewModel.currentFolderPath == "/") {
-                        viewModel.indexedFileCount
-                    } else {
-                        0
-                    }
-                    Text(
-                        "$displayCount",
-                        fontSize = 12.sp,
-                        color = if (displayCount > 0) Color.Gray else Color.Gray.copy(alpha = 0.5f)
-                    )
-                }
-                
-                Button(
-                    onClick = {
-                        if (indexingProgress.isIndexing) {
-                            viewModel.stopIndexing()
-                        } else {
-                            val rootPath = viewModel.currentFolderPath ?: "/sdcard"
-                            viewModel.rebuildIndex(rootPath) { files, folders, size ->
-                                Toast.makeText(
-                                    context,
-                                    "Indexed $files files in $folders folders (${size / 1024 / 1024} MB)",
-                                    Toast.LENGTH_LONG
-                                ).show()
-                                // Load the search results after indexing completes
-                                if (viewModel.searchQuery.isNotEmpty()) {
-                                    viewModel.searchFilesInDatabase(viewModel.searchQuery, viewModel.currentFolderPath, searchResultLimit)
-                                } else {
-                                    viewModel.getAllFilesInDatabase(viewModel.currentFolderPath, searchResultLimit)
-                                }
-                            }
-                        }
-                    },
-                    enabled = viewModel.currentFolderPath != null && viewModel.currentFolderPath != "/",
-                    colors = if (indexingProgress.isIndexing) {
-                        ButtonDefaults.buttonColors(backgroundColor = MaterialTheme.colors.error)
-                    } else {
-                        ButtonDefaults.buttonColors()
-                    },
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
-                ) {
-                    Icon(
-                        if (indexingProgress.isIndexing) Icons.Filled.Stop else Icons.Filled.Refresh,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(if (indexingProgress.isIndexing) "Stop" else "Index", fontSize = 13.sp)
                 }
             }
         } else {
@@ -3420,88 +3414,13 @@ fun SearchScreenContent(
                             modifier = Modifier.padding(end = 12.dp)
                         )
                         Text(
-                            "This directory is not indexed. Build an index to enable search.",
+                            "This directory is not indexed. Use the refresh button above to build an index.",
                             fontSize = 14.sp,
                             color = Color.Gray
                         )
                     }
                 }
             }
-            
-            // Index status and rebuild button
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    val displayCount = if (isCurrentPathIndexed || viewModel.currentFolderPath == null || viewModel.currentFolderPath == "/") {
-                        viewModel.indexedFileCount
-                    } else {
-                        0
-                    }
-                    
-                    Text(
-                        "Indexed: $displayCount files",
-                        fontSize = 12.sp,
-                        color = if (displayCount > 0) Color.Gray else Color.Gray.copy(alpha = 0.5f)
-                    )
-                    if (indexingProgress.isIndexing) {
-                        Text(
-                            "Indexing: ${indexingProgress.filesIndexed} files, ${indexingProgress.foldersScanned} folders",
-                            fontSize = 10.sp,
-                            color = MaterialTheme.colors.primary
-                        )
-                        LinearProgressIndicator(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 4.dp)
-                        )
-                    }
-                }
-                
-                Button(
-                    onClick = {
-                        if (indexingProgress.isIndexing) {
-                            viewModel.stopIndexing()
-                        } else {
-                            val rootPath = viewModel.currentFolderPath ?: "/sdcard"
-                            viewModel.rebuildIndex(rootPath) { files, folders, size ->
-                                Toast.makeText(
-                                    context,
-                                    "Indexed $files files in $folders folders (${size / 1024 / 1024} MB)",
-                                    Toast.LENGTH_LONG
-                                ).show()
-                                // Load the search results after indexing completes
-                                if (viewModel.searchQuery.isNotEmpty()) {
-                                    viewModel.searchFilesInDatabase(viewModel.searchQuery, viewModel.currentFolderPath, searchResultLimit)
-                                } else {
-                                    viewModel.getAllFilesInDatabase(viewModel.currentFolderPath, searchResultLimit)
-                                }
-                            }
-                        }
-                    },
-                    enabled = viewModel.currentFolderPath != null && viewModel.currentFolderPath != "/",
-                    colors = if (indexingProgress.isIndexing) {
-                        ButtonDefaults.buttonColors(backgroundColor = MaterialTheme.colors.error)
-                    } else {
-                        ButtonDefaults.buttonColors()
-                    },
-                    modifier = Modifier.padding(start = 8.dp)
-                ) {
-                    Icon(
-                        if (indexingProgress.isIndexing) Icons.Filled.Stop else Icons.Filled.Refresh,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(if (indexingProgress.isIndexing) "Stop" else "Build Index")
-                }
-            }
-            
-            Divider(color = Color.Gray.copy(alpha = 0.2f))
         }
         
         // Search results
@@ -3555,15 +3474,6 @@ fun SearchScreenContent(
                 } else {
                     // Show all results
                     LazyColumn(modifier = Modifier.fillMaxSize()) {
-                        item {
-                            val limitText = if (searchResultLimit == -1) "all" else "up to $searchResultLimit"
-                            Text(
-                                "${searchResults.size} file(s) ($limitText)",
-                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                                fontSize = 12.sp,
-                                color = Color.Gray
-                            )
-                        }
                         itemsIndexed(searchResults) { index, item ->
                             FolderSongListItem(
                                 item = item,
@@ -3600,15 +3510,6 @@ fun SearchScreenContent(
             else -> {
                 // Show results with count
                 LazyColumn(modifier = Modifier.fillMaxSize()) {
-                    item {
-                        val limitText = if (searchResultLimit == -1) "all" else "up to $searchResultLimit"
-                        Text(
-                            "${searchResults.size} file(s) found ($limitText)",
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                            fontSize = 12.sp,
-                            color = Color.Gray
-                        )
-                    }
                     itemsIndexed(searchResults) { index, item ->
                         FolderSongListItem(
                             item = item,
