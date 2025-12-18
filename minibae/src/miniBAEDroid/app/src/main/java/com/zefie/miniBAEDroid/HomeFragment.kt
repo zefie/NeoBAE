@@ -842,7 +842,7 @@ class HomeFragment : Fragment() {
             val lastBankPath = prefs.getString("last_bank_path", "__builtin__")
             loadBankFromFile(java.io.File(lastBankPath))
         }
-        stopPlayback(false)
+        stopPlayback(true)
         viewModel.clearPlaylist()
         val item = PlaylistItem(file)
         viewModel.addToPlaylist(item)
@@ -874,14 +874,11 @@ class HomeFragment : Fragment() {
             
             val bytes = file.readBytes()
             val loadResult = org.minibae.LoadResult()
-            
-
 
             val status = Mixer.loadFromMemory(bytes, loadResult)
             
             if (status == 0) {
                 android.util.Log.d("HomeFragment", "Loaded ${loadResult.fileTypeString} file: ${file.name}")
-                
                 if (loadResult.isSong) {
                     val song = loadResult.song
                     if (song != null) {
@@ -980,10 +977,10 @@ class HomeFragment : Fragment() {
     
     private fun scheduleMixerCleanup() {
         mixerIdleJob?.cancel()
-        mixerIdleJob = lifecycleScope.launch {
-            delay(6000) // 1 minute
+        // Aggressively destroy mixer immediately
+        if (Mixer.getMixer() != null) {
             Mixer.delete()
-            android.util.Log.d("HomeFragment", "Mixer deleted due to inactivity")
+            android.util.Log.d("HomeFragment", "Mixer deleted immediately")
         }
     }
 
@@ -1010,11 +1007,11 @@ class HomeFragment : Fragment() {
     }
     
     private fun stopPlayback(delete: Boolean = true) {
-        if (!ensureMixerExists()) {
-            return
+        // Only try to stop if mixer exists
+        if (Mixer.getMixer() != null) {
+            currentSong?.stop(delete)
+            currentSound?.stop(delete)
         }
-        currentSong?.stop(delete)
-        currentSound?.stop(delete)
         if (delete) {
             setCurrentSong(null)
             setCurrentSound(null)
@@ -1066,45 +1063,52 @@ class HomeFragment : Fragment() {
             Mixer.setNativeCacheDir(requireContext().cacheDir.absolutePath)
             
             // Restore bank settings
-            var bankLoaded = false
+            ensureBankIsLoaded()
+            
+            // Restore reverb and velocity curve settings
             try {
                 val prefs = requireContext().getSharedPreferences("miniBAE_prefs", android.content.Context.MODE_PRIVATE)
-                val lastBankPath = prefs.getString("last_bank_path", null)
-                
-                if (!lastBankPath.isNullOrEmpty()) {
-                    if (lastBankPath == "__builtin__") {
-                        if (Mixer.addBuiltInPatches() == 0) {
-                            bankLoaded = true
-                        }
-                    } else {
-                        val bankFile = java.io.File(lastBankPath)
-                        if (bankFile.exists()) {
-                            val bytes = bankFile.readBytes()
-                            if (Mixer.addBankFromMemory(bytes, bankFile.name) == 0) {
-                                bankLoaded = true
-                            }
-                        }
-                    }
-                }
-                
-                // Fall back to built-in patches if no bank was loaded
-                if (!bankLoaded) {
-                    Mixer.addBuiltInPatches()
-                }
-                
-                // Restore reverb and velocity curve settings
                 val reverbType = prefs.getInt("default_reverb", 1)
                 val velocityCurve = prefs.getInt("velocity_curve", 1)
                 Mixer.setDefaultReverb(reverbType)
                 Mixer.setDefaultVelocityCurve(velocityCurve)
-            } catch (_: Exception) {
-                // If restoration fails, use built-in patches
-                try {
-                    Mixer.addBuiltInPatches()
-                } catch (_: Exception) {}
-            }
+            } catch (_: Exception) {}
         }
         return true
+    }
+
+    private fun ensureBankIsLoaded() {
+        var bankLoaded = false
+        try {
+            val prefs = requireContext().getSharedPreferences("miniBAE_prefs", android.content.Context.MODE_PRIVATE)
+            val lastBankPath = prefs.getString("last_bank_path", null)
+            
+            if (!lastBankPath.isNullOrEmpty()) {
+                if (lastBankPath == "__builtin__") {
+                    if (Mixer.addBuiltInPatches() == 0) {
+                        bankLoaded = true
+                    }
+                } else {
+                    val bankFile = java.io.File(lastBankPath)
+                    if (bankFile.exists()) {
+                        val bytes = bankFile.readBytes()
+                        if (Mixer.addBankFromMemory(bytes, bankFile.name) == 0) {
+                            bankLoaded = true
+                        }
+                    }
+                }
+            }
+            
+            // Fall back to built-in patches if no bank was loaded
+            if (!bankLoaded) {
+                Mixer.addBuiltInPatches()
+            }
+        } catch (_: Exception) {
+            // If restoration fails, use built-in patches
+            try {
+                Mixer.addBuiltInPatches()
+            } catch (_: Exception) {}
+        }
     }
     
     private fun getMusicDir(): File? {

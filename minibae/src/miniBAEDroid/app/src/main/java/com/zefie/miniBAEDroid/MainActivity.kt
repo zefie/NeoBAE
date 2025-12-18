@@ -130,9 +130,6 @@ class MainActivity : AppCompatActivity() {
         // Only reload if it's a Song (Sound doesn't use banks)
         if (currentSound != null) {
             android.util.Log.d("MainActivity", "Current item is a Sound, bank change doesn't affect it")
-            runOnUiThread {
-                Toast.makeText(this, "Sound files don't use banks", Toast.LENGTH_SHORT).show()
-            }
             return
         }
         
@@ -148,14 +145,20 @@ class MainActivity : AppCompatActivity() {
         
         try {
             // Stop current playback
-            song.stop(false)
+            song.stop(true)
+            val bytes = currentItem.file.readBytes()
+            val loadResult = org.minibae.LoadResult()
+
+            val status = Mixer.loadFromMemory(bytes, loadResult)
+
             viewModel.isPlaying = false
             
             // Bank has already been loaded by the caller
             // Just restart the song from the beginning to let it initialize controllers
             song.seekToMs(0)
             song.preroll()
-            
+            song.seekToMs(0)
+
             val startResult = song.start()
             if (startResult != 0) {
                 android.util.Log.e("MainActivity", "Failed to start song: $startResult")
@@ -182,10 +185,6 @@ class MainActivity : AppCompatActivity() {
                 song.pause()
                 viewModel.isPlaying = false
                 android.util.Log.d("MainActivity", "Song restarted and paused")
-            }
-            
-            runOnUiThread {
-                Toast.makeText(this, "Bank applied to current song", Toast.LENGTH_SHORT).show()
             }
         } catch (ex: Exception) {
             viewModel.isPlaying = false
