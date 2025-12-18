@@ -3318,6 +3318,12 @@ fun SearchScreenContent(
                                     "Indexed $files files in $folders folders (${size / 1024 / 1024} MB)",
                                     Toast.LENGTH_LONG
                                 ).show()
+                                // Load the search results after indexing completes
+                                if (viewModel.searchQuery.isNotEmpty()) {
+                                    viewModel.searchFilesInDatabase(viewModel.searchQuery, viewModel.currentFolderPath, searchResultLimit)
+                                } else {
+                                    viewModel.getAllFilesInDatabase(viewModel.currentFolderPath, searchResultLimit)
+                                }
                             }
                         }
                     },
@@ -3436,6 +3442,12 @@ fun SearchScreenContent(
                                     "Indexed $files files in $folders folders (${size / 1024 / 1024} MB)",
                                     Toast.LENGTH_LONG
                                 ).show()
+                                // Load the search results after indexing completes
+                                if (viewModel.searchQuery.isNotEmpty()) {
+                                    viewModel.searchFilesInDatabase(viewModel.searchQuery, viewModel.currentFolderPath, searchResultLimit)
+                                } else {
+                                    viewModel.getAllFilesInDatabase(viewModel.currentFolderPath, searchResultLimit)
+                                }
                             }
                         }
                     },
