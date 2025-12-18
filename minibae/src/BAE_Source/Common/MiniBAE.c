@@ -7419,6 +7419,7 @@ BAEResult BAESong_LoadRmfFromMemory(BAESong song, void const *pRMFData, uint32_t
                 pXSong = (SongResource *)XGetIndexedFileResource(fileRef, ID_SONG, &theID, songIndex, NULL, &size);
                 if (pXSong)
                 {
+                    BAE_PRINTF("[RMF] Primary path: XGetIndexedFileResource succeeded, pXSong=%p\n", pXSong);
                     if (song->pSong)
                     {
                         PV_BAESong_Unload(song);
@@ -7442,12 +7443,12 @@ BAEResult BAESong_LoadRmfFromMemory(BAESong song, void const *pRMFData, uint32_t
                         if (pSong)
                         {
                             // things are cool
-                            GM_SetDisposeSongDataWhenDoneFlag(pSong, TRUE); // dispose of midi data
-                            GM_SetSongLoopFlag(pSong, FALSE);               // don't loop song
-#if USE_SF2_SUPPORT == TRUE
+    #if USE_SF2_SUPPORT == TRUE
                             uint32_t instBuf[MAX_INSTRUMENTS];
                             uint32_t totalInst = 0;
-                            BAEUtil_GetRmfInstrumentList(fileRef, rmfSize, songIndex, instBuf, MAX_INSTRUMENTS, &totalInst);
+                            BAEUtil_GetRmfInstrumentListFromMemory(pRMFData, rmfSize, songIndex, instBuf, MAX_INSTRUMENTS, &totalInst);
+                            BAE_PRINTF("pSong = %p\n", pSong);
+                            BAE_PRINTF("instBuf[0] = %d\n", instBuf[0]);
                             pSong->RMFInstrumentIDs[0] = totalInst; // Store count first
                             for (uint32_t i = 1; i <= totalInst; i++)
                             {
@@ -7457,11 +7458,17 @@ BAEResult BAESong_LoadRmfFromMemory(BAESong song, void const *pRMFData, uint32_t
                             for (uint32_t i = 1; i <= totalInst; i++) {
                                 BAE_PRINTF("    %u - INST: %u\n", i, pSong->RMFInstrumentIDs[i]);
                             }
-                            pSong->songFlags = SONG_FLAG_IS_RMF;
-                            if (GM_SF2_IsActive()) { GM_EnableSF2ForSong(pSong, TRUE); }
-#endif
+                            pSong->songFlags = SONG_FLAG_IS_RMF;                      
+    #endif
+                            // things are cool
+                            GM_SetDisposeSongDataWhenDoneFlag(pSong, TRUE); // dispose of midi data
+                            GM_SetSongLoopFlag(pSong, FALSE);               // don't loop song
                             GM_SetVelocityCurveType(pSong, (VelocityCurveType)g_defaultVelocityCurve);
                             song->pSong = pSong;                            // preserve for use later
+                            
+    #if USE_SF2_SUPPORT == TRUE
+                            if (GM_SF2_IsActive()) { GM_EnableSF2ForSong(song->pSong, TRUE); }
+    #endif
                         }
                         else
                         {
@@ -7479,6 +7486,7 @@ BAEResult BAESong_LoadRmfFromMemory(BAESong song, void const *pRMFData, uint32_t
                 else
                 {
                     theErr = RESOURCE_NOT_FOUND;
+                    BAE_PRINTF("[RMF] Primary path failed: XGetIndexedFileResource returned NULL for songIndex=%d\n", songIndex);
                     // Fallback attempt: direct memory scan if primary lookup failed.
                     SongResource *fallbackSong = PV_FallbackFindSongInRMFMemory(pRMFData, rmfSize, songIndex, &theID, &size);
                     if (fallbackSong)
@@ -7502,6 +7510,23 @@ BAEResult BAESong_LoadRmfFromMemory(BAESong song, void const *pRMFData, uint32_t
                                                 &theErr);
                             if (pSong)
                             {
+#if USE_SF2_SUPPORT == TRUE
+                                uint32_t instBuf[MAX_INSTRUMENTS];
+                                uint32_t totalInst = 0;
+                                BAEUtil_GetRmfInstrumentListFromMemory(pRMFData, rmfSize, songIndex, instBuf, MAX_INSTRUMENTS, &totalInst);
+                                BAE_PRINTF("[FALLBACK] pSong = %p\n", pSong);
+                                pSong->RMFInstrumentIDs[0] = totalInst;
+                                for (uint32_t i = 1; i <= totalInst; i++)
+                                {
+                                    pSong->RMFInstrumentIDs[i] = instBuf[i-1];
+                                }
+                                BAE_PRINTF("[FALLBACK] Found %u Instruments in RMF (stored=%u)\n", totalInst, (unsigned)XMIN(totalInst, MAX_INSTRUMENTS));
+                                for (uint32_t i = 1; i <= totalInst; i++) {
+                                    BAE_PRINTF("[FALLBACK]     %u - INST: %u\n", i, pSong->RMFInstrumentIDs[i]);
+                                }
+                                pSong->songFlags = SONG_FLAG_IS_RMF;
+                                BAE_PRINTF("[FALLBACK] Set songFlags=0x%X, RMFInstrumentIDs[0]=%u\n", pSong->songFlags, pSong->RMFInstrumentIDs[0]);
+#endif
                                 GM_SetDisposeSongDataWhenDoneFlag(pSong, TRUE);
                                 GM_SetSongLoopFlag(pSong, FALSE);
                                 GM_SetVelocityCurveType(pSong, (VelocityCurveType)g_defaultVelocityCurve);
@@ -9977,28 +10002,20 @@ BAEResult BAEUtil_GetRmfSongInfoFromFile(BAEPathName filePath, int16_t songIndex
 }
 
 #if USE_SF2_SUPPORT == TRUE
-// BAEUtil_GetRmfInstrumentList()
+// BAEUtil_GetRmfInstrumentListFromMemory()
 // --------------------------------------
 //
-// Gets the list of instruments used by the RMF
-BAEResult BAEUtil_GetRmfInstrumentList(void *pRMFData, uint32_t rmfSize, int16_t songIndex,
+// Gets the list of instruments used by the RMF from memory buffer
+BAEResult BAEUtil_GetRmfInstrumentListFromMemory(void const *pRMFData, uint32_t rmfSize, int16_t songIndex,
                                        uint32_t *pOutInstruments, uint32_t maxInstruments,
                                        uint32_t *pOutNumInstruments)
 {
     (void)songIndex; // current implementation ignores song filtering; could refine later
     if (!pRMFData || rmfSize < 12 || !pOutNumInstruments) return BAE_PARAM_ERR;
 
-    XFILE fileRef = (XFILE)pRMFData; // caller must pass actual XFILE (not &fileRef)
-    char *rmfData = (char *)XNewPtr(rmfSize);
-    if (!rmfData) return BAE_MEMORY_ERR;
-    XFileSetPosition(fileRef, 0);
+    const char *rmfData = (const char *)pRMFData;
 
-    if (XFileRead(fileRef, rmfData, (int32_t)rmfSize) != 0) {
-        XDisposePtr(rmfData);
-        return BAE_FILE_IO_ERROR;
-    }
     if (memcmp(rmfData, "IREZ", 4) != 0) {
-        XDisposePtr(rmfData);
         return BAE_PARAM_ERR;
     }
 
@@ -10029,8 +10046,33 @@ BAEResult BAEUtil_GetRmfInstrumentList(void *pRMFData, uint32_t rmfSize, int16_t
 #undef READ_BE32
 
     *pOutNumInstruments = instrumentCount; // total discovered (may exceed maxInstruments)
-    XDisposePtr(rmfData);
     return BAE_NO_ERROR;
+}
+
+// BAEUtil_GetRmfInstrumentList()
+// --------------------------------------
+//
+// Gets the list of instruments used by the RMF
+BAEResult BAEUtil_GetRmfInstrumentList(void *pRMFData, uint32_t rmfSize, int16_t songIndex,
+                                       uint32_t *pOutInstruments, uint32_t maxInstruments,
+                                       uint32_t *pOutNumInstruments)
+{
+    if (!pRMFData || rmfSize < 12 || !pOutNumInstruments) return BAE_PARAM_ERR;
+
+    XFILE fileRef = (XFILE)pRMFData; // caller must pass actual XFILE (not &fileRef)
+    char *rmfData = (char *)XNewPtr(rmfSize);
+    if (!rmfData) return BAE_MEMORY_ERR;
+    XFileSetPosition(fileRef, 0);
+
+    if (XFileRead(fileRef, rmfData, (int32_t)rmfSize) != 0) {
+        XDisposePtr(rmfData);
+        return BAE_FILE_IO_ERROR;
+    }
+
+    BAEResult result = BAEUtil_GetRmfInstrumentListFromMemory(rmfData, rmfSize, songIndex, pOutInstruments, maxInstruments, pOutNumInstruments);
+
+    XDisposePtr(rmfData);
+    return result;
 }
 #endif
 

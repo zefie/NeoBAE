@@ -880,11 +880,8 @@ class HomeFragment : Fragment() {
                             song.setVelocityCurve(velocityCurve.value)
                         }
 
-                        song.setDefaultReverb(reverbType.value)
+                        Mixer.setDefaultReverb(reverbType.value)
 
-                        song.seekToMs(0)
-                        song.preroll()
-                        song.seekToMs(0)
                         val r = song.start()
                         if (r == 0) {
                             if (song.hasEmbeddedBank()) {

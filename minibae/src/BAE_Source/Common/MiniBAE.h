@@ -2582,6 +2582,16 @@ extern "C"
                                            uint32_t maxInstruments,
                                            uint32_t *pOutNumInstruments);
 
+    // BAEUtil_GetRmfInstrumentListFromMemory()
+    // --------------------------------------
+    // Enumerate INST resource IDs found in an RMF/IREZ image in memory (pRMFData is the raw data pointer).
+    BAEResult BAEUtil_GetRmfInstrumentListFromMemory(void const *pRMFData,
+                                           uint32_t rmfSize,
+                                           int16_t songIndex,
+                                           uint32_t *pOutInstruments,
+                                           uint32_t maxInstruments,
+                                           uint32_t *pOutNumInstruments);
+
     // BAEUtil_GetRmfSongInfoFromFile()
     // --------------------------------------
     // If the file at filePath contains a song with index

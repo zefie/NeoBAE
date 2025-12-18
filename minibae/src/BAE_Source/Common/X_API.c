@@ -2690,19 +2690,34 @@ XFILERESOURCECACHE * XCreateAccessCache(XFILE fileRef)
         // name length (pascal)
         int32_t namePos = XFileGetPosition(fileRef);
         unsigned char nameLen = 0;
-        if (XFileRead(fileRef, &nameLen, 1) != 0) { XDisposePtr(newCache); return NULL; }
+        if (XFileRead(fileRef, &nameLen, 1) != 0) { 
+            BAE_PRINTF("[XCreateAccessCache] FAIL: XFileRead(nameLen) failed at resource %d\n", count+1);
+            XDisposePtr(newCache); return NULL; 
+        }
         if (nameLen > 0)
         {
             // skip remainder of name
-            if (XFileSetPositionRelative(fileRef, nameLen) != 0) { XDisposePtr(newCache); return NULL; }
+            if (XFileSetPositionRelative(fileRef, nameLen) != 0) { 
+                BAE_PRINTF("[XCreateAccessCache] FAIL: XFileSetPositionRelative(nameLen=%d) failed at resource %d\n", nameLen, count+1);
+                XDisposePtr(newCache); return NULL; 
+            }
         }
         // length
-        if (XFileRead(fileRef, &data, (int32_t)sizeof(int32_t)) != 0) { XDisposePtr(newCache); return NULL; }
+        if (XFileRead(fileRef, &data, (int32_t)sizeof(int32_t)) != 0) { 
+            BAE_PRINTF("[XCreateAccessCache] FAIL: XFileRead(resourceLength) failed at resource %d\n", count+1);
+            XDisposePtr(newCache); return NULL; 
+        }
         item->resourceLength = (int32_t)XGetLong(&data);
         item->fileOffsetName = namePos;
         item->fileOffsetData = XFileGetPosition(fileRef); // start of data
-        // skip data block
-        if (XFileSetPositionRelative(fileRef, item->resourceLength) != 0) { XDisposePtr(newCache); return NULL; }
+        // skip data block (but not for the last resource, as it may extend past file end)
+        if (count < total - 1)
+        {
+            if (XFileSetPositionRelative(fileRef, item->resourceLength) != 0) { 
+                BAE_PRINTF("[XCreateAccessCache] FAIL: XFileSetPositionRelative(resourceLength=%d) failed at resource %d\n", item->resourceLength, count+1);
+                XDisposePtr(newCache); return NULL; 
+            }
+        }
         next = headerNext;
     }
     // Replace any existing cache
@@ -2711,6 +2726,7 @@ XFILERESOURCECACHE * XCreateAccessCache(XFILE fileRef)
         XDisposePtr(pReference->pCache);
     }
     pReference->pCache = newCache;
+    BAE_PRINTF("[XCreateAccessCache] SUCCESS: Cache created with %d resources\n", total);
     return newCache;
 }
 
