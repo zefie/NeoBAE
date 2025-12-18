@@ -268,10 +268,10 @@ class MusicPlayerViewModel : ViewModel() {
     }
     
     // Database-backed search (instant results)
-    fun searchFilesInDatabase(query: String, currentPath: String?) {
-        android.util.Log.d("MusicPlayerViewModel", "searchFilesInDatabase: query='$query', path='$currentPath', db=${database != null}")
+    fun searchFilesInDatabase(query: String, currentPath: String?, limit: Int = 1000) {
+        android.util.Log.d("MusicPlayerViewModel", "searchFilesInDatabase: query='$query', path='$currentPath', limit=$limit, db=${database != null}")
         
-        if (query.length < 3) {
+        if (query.isEmpty()) {
             _searchResults.value = emptyList()
             return
         }
@@ -297,12 +297,68 @@ class MusicPlayerViewModel : ViewModel() {
                     if (db != null) {
                         val entities = if (currentPath != null && currentPath != "/") {
                             android.util.Log.d("MusicPlayerViewModel", "Searching in path: $currentPath")
-                            db.searchFilesInPath(currentPath, query)
+                            db.searchFilesInPath(currentPath, query, limit)
                         } else {
                             // Use current path or default to /sdcard for finding parent index
                             val searchPath = currentPath ?: "/sdcard"
                             android.util.Log.d("MusicPlayerViewModel", "Searching in root, searchPath: $searchPath")
-                            db.searchFiles(searchPath, query)
+                            db.searchFiles(searchPath, query, limit)
+                        }
+                        
+                        // Convert entities to PlaylistItems
+                        entities.map { entity ->
+                            PlaylistItem(
+                                file = File(entity.path),
+                                title = entity.filename,
+                                path = entity.path,
+                                durationMs = 0,
+                                isFolder = false
+                            )
+                        }
+                    } else {
+                        emptyList()
+                    }
+                }
+                _searchResults.value = results
+            } catch (e: Exception) {
+                _searchResults.value = emptyList()
+            } finally {
+                isSearching = false
+            }
+        }
+    }
+    
+    // Get all files in database (for showing all results when search is empty)
+    fun getAllFilesInDatabase(currentPath: String?, limit: Int = 1000) {
+        android.util.Log.d("MusicPlayerViewModel", "getAllFilesInDatabase: path='$currentPath', limit=$limit, db=${database != null}")
+        
+        if (database == null) {
+            android.util.Log.w("MusicPlayerViewModel", "Database not initialized!")
+            _searchResults.value = emptyList()
+            return
+        }
+        
+        // Check if current path is covered by an index
+        if (currentPath != null && currentPath != "/" && !database!!.hasIndexForPath(currentPath)) {
+            android.util.Log.w("MusicPlayerViewModel", "Current path not indexed: $currentPath")
+            _searchResults.value = emptyList()
+            return
+        }
+        
+        isSearching = true
+        viewModelScope.launch {
+            try {
+                val results = withContext(Dispatchers.IO) {
+                    val db = database
+                    if (db != null) {
+                        val entities = if (currentPath != null && currentPath != "/") {
+                            android.util.Log.d("MusicPlayerViewModel", "Getting all files in path: $currentPath")
+                            db.getAllFilesInPath(currentPath, limit)
+                        } else {
+                            // Use current path or default to /sdcard for finding parent index
+                            val searchPath = currentPath ?: "/sdcard"
+                            android.util.Log.d("MusicPlayerViewModel", "Getting all files in root, searchPath: $searchPath")
+                            db.getAllFiles(searchPath, limit)
                         }
                         
                         // Convert entities to PlaylistItems

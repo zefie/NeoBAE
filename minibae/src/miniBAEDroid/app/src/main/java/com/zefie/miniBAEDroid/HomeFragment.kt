@@ -93,6 +93,7 @@ class HomeFragment : Fragment() {
     private var reverbType = mutableStateOf(1)
     // velocityCurve is now in companion object
     private var exportCodec = mutableStateOf(2) // Default to OGG
+    private var searchResultLimit = mutableStateOf(1000) // Default to 1000
     
     // Bank browser state (completely separate from main browser)
     private var showBankBrowser = mutableStateOf(false)
@@ -628,6 +629,7 @@ class HomeFragment : Fragment() {
                         reverbType = reverbType.value,
                         velocityCurve = velocityCurve.value,
                         exportCodec = exportCodec.value,
+                        searchResultLimit = searchResultLimit.value,
                         onLoadBuiltin = {
                             loadBuiltInPatches()
                         },
@@ -651,6 +653,11 @@ class HomeFragment : Fragment() {
                             exportCodec.value = value
                             val prefs = requireContext().getSharedPreferences("miniBAE_prefs", Context.MODE_PRIVATE)
                             prefs.edit().putInt("export_codec", value).apply()
+                        },
+                        onSearchLimitChange = { value ->
+                            searchResultLimit.value = value
+                            val prefs = requireContext().getSharedPreferences("miniBAE_prefs", Context.MODE_PRIVATE)
+                            prefs.edit().putInt("search_result_limit", value).apply()
                         },
                         onExportRequest = { filename, codec ->
                             val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
@@ -1966,10 +1973,12 @@ fun NewMusicPlayerScreen(
     reverbType: Int,
     velocityCurve: Int,
     exportCodec: Int,
+    searchResultLimit: Int,
     onLoadBuiltin: () -> Unit,
     onReverbChange: (Int) -> Unit,
     onCurveChange: (Int) -> Unit,
     onExportCodecChange: (Int) -> Unit,
+    onSearchLimitChange: (Int) -> Unit,
     onExportRequest: (String, Int) -> Unit,
     onRefreshStorage: () -> Unit,
     onRepeatModeChange: () -> Unit,
@@ -2172,7 +2181,8 @@ fun NewMusicPlayerScreen(
                     viewModel = viewModel,
                     onPlaylistItemClick = onPlaylistItemClick,
                     onToggleFavorite = onToggleFavorite,
-                    onAddToPlaylist = onAddToPlaylist
+                    onAddToPlaylist = onAddToPlaylist,
+                    searchResultLimit = searchResultLimit
                 )
                 NavigationScreen.FAVORITES -> FavoritesScreenContent(
                     viewModel = viewModel,
@@ -2186,11 +2196,13 @@ fun NewMusicPlayerScreen(
                     reverbType = reverbType,
                     velocityCurve = velocityCurve,
                     exportCodec = exportCodec,
+                    searchResultLimit = searchResultLimit,
                     onLoadBuiltin = onLoadBuiltin,
                     onReverbChange = onReverbChange,
                     onCurveChange = onCurveChange,
                     onVolumeChange = onVolumeChange,
                     onExportCodecChange = onExportCodecChange,
+                    onSearchLimitChange = onSearchLimitChange,
                     onBrowseBanks = onBrowseBanks
                 )
             }
@@ -2665,53 +2677,8 @@ fun HomeScreenContent(
                 }
             }
             else -> {
+                val songFiles = viewModel.folderFiles.filter { !it.isFolder && !it.title.startsWith("🔄") }
                 LazyColumn(modifier = Modifier.fillMaxSize()) {
-                    // Add all MIDI buttons (only show if there are songs in the folder)
-                    val songFiles = viewModel.folderFiles.filter { !it.isFolder && !it.title.startsWith("🔄") }
-                    if (songFiles.isNotEmpty()) {
-                        item {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Button(
-                                    onClick = onAddAllMidi,
-                                    modifier = Modifier.weight(1f),
-                                    colors = ButtonDefaults.buttonColors(
-                                        backgroundColor = MaterialTheme.colors.primary.copy(alpha = 0.1f),
-                                        contentColor = MaterialTheme.colors.primary
-                                    )
-                                ) {
-                                    Icon(
-                                        Icons.AutoMirrored.Filled.PlaylistAdd,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text("Add All", fontSize = 12.sp)
-                                }
-                                Button(
-                                    onClick = onAddAllMidiRecursive,
-                                    modifier = Modifier.weight(1f),
-                                    colors = ButtonDefaults.buttonColors(
-                                        backgroundColor = MaterialTheme.colors.primary.copy(alpha = 0.1f),
-                                        contentColor = MaterialTheme.colors.primary
-                                    )
-                                ) {
-                                    Icon(
-                                        Icons.AutoMirrored.Filled.PlaylistAdd,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text("+ Subfolders", fontSize = 12.sp)
-                                }
-                            }
-                        }
-                    }
-                    
                     // Show parent directory ".." option
                     viewModel.currentFolderPath?.let { currentPath ->
                         val file = File(currentPath)
@@ -2832,7 +2799,8 @@ fun SearchScreenContent(
     viewModel: MusicPlayerViewModel,
     onPlaylistItemClick: (File) -> Unit,
     onToggleFavorite: (String) -> Unit,
-    onAddToPlaylist: (File) -> Unit
+    onAddToPlaylist: (File) -> Unit,
+    searchResultLimit: Int
 ) {
     val context = LocalContext.current
     val indexingProgress by viewModel.getIndexingProgress()?.collectAsState() ?: remember { mutableStateOf(IndexingProgress()) }
@@ -2843,10 +2811,13 @@ fun SearchScreenContent(
         viewModel.initializeDatabase(context)
     }
     
-    // Trigger search when query changes
-    LaunchedEffect(viewModel.searchQuery) {
-        if (viewModel.searchQuery.length >= 3) {
-            viewModel.searchFilesInDatabase(viewModel.searchQuery, viewModel.currentFolderPath)
+    // Trigger search when query changes or when showing all results
+    LaunchedEffect(viewModel.searchQuery, searchResultLimit) {
+        if (viewModel.searchQuery.isNotEmpty()) {
+            viewModel.searchFilesInDatabase(viewModel.searchQuery, viewModel.currentFolderPath, searchResultLimit)
+        } else {
+            // Show all results when search is empty
+            viewModel.getAllFilesInDatabase(viewModel.currentFolderPath, searchResultLimit)
         }
     }
     
@@ -2858,7 +2829,7 @@ fun SearchScreenContent(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp),
-            placeholder = { Text("Search songs... (min 3 chars)") },
+            placeholder = { Text("Search songs...") },
             leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
             trailingIcon = {
                 if (viewModel.searchQuery.isNotEmpty()) {
@@ -3015,24 +2986,41 @@ fun SearchScreenContent(
                 }
             }
             viewModel.searchQuery.isEmpty() -> {
-                // Show hint when nothing typed
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.Filled.Search, contentDescription = null, modifier = Modifier.size(64.dp), tint = Color.Gray)
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text("Enter at least 3 characters to search", color = Color.Gray, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text("Instant search across all indexed files", fontSize = 12.sp, color = Color.Gray)
+                // Show all files when nothing typed
+                if (searchResults.isEmpty()) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(Icons.Filled.Search, contentDescription = null, modifier = Modifier.size(64.dp), tint = Color.Gray)
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text("Showing all indexed files", color = Color.Gray, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text("Type to search", fontSize = 12.sp, color = Color.Gray)
+                        }
                     }
-                }
-            }
-            viewModel.searchQuery.length < 3 -> {
-                // Show hint for more characters
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.Filled.Search, contentDescription = null, modifier = Modifier.size(64.dp), tint = Color.Gray)
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text("Type ${3 - viewModel.searchQuery.length} more character(s)...", color = Color.Gray)
+                } else {
+                    // Show all results
+                    LazyColumn(modifier = Modifier.fillMaxSize()) {
+                        item {
+                            val limitText = if (searchResultLimit == -1) "all" else "up to $searchResultLimit"
+                            Text(
+                                "${searchResults.size} file(s) ($limitText)",
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                                fontSize = 12.sp,
+                                color = Color.Gray
+                            )
+                        }
+                        itemsIndexed(searchResults) { index, item ->
+                            FolderSongListItem(
+                                item = item,
+                                isFavorite = viewModel.isFavorite(item.path),
+                                onClick = { onPlaylistItemClick(item.file) },
+                                onToggleFavorite = { onToggleFavorite(item.path) },
+                                onAddToPlaylist = { onAddToPlaylist(item.file) }
+                            )
+                            if (index < searchResults.size - 1) {
+                                Divider(color = Color.Gray.copy(alpha = 0.2f))
+                            }
+                        }
                     }
                 }
             }
@@ -3058,8 +3046,9 @@ fun SearchScreenContent(
                 // Show results with count
                 LazyColumn(modifier = Modifier.fillMaxSize()) {
                     item {
+                        val limitText = if (searchResultLimit == -1) "all" else "up to $searchResultLimit"
                         Text(
-                            "${searchResults.size} file(s) found",
+                            "${searchResults.size} file(s) found ($limitText)",
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                             fontSize = 12.sp,
                             color = Color.Gray
@@ -3271,11 +3260,13 @@ fun SettingsScreenContent(
     reverbType: Int,
     velocityCurve: Int,
     exportCodec: Int,
+    searchResultLimit: Int,
     onLoadBuiltin: () -> Unit,
     onReverbChange: (Int) -> Unit,
     onCurveChange: (Int) -> Unit,
     onVolumeChange: (Int) -> Unit,
     onExportCodecChange: (Int) -> Unit,
+    onSearchLimitChange: (Int) -> Unit,
     onBrowseBanks: () -> Unit
 ) {
     val reverbOptions = listOf(
@@ -3286,10 +3277,24 @@ fun SettingsScreenContent(
     
     val curveOptions = listOf("Beatnik Default", "Peaky S Curve", "WebTV Curve", "2x Exponential", "2x Linear")
     val exportCodecOptions = listOf("WAV", "OGG", "FLAC")
+    val searchLimitOptions = listOf(
+        250 to "250",
+        500 to "500",
+        750 to "750",
+        1000 to "1,000",
+        2500 to "2,500",
+        5000 to "5,000",
+        10000 to "10,000",
+        25000 to "25,000",
+        50000 to "50,000",
+        -1 to "Unlimited"
+    )
     
     var reverbExpanded by remember { mutableStateOf(false) }
     var curveExpanded by remember { mutableStateOf(false) }
     var exportCodecExpanded by remember { mutableStateOf(false) }
+    var searchLimitExpanded by remember { mutableStateOf(false) }
+    var showUnlimitedWarning by remember { mutableStateOf(false) }
     val scrollState = rememberScrollState()
     
     Column(
@@ -3562,6 +3567,103 @@ fun SettingsScreenContent(
                     }
                 }
             }
+        }
+        
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        // Search Result Limit Section
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            elevation = 4.dp,
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(bottom = 12.dp)
+                ) {
+                    Icon(
+                        Icons.Filled.Search,
+                        contentDescription = null,
+                        tint = MaterialTheme.colors.primary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Search Result Limit",
+                        style = MaterialTheme.typography.h6,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colors.primary
+                    )
+                }
+                
+                Box {
+                    OutlinedButton(
+                        onClick = { searchLimitExpanded = true },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = searchLimitOptions.find { it.first == searchResultLimit }?.second ?: "1,000",
+                            modifier = Modifier.weight(1f)
+                        )
+                        Icon(Icons.Filled.ArrowDropDown, contentDescription = null)
+                    }
+                    DropdownMenu(
+                        expanded = searchLimitExpanded,
+                        onDismissRequest = { searchLimitExpanded = false }
+                    ) {
+                        searchLimitOptions.forEach { (value, label) ->
+                            DropdownMenuItem(onClick = {
+                                if (value == -1) {
+                                    // Show warning for unlimited
+                                    showUnlimitedWarning = true
+                                    searchLimitExpanded = false
+                                } else {
+                                    onSearchLimitChange(value)
+                                    searchLimitExpanded = false
+                                }
+                            }) {
+                                Text(label)
+                            }
+                        }
+                    }
+                }
+                
+                Text(
+                    text = "Maximum number of search results to display. Lower limits improve performance.",
+                    style = MaterialTheme.typography.caption,
+                    color = MaterialTheme.colors.onSurface.copy(alpha = 0.6f),
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+            }
+        }
+        
+        // Warning dialog for unlimited option
+        if (showUnlimitedWarning) {
+            androidx.compose.material.AlertDialog(
+                onDismissRequest = { showUnlimitedWarning = false },
+                title = { Text("Warning") },
+                text = {
+                    Text("Setting the search limit to Unlimited may cause slowdowns and increased memory usage with large databases. Are you sure you want to continue?")
+                },
+                confirmButton = {
+                    androidx.compose.material.TextButton(
+                        onClick = {
+                            onSearchLimitChange(-1)
+                            showUnlimitedWarning = false
+                        }
+                    ) {
+                        Text("Yes, Unlimited")
+                    }
+                },
+                dismissButton = {
+                    androidx.compose.material.TextButton(
+                        onClick = { showUnlimitedWarning = false }
+                    ) {
+                        Text("Cancel")
+                    }
+                }
+            )
         }
         
         Spacer(modifier = Modifier.height(16.dp))

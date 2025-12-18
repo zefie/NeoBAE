@@ -149,33 +149,67 @@ class SQLiteHelper private constructor(private val context: Context) {
         nativeBatchInsert(dbPtr, paths, filenames, extensions, parentPaths, sizes, modifiedTimes)
     }
     
-    fun searchFiles(searchPath: String, query: String): List<FileEntity> {
+    fun searchFiles(searchPath: String, query: String, limit: Int = 1000): List<FileEntity> {
         // Find the closest parent index
         val indexPath = findParentIndex(searchPath)
-        Log.d("SQLiteHelper", "searchFiles: searchPath=$searchPath, indexPath=$indexPath")
+        Log.d("SQLiteHelper", "searchFiles: searchPath=$searchPath, indexPath=$indexPath, limit=$limit")
         if (indexPath == null) return emptyList()
         
         val dbPtr = getOrCreateDatabase(indexPath)
         if (dbPtr == 0L) return emptyList()
         
-        val sql = "SELECT path, filename, extension, parent_path, size, last_modified FROM indexed_files WHERE filename LIKE '%$query%' ORDER BY filename COLLATE NOCASE"
+        val limitClause = if (limit > 0) " LIMIT $limit" else ""
+        val sql = "SELECT path, filename, extension, parent_path, size, last_modified FROM indexed_files WHERE filename LIKE '%$query%' ORDER BY filename COLLATE NOCASE$limitClause"
         val results = executeQuery(dbPtr, sql)
         Log.d("SQLiteHelper", "searchFiles: found ${results.size} results")
         return results
     }
     
-    fun searchFilesInPath(parentPath: String, query: String): List<FileEntity> {
+    fun searchFilesInPath(parentPath: String, query: String, limit: Int = 1000): List<FileEntity> {
         // Find the closest parent index
         val indexPath = findParentIndex(parentPath)
-        Log.d("SQLiteHelper", "searchFilesInPath: parentPath=$parentPath, indexPath=$indexPath")
+        Log.d("SQLiteHelper", "searchFilesInPath: parentPath=$parentPath, indexPath=$indexPath, limit=$limit")
         if (indexPath == null) return emptyList()
         
         val dbPtr = getOrCreateDatabase(indexPath)
         if (dbPtr == 0L) return emptyList()
         
-        val sql = "SELECT path, filename, extension, parent_path, size, last_modified FROM indexed_files WHERE parent_path LIKE '$parentPath%' AND filename LIKE '%$query%' ORDER BY filename COLLATE NOCASE"
+        val limitClause = if (limit > 0) " LIMIT $limit" else ""
+        val sql = "SELECT path, filename, extension, parent_path, size, last_modified FROM indexed_files WHERE parent_path LIKE '$parentPath%' AND filename LIKE '%$query%' ORDER BY filename COLLATE NOCASE$limitClause"
         val results = executeQuery(dbPtr, sql)
         Log.d("SQLiteHelper", "searchFilesInPath: query=$sql, found ${results.size} results")
+        return results
+    }
+    
+    fun getAllFiles(searchPath: String, limit: Int = 1000): List<FileEntity> {
+        // Find the closest parent index
+        val indexPath = findParentIndex(searchPath)
+        Log.d("SQLiteHelper", "getAllFiles: searchPath=$searchPath, indexPath=$indexPath, limit=$limit")
+        if (indexPath == null) return emptyList()
+        
+        val dbPtr = getOrCreateDatabase(indexPath)
+        if (dbPtr == 0L) return emptyList()
+        
+        val limitClause = if (limit > 0) " LIMIT $limit" else ""
+        val sql = "SELECT path, filename, extension, parent_path, size, last_modified FROM indexed_files ORDER BY filename COLLATE NOCASE$limitClause"
+        val results = executeQuery(dbPtr, sql)
+        Log.d("SQLiteHelper", "getAllFiles: found ${results.size} results")
+        return results
+    }
+    
+    fun getAllFilesInPath(parentPath: String, limit: Int = 1000): List<FileEntity> {
+        // Find the closest parent index
+        val indexPath = findParentIndex(parentPath)
+        Log.d("SQLiteHelper", "getAllFilesInPath: parentPath=$parentPath, indexPath=$indexPath, limit=$limit")
+        if (indexPath == null) return emptyList()
+        
+        val dbPtr = getOrCreateDatabase(indexPath)
+        if (dbPtr == 0L) return emptyList()
+        
+        val limitClause = if (limit > 0) " LIMIT $limit" else ""
+        val sql = "SELECT path, filename, extension, parent_path, size, last_modified FROM indexed_files WHERE parent_path LIKE '$parentPath%' ORDER BY filename COLLATE NOCASE$limitClause"
+        val results = executeQuery(dbPtr, sql)
+        Log.d("SQLiteHelper", "getAllFilesInPath: found ${results.size} results")
         return results
     }
     
