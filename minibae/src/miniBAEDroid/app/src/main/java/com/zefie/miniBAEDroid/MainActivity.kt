@@ -23,6 +23,23 @@ class MainActivity : AppCompatActivity() {
     var pendingBankReload = false
     var currentSong: org.minibae.Song? = null
     var currentSound: org.minibae.Sound? = null
+    
+    // Service binding
+    private var playbackService: MediaPlaybackService? = null
+    private var isBound = false
+    
+    private val connection = object : android.content.ServiceConnection {
+        override fun onServiceConnected(className: android.content.ComponentName, service: android.os.IBinder) {
+            val binder = service as MediaPlaybackService.LocalBinder
+            playbackService = binder.getService()
+            isBound = true
+        }
+
+        override fun onServiceDisconnected(arg0: android.content.ComponentName) {
+            isBound = false
+            playbackService = null
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -49,6 +66,11 @@ class MainActivity : AppCompatActivity() {
         
         // Request storage permissions
         requestStoragePermissions()
+        
+        // Bind to MediaPlaybackService
+        android.content.Intent(this, MediaPlaybackService::class.java).also { intent ->
+            bindService(intent, connection, Context.BIND_AUTO_CREATE)
+        }
 
         // Load native library (built by the module 'miniBAE')
         // Load sqlite3 first since miniBAE depends on it
@@ -247,6 +269,36 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        if (isBound) {
+            unbindService(connection)
+            isBound = false
+        }
         Mixer.delete()
+    }
+    
+    fun updateServiceNotification(
+        title: String,
+        artist: String,
+        isPlaying: Boolean,
+        hasNext: Boolean,
+        hasPrevious: Boolean,
+        currentPosition: Long = 0,
+        duration: Long = 0
+    ) {
+        if (isBound && playbackService != null) {
+            // Start the service if it's not already running in foreground
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(android.content.Intent(this, MediaPlaybackService::class.java))
+            } else {
+                startService(android.content.Intent(this, MediaPlaybackService::class.java))
+            }
+            playbackService?.updateNotification(title, artist, isPlaying, hasNext, hasPrevious, currentPosition, duration)
+        }
+    }
+    
+    fun stopServiceNotification() {
+        if (isBound && playbackService != null) {
+            playbackService?.stopForegroundService()
+        }
     }
 }

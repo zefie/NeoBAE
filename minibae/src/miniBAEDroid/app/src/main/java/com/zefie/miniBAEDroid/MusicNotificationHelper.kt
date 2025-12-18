@@ -86,7 +86,7 @@ class MusicNotificationHelper(private val context: Context) {
         return bitmap
     }
     
-    fun showNotification(
+    fun buildNotification(
         title: String,
         artist: String,
         isPlaying: Boolean,
@@ -94,7 +94,7 @@ class MusicNotificationHelper(private val context: Context) {
         hasPrevious: Boolean,
         currentPosition: Long = 0,
         duration: Long = 0
-    ) {
+    ): android.app.Notification {
         val notificationIntent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
         }
@@ -194,8 +194,21 @@ class MusicNotificationHelper(private val context: Context) {
             builder.setProgress(duration.toInt(), currentPosition.toInt(), false)
         }
         
+        return builder.build()
+    }
+
+    fun showNotification(
+        title: String,
+        artist: String,
+        isPlaying: Boolean,
+        hasNext: Boolean,
+        hasPrevious: Boolean,
+        currentPosition: Long = 0,
+        duration: Long = 0
+    ) {
+        val notification = buildNotification(title, artist, isPlaying, hasNext, hasPrevious, currentPosition, duration)
         try {
-            NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, builder.build())
+            NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, notification)
         } catch (e: SecurityException) {
             // Permission not granted, silently fail
         }

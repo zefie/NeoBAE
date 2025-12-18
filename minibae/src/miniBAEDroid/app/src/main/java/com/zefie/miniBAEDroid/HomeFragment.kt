@@ -65,7 +65,6 @@ class HomeFragment : Fragment() {
     private var mixerIdleJob: Job? = null
     private var pickedFolderUri: Uri? = null
     private lateinit var viewModel: MusicPlayerViewModel
-    private lateinit var notificationHelper: MusicNotificationHelper
     private var isAppInForeground = mutableStateOf(true)
     
     private val currentSong: Song?
@@ -352,9 +351,6 @@ class HomeFragment : Fragment() {
     
     override fun onDestroy() {
         super.onDestroy()
-        if (::notificationHelper.isInitialized) {
-            notificationHelper.cleanup()
-        }
     }
 
     private fun savePlaylist() {
@@ -488,9 +484,6 @@ class HomeFragment : Fragment() {
                         loadFavorites()
                     }
                 
-                    // Initialize notification helper
-                    notificationHelper = MusicNotificationHelper(requireContext())
-                    
                     // Register notification action callbacks
                     MusicNotificationReceiver.setCallbacks(
                         onPlayPause = { togglePlayPause() },
@@ -499,9 +492,7 @@ class HomeFragment : Fragment() {
                         onClose = {
                             stopPlayback(true)
                             viewModel.isPlaying = false
-                            if (::notificationHelper.isInitialized) {
-                                notificationHelper.hideNotification()
-                            }
+                            (activity as? MainActivity)?.stopServiceNotification()
                             // User closed playback - cleanup is scheduled by stopPlayback(true)
                         }
                     )
@@ -583,33 +574,25 @@ class HomeFragment : Fragment() {
                     prefs.edit().putInt("repeat_mode", viewModel.repeatMode.ordinal).apply()
                 }
                 
-                // Update notification when playback state changes (only when backgrounded)
-                LaunchedEffect(viewModel.isPlaying, viewModel.currentTitle, viewModel.currentIndex, isAppInForeground.value) {
-                    if (!::notificationHelper.isInitialized) return@LaunchedEffect
-                    
-                    // Only show notification when app is in background
-                    if (!isAppInForeground.value) {
-                        val currentItem = viewModel.getCurrentItem()
-                        if (currentItem != null && (viewModel.isPlaying || viewModel.currentTitle != "No song loaded")) {
-                            val folderName = viewModel.currentFolderPath?.let { path ->
-                                File(path).name
-                            } ?: "Unknown Folder"
-                            
-                            notificationHelper.showNotification(
-                                title = viewModel.currentTitle,
-                                artist = folderName,
-                                isPlaying = viewModel.isPlaying,
-                                hasNext = viewModel.hasNext(),
-                                hasPrevious = viewModel.hasPrevious(),
-                                currentPosition = viewModel.currentPositionMs.toLong(),
-                                duration = viewModel.totalDurationMs.toLong()
-                            )
-                        } else {
-                            notificationHelper.hideNotification()
-                        }
+                // Update notification when playback state changes
+                LaunchedEffect(viewModel.isPlaying, viewModel.currentTitle, viewModel.currentIndex) {
+                    val currentItem = viewModel.getCurrentItem()
+                    if (currentItem != null && (viewModel.isPlaying || viewModel.currentTitle != "No song loaded")) {
+                        val folderName = viewModel.currentFolderPath?.let { path ->
+                            File(path).name
+                        } ?: "Unknown Folder"
+                        
+                        (activity as? MainActivity)?.updateServiceNotification(
+                            title = viewModel.currentTitle,
+                            artist = folderName,
+                            isPlaying = viewModel.isPlaying,
+                            hasNext = viewModel.hasNext(),
+                            hasPrevious = viewModel.hasPrevious(),
+                            currentPosition = viewModel.currentPositionMs.toLong(),
+                            duration = viewModel.totalDurationMs.toLong()
+                        )
                     } else {
-                        // Hide notification when app is in foreground
-                        notificationHelper.hideNotification()
+                        (activity as? MainActivity)?.stopServiceNotification()
                     }
                 }
 
@@ -896,6 +879,8 @@ class HomeFragment : Fragment() {
                         } else {
                             song.setVelocityCurve(velocityCurve.value)
                         }
+
+                        song.setDefaultReverb(reverbType.value)
 
                         song.seekToMs(0)
                         song.preroll()
