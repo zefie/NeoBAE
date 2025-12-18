@@ -26,6 +26,9 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.background
 import androidx.compose.material.*
+import androidx.compose.material.pullrefresh.PullRefreshIndicator
+import androidx.compose.material.pullrefresh.pullRefresh
+import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material.icons.filled.*
@@ -676,7 +679,9 @@ class HomeFragment : Fragment() {
                         },
                         onRefreshStorage = { 
                             checkStoragePermissions()
-                            loadFolderContents("/")
+                            viewModel.currentFolderPath?.let { path ->
+                                loadFolderContents(path)
+                            } ?: loadFolderContents("/")
                         },
                         onRepeatModeChange = {
                             currentSong?.setLoops(if (viewModel.repeatMode == RepeatMode.SONG) 32768 else 0)
@@ -3123,6 +3128,7 @@ private fun LandscapePlayerLayout(
     }
 }
 
+@OptIn(ExperimentalMaterialApi::class)
 @Composable
 fun HomeScreenContent(
     viewModel: MusicPlayerViewModel,
@@ -3137,6 +3143,20 @@ fun HomeScreenContent(
     onAddAllMidi: () -> Unit,
     onAddAllMidiRecursive: () -> Unit
 ) {
+    var refreshing by remember { mutableStateOf(false) }
+    val pullRefreshState = rememberPullRefreshState(
+        refreshing = refreshing,
+        onRefresh = {
+            refreshing = true
+            onRefreshStorage()
+            // Reset refreshing after a short delay
+            kotlinx.coroutines.MainScope().launch {
+                kotlinx.coroutines.delay(500)
+                refreshing = false
+            }
+        }
+    )
+    
     Column(modifier = Modifier.fillMaxSize()) {
         // File list
         when {
@@ -3165,7 +3185,12 @@ fun HomeScreenContent(
             }
             else -> {
                 val songFiles = viewModel.folderFiles.filter { !it.isFolder && !it.title.startsWith("🔄") }
-                LazyColumn(modifier = Modifier.fillMaxSize()) {
+                Box(modifier = Modifier.fillMaxSize()) {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .pullRefresh(pullRefreshState)
+                    ) {
                     // Show parent directory ".." option
                     viewModel.currentFolderPath?.let { currentPath ->
                         val file = File(currentPath)
@@ -3275,6 +3300,13 @@ fun HomeScreenContent(
                             }
                         }
                     }
+                    }
+                    
+                    PullRefreshIndicator(
+                        refreshing = refreshing,
+                        state = pullRefreshState,
+                        modifier = Modifier.align(Alignment.TopCenter)
+                    )
                 }
             }
         }
