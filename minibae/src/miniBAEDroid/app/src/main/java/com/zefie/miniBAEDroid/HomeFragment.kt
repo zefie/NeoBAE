@@ -3228,6 +3228,8 @@ fun SearchScreenContent(
     val context = LocalContext.current
     val indexingProgress by viewModel.getIndexingProgress()?.collectAsState() ?: remember { mutableStateOf(IndexingProgress()) }
     val searchResults by viewModel.searchResults.collectAsState()
+    val configuration = LocalConfiguration.current
+    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
     
     // Initialize database on first composition
     LaunchedEffect(Unit) {
@@ -3245,128 +3247,214 @@ fun SearchScreenContent(
     }
     
     Column(modifier = Modifier.fillMaxSize()) {
-        // Search bar
-        TextField(
-            value = viewModel.searchQuery,
-            onValueChange = { viewModel.searchQuery = it },
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            placeholder = { Text("Search songs...") },
-            leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
-            trailingIcon = {
-                if (viewModel.searchQuery.isNotEmpty()) {
-                    IconButton(onClick = { viewModel.searchQuery = "" }) {
-                        Icon(Icons.Filled.Clear, contentDescription = "Clear")
-                    }
-                }
-            },
-            colors = TextFieldDefaults.textFieldColors(
-                backgroundColor = MaterialTheme.colors.surface,
-                textColor = MaterialTheme.colors.onSurface
-            ),
-            shape = RoundedCornerShape(24.dp),
-            enabled = !indexingProgress.isIndexing
-        )
-        
         // Check if current path is indexed
         val isCurrentPathIndexed = viewModel.isCurrentPathIndexed
         
-        // Show message if current directory is not indexed
-        if (!isCurrentPathIndexed && viewModel.currentFolderPath != null && viewModel.currentFolderPath != "/") {
-            Card(
+        if (isLandscape) {
+            // Landscape: horizontal layout
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 8.dp),
-                backgroundColor = MaterialTheme.colors.surface.copy(alpha = 0.7f)
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    modifier = Modifier.padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        Icons.Filled.Info,
-                        contentDescription = null,
-                        tint = Color.Gray,
-                        modifier = Modifier.padding(end = 12.dp)
-                    )
-                    Text(
-                        "This directory is not indexed. Build an index to enable search.",
-                        fontSize = 14.sp,
-                        color = Color.Gray
-                    )
-                }
-            }
-        }
-        
-        // Index status and rebuild button
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                // Only show count if current path is indexed or we're at root
-                val displayCount = if (isCurrentPathIndexed || viewModel.currentFolderPath == null || viewModel.currentFolderPath == "/") {
-                    viewModel.indexedFileCount
-                } else {
-                    0
-                }
-                
-                Text(
-                    "Indexed: $displayCount files",
-                    fontSize = 12.sp,
-                    color = if (displayCount > 0) Color.Gray else Color.Gray.copy(alpha = 0.5f)
+                // Search bar
+                TextField(
+                    value = viewModel.searchQuery,
+                    onValueChange = { viewModel.searchQuery = it },
+                    modifier = Modifier.weight(1f),
+                    placeholder = { Text("Search songs...") },
+                    leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+                    trailingIcon = {
+                        if (viewModel.searchQuery.isNotEmpty()) {
+                            IconButton(onClick = { viewModel.searchQuery = "" }) {
+                                Icon(Icons.Filled.Clear, contentDescription = "Clear")
+                            }
+                        }
+                    },
+                    colors = TextFieldDefaults.textFieldColors(
+                        backgroundColor = MaterialTheme.colors.surface,
+                        textColor = MaterialTheme.colors.onSurface
+                    ),
+                    shape = RoundedCornerShape(24.dp),
+                    enabled = !indexingProgress.isIndexing,
+                    singleLine = true
                 )
+                
+                // Index status and button
                 if (indexingProgress.isIndexing) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        strokeWidth = 2.dp
+                    )
                     Text(
-                        "Indexing: ${indexingProgress.filesIndexed} files, ${indexingProgress.foldersScanned} folders",
-                        fontSize = 10.sp,
+                        "${indexingProgress.filesIndexed}",
+                        fontSize = 12.sp,
                         color = MaterialTheme.colors.primary
                     )
-                    LinearProgressIndicator(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 4.dp)
+                } else {
+                    val displayCount = if (isCurrentPathIndexed || viewModel.currentFolderPath == null || viewModel.currentFolderPath == "/") {
+                        viewModel.indexedFileCount
+                    } else {
+                        0
+                    }
+                    Text(
+                        "$displayCount",
+                        fontSize = 12.sp,
+                        color = if (displayCount > 0) Color.Gray else Color.Gray.copy(alpha = 0.5f)
                     )
                 }
-            }
-            
-            Button(
-                onClick = {
-                    if (indexingProgress.isIndexing) {
-                        // Stop indexing
-                        viewModel.stopIndexing()
+                
+                Button(
+                    onClick = {
+                        if (indexingProgress.isIndexing) {
+                            viewModel.stopIndexing()
+                        } else {
+                            val rootPath = viewModel.currentFolderPath ?: "/sdcard"
+                            viewModel.rebuildIndex(rootPath) { files, folders, size ->
+                                Toast.makeText(
+                                    context,
+                                    "Indexed $files files in $folders folders (${size / 1024 / 1024} MB)",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }
+                        }
+                    },
+                    enabled = viewModel.currentFolderPath != null && viewModel.currentFolderPath != "/",
+                    colors = if (indexingProgress.isIndexing) {
+                        ButtonDefaults.buttonColors(backgroundColor = MaterialTheme.colors.error)
                     } else {
-                        // Start indexing current directory and all subdirectories
-                        val rootPath = viewModel.currentFolderPath ?: "/sdcard"
-                        viewModel.rebuildIndex(rootPath) { files, folders, size ->
-                            // Show completion toast
-                            Toast.makeText(
-                                context,
-                                "Indexed $files files in $folders folders (${size / 1024 / 1024} MB)",
-                                Toast.LENGTH_LONG
-                            ).show()
+                        ButtonDefaults.buttonColors()
+                    },
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                ) {
+                    Icon(
+                        if (indexingProgress.isIndexing) Icons.Filled.Stop else Icons.Filled.Refresh,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(if (indexingProgress.isIndexing) "Stop" else "Index", fontSize = 13.sp)
+                }
+            }
+        } else {
+            // Portrait: vertical layout
+            TextField(
+                value = viewModel.searchQuery,
+                onValueChange = { viewModel.searchQuery = it },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                placeholder = { Text("Search songs...") },
+                leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+                trailingIcon = {
+                    if (viewModel.searchQuery.isNotEmpty()) {
+                        IconButton(onClick = { viewModel.searchQuery = "" }) {
+                            Icon(Icons.Filled.Clear, contentDescription = "Clear")
                         }
                     }
                 },
-                enabled = viewModel.currentFolderPath != null && viewModel.currentFolderPath != "/",
-                colors = if (indexingProgress.isIndexing) {
-                    ButtonDefaults.buttonColors(backgroundColor = MaterialTheme.colors.error)
-                } else {
-                    ButtonDefaults.buttonColors()
-                },
-                modifier = Modifier.padding(start = 8.dp)
+                colors = TextFieldDefaults.textFieldColors(
+                    backgroundColor = MaterialTheme.colors.surface,
+                    textColor = MaterialTheme.colors.onSurface
+                ),
+                shape = RoundedCornerShape(24.dp),
+                enabled = !indexingProgress.isIndexing
+            )
+            
+            // Show message if current directory is not indexed
+            if (!isCurrentPathIndexed && viewModel.currentFolderPath != null && viewModel.currentFolderPath != "/") {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    backgroundColor = MaterialTheme.colors.surface.copy(alpha = 0.7f)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Filled.Info,
+                            contentDescription = null,
+                            tint = Color.Gray,
+                            modifier = Modifier.padding(end = 12.dp)
+                        )
+                        Text(
+                            "This directory is not indexed. Build an index to enable search.",
+                            fontSize = 14.sp,
+                            color = Color.Gray
+                        )
+                    }
+                }
+            }
+            
+            // Index status and rebuild button
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    if (indexingProgress.isIndexing) Icons.Filled.Stop else Icons.Filled.Refresh,
-                    contentDescription = null,
-                    modifier = Modifier.size(16.dp)
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(if (indexingProgress.isIndexing) "Stop" else "Build Index")
+                Column(modifier = Modifier.weight(1f)) {
+                    val displayCount = if (isCurrentPathIndexed || viewModel.currentFolderPath == null || viewModel.currentFolderPath == "/") {
+                        viewModel.indexedFileCount
+                    } else {
+                        0
+                    }
+                    
+                    Text(
+                        "Indexed: $displayCount files",
+                        fontSize = 12.sp,
+                        color = if (displayCount > 0) Color.Gray else Color.Gray.copy(alpha = 0.5f)
+                    )
+                    if (indexingProgress.isIndexing) {
+                        Text(
+                            "Indexing: ${indexingProgress.filesIndexed} files, ${indexingProgress.foldersScanned} folders",
+                            fontSize = 10.sp,
+                            color = MaterialTheme.colors.primary
+                        )
+                        LinearProgressIndicator(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 4.dp)
+                        )
+                    }
+                }
+                
+                Button(
+                    onClick = {
+                        if (indexingProgress.isIndexing) {
+                            viewModel.stopIndexing()
+                        } else {
+                            val rootPath = viewModel.currentFolderPath ?: "/sdcard"
+                            viewModel.rebuildIndex(rootPath) { files, folders, size ->
+                                Toast.makeText(
+                                    context,
+                                    "Indexed $files files in $folders folders (${size / 1024 / 1024} MB)",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }
+                        }
+                    },
+                    enabled = viewModel.currentFolderPath != null && viewModel.currentFolderPath != "/",
+                    colors = if (indexingProgress.isIndexing) {
+                        ButtonDefaults.buttonColors(backgroundColor = MaterialTheme.colors.error)
+                    } else {
+                        ButtonDefaults.buttonColors()
+                    },
+                    modifier = Modifier.padding(start = 8.dp)
+                ) {
+                    Icon(
+                        if (indexingProgress.isIndexing) Icons.Filled.Stop else Icons.Filled.Refresh,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(if (indexingProgress.isIndexing) "Stop" else "Build Index")
+                }
             }
         }
         
