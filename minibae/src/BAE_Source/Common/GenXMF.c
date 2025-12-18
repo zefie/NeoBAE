@@ -1148,13 +1148,13 @@ BAEResult BAESong_LoadXmfFromFile(BAESong song, BAEPathName filePath, BAE_BOOL i
         return BAE_BAD_FILE;
     }
 
-    unsigned char *bytes = (unsigned char *)data;
+    const void *bytes = (const unsigned char *)data;
     uint32_t ulen = (uint32_t)size;
 
-    return BAESong_LoadXmfFromMemory(song, (void *)bytes, ulen, ignoreBadInstruments);
+    return BAESong_LoadXmfFromMemory(song, bytes, ulen, ignoreBadInstruments);
 }
 
-BAEResult BAESong_LoadXmfFromMemory(BAESong song, void *data, uint32_t ulen, BAE_BOOL ignoreBadInstruments)
+BAEResult BAESong_LoadXmfFromMemory(BAESong song, const void *data, uint32_t ulen, BAE_BOOL ignoreBadInstruments)
 {
     if (!(song))
         return BAE_NULL_OBJECT;
@@ -1198,7 +1198,6 @@ BAEResult BAESong_LoadXmfFromMemory(BAESong song, void *data, uint32_t ulen, BAE
             // Free inflated buffers (loaders make their own copy)
             if (mid) { XDisposePtr((XPTR)mid); }
             if (rmf) { XDisposePtr((XPTR)rmf); }
-            XDisposePtr(data);
             return lerr;
         }
         // If packed extraction failed, fall back to heuristic scanning below
@@ -1231,7 +1230,6 @@ BAEResult BAESong_LoadXmfFromMemory(BAESong song, void *data, uint32_t ulen, BAE
                 BAE_PRINTF("[XMF] No bank loaded during XMF_1.00 parse; scanning raw container for RIFF bank...\n");
                 PV_TryLoadBankFromBlob(bytes, ulen);
             }
-            XDisposePtr(data);
             return lerr;
         }
         // If parsing didn't yield content, try a packed-stream scan across the whole file
@@ -1246,7 +1244,6 @@ BAEResult BAESong_LoadXmfFromMemory(BAESong song, void *data, uint32_t ulen, BAE
                 if (pm) { XDisposePtr((XPTR)pm); }
                 if (pr) { XDisposePtr((XPTR)pr); }
                 if (bank2 == FALSE) { PV_TryLoadBankFromBlob(bytes, ulen); }
-                XDisposePtr(data);
                 return lerr2;
             }
             // Try on decrypted copy as well
@@ -1265,7 +1262,6 @@ BAEResult BAESong_LoadXmfFromMemory(BAESong song, void *data, uint32_t ulen, BAE
                     if (pr) { XDisposePtr((XPTR)pr); }
                     if (bank2 == FALSE) { PV_TryLoadBankFromBlob(decAll, ulen); }
                     XDisposePtr(decAll);
-                    XDisposePtr(data);
                     return lerr2;
                 }
                 XDisposePtr(decAll);
@@ -1294,7 +1290,6 @@ BAEResult BAESong_LoadXmfFromMemory(BAESong song, void *data, uint32_t ulen, BAE
             PV_TryLoadBankFromBlob(bytes, ulen);
         }
         BAEResult lerr = BAESong_LoadMidiFromMemory(song, (void const *)(bytes + smf_off), (uint32_t)(ulen - (uint32_t)smf_off), ignoreBadInstruments);
-        XDisposePtr(data);
         return lerr;
     }
 
@@ -1317,7 +1312,6 @@ BAEResult BAESong_LoadXmfFromMemory(BAESong song, void *data, uint32_t ulen, BAE
             PV_TryLoadBankFromBlob(bytes, ulen);
         }
         BAEResult lerr = BAESong_LoadRmfFromMemory(song, (void *)(bytes + rmf_off), (uint32_t)(ulen - (uint32_t)rmf_off), 0, ignoreBadInstruments);
-        XDisposePtr(data);
         return lerr;
     }
 
@@ -1340,7 +1334,6 @@ BAEResult BAESong_LoadXmfFromMemory(BAESong song, void *data, uint32_t ulen, BAE
             PV_TryLoadBankFromBlob(bytes, ulen);
         }
         BAEResult lerr = BAESong_LoadMidiFromMemory(song, (void const *)rmidSmf, rmidLen, ignoreBadInstruments);
-        XDisposePtr(data);
         return lerr;
     }
 
@@ -1369,7 +1362,6 @@ BAEResult BAESong_LoadXmfFromMemory(BAESong song, void *data, uint32_t ulen, BAE
                         PV_TryLoadBankFromBlob(bytes + bankStart, ulen - bankStart);
                 }
                 BAEResult lerr = BAESong_LoadMidiFromMemory(song, (void const *)(m + roff), (uint32_t)(mlen - (uint32_t)roff), ignoreBadInstruments);
-                XDisposePtr(data);
                 return lerr;
             }
             const unsigned char *smf2=NULL; uint32_t slen2=0;
@@ -1384,7 +1376,6 @@ BAEResult BAESong_LoadXmfFromMemory(BAESong song, void *data, uint32_t ulen, BAE
                         PV_TryLoadBankFromBlob(bytes + bankStart, ulen - bankStart);
                 }
                 BAEResult lerr = BAESong_LoadMidiFromMemory(song, (void const *)smf2, slen2, ignoreBadInstruments);
-                XDisposePtr(data);
                 return lerr;
             }
             int irez = PV_FindSignature(m, mlen, rmf_sig);
@@ -1399,7 +1390,6 @@ BAEResult BAESong_LoadXmfFromMemory(BAESong song, void *data, uint32_t ulen, BAE
                         PV_TryLoadBankFromBlob(bytes + bankStart, ulen - bankStart);
                 }
                 BAEResult lerr = BAESong_LoadRmfFromMemory(song, (void *)(m + irez), (uint32_t)(mlen - (uint32_t)irez), 0, ignoreBadInstruments);
-                XDisposePtr(data);
                 return lerr;
             }
 
@@ -1422,7 +1412,6 @@ BAEResult BAESong_LoadXmfFromMemory(BAESong song, void *data, uint32_t ulen, BAE
                     }
                     BAEResult lerr = BAESong_LoadMidiFromMemory(song, (void const *)(mcpy + droff), (uint32_t)(mlen - (uint32_t)droff), ignoreBadInstruments);
                     XDisposePtr(mcpy);
-                    XDisposePtr(data);
                     return lerr;
                 }
                 const unsigned char *dsmf2=NULL; uint32_t dslen2=0;
@@ -1438,7 +1427,6 @@ BAEResult BAESong_LoadXmfFromMemory(BAESong song, void *data, uint32_t ulen, BAE
                     }
                     BAEResult lerr = BAESong_LoadMidiFromMemory(song, (void const *)dsmf2, dslen2, ignoreBadInstruments);
                     XDisposePtr(mcpy);
-                    XDisposePtr(data);
                     return lerr;
                 }
                 int direz = PV_FindSignature(mcpy, mlen, rmf_sig);
@@ -1454,7 +1442,6 @@ BAEResult BAESong_LoadXmfFromMemory(BAESong song, void *data, uint32_t ulen, BAE
                     }
                     BAEResult lerr = BAESong_LoadRmfFromMemory(song, (void *)(mcpy + direz), (uint32_t)(mlen - (uint32_t)direz), 0, ignoreBadInstruments);
                     XDisposePtr(mcpy);
-                    XDisposePtr(data);
                     return lerr;
                 }
                 // Sliding-window decrypt: some files encode subranges only. Try decrypt starting at each offset.
@@ -1481,7 +1468,6 @@ BAEResult BAESong_LoadXmfFromMemory(BAESong song, void *data, uint32_t ulen, BAE
                             BAEResult lerr = BAESong_LoadMidiFromMemory(song, (void const *)(dwin + woff), (uint32_t)(dlen - (uint32_t)woff), ignoreBadInstruments);
                             XDisposePtr(dwin);
                             XDisposePtr(mcpy);
-                            XDisposePtr(data);
                             return lerr;
                         }
                         int wrez = PV_FindSignature(dwin, dlen, rmf_sig);
@@ -1498,7 +1484,6 @@ BAEResult BAESong_LoadXmfFromMemory(BAESong song, void *data, uint32_t ulen, BAE
                             BAEResult lerr = BAESong_LoadRmfFromMemory(song, (void *)(dwin + wrez), (uint32_t)(dlen - (uint32_t)wrez), 0, ignoreBadInstruments);
                             XDisposePtr(dwin);
                             XDisposePtr(mcpy);
-                            XDisposePtr(data);
                             return lerr;
                         }
                         XDisposePtr(dwin);
@@ -1529,7 +1514,6 @@ BAEResult BAESong_LoadXmfFromMemory(BAESong song, void *data, uint32_t ulen, BAE
                                 }
                                 BAEResult lerr = BAESong_LoadMidiFromMemory(song, (void const *)(out + off), (uint32_t)(outLen - (uint32_t)off), ignoreBadInstruments);
                                 XDisposePtr(out);
-                                XDisposePtr(data);
                                 return lerr;
                             }
                             int roff = PV_FindSignature(out, outLen, rmf_sig);
@@ -1543,7 +1527,6 @@ BAEResult BAESong_LoadXmfFromMemory(BAESong song, void *data, uint32_t ulen, BAE
                                 }
                                 BAEResult lerr = BAESong_LoadRmfFromMemory(song, (void *)(out + roff), (uint32_t)(outLen - (uint32_t)roff), 0, ignoreBadInstruments);
                                 XDisposePtr(out);
-                                XDisposePtr(data);
                                 return lerr;
                             }
                             const unsigned char *smfRMID=NULL; uint32_t smfRMIDLen=0;
@@ -1557,7 +1540,6 @@ BAEResult BAESong_LoadXmfFromMemory(BAESong song, void *data, uint32_t ulen, BAE
                                 }
                                 BAEResult lerr = BAESong_LoadMidiFromMemory(song, (void const *)smfRMID, smfRMIDLen, ignoreBadInstruments);
                                 XDisposePtr(out);
-                                XDisposePtr(data);
                                 return lerr;
                             }
                             XDisposePtr(out);
@@ -1582,7 +1564,6 @@ BAEResult BAESong_LoadXmfFromMemory(BAESong song, void *data, uint32_t ulen, BAE
                                 }
                                 BAEResult lerr = BAESong_LoadMidiFromMemory(song, (void const *)(rdout + off), (uint32_t)(rdlen - (uint32_t)off), ignoreBadInstruments);
                                 XDisposePtr(rdout);
-                                XDisposePtr(data);
                                 return lerr;
                             }
                             int rmr = PV_FindSignature(rdout, rdlen, rmf_sig);
@@ -1596,7 +1577,6 @@ BAEResult BAESong_LoadXmfFromMemory(BAESong song, void *data, uint32_t ulen, BAE
                                 }
                                 BAEResult lerr = BAESong_LoadRmfFromMemory(song, (void *)(rdout + rmr), (uint32_t)(rdlen - (uint32_t)rmr), 0, ignoreBadInstruments);
                                 XDisposePtr(rdout);
-                                XDisposePtr(data);
                                 return lerr;
                             }
                             const unsigned char *rmidSmf2=NULL; uint32_t rmidLen2=0;
@@ -1610,7 +1590,6 @@ BAEResult BAESong_LoadXmfFromMemory(BAESong song, void *data, uint32_t ulen, BAE
                                 }
                                 BAEResult lerr = BAESong_LoadMidiFromMemory(song, (void const *)rmidSmf2, rmidLen2, ignoreBadInstruments);
                                 XDisposePtr(rdout);
-                                XDisposePtr(data);
                                 return lerr;
                             }
                             XDisposePtr(rdout);
@@ -1633,7 +1612,6 @@ BAEResult BAESong_LoadXmfFromMemory(BAESong song, void *data, uint32_t ulen, BAE
                             }
                             BAEResult lerr = BAESong_LoadMidiFromMemory(song, (void const *)pm, pmLen, ignoreBadInstruments);
                             XDisposePtr((XPTR)pm); if (pr) XDisposePtr((XPTR)pr);
-                            XDisposePtr(data);
                             return lerr;
                         }
                         if (pr && prLen)
@@ -1646,7 +1624,6 @@ BAEResult BAESong_LoadXmfFromMemory(BAESong song, void *data, uint32_t ulen, BAE
                             }
                             BAEResult lerr = BAESong_LoadRmfFromMemory(song, (void *)pr, prLen, 0, ignoreBadInstruments);
                             XDisposePtr((XPTR)pr); if (pm) XDisposePtr((XPTR)pm);
-                            XDisposePtr(data);
                             return lerr;
                         }
                         if (pm) { XDisposePtr((XPTR)pm); }
@@ -1686,7 +1663,6 @@ BAEResult BAESong_LoadXmfFromMemory(BAESong song, void *data, uint32_t ulen, BAE
             }
             BAEResult lerr = BAESong_LoadMidiFromMemory(song, (void const *)(dec + d_smf_off), (uint32_t)(ulen - (uint32_t)d_smf_off), ignoreBadInstruments);
             XDisposePtr(dec);
-            XDisposePtr(data);
             return lerr;
         }
 
@@ -1710,7 +1686,6 @@ BAEResult BAESong_LoadXmfFromMemory(BAESong song, void *data, uint32_t ulen, BAE
             }
             BAEResult lerr = BAESong_LoadRmfFromMemory(song, (void *)(dec + d_rmf_off), (uint32_t)(ulen - (uint32_t)d_rmf_off), 0, ignoreBadInstruments);
             XDisposePtr(dec);
-            XDisposePtr(data);
             return lerr;
         }
 
@@ -1734,7 +1709,6 @@ BAEResult BAESong_LoadXmfFromMemory(BAESong song, void *data, uint32_t ulen, BAE
             }
             BAEResult lerr = BAESong_LoadMidiFromMemory(song, (void const *)d_rmidSmf, d_rmidLen, ignoreBadInstruments);
             XDisposePtr(dec);
-            XDisposePtr(data);
             return lerr;
         }
 
@@ -1763,7 +1737,6 @@ BAEResult BAESong_LoadXmfFromMemory(BAESong song, void *data, uint32_t ulen, BAE
                     }
                     BAEResult lerr = BAESong_LoadMidiFromMemory(song, (void const *)(m + roff2), (uint32_t)(mlen - (uint32_t)roff2), ignoreBadInstruments);
                     XDisposePtr(dec);
-                    XDisposePtr(data);
                     return lerr;
                 }
                 const unsigned char *smf2=NULL; uint32_t slen2=0;
@@ -1779,7 +1752,6 @@ BAEResult BAESong_LoadXmfFromMemory(BAESong song, void *data, uint32_t ulen, BAE
                     }
                     BAEResult lerr = BAESong_LoadMidiFromMemory(song, (void const *)smf2, slen2, ignoreBadInstruments);
                     XDisposePtr(dec);
-                    XDisposePtr(data);
                     return lerr;
                 }
                 int irez2 = PV_FindSignature(m, mlen, rmf_sig);
@@ -1795,7 +1767,6 @@ BAEResult BAESong_LoadXmfFromMemory(BAESong song, void *data, uint32_t ulen, BAE
                     }
                     BAEResult lerr = BAESong_LoadRmfFromMemory(song, (void *)(m + irez2), (uint32_t)(mlen - (uint32_t)irez2), 0, ignoreBadInstruments);
                     XDisposePtr(dec);
-                    XDisposePtr(data);
                     return lerr;
                 }
             }
@@ -1804,7 +1775,6 @@ BAEResult BAESong_LoadXmfFromMemory(BAESong song, void *data, uint32_t ulen, BAE
         XDisposePtr(dec);
     }
     BAE_PRINTF("[XMF] Decrypt fallback failed to locate content; unsupported XMF variant\n");
-    XDisposePtr(data);
     return BAE_BAD_FILE;
 }
 

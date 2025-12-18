@@ -14,7 +14,7 @@
 // embedded Standard MIDI File and, if present, an embedded SF2/DLS bank to
 // drive playback via the FluidSynth backend.
 BAEResult BAESong_LoadXmfFromMemory(BAESong song,
-                                  void *data,
+                                  const void *data,
                                   uint32_t ulen,
                                   BAE_BOOL ignoreBadInstruments);
 
