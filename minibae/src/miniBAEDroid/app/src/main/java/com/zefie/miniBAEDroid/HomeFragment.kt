@@ -3819,6 +3819,8 @@ fun SettingsScreenContent(
     var searchLimitExpanded by remember { mutableStateOf(false) }
     var showUnlimitedWarning by remember { mutableStateOf(false) }
     val scrollState = rememberScrollState()
+    val configuration = LocalConfiguration.current
+    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
     
     Column(
         modifier = Modifier
@@ -3826,12 +3828,19 @@ fun SettingsScreenContent(
             .verticalScroll(scrollState)
             .padding(16.dp)
     ) {
-        // Bank Section
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            elevation = 4.dp,
-            shape = RoundedCornerShape(12.dp)
-        ) {
+        if (isLandscape) {
+            // Landscape: 2-column layout
+            // Row 1: Bank and Reverb
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Bank Section
+                Card(
+                    modifier = Modifier.weight(1f),
+                    elevation = 4.dp,
+                    shape = RoundedCornerShape(12.dp)
+                ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -3923,15 +3932,13 @@ fun SettingsScreenContent(
                 )
             }
         }
-        
-        Spacer(modifier = Modifier.height(16.dp))
-        
-        // Reverb Section
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            elevation = 4.dp,
-            shape = RoundedCornerShape(12.dp)
-        ) {
+                
+                // Reverb Section
+                Card(
+                    modifier = Modifier.weight(1f),
+                    elevation = 4.dp,
+                    shape = RoundedCornerShape(12.dp)
+                ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -3979,12 +3986,18 @@ fun SettingsScreenContent(
                 }
             }
         }
-        
-        Spacer(modifier = Modifier.height(16.dp))
-        
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            // Row 2: Velocity Curve and Export Codec
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
         // Velocity Curve Section
         Card(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.weight(1f),
             elevation = 4.dp,
             shape = RoundedCornerShape(12.dp)
         ) {
@@ -4036,14 +4049,12 @@ fun SettingsScreenContent(
             }
         }
         
-        Spacer(modifier = Modifier.height(16.dp))
-        
-        // Export Codec Section
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            elevation = 4.dp,
-            shape = RoundedCornerShape(12.dp)
-        ) {
+                // Export Codec Section
+                Card(
+                    modifier = Modifier.weight(1f),
+                    elevation = 4.dp,
+                    shape = RoundedCornerShape(12.dp)
+                ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -4091,10 +4102,11 @@ fun SettingsScreenContent(
                 }
             }
         }
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
         
-        Spacer(modifier = Modifier.height(16.dp))
-        
-        // Search Result Limit Section
+        // Search Result Limit Section (full width in landscape)
         Card(
             modifier = Modifier.fillMaxWidth(),
             elevation = 4.dp,
@@ -4188,10 +4200,375 @@ fun SettingsScreenContent(
                 }
             )
         }
+        } else {
+            // Portrait: vertical layout (original)
+            // Bank Section
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                elevation = 4.dp,
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(bottom = 12.dp)
+                    ) {
+                        Icon(
+                            Icons.Filled.LibraryMusic,
+                            contentDescription = null,
+                            tint = MaterialTheme.colors.primary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Sound Bank",
+                            style = MaterialTheme.typography.h6,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colors.primary
+                        )
+                    }
+                    
+                    if (isLoadingBank) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text("Loading bank...", style = MaterialTheme.typography.body2)
+                        }
+                    } else {
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colors.primary.copy(alpha = 0.1f)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    Icons.Filled.MusicNote,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colors.primary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = bankName,
+                                    style = MaterialTheme.typography.body1,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colors.onSurface
+                                )
+                            }
+                        }
+                    }
+                    
+                    Spacer(modifier = Modifier.height(12.dp))
+                    
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = onBrowseBanks,
+                            modifier = Modifier.weight(1f),
+                            enabled = !isLoadingBank
+                        ) {
+                            Icon(Icons.Filled.FolderOpen, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Load Bank")
+                        }
+                        OutlinedButton(
+                            onClick = onLoadBuiltin,
+                            modifier = Modifier.weight(1f),
+                            enabled = !isLoadingBank
+                        ) {
+                            Icon(Icons.Filled.GetApp, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Built-in")
+                        }
+                    }
+                    
+                    Text(
+                        text = "Supports HSB, SF2, SF3, DLS formats • Hot-swap: reloads current song automatically",
+                        style = MaterialTheme.typography.caption,
+                        color = MaterialTheme.colors.onSurface.copy(alpha = 0.6f),
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            // Reverb Section
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                elevation = 4.dp,
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(bottom = 12.dp)
+                    ) {
+                        Icon(
+                            Icons.Filled.GraphicEq,
+                            contentDescription = null,
+                            tint = MaterialTheme.colors.primary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Reverb",
+                            style = MaterialTheme.typography.h6,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colors.primary
+                        )
+                    }
+                    
+                    Box {
+                        OutlinedButton(
+                            onClick = { reverbExpanded = true },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = reverbOptions.getOrNull(reverbType - 1) ?: "None",
+                                modifier = Modifier.weight(1f)
+                            )
+                            Icon(Icons.Filled.ArrowDropDown, contentDescription = null)
+                        }
+                        DropdownMenu(
+                            expanded = reverbExpanded,
+                            onDismissRequest = { reverbExpanded = false }
+                        ) {
+                            reverbOptions.forEachIndexed { index, option ->
+                                DropdownMenuItem(onClick = {
+                                    onReverbChange(index + 1)
+                                    reverbExpanded = false
+                                }) {
+                                    Text(option)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            // Velocity Curve Section
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                elevation = 4.dp,
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(bottom = 12.dp)
+                    ) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.TrendingUp,
+                            contentDescription = null,
+                            tint = MaterialTheme.colors.primary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Velocity Curve (HSB Only)",
+                            style = MaterialTheme.typography.h6,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colors.primary
+                        )
+                    }
+                    
+                    Box {
+                        OutlinedButton(
+                            onClick = { curveExpanded = true },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = curveOptions.getOrNull(velocityCurve) ?: "Default",
+                                modifier = Modifier.weight(1f)
+                            )
+                            Icon(Icons.Filled.ArrowDropDown, contentDescription = null)
+                        }
+                        DropdownMenu(
+                            expanded = curveExpanded,
+                            onDismissRequest = { curveExpanded = false }
+                        ) {
+                            curveOptions.forEachIndexed { index, option ->
+                                DropdownMenuItem(onClick = {
+                                    onCurveChange(index)
+                                    curveExpanded = false
+                                }) {
+                                    Text(option)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            // Export Codec Section
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                elevation = 4.dp,
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(bottom = 12.dp)
+                    ) {
+                        Icon(
+                            Icons.Filled.GetApp,
+                            contentDescription = null,
+                            tint = MaterialTheme.colors.primary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Export Codec",
+                            style = MaterialTheme.typography.h6,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colors.primary
+                        )
+                    }
+                    
+                    Box {
+                        OutlinedButton(
+                            onClick = { exportCodecExpanded = true },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = exportCodecOptions.getOrNull(exportCodec - 1) ?: "OGG",
+                                modifier = Modifier.weight(1f)
+                            )
+                            Icon(Icons.Filled.ArrowDropDown, contentDescription = null)
+                        }
+                        DropdownMenu(
+                            expanded = exportCodecExpanded,
+                            onDismissRequest = { exportCodecExpanded = false }
+                        ) {
+                            exportCodecOptions.forEachIndexed { index, option ->
+                                DropdownMenuItem(onClick = {
+                                    onExportCodecChange(index + 1)
+                                    exportCodecExpanded = false
+                                }) {
+                                    Text(option)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            // Search Result Limit Section
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                elevation = 4.dp,
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(bottom = 12.dp)
+                    ) {
+                        Icon(
+                            Icons.Filled.Search,
+                            contentDescription = null,
+                            tint = MaterialTheme.colors.primary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Search Result Limit",
+                            style = MaterialTheme.typography.h6,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colors.primary
+                        )
+                    }
+                    
+                    Box {
+                        OutlinedButton(
+                            onClick = { searchLimitExpanded = true },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = searchLimitOptions.find { it.first == searchResultLimit }?.second ?: "1,000",
+                                modifier = Modifier.weight(1f)
+                            )
+                            Icon(Icons.Filled.ArrowDropDown, contentDescription = null)
+                        }
+                        DropdownMenu(
+                            expanded = searchLimitExpanded,
+                            onDismissRequest = { searchLimitExpanded = false }
+                        ) {
+                            searchLimitOptions.forEach { (value, label) ->
+                                DropdownMenuItem(onClick = {
+                                    if (value == -1) {
+                                        // Show warning for unlimited
+                                        showUnlimitedWarning = true
+                                        searchLimitExpanded = false
+                                    } else {
+                                        onSearchLimitChange(value)
+                                        searchLimitExpanded = false
+                                    }
+                                }) {
+                                    Text(label)
+                                }
+                            }
+                        }
+                    }
+                    
+                    Text(
+                        text = "Maximum number of search results to display. Lower limits improve performance.",
+                        style = MaterialTheme.typography.caption,
+                        color = MaterialTheme.colors.onSurface.copy(alpha = 0.6f),
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                }
+            }
+        }
+        
+        // Warning dialog for unlimited option (outside if/else)
+        if (showUnlimitedWarning) {
+            androidx.compose.material.AlertDialog(
+                onDismissRequest = { showUnlimitedWarning = false },
+                title = { Text("Warning") },
+                text = {
+                    Text("Setting the search limit to Unlimited may cause slowdowns and increased memory usage with large databases. Are you sure you want to continue?")
+                },
+                confirmButton = {
+                    androidx.compose.material.TextButton(
+                        onClick = {
+                            onSearchLimitChange(-1)
+                            showUnlimitedWarning = false
+                        }
+                    ) {
+                        Text("Yes, Unlimited")
+                    }
+                },
+                dismissButton = {
+                    androidx.compose.material.TextButton(
+                        onClick = { showUnlimitedWarning = false }
+                    ) {
+                        Text("Cancel")
+                    }
+                }
+            )
+        }
         
         Spacer(modifier = Modifier.height(16.dp))
         
-        // About Section
+        // About Section (same for both orientations)
         Card(
             modifier = Modifier.fillMaxWidth(),
             elevation = 4.dp,
