@@ -871,10 +871,9 @@ class HomeFragment : Fragment() {
                             song.setVelocityCurve(velocityCurve.value)
                         }
 
-                        Mixer.setDefaultReverb(reverbType.value)
-
                         val r = song.start()
                         if (r == 0) {
+                            Mixer.setDefaultReverb(reverbType.value)
                             if (song.hasEmbeddedBank()) {
                                 currentBankName.value = "Embedded Bank"
                             }
@@ -887,7 +886,7 @@ class HomeFragment : Fragment() {
                                         song.resume()
                                     } catch (_: Exception) {}
                                 }, 250)
-                            }
+                            }                                                
                             viewModel.isPlaying = true
                             viewModel.currentTitle = file.nameWithoutExtension
                         } else {
