@@ -887,10 +887,12 @@ void GM_SF2_ProcessProgramChange(GM_Song* pSong, int16_t channel, int32_t progra
 
     if (isOddBankPerc)
     {
-        // Odd banks are percussion in miniBAE mapping
-        midiBank = (midiBank - 1) / 2;     // Convert back to external MIDI bank
-        // Route to SF2 percussion bank
-        midiProgram = 0; // Standard drum kit preset
+        if (pSong->songFlags == SONG_FLAG_IS_RMF) {
+            // Odd banks are percussion in miniBAE mapping
+            midiBank = (midiBank - 1) / 2;     // Convert back to external MIDI bank
+            // Route to SF2 percussion bank
+            midiProgram = 0; // Standard drum kit preset
+        }
         midiBank = 128;  // SF2 percussion bank
     }
     else if (isMSB128Perc)

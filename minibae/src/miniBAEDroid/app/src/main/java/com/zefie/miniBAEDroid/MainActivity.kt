@@ -218,11 +218,19 @@ class MainActivity : AppCompatActivity() {
         
         try {
             // Stop current playback
-            song.stop(true)
+            song.stop(false)
             val bytes = currentItem.file.readBytes()
             val loadResult = org.minibae.LoadResult()
 
             val status = Mixer.loadFromMemory(bytes, loadResult)
+
+            if (status != 0) {
+                android.util.Log.e("MainActivity", "Failed to reload song: $status")
+                runOnUiThread {
+                    Toast.makeText(this, "Failed to reload song (err=$status)", Toast.LENGTH_SHORT).show()
+                }
+                return
+            }
 
             viewModel.isPlaying = false
             

@@ -2042,12 +2042,16 @@ fun NewMusicPlayerScreen(
             TopAppBar(
                 title = {
                     Column {
-                        // Dynamic title based on current screen
-                        val titleText = when (viewModel.currentScreen) {
-                            NavigationScreen.HOME -> "Home"
-                            NavigationScreen.SEARCH -> "Search"
-                            NavigationScreen.FAVORITES -> "Favorites"
-                            NavigationScreen.SETTINGS -> "Settings"
+                        // Dynamic title based on current screen or bank browser
+                        val titleText = if (showBankBrowser) {
+                            "Bank Select"
+                        } else {
+                            when (viewModel.currentScreen) {
+                                NavigationScreen.HOME -> "Home"
+                                NavigationScreen.SEARCH -> "Search"
+                                NavigationScreen.FAVORITES -> "Favorites"
+                                NavigationScreen.SETTINGS -> "Settings"
+                            }
                         }
                         Text(
                             text = titleText,
@@ -2055,27 +2059,31 @@ fun NewMusicPlayerScreen(
                             fontWeight = FontWeight.Bold
                         )
                         
-                        // Dynamic subtitle based on current screen
-                        val subtitleText = when (viewModel.currentScreen) {
-                            NavigationScreen.HOME -> {
-                                viewModel.currentFolderPath ?: "No folder selected"
-                            }
-                            NavigationScreen.SEARCH -> {
-                                val searchResults by viewModel.searchResults.collectAsState()
-                                val resultCount = searchResults.size
-                                val totalResults = viewModel.indexedFileCount
-                                val limitText = if (searchResultLimit == -1) "all" else "$searchResultLimit"
-                                if (resultCount == 0) {
-                                    "No results"
-                                } else {
-                                    "Showing $resultCount of $totalResults result${if (totalResults != 1) "s" else ""} (max $limitText)"
+                        // Dynamic subtitle based on current screen or bank browser
+                        val subtitleText = if (showBankBrowser) {
+                            "Choose a sound bank"
+                        } else {
+                            when (viewModel.currentScreen) {
+                                NavigationScreen.HOME -> {
+                                    viewModel.currentFolderPath ?: "No folder selected"
                                 }
+                                NavigationScreen.SEARCH -> {
+                                    val searchResults by viewModel.searchResults.collectAsState()
+                                    val resultCount = searchResults.size
+                                    val totalResults = viewModel.indexedFileCount
+                                    val limitText = if (searchResultLimit == -1) "all" else "$searchResultLimit"
+                                    if (resultCount == 0) {
+                                        "No results"
+                                    } else {
+                                        "Showing $resultCount of $totalResults result${if (totalResults != 1) "s" else ""} (max $limitText)"
+                                    }
+                                }
+                                NavigationScreen.FAVORITES -> {
+                                    val count = viewModel.favorites.size
+                                    "$count favorite${if (count != 1) "s" else ""}"
+                                }
+                                NavigationScreen.SETTINGS -> "Configure miniBAE"
                             }
-                            NavigationScreen.FAVORITES -> {
-                                val count = viewModel.favorites.size
-                                "$count favorite${if (count != 1) "s" else ""}"
-                            }
-                            NavigationScreen.SETTINGS -> "Configure miniBAE"
                         }
                         Text(
                             text = subtitleText,
@@ -2087,8 +2095,18 @@ fun NewMusicPlayerScreen(
                     }
                 },
                 actions = {
+                    // Close button for Bank Browser
+                    if (showBankBrowser) {
+                        IconButton(onClick = onBankBrowserClose) {
+                            Icon(
+                                Icons.Filled.Close,
+                                contentDescription = "Close",
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                    }
                     // Build Index button for Search screen
-                    if (viewModel.currentScreen == NavigationScreen.SEARCH) {
+                    else if (viewModel.currentScreen == NavigationScreen.SEARCH) {
                         val indexingProgress by viewModel.getIndexingProgress()?.collectAsState() ?: remember { mutableStateOf(IndexingProgress()) }
                         val context = LocalContext.current
                         
@@ -2240,7 +2258,8 @@ fun NewMusicPlayerScreen(
                     }
                 }
                 
-                // Bottom navigation
+                // Bottom navigation - hide when bank browser is open
+                if (!showBankBrowser) {
                 BottomNavigation(
                     backgroundColor = MaterialTheme.colors.surface,
                     elevation = 8.dp
@@ -2285,6 +2304,7 @@ fun NewMusicPlayerScreen(
                         selectedContentColor = MaterialTheme.colors.primary,
                         unselectedContentColor = Color.Gray
                     )
+                }
                 }
             }
         }
@@ -2401,6 +2421,7 @@ fun NewMusicPlayerScreen(
                     isLoading = bankBrowserLoading,
                     onNavigate = onBankBrowserNavigate,
                     onSelectBank = onBankBrowserSelect,
+                    onLoadBuiltin = onLoadBuiltin,
                     onClose = onBankBrowserClose
                 )
             }
@@ -3888,109 +3909,97 @@ fun SettingsScreenContent(
     ) {
         if (isLandscape) {
             // Landscape: 2-column layout
-            // Row 1: Bank and Reverb
+            // Sound Bank Button
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                elevation = 4.dp,
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(bottom = 12.dp)
+                    ) {
+                        Icon(
+                            Icons.Filled.LibraryMusic,
+                            contentDescription = null,
+                            tint = MaterialTheme.colors.primary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Sound Bank",
+                            style = MaterialTheme.typography.h6,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colors.primary
+                        )
+                    }
+                    
+                    if (isLoadingBank) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text("Loading bank...", style = MaterialTheme.typography.body2)
+                        }
+                    } else {
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colors.primary.copy(alpha = 0.1f)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    Icons.Filled.MusicNote,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colors.primary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = bankName,
+                                    style = MaterialTheme.typography.body1,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colors.onSurface
+                                )
+                            }
+                        }
+                    }
+                    
+                    Spacer(modifier = Modifier.height(12.dp))
+                    
+                    Button(
+                        onClick = onBrowseBanks,
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !isLoadingBank
+                    ) {
+                        Icon(Icons.Filled.LibraryMusic, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Change Sound Bank")
+                    }
+                    
+                    Text(
+                        text = "Supports HSB, SF2, SF3, DLS formats • Hot-swap: reloads current song automatically",
+                        style = MaterialTheme.typography.caption,
+                        color = MaterialTheme.colors.onSurface.copy(alpha = 0.6f),
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            // Row 1: Reverb and Velocity Curve
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // Bank Section
-                Card(
-                    modifier = Modifier.weight(1f),
-                    elevation = 4.dp,
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(bottom = 12.dp)
-                ) {
-                    Icon(
-                        Icons.Filled.LibraryMusic,
-                        contentDescription = null,
-                        tint = MaterialTheme.colors.primary,
-                        modifier = Modifier.size(24.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "Sound Bank",
-                        style = MaterialTheme.typography.h6,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colors.primary
-                    )
-                }
-                
-                if (isLoadingBank) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        CircularProgressIndicator(modifier = Modifier.size(24.dp))
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Text("Loading bank...", style = MaterialTheme.typography.body2)
-                    }
-                } else {
-                    Surface(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(8.dp),
-                        color = MaterialTheme.colors.primary.copy(alpha = 0.1f)
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                Icons.Filled.MusicNote,
-                                contentDescription = null,
-                                tint = MaterialTheme.colors.primary,
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = bankName,
-                                style = MaterialTheme.typography.body1,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colors.onSurface
-                            )
-                        }
-                    }
-                }
-                
-                Spacer(modifier = Modifier.height(12.dp))
-                
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    OutlinedButton(
-                        onClick = onBrowseBanks,
-                        modifier = Modifier.weight(1f),
-                        enabled = !isLoadingBank
-                    ) {
-                        Icon(Icons.Filled.FolderOpen, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Load Bank")
-                    }
-                    OutlinedButton(
-                        onClick = onLoadBuiltin,
-                        modifier = Modifier.weight(1f),
-                        enabled = !isLoadingBank
-                    ) {
-                        Icon(Icons.Filled.GetApp, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Built-in")
-                    }
-                }
-                
-                Text(
-                    text = "Supports HSB, SF2, SF3, DLS formats • Hot-swap: reloads current song automatically",
-                    style = MaterialTheme.typography.caption,
-                    color = MaterialTheme.colors.onSurface.copy(alpha = 0.6f),
-                    modifier = Modifier.padding(top = 8.dp)
-                )
-            }
-        }
-                
                 // Reverb Section
                 Card(
                     modifier = Modifier.weight(1f),
@@ -4260,7 +4269,7 @@ fun SettingsScreenContent(
         }
         } else {
             // Portrait: vertical layout (original)
-            // Bank Section
+            // Sound Bank Section
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 elevation = 4.dp,
@@ -4325,28 +4334,14 @@ fun SettingsScreenContent(
                     
                     Spacer(modifier = Modifier.height(12.dp))
                     
-                    Row(
+                    Button(
+                        onClick = onBrowseBanks,
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        enabled = !isLoadingBank
                     ) {
-                        OutlinedButton(
-                            onClick = onBrowseBanks,
-                            modifier = Modifier.weight(1f),
-                            enabled = !isLoadingBank
-                        ) {
-                            Icon(Icons.Filled.FolderOpen, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Load Bank")
-                        }
-                        OutlinedButton(
-                            onClick = onLoadBuiltin,
-                            modifier = Modifier.weight(1f),
-                            enabled = !isLoadingBank
-                        ) {
-                            Icon(Icons.Filled.GetApp, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Built-in")
-                        }
+                        Icon(Icons.Filled.LibraryMusic, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Change Sound Bank")
                     }
                     
                     Text(
@@ -4713,59 +4708,36 @@ fun BankBrowserScreen(
     isLoading: Boolean,
     onNavigate: (String) -> Unit,
     onSelectBank: (File) -> Unit,
+    onLoadBuiltin: () -> Unit,
     onClose: () -> Unit
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
-        // Header with path and close button
+        // Current path bar
         Surface(
             modifier = Modifier.fillMaxWidth(),
-            color = MaterialTheme.colors.primary,
-            elevation = 4.dp
+            color = MaterialTheme.colors.surface,
+            elevation = 2.dp
         ) {
-            Column {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(onClick = onClose) {
-                        Icon(
-                            Icons.Filled.Close,
-                            contentDescription = "Close",
-                            tint = Color.White
-                        )
-                    }
-                    Text(
-                        text = "Select Sound Bank",
-                        style = MaterialTheme.typography.h6,
-                        color = Color.White,
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-                
-                // Current path
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        Icons.Filled.Folder,
-                        contentDescription = null,
-                        tint = Color.White.copy(alpha = 0.7f),
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = currentPath,
-                        style = MaterialTheme.typography.caption,
-                        color = Color.White.copy(alpha = 0.9f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    Icons.Filled.Folder,
+                    contentDescription = null,
+                    tint = MaterialTheme.colors.onSurface.copy(alpha = 0.6f),
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = currentPath,
+                    style = MaterialTheme.typography.caption,
+                    color = MaterialTheme.colors.onSurface.copy(alpha = 0.7f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
         }
         
@@ -4798,6 +4770,53 @@ fun BankBrowserScreen(
             }
             else -> {
                 LazyColumn(modifier = Modifier.fillMaxSize()) {
+                    // Built-in Patches option at the top
+                    item {
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { 
+                                    onLoadBuiltin()
+                                    onClose()
+                                },
+                            color = MaterialTheme.colors.primary.copy(alpha = 0.05f)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    Icons.Filled.GetApp,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colors.secondary,
+                                    modifier = Modifier.size(40.dp)
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "Built-in Patches",
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colors.onBackground
+                                    )
+                                    Text(
+                                        text = "Beatnik Standard sound bank",
+                                        fontSize = 12.sp,
+                                        color = MaterialTheme.colors.onBackground.copy(alpha = 0.6f)
+                                    )
+                                }
+                                Icon(
+                                    Icons.AutoMirrored.Filled.ArrowForward,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colors.onBackground.copy(alpha = 0.4f)
+                                )
+                            }
+                        }
+                        Divider(color = Color.Gray.copy(alpha = 0.2f))
+                    }
+                    
                     // Show parent directory ".." if not at root
                     val file = File(currentPath)
                     val parentPath = file.parent
