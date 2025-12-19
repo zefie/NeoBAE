@@ -49,6 +49,7 @@
     <exclude-output />
     <content url="file://$MODULE_DIR$/build/generated/ap_generated_sources/debugAndroidTest/out" />
     <content url="file://$MODULE_DIR$/build/generated/res/resValues/androidTest/debug" />
+    <content url="file://$MODULE_DIR$/build/generated/source/buildConfig/androidTest/debug" />
     <content url="file://$MODULE_DIR$/src/androidTest" />
     <content url="file://$MODULE_DIR$/src/androidTestDebug" />
     <orderEntry type="jdk" jdkName="Android API 36.0, extension level 17 Platform" jdkType="Android SDK" />

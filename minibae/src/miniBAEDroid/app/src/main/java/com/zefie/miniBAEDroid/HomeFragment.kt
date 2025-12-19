@@ -66,6 +66,18 @@ class HomeFragment : Fragment() {
 
     companion object {
         var velocityCurve = mutableStateOf(0)
+        
+        // Valid music file extensions
+        private val MUSIC_EXTENSIONS_DEBUG = setOf("mid", "midi", "kar", "rmf", "xmf", "mxmf", "rmi")
+        private val MUSIC_EXTENSIONS_RELEASE = setOf("mid", "midi", "kar", "rmf", "rmi")
+        
+        // Valid sound bank file extensions
+        val BANK_EXTENSIONS = setOf("sf2", "hsb", "sf3", "sfo", "dls")
+        
+        // Get appropriate music extensions based on build type
+        fun getMusicExtensions(): Set<String> {
+            return if (BuildConfig.DEBUG) MUSIC_EXTENSIONS_DEBUG else MUSIC_EXTENSIONS_RELEASE
+        }
     }
 
     private var mixerIdleJob: Job? = null
@@ -1141,7 +1153,7 @@ class HomeFragment : Fragment() {
 
     private fun getMediaFiles(): List<File> {
         val musicDir = getMusicDir() ?: File("/sdcard/Music")
-        val validExtensions = setOf("mid", "midi", "kar", "rmf", "xmf", "mxmf", "rmi")
+        val validExtensions = getMusicExtensions()
         val map = LinkedHashMap<String, File>()
         if (musicDir.exists() && musicDir.isDirectory) {
             musicDir.listFiles { file -> file.isFile && file.extension.lowercase() in validExtensions }?.forEach { f ->
@@ -1152,7 +1164,7 @@ class HomeFragment : Fragment() {
     }
     
     private fun getBankFiles(folder: File): List<PlaylistItem> {
-        val validExtensions = setOf("sf2", "hsb", "sf3", "sfo", "dls")
+        val validExtensions = BANK_EXTENSIONS
         val allItems = folder.listFiles()?.let { allFiles ->
             val folders = allFiles.filter { it.isDirectory && it.canRead() }
                 .sortedBy { it.name.lowercase() }
@@ -1178,7 +1190,7 @@ class HomeFragment : Fragment() {
         val currentDir = File(currentPath)
         if (!currentDir.exists() || !currentDir.isDirectory) return
         
-        val validExtensions = setOf("mid", "midi", "kar", "rmf", "rmi", "xmf", "mxmf")
+        val validExtensions = getMusicExtensions()
         val midiFiles = currentDir.listFiles { file -> 
             file.isFile && file.extension.lowercase() in validExtensions 
         }?.sortedBy { it.name.lowercase() } ?: return
@@ -1202,7 +1214,7 @@ class HomeFragment : Fragment() {
         val currentDir = File(currentPath)
         if (!currentDir.exists() || !currentDir.isDirectory) return
         
-        val validExtensions = setOf("mid", "midi", "kar", "rmf", "rmi", "xmf", "mxmf")
+        val validExtensions = getMusicExtensions()
         val midiFiles = mutableListOf<File>()
         
         fun scanDirectory(dir: File) {
@@ -1395,7 +1407,7 @@ class HomeFragment : Fragment() {
                     return@Thread
                 }
                 
-                val validExtensions = setOf("mid", "midi", "kar", "rmf", "rmi", "xmf", "mxmf")
+                val validExtensions = getMusicExtensions()
                 val allItems = folder.listFiles()?.let { allFiles ->
                     val folders = allFiles.filter { it.isDirectory && it.canRead() }
                         .sortedBy { it.name.lowercase() }

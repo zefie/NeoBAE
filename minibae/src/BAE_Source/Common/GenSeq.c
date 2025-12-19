@@ -3208,72 +3208,73 @@ static void PV_ProcessExternalMIDIQueue(GM_Song *pSong)
             {                // use it
                 pSong = event.pSong;
             }
-            switch (event.command)
-            {
-            case B_NOTE_ON: // �� Note On
+            switch (event.command) {
+                case B_NOTE_ON: // �� Note On
 #ifdef EVENT_DEBUG
-                if (qindex < 5000)
+                    if (qindex < 5000)
+                    {
+                        if (event.byte2 > 0)
+                            sprintf(msgQueue[qindex++].s, "note on  %d  time %d\n", event.byte1, event.timeStamp);
+                        else
+                            sprintf(msgQueue[qindex++].s, "note off %d  time %d\n", event.byte1, event.timeStamp);
+                    }
+#endif
                 {
-                    if (event.byte2 > 0)
-                        sprintf(msgQueue[qindex++].s, "note on  %d  time %d\n", event.byte1, event.timeStamp);
-                    else
+                    unsigned char msg[3];
+                    msg[0] = (unsigned char) (0x90 | (event.midiChannel & 0x0F));
+                    msg[1] = event.byte1;
+                    msg[2] = event.byte2;
+                    PV_CallMidiEventCallback(NULL, pSong, msg, 3);
+                }
+                    PV_ProcessNoteOn(pSong, event.midiChannel, -1, event.byte1, event.byte2);
+                    break;
+                case B_NOTE_OFF: // �� Note Off
+#ifdef EVENT_DEBUG
+                    if (qindex < 5000)
                         sprintf(msgQueue[qindex++].s, "note off %d  time %d\n", event.byte1, event.timeStamp);
-                }
 #endif
                 {
                     unsigned char msg[3];
-                    msg[0] = (unsigned char)(0x90 | (event.midiChannel & 0x0F));
+                    msg[0] = (unsigned char) (0x80 | (event.midiChannel & 0x0F));
                     msg[1] = event.byte1;
                     msg[2] = event.byte2;
                     PV_CallMidiEventCallback(NULL, pSong, msg, 3);
                 }
-                PV_ProcessNoteOn(pSong, event.midiChannel, -1, event.byte1, event.byte2);
-                break;
-            case B_NOTE_OFF: // �� Note Off
+                    PV_ProcessNoteOff(pSong, event.midiChannel, -1, event.byte1, event.byte2);
+                    break;
+                case 0xB0: // �� Control Change
 #ifdef EVENT_DEBUG
-                if (qindex < 5000)
-                    sprintf(msgQueue[qindex++].s, "note off %d  time %d\n", event.byte1, event.timeStamp);
+                    if (event.byte1 == 123)
+                    {
+                        int n;
+                        BAE_PRINTF("INPUT LOG:\n");
+                        for (n = 0; n < iqindex; n++)
+                            printf("%s", imsgQueue[n].s);
+                        BAE_PRINTF("\n");
+                        iqindex = 0;
+                        BAE_PRINTF("OUTPUT LOG:\n");
+                        for (n = 0; n < qindex; n++)
+                            printf("%s", msgQueue[n].s);
+                        BAE_PRINTF("\n");
+                        qindex = 0;
+                    }
 #endif
                 {
                     unsigned char msg[3];
-                    msg[0] = (unsigned char)(0x80 | (event.midiChannel & 0x0F));
+                    msg[0] = (unsigned char) (0xB0 | (event.midiChannel & 0x0F));
                     msg[1] = event.byte1;
                     msg[2] = event.byte2;
                     PV_CallMidiEventCallback(NULL, pSong, msg, 3);
                 }
-                PV_ProcessNoteOff(pSong, event.midiChannel, -1, event.byte1, event.byte2);
-                break;
-            case 0xB0: // �� Control Change
-#ifdef EVENT_DEBUG
-                if (event.byte1 == 123)
+                    PV_ProcessController(pSong, event.midiChannel, -1, event.byte1, event.byte2);
+                    break;
+                case B_PROGRAM_CHANGE: // �� ProgramChange
                 {
-                    int n;
-                    BAE_PRINTF("INPUT LOG:\n");
-                    for (n = 0; n < iqindex; n++)
-                        printf("%s", imsgQueue[n].s);
-                    BAE_PRINTF("\n");
-                    iqindex = 0;
-                    BAE_PRINTF("OUTPUT LOG:\n");
-                    for (n = 0; n < qindex; n++)
-                        printf("%s", msgQueue[n].s);
-                    BAE_PRINTF("\n");
-                    qindex = 0;
-                }
-#endif
-                {
-                    unsigned char msg[3];
-                    msg[0] = (unsigned char)(0xB0 | (event.midiChannel & 0x0F));
+                    unsigned char msg[2];
+                    msg[0] = (unsigned char) (0xC0 | (event.midiChannel & 0x0F));
                     msg[1] = event.byte1;
-                    msg[2] = event.byte2;
-                    PV_CallMidiEventCallback(NULL, pSong, msg, 3);
+                    PV_CallMidiEventCallback(NULL, pSong, msg, 2);
                 }
-                PV_ProcessController(pSong, event.midiChannel, -1, event.byte1, event.byte2);
-                break;
-            case B_PROGRAM_CHANGE: // �� ProgramChange
-                unsigned char msg[2];
-                msg[0] = (unsigned char)(0xC0 | (event.midiChannel & 0x0F));
-                msg[1] = event.byte1;
-                PV_CallMidiEventCallback(NULL, pSong, msg, 2);
                 PV_ProcessProgramChange(pSong, event.midiChannel, -1, event.byte1);
                 break;
             case B_PITCH_BEND: // �� SetPitchBend
