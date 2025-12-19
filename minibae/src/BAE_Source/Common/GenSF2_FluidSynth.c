@@ -926,9 +926,22 @@ void GM_SF2_ProcessProgramChange(GM_Song* pSong, int16_t channel, int32_t progra
 
     BAE_PRINTF("final intepretation: midiBank: %i, midiProgram: %i, channel: %i\n", midiBank, midiProgram, channel);
 
+    // mobileBAE MIDI quirk: bank 121 program 124:125 are used for motor vibration.
+    // Best behavior is to give the channel no preset at all.
+    if (midiBank == 121 && (midiProgram == 124 || midiProgram == 125))
+    {
+        BAE_PRINTF("[FluidProgChange] Denying preset request %i:%i on channel %d (unsetting program)\n", midiBank, midiProgram, channel);
+        fluid_synth_all_sounds_off(g_fluidsynth_synth, channel);
+        fluid_synth_all_notes_off(g_fluidsynth_synth, channel);
+        fluid_synth_unset_program(g_fluidsynth_synth, channel);
+        return;
+    }
+
     // Validate bank/program exist in current font; apply fallback if not
     int useBank = midiBank;
     int useProg = midiProgram;
+    
+
     if (!PV_SF2_PresetExists(useBank, useProg)) {
         XBOOL percIntent = (channel == BAE_PERCUSSION_CHANNEL) || (useBank == 128);
         XBOOL found = FALSE;

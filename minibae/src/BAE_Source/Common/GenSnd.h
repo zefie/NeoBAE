@@ -1126,7 +1126,7 @@ typedef int32_t UNIT_TYPE;
         XBOOL seenTrueLyric;
         XBOOL seenGenericTextLyric;
         XBOOL seenLyricMeta;
-        
+      
         // Lyric deduplication (to filter duplicate events in MIDI files)
         char lastLyric[256];          // Last lyric text sent to callback
         XDWORD lastLyricTimestamp;    // Timestamp of last lyric (microseconds)
@@ -1191,6 +1191,7 @@ typedef int32_t UNIT_TYPE;
         XDWORD titleOffset; // offset in bytes of midi file
         XDWORD titleLength; // for title=
         //  instrument array. These are the instruments that are used by just this song
+  
         GM_Instrument *instrumentData[MAX_INSTRUMENTS * MAX_BANKS];
         XLongResourceID remapArray[MAX_INSTRUMENTS * MAX_BANKS];
 
@@ -1217,6 +1218,9 @@ typedef int32_t UNIT_TYPE;
         XBYTE channelVolume[MAX_CHANNELS];                     // current channel volume
         XBYTE channelExpression[MAX_CHANNELS];                 // current channel expression
         XBYTE channelPitchBendRange[MAX_CHANNELS];             // current bend range in half steps
+#if DISABLE_NOKIA_PATCH != TRUE
+        XBOOL isNokiaVibrationChannel[MAX_CHANNELS]; // TRUE if channel is Nokia vibration channel
+#endif        
 #if REVERB_USED != REVERB_DISABLED
         XBYTE channelReverb[MAX_CHANNELS]; // current channel reverb
         XBYTE channelChorus[MAX_CHANNELS]; // current channel chorus
@@ -1228,6 +1232,8 @@ typedef int32_t UNIT_TYPE;
         XBYTE channelMonoMode[MAX_CHANNELS];              // boolean for mono mode being on or off (NOT CONNECTED as of 6.8.99)
         XSWORD channelBend[MAX_CHANNELS];                 // MUST BE AN XSWORD!! current amount to bend new notes
         XSWORD channelProgram[MAX_CHANNELS];              // current channel program
+        XSBYTE channelRawBank[MAX_CHANNELS];              // current raw bank
+        XSBYTE channelLSB[MAX_CHANNELS];                   // current LSB bank
         XSBYTE channelBank[MAX_CHANNELS];                 // current bank
         XSWORD channelStereoPosition[MAX_CHANNELS];       // current channel stereo position
 #if USE_SF2_SUPPORT == TRUE
@@ -2104,6 +2110,7 @@ typedef int32_t UNIT_TYPE;
         B_POLY_AFTERTOUCH = 0xA0,
         B_CONTROL_CHANGE = 0xB0,
         B_PROGRAM_CHANGE = 0xC0,
+        B_PROGRAM_CHANGE_2 = 0xCF,
         B_CHANNEL_AFTERTOUCH = 0xD0,
         B_PITCH_BEND = 0xE0,
         B_SYSTEM_EXCLUSIVE = 0xF0,

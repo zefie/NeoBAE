@@ -496,6 +496,7 @@ void PV_ResetControlers(GM_Song *pSong, INT16 channel2Reset, XBOOL completeReset
         pSong->channelPitchBendRange[count] = DEFAULT_PITCH_RANGE; // pitch bend controler
         pSong->channelBend[count] = 0;
         pSong->channelModWheel[count] = 0;
+        pSong->isNokiaVibrationChannel[count] = FALSE;
     }
 }
 
@@ -1709,7 +1710,11 @@ static INT16 PV_ConvertPatchBank(GM_Song *pSong, INT16 thePatch, INT16 theChanne
 static void PV_ProcessProgramChange(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTrack, INT16 program)
 {
     if (PV_IsMuted(pSong, MIDIChannel, currentTrack) == FALSE)
-    {
+    {        
+        if (pSong->channelLSB[MIDIChannel] == 6 && (program == 124 || program == 125)) {
+            pSong->isNokiaVibrationChannel[MIDIChannel] = TRUE;
+            BAE_PRINTF("ProcessProgramChange Debug: Channel %d is set to Nokia Vibration (LSB=6, Program %d)\n", MIDIChannel, program);
+        }
         if (pSong->allowProgramChanges)
         {
             if (MIDIChannel == PERCUSSION_CHANNEL)
@@ -1988,6 +1993,9 @@ static void PV_ProcessNoteOff(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTr
 static void PV_ProcessNoteOn(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTrack, INT16 note, INT16 volume)
 {
     register INT16 thePatch = 0;
+    if (pSong->isNokiaVibrationChannel[MIDIChannel]) {
+        return;
+    }
 
     if (PV_IsMuted(pSong, MIDIChannel, currentTrack) == FALSE)
     {
@@ -2320,27 +2328,28 @@ void PV_ProcessController(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTrack,
 #endif
         switch (controler)
         {
-        
-        case B_BANK_LSB: // bank select MSB. This is GS.
+        case B_BANK_LSB: // bank select LSB. This is GS.
 #if DISABLE_NOKIA_PATCH != TRUE
-            // START "NOKIA PATCH"
-            if (value == 6)
-            {
-                value = 2;
-                pSong->channelBank[MIDIChannel] = (SBYTE)value;
+            if (pSong->channelRawBank[MIDIChannel] == 121) {
+                switch (value) {
+                    case 5:
+                        pSong->channelBank[MIDIChannel] = 1;
+                        pSong->channelRawBank[MIDIChannel] = 1;
+                        BAE_PRINTF("Nokia Patch Applied: Changing Bank %i to 1 on channel %d\n", pSong->channelBank[MIDIChannel], MIDIChannel);
+                        break;
+                    default:
+                        break;
+                }
+                pSong->channelLSB[MIDIChannel] = (SBYTE)value;
             }
-            else if (value == 5)
-            {
-                value = 1;
-                pSong->channelBank[MIDIChannel] = (SBYTE)value;
-            }
-            // END "NOKIA PATCH"
-#endif            
+#endif          
+            BAE_PRINTF("Bank LSB Change on Channel %d to %d\n", MIDIChannel, value);
             break;
-        case B_BANK_MSB: // bank select LSB.
+        case B_BANK_MSB: // bank select MSB.
+            pSong->channelRawBank[MIDIChannel] = (SBYTE)value;
 #if USE_SF2_SUPPORT == TRUE
             if (!GM_IsSF2Song(pSong)) {
-#endif
+#endif          
                 if (value > (MAX_BANKS / 2))
                 { // if we're selecting outside of our range, default to 0
                     value = 0;
@@ -2348,6 +2357,7 @@ void PV_ProcessController(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTrack,
 #if USE_SF2_SUPPORT == TRUE
             }
 #endif
+            BAE_PRINTF("Bank MSB Change on Channel %d (raw: %d) to %d\n", MIDIChannel, pSong->channelRawBank[MIDIChannel], value);
             pSong->channelBank[MIDIChannel] = (SBYTE)value;
             break;
 
@@ -3260,12 +3270,10 @@ static void PV_ProcessExternalMIDIQueue(GM_Song *pSong)
                 PV_ProcessController(pSong, event.midiChannel, -1, event.byte1, event.byte2);
                 break;
             case B_PROGRAM_CHANGE: // �� ProgramChange
-            {
                 unsigned char msg[2];
                 msg[0] = (unsigned char)(0xC0 | (event.midiChannel & 0x0F));
                 msg[1] = event.byte1;
                 PV_CallMidiEventCallback(NULL, pSong, msg, 2);
-            }
                 PV_ProcessProgramChange(pSong, event.midiChannel, -1, event.byte1);
                 break;
             case B_PITCH_BEND: // �� SetPitchBend
