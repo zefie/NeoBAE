@@ -1016,6 +1016,34 @@ class HomeFragment : Fragment() {
         }
     }
     
+    // Public method to handle seeks from notification media controls
+    fun handleSeekFromNotification(ms: Int) {
+        seekPlaybackToMs(ms)
+    }
+    
+    // Public methods for notification media controls
+    fun handlePlayPauseFromNotification() {
+        android.util.Log.d("HomeFragment", "handlePlayPauseFromNotification called")
+        togglePlayPause()
+    }
+    
+    fun handleNextFromNotification() {
+        android.util.Log.d("HomeFragment", "handleNextFromNotification called")
+        playNext()
+    }
+    
+    fun handlePreviousFromNotification() {
+        android.util.Log.d("HomeFragment", "handlePreviousFromNotification called")
+        playPrevious()
+    }
+    
+    fun handleCloseFromNotification() {
+        android.util.Log.d("HomeFragment", "handleCloseFromNotification called")
+        stopPlayback(delete = true)
+        viewModel.isPlaying = false
+        (activity as? MainActivity)?.playbackService?.stopForegroundService()
+    }
+    
     private fun hasActivePlayback(): Boolean {
         if (!ensureMixerExists()) {
             return false

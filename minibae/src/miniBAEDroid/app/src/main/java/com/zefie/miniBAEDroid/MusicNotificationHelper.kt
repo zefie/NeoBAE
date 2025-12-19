@@ -11,6 +11,7 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.RectF
 import android.os.Build
+import android.os.SystemClock
 import android.support.v4.media.session.MediaSessionCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -28,11 +29,27 @@ class MusicNotificationHelper(private val context: Context) {
         const val ACTION_CLOSE = "com.zefie.miniBAEDroid.CLOSE"
     }
     
+    interface PlaybackCallback {
+        fun onSeek(position: Long)
+        fun onPlay()
+        fun onPause()
+        fun onNext()
+        fun onPrevious()
+        fun onStop()
+    }
+    
     private var mediaSession: MediaSessionCompat? = null
+    private var playbackCallback: PlaybackCallback? = null
+    private var currentIsPlaying: Boolean = false
+    private var currentPosition: Long = 0
     
     init {
         createNotificationChannel()
         setupMediaSession()
+    }
+    
+    fun setPlaybackCallback(callback: PlaybackCallback) {
+        this.playbackCallback = callback
     }
     
     private fun createNotificationChannel() {
@@ -56,7 +73,89 @@ class MusicNotificationHelper(private val context: Context) {
     private fun setupMediaSession() {
         mediaSession = MediaSessionCompat(context, "miniBAE_session").apply {
             isActive = true
+            // Set supported actions for media controls
+            setFlags(MediaSessionCompat.FLAG_HANDLES_MEDIA_BUTTONS or 
+                    MediaSessionCompat.FLAG_HANDLES_TRANSPORT_CONTROLS)
+            
+            // Set callback to handle media session events (like seeking)
+            setCallback(object : MediaSessionCompat.Callback() {
+                override fun onSeekTo(pos: Long) {
+                    super.onSeekTo(pos)
+                    android.util.Log.d("MusicNotificationHelper", "onSeekTo: $pos")
+                    playbackCallback?.onSeek(pos)
+                }
+                
+                override fun onPlay() {
+                    super.onPlay()
+                    android.util.Log.d("MusicNotificationHelper", "onPlay")
+                    playbackCallback?.onPlay()
+                }
+                
+                override fun onPause() {
+                    super.onPause()
+                    android.util.Log.d("MusicNotificationHelper", "onPause")
+                    playbackCallback?.onPause()
+                }
+                
+                override fun onSkipToNext() {
+                    super.onSkipToNext()
+                    android.util.Log.d("MusicNotificationHelper", "onSkipToNext")
+                    playbackCallback?.onNext()
+                }
+                
+                override fun onSkipToPrevious() {
+                    super.onSkipToPrevious()
+                    android.util.Log.d("MusicNotificationHelper", "onSkipToPrevious")
+                    playbackCallback?.onPrevious()
+                }
+                
+                override fun onStop() {
+                    super.onStop()
+                    android.util.Log.d("MusicNotificationHelper", "onStop")
+                    playbackCallback?.onStop()
+                }
+            })
         }
+    }
+    
+    private fun updatePlaybackState(isPlaying: Boolean, currentPosition: Long) {
+        // Store current state for seek operations
+        this.currentIsPlaying = isPlaying
+        this.currentPosition = currentPosition
+        
+        val state = if (isPlaying) {
+            android.support.v4.media.session.PlaybackStateCompat.STATE_PLAYING
+        } else {
+            android.support.v4.media.session.PlaybackStateCompat.STATE_PAUSED
+        }
+        
+        val playbackState = android.support.v4.media.session.PlaybackStateCompat.Builder()
+            .setState(
+                state, 
+                currentPosition, 
+                if (isPlaying) 1.0f else 0.0f, // Use 0.0f speed when paused
+                SystemClock.elapsedRealtime() // Provide explicit update time for smooth progress
+            )
+            .setActions(
+                android.support.v4.media.session.PlaybackStateCompat.ACTION_PLAY or
+                android.support.v4.media.session.PlaybackStateCompat.ACTION_PAUSE or
+                android.support.v4.media.session.PlaybackStateCompat.ACTION_SKIP_TO_NEXT or
+                android.support.v4.media.session.PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS or
+                android.support.v4.media.session.PlaybackStateCompat.ACTION_SEEK_TO
+            )
+            .build()
+        
+        mediaSession?.setPlaybackState(playbackState)
+    }
+    
+    private fun updateMetadata(title: String, artist: String, duration: Long) {
+        val metadata = android.support.v4.media.MediaMetadataCompat.Builder()
+            .putString(android.support.v4.media.MediaMetadataCompat.METADATA_KEY_TITLE, title)
+            .putString(android.support.v4.media.MediaMetadataCompat.METADATA_KEY_ARTIST, artist)
+            .putLong(android.support.v4.media.MediaMetadataCompat.METADATA_KEY_DURATION, duration)
+            .build()
+        
+        mediaSession?.setMetadata(metadata)
     }
     
     private fun createAlbumArt(): Bitmap {
@@ -95,6 +194,10 @@ class MusicNotificationHelper(private val context: Context) {
         currentPosition: Long = 0,
         duration: Long = 0
     ): android.app.Notification {
+        // Update MediaSession with playback state and metadata for progress bar
+        updatePlaybackState(isPlaying, currentPosition)
+        updateMetadata(title, artist, duration)
+        
         val notificationIntent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
         }
@@ -189,10 +292,8 @@ class MusicNotificationHelper(private val context: Context) {
             builder.setStyle(mediaStyle)
         }
         
-        // Add progress information if available
-        if (duration > 0) {
-            builder.setProgress(duration.toInt(), currentPosition.toInt(), false)
-        }
+        // Progress bar is automatically handled by MediaSession PlaybackState and Metadata
+        // No need to call builder.setProgress() - it's managed by the system via MediaSession
         
         return builder.build()
     }

@@ -24,7 +24,47 @@ class MediaPlaybackService : Service() {
     override fun onCreate() {
         super.onCreate()
         notificationHelper = MusicNotificationHelper(this)
+        
+        // Set up callback to handle seek operations from notification
+        notificationHelper.setPlaybackCallback(object : MusicNotificationHelper.PlaybackCallback {
+            override fun onSeek(position: Long) {
+                android.util.Log.d("MediaPlaybackService", "onSeek: $position")
+                seekCallback?.invoke(position.toInt())
+            }
+            
+            override fun onPlay() {
+                android.util.Log.d("MediaPlaybackService", "onPlay")
+                playPauseCallback?.invoke()
+            }
+            
+            override fun onPause() {
+                android.util.Log.d("MediaPlaybackService", "onPause")
+                playPauseCallback?.invoke()
+            }
+            
+            override fun onNext() {
+                android.util.Log.d("MediaPlaybackService", "onNext")
+                nextCallback?.invoke()
+            }
+            
+            override fun onPrevious() {
+                android.util.Log.d("MediaPlaybackService", "onPrevious")
+                previousCallback?.invoke()
+            }
+            
+            override fun onStop() {
+                android.util.Log.d("MediaPlaybackService", "onStop")
+                closeCallback?.invoke()
+            }
+        })
     }
+    
+    // Callbacks for media operations
+    var seekCallback: ((Int) -> Unit)? = null
+    var playPauseCallback: (() -> Unit)? = null
+    var nextCallback: (() -> Unit)? = null
+    var previousCallback: (() -> Unit)? = null
+    var closeCallback: (() -> Unit)? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         // If the service is started, make sure it's in foreground

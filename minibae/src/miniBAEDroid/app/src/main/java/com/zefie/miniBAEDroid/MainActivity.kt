@@ -25,7 +25,7 @@ class MainActivity : AppCompatActivity() {
     var currentSound: org.minibae.Sound? = null
     
     // Service binding
-    private var playbackService: MediaPlaybackService? = null
+    var playbackService: MediaPlaybackService? = null
     private var isBound = false
     
     private val connection = object : android.content.ServiceConnection {
@@ -33,6 +33,57 @@ class MainActivity : AppCompatActivity() {
             val binder = service as MediaPlaybackService.LocalBinder
             playbackService = binder.getService()
             isBound = true
+            
+            // Set up media control callbacks
+            playbackService?.seekCallback = { position ->
+                android.util.Log.d("MainActivity", "Seek callback: $position")
+                val fragment = supportFragmentManager.findFragmentById(R.id.fragment_container)
+                if (fragment is HomeFragment) {
+                    fragment.handleSeekFromNotification(position)
+                } else {
+                    android.util.Log.e("MainActivity", "HomeFragment not found for seek!")
+                }
+            }
+            
+            playbackService?.playPauseCallback = {
+                android.util.Log.d("MainActivity", "Play/Pause callback")
+                val fragment = supportFragmentManager.findFragmentById(R.id.fragment_container)
+                if (fragment is HomeFragment) {
+                    fragment.handlePlayPauseFromNotification()
+                } else {
+                    android.util.Log.e("MainActivity", "HomeFragment not found for play/pause!")
+                }
+            }
+            
+            playbackService?.nextCallback = {
+                android.util.Log.d("MainActivity", "Next callback")
+                val fragment = supportFragmentManager.findFragmentById(R.id.fragment_container)
+                if (fragment is HomeFragment) {
+                    fragment.handleNextFromNotification()
+                } else {
+                    android.util.Log.e("MainActivity", "HomeFragment not found for next!")
+                }
+            }
+            
+            playbackService?.previousCallback = {
+                android.util.Log.d("MainActivity", "Previous callback")
+                val fragment = supportFragmentManager.findFragmentById(R.id.fragment_container)
+                if (fragment is HomeFragment) {
+                    fragment.handlePreviousFromNotification()
+                } else {
+                    android.util.Log.e("MainActivity", "HomeFragment not found for previous!")
+                }
+            }
+            
+            playbackService?.closeCallback = {
+                android.util.Log.d("MainActivity", "Close callback")
+                val fragment = supportFragmentManager.findFragmentById(R.id.fragment_container)
+                if (fragment is HomeFragment) {
+                    fragment.handleCloseFromNotification()
+                } else {
+                    android.util.Log.e("MainActivity", "HomeFragment not found for close!")
+                }
+            }
         }
 
         override fun onServiceDisconnected(arg0: android.content.ComponentName) {
