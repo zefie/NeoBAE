@@ -593,10 +593,9 @@ class HomeFragment : Fragment() {
                     val window = (view.context as? android.app.Activity)?.window
                     SideEffect {
                         window?.let {
-                            it.statusBarColor = android.graphics.Color.parseColor("#1E1E1E")
-                            WindowCompat.getInsetsController(it, view)?.let { controller ->
-                                controller.isAppearanceLightStatusBars = false
-                            }
+                            WindowCompat.setDecorFitsSystemWindows(it, false)
+                            val controller = WindowCompat.getInsetsController(it, view)
+                            controller.isAppearanceLightStatusBars = false
                         }
                     }
                     

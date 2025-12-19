@@ -73,9 +73,8 @@ class MusicNotificationHelper(private val context: Context) {
     private fun setupMediaSession() {
         mediaSession = MediaSessionCompat(context, "miniBAE_session").apply {
             isActive = true
-            // Set supported actions for media controls
-            setFlags(MediaSessionCompat.FLAG_HANDLES_MEDIA_BUTTONS or 
-                    MediaSessionCompat.FLAG_HANDLES_TRANSPORT_CONTROLS)
+            // MediaSessionCompat handles media buttons and transport controls by default
+            // No need to set flags as they are deprecated and handled automatically
             
             // Set callback to handle media session events (like seeking)
             setCallback(object : MediaSessionCompat.Callback() {
