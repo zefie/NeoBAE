@@ -782,7 +782,11 @@ class HomeFragment : Fragment() {
             android.util.Log.d("HomeFragment", "The previous song had an embedded bank, restoring last known bank")
             val prefs = requireContext().getSharedPreferences("miniBAE_prefs", Context.MODE_PRIVATE)
             val lastBankPath = prefs.getString("last_bank_path", "__builtin__")
-            loadBankFromFile(java.io.File(lastBankPath))
+            if (lastBankPath == "__builtin__") {
+                loadBuiltInPatches()
+            } else if (!lastBankPath.isNullOrEmpty()) {
+                loadBankFromFile(java.io.File(lastBankPath))
+            }
         }
         stopPlayback(true)
         viewModel.clearPlaylist()
