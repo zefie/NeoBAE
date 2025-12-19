@@ -148,22 +148,30 @@ class MusicNotificationHelper(private val context: Context) {
         mediaSession?.setPlaybackState(playbackState)
     }
     
-    private fun updateMetadata(title: String, artist: String, duration: Long) {
+    private fun updateMetadata(title: String, artist: String, duration: Long, albumArt: Bitmap? = null) {
         val metadata = android.support.v4.media.MediaMetadataCompat.Builder()
             .putString(android.support.v4.media.MediaMetadataCompat.METADATA_KEY_TITLE, title)
             .putString(android.support.v4.media.MediaMetadataCompat.METADATA_KEY_ARTIST, artist)
             .putLong(android.support.v4.media.MediaMetadataCompat.METADATA_KEY_DURATION, duration)
-            .build()
         
-        mediaSession?.setMetadata(metadata)
+        if (albumArt != null) {
+            // Different Android surfaces (notification, lockscreen, QS media player) may prefer different keys.
+            // Setting all of them improves compatibility.
+            metadata.putBitmap(android.support.v4.media.MediaMetadataCompat.METADATA_KEY_ART, albumArt)
+            metadata.putBitmap(android.support.v4.media.MediaMetadataCompat.METADATA_KEY_ALBUM_ART, albumArt)
+            metadata.putBitmap(android.support.v4.media.MediaMetadataCompat.METADATA_KEY_DISPLAY_ICON, albumArt)
+        }
+        
+        mediaSession?.setMetadata(metadata.build())
     }
     
-    private fun createAlbumArt(): Bitmap {
+    private fun createAlbumArt(fileExtension: String = ""): Bitmap {
+        android.util.Log.d("MusicNotificationHelper", "createAlbumArt called with extension: '$fileExtension'")
         val size = 256 // Smaller size for more compact notification
         val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
         
-        // Create dark purple to black gradient
+        // Create dark purple to black gradient background
         val gradient = android.graphics.LinearGradient(
             0f, 0f, 0f, size.toFloat(),
             intArrayOf(
@@ -182,6 +190,65 @@ class MusicNotificationHelper(private val context: Context) {
         val rect = RectF(0f, 0f, size.toFloat(), size.toFloat())
         canvas.drawRoundRect(rect, 16f, 16f, paint)
         
+        // Add file type badge if extension provided
+        if (fileExtension.isNotEmpty()) {
+            val ext = fileExtension.uppercase()
+            val displayText = when (ext) {
+                "MID" -> "MIDI"
+                "MIDI" -> "MIDI"
+                "RMI" -> "RMI"
+                "RMF" -> "RMF"
+                "XMF" -> "XMF"
+                "MXMF" -> "MXMF"
+                "KAR" -> "KAR"
+                else -> ext
+            }
+
+            // Make the badge the dominant element of the artwork (centered + large).
+            // Some Android surfaces crop/blur artwork; a small corner badge can disappear.
+            val badgePaint = Paint().apply {
+                isAntiAlias = true
+                color = 0xFF6200EA.toInt()
+            }
+
+            val badgeWidth = 190f
+            val badgeHeight = 110f
+            val badgeLeft = (size - badgeWidth) / 2f
+            val badgeTop = (size - badgeHeight) / 2f
+
+            val badgeRect = RectF(
+                badgeLeft,
+                badgeTop,
+                badgeLeft + badgeWidth,
+                badgeTop + badgeHeight
+            )
+            canvas.drawRoundRect(badgeRect, 18f, 18f, badgePaint)
+
+            val textPaint = Paint().apply {
+                isAntiAlias = true
+                // Slightly darker than pure white so it doesn't glow/wash out
+                // when Android uses the artwork as a notification background.
+                color = 0xFFA0A0A0.toInt()
+                textAlign = Paint.Align.CENTER
+                typeface = android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
+            }
+
+            // Scale text to fit the badge nicely.
+            // (Simple heuristic: start large, shrink until it fits.)
+            var textSize = 64f
+            textPaint.textSize = textSize
+            while (textPaint.measureText(displayText) > badgeWidth - 24f && textSize > 18f) {
+                textSize -= 2f
+                textPaint.textSize = textSize
+            }
+
+            val textBounds = android.graphics.Rect()
+            textPaint.getTextBounds(displayText, 0, displayText.length, textBounds)
+            val textX = size / 2f
+            val textY = badgeTop + (badgeHeight / 2f) - textBounds.exactCenterY()
+            canvas.drawText(displayText, textX, textY, textPaint)
+        }
+        
         return bitmap
     }
     
@@ -192,11 +259,11 @@ class MusicNotificationHelper(private val context: Context) {
         hasNext: Boolean,
         hasPrevious: Boolean,
         currentPosition: Long = 0,
-        duration: Long = 0
+        duration: Long = 0,
+        fileExtension: String = ""
     ): android.app.Notification {
-        // Update MediaSession with playback state and metadata for progress bar
+        // Update MediaSession with playback state for progress bar
         updatePlaybackState(isPlaying, currentPosition)
-        updateMetadata(title, artist, duration)
         
         val notificationIntent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
@@ -227,8 +294,11 @@ class MusicNotificationHelper(private val context: Context) {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
         
-        // Create album art
-        val albumArt = createAlbumArt()
+        // Create album art with file type badge
+        val albumArt = createAlbumArt(fileExtension)
+        
+        // Update metadata with album art for MediaSession
+        updateMetadata(title, artist, duration, albumArt)
         
         // Build the notification with MediaStyle
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
@@ -305,9 +375,10 @@ class MusicNotificationHelper(private val context: Context) {
         hasNext: Boolean,
         hasPrevious: Boolean,
         currentPosition: Long = 0,
-        duration: Long = 0
+        duration: Long = 0,
+        fileExtension: String = ""
     ) {
-        val notification = buildNotification(title, artist, isPlaying, hasNext, hasPrevious, currentPosition, duration)
+        val notification = buildNotification(title, artist, isPlaying, hasNext, hasPrevious, currentPosition, duration, fileExtension)
         try {
             NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, notification)
         } catch (e: SecurityException) {

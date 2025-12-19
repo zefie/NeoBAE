@@ -548,6 +548,8 @@ class HomeFragment : Fragment() {
                             File(path).name
                         } ?: "Unknown Folder"
                         
+                        val fileExt = currentItem.file.extension
+                        
                         (activity as? MainActivity)?.updateServiceNotification(
                             title = viewModel.currentTitle,
                             artist = folderName,
@@ -555,7 +557,8 @@ class HomeFragment : Fragment() {
                             hasNext = viewModel.hasNext(),
                             hasPrevious = viewModel.hasPrevious(),
                             currentPosition = viewModel.currentPositionMs.toLong(),
-                            duration = viewModel.totalDurationMs.toLong()
+                            duration = viewModel.totalDurationMs.toLong(),
+                            fileExtension = fileExt
                         )
                     } else {
                         (activity as? MainActivity)?.stopServiceNotification()

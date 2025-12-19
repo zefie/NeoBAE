@@ -28,7 +28,7 @@ class MediaPlaybackService : Service() {
         // Set up callback to handle seek operations from notification
         notificationHelper.setPlaybackCallback(object : MusicNotificationHelper.PlaybackCallback {
             override fun onSeek(position: Long) {
-                android.util.Log.d("MediaPlaybackService", "onSeek: $position")
+                // Notify bound activity/fragment to seek to position (in milliseconds)
                 seekCallback?.invoke(position.toInt())
             }
             
@@ -91,10 +91,11 @@ class MediaPlaybackService : Service() {
         hasNext: Boolean,
         hasPrevious: Boolean,
         currentPosition: Long = 0,
-        duration: Long = 0
+        duration: Long = 0,
+        fileExtension: String = ""
     ) {
         val notification = notificationHelper.buildNotification(
-            title, artist, isPlaying, hasNext, hasPrevious, currentPosition, duration
+            title, artist, isPlaying, hasNext, hasPrevious, currentPosition, duration, fileExtension
         )
         
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {

@@ -36,7 +36,7 @@ class MainActivity : AppCompatActivity() {
             
             // Set up media control callbacks
             playbackService?.seekCallback = { position ->
-                android.util.Log.d("MainActivity", "Seek callback: $position")
+                // Forward seek request to HomeFragment
                 val fragment = supportFragmentManager.findFragmentById(R.id.fragment_container)
                 if (fragment is HomeFragment) {
                     fragment.handleSeekFromNotification(position)
@@ -334,7 +334,8 @@ class MainActivity : AppCompatActivity() {
         hasNext: Boolean,
         hasPrevious: Boolean,
         currentPosition: Long = 0,
-        duration: Long = 0
+        duration: Long = 0,
+        fileExtension: String = ""
     ) {
         if (isBound && playbackService != null) {
             // Start the service if it's not already running in foreground
@@ -343,7 +344,7 @@ class MainActivity : AppCompatActivity() {
             } else {
                 startService(android.content.Intent(this, MediaPlaybackService::class.java))
             }
-            playbackService?.updateNotification(title, artist, isPlaying, hasNext, hasPrevious, currentPosition, duration)
+            playbackService?.updateNotification(title, artist, isPlaying, hasNext, hasPrevious, currentPosition, duration, fileExtension)
         }
     }
     
