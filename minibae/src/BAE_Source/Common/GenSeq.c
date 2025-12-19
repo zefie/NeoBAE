@@ -1728,23 +1728,25 @@ static void PV_ProcessProgramChange(GM_Song *pSong, INT16 MIDIChannel, INT16 cur
             pSong->channelProgram[MIDIChannel] = program;
             
 #if USE_SF2_SUPPORT == TRUE
-            // If SF2 is active for this song, send program change to SF2
-            if (GM_IsSF2Song(pSong))
-            {
-                for (int i = 1; i <= pSong->RMFInstrumentIDs[0]; i++) {
-                    if (pSong->RMFInstrumentIDs[i] == program) {
-                        pSong->channelType[MIDIChannel] = CHANNEL_TYPE_RMF;
-                        BAE_PRINTF("ProcessProgramChange Debug: Channel %d is using an Embedded RMF Instrument (%d)\n", MIDIChannel, program);
-                        break;
-                    }
-                }  
-                if (pSong->channelType[MIDIChannel] != CHANNEL_TYPE_RMF) {
-                    // Calculate combined program manually to support banks > MAX_BANKS for SF2
-                    INT32 theBank = pSong->channelBank[MIDIChannel];
-                    INT32 thePatch = program;
-                    
-                    switch (pSong->channelBankMode[MIDIChannel])
-                    {
+
+            // Check for RMF embedded instruments first
+            XBOOL useRMF = FALSE;
+            for (int i = 1; i <= pSong->RMFInstrumentIDs[0]; i++) {
+                if (pSong->RMFInstrumentIDs[i] == program) {
+                    pSong->channelType[MIDIChannel] = CHANNEL_TYPE_RMF;
+                    useRMF = TRUE;
+                    BAE_PRINTF("ProcessProgramChange Debug: Channel %d is using an Embedded RMF Instrument (%d)\n", MIDIChannel, program);
+                    break;
+                }
+            }
+            
+            if (!useRMF) {
+                // Calculate bank/program for SF2 or XMF overlay check
+                INT32 theBank = pSong->channelRawBank[MIDIChannel];
+                INT32 thePatch = program;
+                
+                switch (pSong->channelBankMode[MIDIChannel])
+                {
                     default:
                     case USE_GM_DEFAULT:
                         if (MIDIChannel == PERCUSSION_CHANNEL)
@@ -1763,14 +1765,39 @@ static void PV_ProcessProgramChange(GM_Song *pSong, INT16 MIDIChannel, INT16 cur
                     case USE_NORM_BANK:
                         theBank = theBank * 2 + 0; // even banks are for instruments
                         break;
+                }
+                
+                // Check if XMF overlay has this preset (only in HSB mode)
+                // In SF2 mode, the overlay is already part of the soundfont stack
+                if (!GM_IsSF2Song(pSong) && GM_SF2_HasXmfEmbeddedBank(pSong))
+                {
+                    INT32 overlayBank = theBank / 2;  // Convert back to MIDI bank for overlay check
+                    if (GM_SF2_XmfOverlayHasPreset(overlayBank, thePatch)) {
+                        // Route this channel to FluidSynth overlay
+                        pSong->channelType[MIDIChannel] = CHANNEL_TYPE_SF2;
+                        // Directly set the bank and program in FluidSynth (bypass conversion logic)
+                        GM_SF2_SetChannelBankAndProgram(MIDIChannel, overlayBank, thePatch);
+                        BAE_PRINTF("ProcessProgramChange Debug: Channel %d routed to XMF overlay (bank=%d prog=%d)\n", MIDIChannel, overlayBank, thePatch);
+                    } else {
+                        // HSB mode without overlay match - use native synthesis
+                        pSong->channelType[MIDIChannel] = CHANNEL_TYPE_GM;
                     }
-                    
+                }
+                // If SF2 is active for this song, send program change to SF2
+                else if (GM_IsSF2Song(pSong))
+                {
+                    pSong->channelType[MIDIChannel] = CHANNEL_TYPE_SF2;
                     INT32 combinedProgram = (theBank * 128) + thePatch;
                     GM_SF2_ProcessProgramChange(pSong, MIDIChannel, combinedProgram);
                 }
+                else
+                {
+                    // HSB mode without overlay - use native synthesis
+                    pSong->channelType[MIDIChannel] = CHANNEL_TYPE_GM;
+                }
             }
-#endif
         }
+#endif
 
         if (pSong->AnalyzeMode != SCAN_NORMAL)
         {
@@ -1957,8 +1984,8 @@ static void PV_ProcessNoteOff(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTr
             }
             
 #if USE_SF2_SUPPORT == TRUE
-            // If SF2 is active for this song, route to SF2 instead of normal synthesis
-            if (GM_IsSF2Song(pSong) && !GM_IsRMFChannel(pSong, MIDIChannel))
+            // If SF2 is active for this song OR channel is routed to SF2, route to SF2 instead
+            if ((GM_IsSF2Song(pSong) || pSong->channelType[MIDIChannel] == CHANNEL_TYPE_SF2) && !GM_IsRMFChannel(pSong, MIDIChannel))
             {
                 GM_SF2_ProcessNoteOff(pSong, MIDIChannel, note, volume);
             }
@@ -2013,8 +2040,8 @@ static void PV_ProcessNoteOn(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTra
                 }
 #if USE_SF2_SUPPORT == TRUE
 
-                // If SF2 is active for this song, route to SF2 synthesis instead of BAE synthesis
-                if (GM_IsSF2Song(pSong))
+                // If SF2 is active for this song OR channel is routed to SF2, route to SF2 synthesis
+                if (GM_IsSF2Song(pSong) || pSong->channelType[MIDIChannel] == CHANNEL_TYPE_SF2)
                 {
                     // adding this pleases the compiler
                     // warning: writing 1 byte into a region of size 0 [-Wstringop-overflow=]
@@ -2138,7 +2165,7 @@ static void PV_ProcessPitchBend(GM_Song *pSong, INT16 MIDIChannel, INT16 current
     {
 #if USE_SF2_SUPPORT == TRUE
         // If SF2 is active for this song, send pitch bend to SF2
-        if (GM_IsSF2Song(pSong))
+        if (GM_IsSF2Song(pSong) || pSong->channelType[MIDIChannel] == CHANNEL_TYPE_SF2)
         {
             GM_SF2_ProcessPitchBend(pSong, MIDIChannel, valueMSB, valueLSB);
         }
@@ -2268,7 +2295,7 @@ void PV_ProcessController(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTrack,
     if (PV_IsMuted(pSong, MIDIChannel, currentTrack) == FALSE)
     {
 #if USE_SF2_SUPPORT == TRUE
-        if (GM_IsSF2Song(pSong))
+        if (GM_IsSF2Song(pSong) || pSong->channelType[MIDIChannel] == CHANNEL_TYPE_SF2)
         {
             if (pSong->songFlags == SONG_FLAG_IS_RMF) {
                 if (controler == 0 && (value == 1 || value == 2)) {
@@ -2348,7 +2375,7 @@ void PV_ProcessController(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTrack,
         case B_BANK_MSB: // bank select MSB.
             pSong->channelRawBank[MIDIChannel] = (SBYTE)value;
 #if USE_SF2_SUPPORT == TRUE
-            if (!GM_IsSF2Song(pSong)) {
+            if (!GM_IsSF2Song(pSong) && !GM_SF2_HasXmfEmbeddedBank(pSong)) {
 #endif          
                 if (value > (MAX_BANKS / 2))
                 { // if we're selecting outside of our range, default to 0
@@ -4329,7 +4356,7 @@ void GM_MuteChannel(GM_Song *pSong, short int channel)
     if ((channel < MAX_CHANNELS) && (channel >= 0))
     {
 #if USE_SF2_SUPPORT == TRUE
-        if (GM_IsSF2Song(pSong))
+        if (GM_IsSF2Song(pSong) || pSong->channelType[channel] == CHANNEL_TYPE_SF2)
         {
             // For SF2 songs, aggressively silence and also end legacy voices to ensure engine note-offs
             GM_SF2_AllNotesOffChannel(pSong, channel);

@@ -32,9 +32,9 @@ ifneq ($(WASM),1)
 		USE_FLUIDSYNTH := 1
 		EMBED_PATCHES := 1
 		EMBED_FONT := 1
-		XMF_SUPPORT := 0				# Experimental, disabled by default until ready
-		DISABLE_NOKIA := 0			    # Maps MSB5->MSB1 and MSG6->MSB2, relatively harmless, so patch is enabled by default, but optional in case
-		DISABLE_BEATNIK_SF2_NRPN := 0   # Also relatively harmless, it allows MIDIs to send certain commands in order to activate additional percussion channels while in SF2 mode
+		XMF_SUPPORT := 1
+		DISABLE_NOKIA := 0			    
+		DISABLE_BEATNIK_SF2_NRPN := 0   
 	endif
 endif
 

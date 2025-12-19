@@ -669,6 +669,7 @@ extern "C"
 #if USE_SF2_SUPPORT == TRUE
 #define CHANNEL_TYPE_GM 1
 #define CHANNEL_TYPE_RMF 2
+#define CHANNEL_TYPE_SF2 3
 #endif
 
     struct GM_SampleCallbackEntry

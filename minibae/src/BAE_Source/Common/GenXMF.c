@@ -1108,21 +1108,22 @@ static XBOOL PV_TryLoadBankFromBlob(const unsigned char *buf, uint32_t len)
     BAE_PRINTF("[XMF] trying %d bank candidate(s)\n", candCount);
     for (int idx = 0; idx < candCount; ++idx) {
         cand_t *c = &cands[idx];
-        BAE_PRINTF("[XMF] attempting load #%d @+%u bytes=%u%s\n", idx+1, c->off, c->bytes,
+        BAE_PRINTF("[XMF] attempting overlay load #%d @+%u bytes=%u%s\n", idx+1, c->off, c->bytes,
                    (c->isDLS? (c->hasWvpl? ", DLS wvpl=YES" : ", DLS wvpl=NO") : ", SF2"));
-        OPErr r = GM_LoadSF2SoundfontFromMemory(buf + c->off, (size_t)c->bytes);
+        // Use overlay loading to preserve base soundfont and only override instruments in XMF
+        OPErr r = GM_LoadSF2SoundfontAsXMFOverlay(buf + c->off, (size_t)c->bytes);
         if (r == NO_ERR) {
             int presetCount = 0;
             XBOOL okPresets = GM_SF2_CurrentFontHasAnyPreset(&presetCount);
             if (okPresets) {
-                BAE_PRINTF("[XMF] bank load succeeded on candidate #%d (presets>0)\n", idx+1);
+                BAE_PRINTF("[XMF] bank overlay succeeded on candidate #%d (presets>0)\n", idx+1);
                 return TRUE;
             } else {
                 BAE_PRINTF("[XMF] bank candidate #%d loaded but no presets found (count=%d) — trying next...\n", idx+1, presetCount);
-                GM_UnloadSF2Soundfont();
+                GM_UnloadXMFOverlaySoundFont();
             }
         } else {
-            BAE_PRINTF("[XMF] bank load failed on candidate #%d (result=%d), trying next...\n", idx+1, r);
+            BAE_PRINTF("[XMF] bank overlay load failed on candidate #%d (result=%d), trying next...\n", idx+1, r);
         }
     }
     BAE_PRINTF("[XMF] all bank candidates failed to load\n");

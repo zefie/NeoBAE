@@ -296,9 +296,10 @@ BAEFileType X_DetermineFileTypeByPath(const char *filePath)
         return BAE_RMF;
     else if (strcmp(extLower, ".rmi") == 0)
         return BAE_RMI;        
+#if USE_XMF_SUPPORT == TRUE
     else if (strcmp(extLower, ".xmf") == 0 || strcmp(extLower, ".mxmf") == 0)
-        return BAE_MIDI_TYPE; // XMF files contain MIDI data
-    
+        return BAE_XMF; // XMF files contain MIDI data
+#endif    
     return BAE_INVALID_TYPE;
 }
 
