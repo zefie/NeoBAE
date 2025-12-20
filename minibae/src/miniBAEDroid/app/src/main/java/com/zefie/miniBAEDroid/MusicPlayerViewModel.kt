@@ -184,6 +184,42 @@ class MusicPlayerViewModel : ViewModel() {
                 currentIndex in (from + 1)..to -> currentIndex--
                 currentIndex in to until from -> currentIndex++
             }
+
+            // Keep shuffle indices coherent (they store playlist indices).
+            if (isShuffled && shuffledIndices.isNotEmpty()) {
+                shuffledIndices.replaceAll { idx ->
+                    when {
+                        idx == from -> to
+                        from < to && idx in (from + 1)..to -> idx - 1
+                        to < from && idx in to until from -> idx + 1
+                        else -> idx
+                    }
+                }
+            }
+        }
+    }
+
+    fun replacePlaylistPreservingCurrent(newItems: List<PlaylistItem>) {
+        val currentPath = getCurrentItem()?.path
+        playlist.clear()
+        playlist.addAll(newItems)
+
+        currentIndex = if (currentPath != null) {
+            playlist.indexOfFirst { it.path == currentPath }
+        } else {
+            if (playlist.isNotEmpty()) 0 else -1
+        }
+
+        if (isShuffled) {
+            // Regenerate shuffled order for the new playlist.
+            shuffledIndices = (0 until playlist.size).toMutableList().apply { shuffle() }
+            if (currentIndex >= 0) {
+                val currentPos = shuffledIndices.indexOf(currentIndex)
+                if (currentPos >= 0) {
+                    shuffledIndices.removeAt(currentPos)
+                    shuffledIndices.add(0, currentIndex)
+                }
+            }
         }
     }
     

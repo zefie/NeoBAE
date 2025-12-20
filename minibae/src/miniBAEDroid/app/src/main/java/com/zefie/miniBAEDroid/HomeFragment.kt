@@ -21,6 +21,7 @@ import androidx.documentfile.provider.DocumentFile
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -53,6 +54,9 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.zIndex
 import androidx.core.view.WindowCompat
 import androidx.compose.runtime.collectAsState
 import android.content.res.Configuration
@@ -63,6 +67,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import androidx.lifecycle.lifecycleScope
+import kotlin.math.roundToInt
 
 class HomeFragment : Fragment() {
 
@@ -441,6 +446,27 @@ class HomeFragment : Fragment() {
         } catch (ex: Exception) {
             android.util.Log.e("HomeFragment", "Failed to save favorites: ${ex.message}")
         }
+    }
+
+    private fun syncVirtualPlaylistToFavoritesOrder() {
+        if (!::viewModel.isInitialized) return
+        if (viewModel.currentScreen != NavigationScreen.FAVORITES) return
+
+        if (viewModel.playlist.isEmpty() || viewModel.favorites.isEmpty()) return
+
+        val order = viewModel.favorites.withIndex().associate { it.value to it.index }
+        val existing = viewModel.playlist.toList()
+        val originalIndex = existing.withIndex().associate { it.value.path to it.index }
+
+        // Only reorder if the playlist actually contains any favorites.
+        if (existing.none { order.containsKey(it.path) }) return
+
+        val reordered = existing.sortedWith(
+            compareBy<PlaylistItem>({ order[it.path] ?: Int.MAX_VALUE }, { originalIndex[it.path] ?: Int.MAX_VALUE })
+        )
+
+        if (reordered == existing) return
+        viewModel.replacePlaylistPreservingCurrent(reordered)
     }
     
     private fun loadFavorites() {
@@ -2508,6 +2534,36 @@ class HomeFragment : Fragment() {
     }
 }
 
+private fun saveFavorites(context: Context, favorites: List<String>) {
+    try {
+        val prefs = context.getSharedPreferences("miniBAE_prefs", Context.MODE_PRIVATE)
+        val json = favorites.joinToString("|||")
+        prefs.edit().putString("savedFavorites", json).apply()
+    } catch (ex: Exception) {
+        android.util.Log.e("HomeFragment", "Failed to save favorites: ${ex.message}")
+    }
+}
+
+private fun syncVirtualPlaylistToFavoritesOrder(viewModel: MusicPlayerViewModel) {
+    if (viewModel.currentScreen != NavigationScreen.FAVORITES) return
+
+    if (viewModel.playlist.isEmpty() || viewModel.favorites.isEmpty()) return
+
+    val order = viewModel.favorites.withIndex().associate { it.value to it.index }
+    val existing = viewModel.playlist.toList()
+    val originalIndex = existing.withIndex().associate { it.value.path to it.index }
+
+    // Only reorder if the playlist actually contains any favorites.
+    if (existing.none { order.containsKey(it.path) }) return
+
+    val reordered = existing.sortedWith(
+        compareBy<PlaylistItem>({ order[it.path] ?: Int.MAX_VALUE }, { originalIndex[it.path] ?: Int.MAX_VALUE })
+    )
+
+    if (reordered == existing) return
+    viewModel.replacePlaylistPreservingCurrent(reordered)
+}
+
 @Composable
 fun NewMusicPlayerScreen(
     viewModel: MusicPlayerViewModel,
@@ -2901,7 +2957,19 @@ fun NewMusicPlayerScreen(
                     viewModel = viewModel,
                     onPlaylistItemClick = onPlaylistItemClick,
                     onToggleFavorite = onToggleFavorite,
-                    onAddToPlaylist = onAddToPlaylist
+                    onAddToPlaylist = onAddToPlaylist,
+                    onMoveFavorite = { from, to ->
+                        if (from == to) return@FavoritesScreenContent
+                        if (from !in viewModel.favorites.indices) return@FavoritesScreenContent
+                        if (to !in viewModel.favorites.indices) return@FavoritesScreenContent
+
+                        val moved = viewModel.favorites.removeAt(from)
+                        viewModel.favorites.add(to, moved)
+                    },
+                    onReorderFinished = {
+                        saveFavorites(context, viewModel.favorites)
+                        syncVirtualPlaylistToFavoritesOrder(viewModel)
+                    }
                 )
                 NavigationScreen.SETTINGS -> SettingsScreenContent(
                     bankName = bankName,
@@ -4312,19 +4380,28 @@ fun FavoritesScreenContent(
     viewModel: MusicPlayerViewModel,
     onPlaylistItemClick: (File) -> Unit,
     onToggleFavorite: (String) -> Unit,
-    onAddToPlaylist: (File) -> Unit
+    onAddToPlaylist: (File) -> Unit,
+    onMoveFavorite: (from: Int, to: Int) -> Unit,
+    onReorderFinished: () -> Unit
 ) {
-    val favoriteSongs = viewModel.favorites.mapNotNull { path ->
-        val file = File(path)
-        if (file.exists() && !file.isDirectory) {
-            PlaylistItem(file)
-        } else {
-            null
+    // Keep the list clean so indices match and drag-reorder stays consistent.
+    LaunchedEffect(Unit) {
+        val missing = viewModel.favorites.filter { path ->
+            val f = File(path)
+            !f.exists() || f.isDirectory
+        }
+        if (missing.isNotEmpty()) {
+            viewModel.favorites.removeAll(missing)
         }
     }
+
+    val itemHeights = remember { mutableStateMapOf<String, Int>() }
+    var draggingIndex by remember { mutableStateOf<Int?>(null) }
+    var dragOffsetY by remember { mutableStateOf(0f) }
+    var didReorder by remember { mutableStateOf(false) }
     
     Column(modifier = Modifier.fillMaxSize()) {
-        if (favoriteSongs.isEmpty()) {
+        if (viewModel.favorites.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(Icons.Filled.FavoriteBorder, contentDescription = null, modifier = Modifier.size(64.dp), tint = Color.Gray)
@@ -4336,15 +4413,164 @@ fun FavoritesScreenContent(
             }
         } else {
             LazyColumn(modifier = Modifier.fillMaxSize()) {
-                itemsIndexed(favoriteSongs) { index, item ->
-                    FolderSongListItem(
-                        item = item,
-                        isFavorite = true,
-                        onClick = { onPlaylistItemClick(item.file) },
-                        onToggleFavorite = { onToggleFavorite(item.path) },
-                        onAddToPlaylist = { onAddToPlaylist(item.file) }
-                    )
-                    if (index < favoriteSongs.size - 1) {
+                itemsIndexed(
+                    items = viewModel.favorites,
+                    key = { _, path -> path }
+                ) { index, path ->
+                    val file = remember(path) { File(path) }
+                    val item = remember(path) { PlaylistItem(file) }
+                    val isDragging = draggingIndex == index
+
+                    Box(
+                        modifier = Modifier
+                            .onGloballyPositioned { coords ->
+                                itemHeights[path] = coords.size.height
+                            }
+                            .zIndex(if (isDragging) 1f else 0f)
+                            .offset { IntOffset(0, if (isDragging) dragOffsetY.roundToInt() else 0) }
+                    ) {
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            color = Color.Transparent
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                // File type badge (clickable to play)
+                                Box(
+                                    modifier = Modifier
+                                        .size(width = 50.dp, height = 40.dp)
+                                        .clickable { onPlaylistItemClick(item.file) },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Surface(
+                                        modifier = Modifier
+                                            .wrapContentSize()
+                                            .padding(4.dp),
+                                        shape = RoundedCornerShape(4.dp),
+                                        color = MaterialTheme.colors.primary.copy(alpha = 0.15f)
+                                    ) {
+                                        val fileExt = item.file.extension.uppercase()
+                                        val displayText = when (fileExt) {
+                                            "MID" -> "MIDI"
+                                            "MIDI" -> "MIDI"
+                                            "RMI" -> "RMI"
+                                            "RMF" -> "RMF"
+                                            "XMF" -> "XMF"
+                                            "MXMF" -> "MXMF"
+                                            "KAR" -> "KAR"
+                                            else -> fileExt
+                                        }
+                                        Text(
+                                            text = displayText,
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colors.primary,
+                                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.width(4.dp))
+
+                                // Song info (clickable to play)
+                                Column(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clickable { onPlaylistItemClick(item.file) }
+                                ) {
+                                    Text(
+                                        text = item.title,
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Normal,
+                                        color = MaterialTheme.colors.onBackground,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+
+                                // Favorite button
+                                IconButton(onClick = { onToggleFavorite(item.path) }) {
+                                    Icon(
+                                        Icons.Filled.Favorite,
+                                        contentDescription = "Remove from favorites",
+                                        tint = MaterialTheme.colors.primary
+                                    )
+                                }
+
+                                // Drag handle: start reorder from here so vertical scrolling still works elsewhere.
+                                Box(
+                                    modifier = Modifier
+                                        .padding(start = 4.dp)
+                                        .pointerInput(path) {
+                                            detectDragGestures(
+                                                onDragStart = {
+                                                    draggingIndex = index
+                                                    dragOffsetY = 0f
+                                                    didReorder = false
+                                                },
+                                                onDragCancel = {
+                                                    val changed = didReorder
+                                                    draggingIndex = null
+                                                    dragOffsetY = 0f
+                                                    didReorder = false
+                                                    if (changed) onReorderFinished()
+                                                },
+                                                onDragEnd = {
+                                                    val changed = didReorder
+                                                    draggingIndex = null
+                                                    dragOffsetY = 0f
+                                                    didReorder = false
+                                                    if (changed) onReorderFinished()
+                                                },
+                                                onDrag = { change, dragAmount ->
+                                                    change.consume()
+
+                                                    val currentIndex = draggingIndex ?: return@detectDragGestures
+                                                    dragOffsetY += dragAmount.y
+
+                                                    val currentPath = viewModel.favorites.getOrNull(currentIndex) ?: return@detectDragGestures
+                                                    val currentHeight = (itemHeights[currentPath]?.toFloat() ?: 0f)
+                                                    if (currentHeight <= 0f) return@detectDragGestures
+
+                                                    // Swap with next/previous when dragged past half an item.
+                                                    if (dragOffsetY > currentHeight / 2f && currentIndex < viewModel.favorites.lastIndex) {
+                                                        onMoveFavorite(currentIndex, currentIndex + 1)
+                                                        didReorder = true
+                                                        val newIndex = currentIndex + 1
+                                                        draggingIndex = newIndex
+
+                                                        val nextPath = viewModel.favorites.getOrNull(newIndex) ?: return@detectDragGestures
+                                                        val nextHeight = (itemHeights[nextPath]?.toFloat() ?: currentHeight)
+                                                        dragOffsetY -= nextHeight
+                                                    } else if (dragOffsetY < -currentHeight / 2f && currentIndex > 0) {
+                                                        onMoveFavorite(currentIndex, currentIndex - 1)
+                                                        didReorder = true
+                                                        val newIndex = currentIndex - 1
+                                                        draggingIndex = newIndex
+
+                                                        val prevPath = viewModel.favorites.getOrNull(newIndex) ?: return@detectDragGestures
+                                                        val prevHeight = (itemHeights[prevPath]?.toFloat() ?: currentHeight)
+                                                        dragOffsetY += prevHeight
+                                                    }
+                                                }
+                                            )
+                                        }
+                                ) {
+                                    Icon(
+                                        Icons.Filled.DragHandle,
+                                        contentDescription = "Reorder",
+                                        tint = MaterialTheme.colors.onBackground.copy(alpha = 0.6f)
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    if (index < viewModel.favorites.size - 1) {
                         Divider(color = Color.Gray.copy(alpha = 0.2f))
                     }
                 }
