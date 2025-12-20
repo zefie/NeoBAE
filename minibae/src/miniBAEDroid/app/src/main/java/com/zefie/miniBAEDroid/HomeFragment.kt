@@ -5224,6 +5224,51 @@ fun FileTypesScreenContent(
                     )
                 }
 
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = {
+                            supportedExtensions.forEach { ext ->
+                                if (!enabledExtensions.contains(ext)) {
+                                    onExtensionEnabledChange(ext, true)
+                                }
+                            }
+                        }
+                    ) {
+                        Text("Check All")
+                    }
+
+                    OutlinedButton(
+                        onClick = {
+                            supportedExtensions.forEach { ext ->
+                                val shouldEnable = !HomeFragment.isSoundExtension(ext)
+                                if (enabledExtensions.contains(ext) != shouldEnable) {
+                                    onExtensionEnabledChange(ext, shouldEnable)
+                                }
+                            }
+                        }
+                    ) {
+                        Text("MIDI")
+                    }
+
+                    OutlinedButton(
+                        onClick = {
+                            supportedExtensions.forEach { ext ->
+                                val shouldEnable = HomeFragment.isSoundExtension(ext)
+                                if (enabledExtensions.contains(ext) != shouldEnable) {
+                                    onExtensionEnabledChange(ext, shouldEnable)
+                                }
+                            }
+                        }
+                    ) {
+                        Text("Audio")
+                    }
+                }
+
                 supportedExtensions.forEach { ext ->
                     val checked = enabledExtensions.contains(ext)
                     Row(
