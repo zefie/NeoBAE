@@ -1729,7 +1729,8 @@ XERR XFileSetPosition(XFILE fileRef, int32_t filePosition)
     {
         if (pReference->pResourceData)
         {
-            if ( (filePosition >= 0) && (filePosition < pReference->resMemLength) )
+            // Match typical file semantics: seeking to EOF (position == length) is valid.
+            if ((filePosition >= 0) && (filePosition <= pReference->resMemLength))
             {
                 pReference->resMemOffset = filePosition;
                 err = 0;

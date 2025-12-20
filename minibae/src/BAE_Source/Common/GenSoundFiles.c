@@ -3039,7 +3039,8 @@ static FLAC__StreamDecoderSeekStatus flac_seek_callback(const FLAC__StreamDecode
     
     (void)decoder; // unused parameter
     
-    if (absolute_byte_offset >= state->fileSize) {
+    // Allow seeking to EOF (position == length)
+    if (absolute_byte_offset > state->fileSize) {
         return FLAC__STREAM_DECODER_SEEK_STATUS_ERROR;
     }
     
@@ -3466,12 +3467,11 @@ static GM_Waveform* PV_ReadIntoMemoryVorbisFile(XFILE file, XBOOL decodeData,
     GM_Waveform *wave = NULL;
     OggVorbis_File vf;
     vorbis_info *vi;
-    UINT32 total_samples;
     UINT32 sample_rate;
     UINT32 channels;
-    UINT32 total_bytes;
     long bytes_read;
-    long total_read = 0;
+    uint32_t total_read = 0;
+    uint32_t capacity = 0;
     int bitstream;
     int result;
     long pos;
@@ -3522,8 +3522,7 @@ static GM_Waveform* PV_ReadIntoMemoryVorbisFile(XFILE file, XBOOL decodeData,
         *pError = BAD_FILE;
         return NULL;
     }
-    
-    total_samples = (UINT32)ov_pcm_total(&vf, -1);
+
     sample_rate = vi->rate;
     channels = vi->channels;
     
@@ -3534,60 +3533,115 @@ static GM_Waveform* PV_ReadIntoMemoryVorbisFile(XFILE file, XBOOL decodeData,
         *pError = MEMORY_ERR;
         return NULL;
     }
+
+    // For Ogg/Vorbis streaming, keep the underlying XFILE positioned at the start.
+    // The stream layer uses currentFilePosition to seek before starting playback.
+    wave->currentFilePosition = 0;
     
     // Fill in waveform info (Vorbis outputs 16-bit PCM)
-    wave->waveSize = total_samples * channels * 2;
-    wave->waveFrames = total_samples;
+    wave->waveSize = 0;
+    wave->waveFrames = 0;
     wave->sampledRate = sample_rate << 16L; // Convert to fixed point format
     wave->bitSize = 16;
     wave->channels = (unsigned char)channels;
     wave->baseMidiPitch = 60; // middle C
-    wave->compressionType = C_VORBIS;
+    wave->compressionType = decodeData ? C_NONE : C_VORBIS;
     wave->startLoop = 0;
     wave->endLoop = 0;
     
     if (decodeData) {
-        // Allocate memory for decoded audio data
-        total_bytes = total_samples * channels * 2;
-        wave->theWaveform = (SBYTE*)XNewPtr(total_bytes);
+        // Decode incrementally (streaming-style) to avoid depending on ov_pcm_total.
+        // This is also more robust for memory-backed files where EOF seeking matters.
+        const uint32_t minChunk = 64 * 1024;
+        const uint32_t readChunk = 16 * 1024;
+
+        capacity = minChunk;
+        wave->theWaveform = (SBYTE*)XNewPtr(capacity);
         if (wave->theWaveform == NULL) {
             ov_clear(&vf);
             XDisposePtr(wave);
             *pError = MEMORY_ERR;
             return NULL;
         }
-        
-        // Decode all audio data
-        while (total_read < (long)total_bytes) {
-            bytes_read = ov_read(&vf, 
-                               (char*)wave->theWaveform + total_read, 
-                               total_bytes - total_read,
-                               0, // little endian
-                               2, // 16-bit samples
-                               1, // signed
-                               &bitstream);
-            
-            if (bytes_read <= 0) {
-                break; // EOF or error
+
+        for (;;)
+        {
+            if (capacity - total_read < readChunk)
+            {
+                uint32_t newCapacity = capacity ? (capacity * 2) : minChunk;
+                while (newCapacity - total_read < readChunk)
+                {
+                    newCapacity *= 2;
+                }
+                {
+                    SBYTE *resized = (SBYTE*)XResizePtr(wave->theWaveform, (int32_t)newCapacity);
+                    if (resized == NULL)
+                    {
+                        ov_clear(&vf);
+                        XDisposePtr(wave->theWaveform);
+                        XDisposePtr(wave);
+                        *pError = MEMORY_ERR;
+                        return NULL;
+                    }
+                    wave->theWaveform = resized;
+                    capacity = newCapacity;
+                }
             }
-            
-            total_read += bytes_read;
+
+            bytes_read = ov_read(&vf,
+                                 (char*)wave->theWaveform + total_read,
+                                 (int)(capacity - total_read),
+                                 0, // little endian
+                                 2, // 16-bit samples
+                                 1, // signed
+                                 &bitstream);
+
+            if (bytes_read == 0)
+            {
+                break; // EOF
+            }
+            if (bytes_read < 0)
+            {
+                ov_clear(&vf);
+                XDisposePtr(wave->theWaveform);
+                XDisposePtr(wave);
+                *pError = BAD_FILE;
+                return NULL;
+            }
+            total_read += (uint32_t)bytes_read;
         }
-        
-        if (total_read <= 0) {
+
+        if (total_read == 0) {
             ov_clear(&vf);
             XDisposePtr(wave->theWaveform);
             XDisposePtr(wave);
             *pError = BAD_FILE;
             return NULL;
         }
-        
-        // Update actual size based on what was decoded
+
+        // Shrink to the actual decoded size
+        {
+            SBYTE *shrunk = (SBYTE*)XResizePtr(wave->theWaveform, (int32_t)total_read);
+            if (shrunk)
+            {
+                wave->theWaveform = shrunk;
+            }
+        }
+
         wave->waveSize = total_read;
         wave->waveFrames = total_read / (channels * 2);
     } else {
         // Don't decode, just get metadata
         wave->theWaveform = NULL;
+
+        {
+            ogg_int64_t pcm_total = ov_pcm_total(&vf, -1);
+            if (pcm_total > 0 && pcm_total <= (ogg_int64_t)0xFFFFFFFF)
+            {
+                wave->waveFrames = (UINT32)pcm_total;
+                wave->waveSize = wave->waveFrames * channels * 2;
+            }
+        }
     }
     
     ov_clear(&vf);
@@ -3596,6 +3650,466 @@ static GM_Waveform* PV_ReadIntoMemoryVorbisFile(XFILE file, XBOOL decodeData,
 }
 
 #endif // USE_VORBIS_DECODER != FALSE
+
+// -----------------------------------------------------------------------------
+// Streaming decode support for Vorbis + FLAC (BAEStream)
+// -----------------------------------------------------------------------------
+
+#if USE_VORBIS_DECODER != FALSE
+typedef struct
+{
+    XBOOL initialized;
+    OggVorbis_File vf;
+} VorbisStreamState;
+
+static OPErr PV_VorbisStreamEnsureInit(VorbisStreamState *st, XFILE file)
+{
+    if (!st)
+        return PARAM_ERR;
+    if (st->initialized)
+        return NO_ERR;
+
+    ov_callbacks callbacks = {
+        PV_VorbisReadFunc,
+        PV_VorbisSeekFunc,
+        PV_VorbisCloseFunc,
+        PV_VorbisTellFunc};
+
+    // Ensure we're at the start of the file before opening.
+    (void)XFileSetPosition(file, 0);
+
+    if (ov_open_callbacks(file, &st->vf, NULL, 0, callbacks) != 0)
+    {
+        return BAD_FILE;
+    }
+
+    st->initialized = TRUE;
+    return NO_ERR;
+}
+#endif
+
+#if USE_FLAC_DECODER != FALSE
+typedef struct
+{
+    FLAC__StreamDecoder *decoder;
+    XFILE file;
+    XBOOL initialized;
+    XBOOL metadataComplete;
+    XBOOL eof;
+
+    uint8_t channels;
+    uint32_t sampleRate;
+    uint64_t totalSamples;
+    uint8_t sourceBits;
+
+    // Output staging (leftovers across calls)
+    XBYTE *stash;
+    uint32_t stashCap;
+    uint32_t stashLen;
+    uint32_t stashPos;
+
+    // Per-call output target (owned by caller)
+    XBYTE *out;
+    uint32_t outNeed;
+    uint32_t outWritten;
+
+    OPErr err;
+} FLACStreamState;
+
+static uint32_t PV_FlacStashAvailable(const FLACStreamState *st)
+{
+    return (st && st->stashLen > st->stashPos) ? (st->stashLen - st->stashPos) : 0;
+}
+
+static XBOOL PV_FlacStashEnsure(FLACStreamState *st, uint32_t extraBytes)
+{
+    if (!st)
+        return FALSE;
+    if (st->stashCap - st->stashLen >= extraBytes)
+        return TRUE;
+    uint32_t newCap = st->stashCap ? st->stashCap : (64 * 1024);
+    while (newCap - st->stashLen < extraBytes)
+    {
+        newCap *= 2;
+    }
+    {
+        XBYTE *resized = (XBYTE *)XResizePtr(st->stash, (int32_t)newCap);
+        if (!resized)
+            return FALSE;
+        st->stash = resized;
+        st->stashCap = newCap;
+    }
+    return TRUE;
+}
+
+static void PV_FlacStashClear(FLACStreamState *st)
+{
+    if (!st)
+        return;
+    st->stashLen = 0;
+    st->stashPos = 0;
+}
+
+static int16_t PV_FlacConvertSampleToS16(int32_t val, int bitDepth)
+{
+    if (bitDepth <= 0)
+        bitDepth = 16;
+
+    if (bitDepth == 16)
+    {
+        if (val > INT16_MAX)
+            val = INT16_MAX;
+        else if (val < INT16_MIN)
+            val = INT16_MIN;
+        return (int16_t)val;
+    }
+    if (bitDepth > 16)
+    {
+        int shift = bitDepth - 16;
+        int32_t scaled = val >> shift;
+        if (scaled > INT16_MAX)
+            scaled = INT16_MAX;
+        else if (scaled < INT16_MIN)
+            scaled = INT16_MIN;
+        return (int16_t)scaled;
+    }
+
+    // bitDepth < 16
+    int32_t scaled = val << (16 - bitDepth);
+    if (scaled > INT16_MAX)
+        scaled = INT16_MAX;
+    else if (scaled < INT16_MIN)
+        scaled = INT16_MIN;
+    return (int16_t)scaled;
+}
+
+static FLAC__StreamDecoderReadStatus flac_xfile_read_callback(const FLAC__StreamDecoder *decoder, FLAC__byte buffer[], size_t *bytes, void *client_data)
+{
+    FLACStreamState *st = (FLACStreamState *)client_data;
+    (void)decoder;
+
+    if (!st || !st->file || !bytes)
+        return FLAC__STREAM_DECODER_READ_STATUS_ABORT;
+
+    if (*bytes == 0)
+        return FLAC__STREAM_DECODER_READ_STATUS_CONTINUE;
+
+    // Cap reads so XFileRead doesn't signal EOF as an error.
+    {
+        int32_t len = XFileGetLength(st->file);
+        int32_t pos = XFileGetPosition(st->file);
+        if (len >= 0 && pos >= 0)
+        {
+            int32_t remaining = len - pos;
+            if (remaining <= 0)
+            {
+                *bytes = 0;
+                return FLAC__STREAM_DECODER_READ_STATUS_END_OF_STREAM;
+            }
+            if ((uint64_t)*bytes > (uint64_t)remaining)
+            {
+                *bytes = (size_t)remaining;
+            }
+        }
+    }
+
+    if (XFileRead(st->file, buffer, (int32_t)*bytes) != 0)
+    {
+        *bytes = 0;
+        return FLAC__STREAM_DECODER_READ_STATUS_ABORT;
+    }
+
+    return FLAC__STREAM_DECODER_READ_STATUS_CONTINUE;
+}
+
+static FLAC__StreamDecoderSeekStatus flac_xfile_seek_callback(const FLAC__StreamDecoder *decoder, FLAC__uint64 absolute_byte_offset, void *client_data)
+{
+    FLACStreamState *st = (FLACStreamState *)client_data;
+    (void)decoder;
+    if (!st || !st->file)
+        return FLAC__STREAM_DECODER_SEEK_STATUS_ERROR;
+
+    if (absolute_byte_offset > (FLAC__uint64)0x7FFFFFFF)
+        return FLAC__STREAM_DECODER_SEEK_STATUS_ERROR;
+
+    // Allow seeking to EOF.
+    return (XFileSetPosition(st->file, (int32_t)absolute_byte_offset) == 0)
+               ? FLAC__STREAM_DECODER_SEEK_STATUS_OK
+               : FLAC__STREAM_DECODER_SEEK_STATUS_ERROR;
+}
+
+static FLAC__StreamDecoderTellStatus flac_xfile_tell_callback(const FLAC__StreamDecoder *decoder, FLAC__uint64 *absolute_byte_offset, void *client_data)
+{
+    FLACStreamState *st = (FLACStreamState *)client_data;
+    (void)decoder;
+    if (!st || !st->file || !absolute_byte_offset)
+        return FLAC__STREAM_DECODER_TELL_STATUS_ERROR;
+    {
+        int32_t pos = XFileGetPosition(st->file);
+        if (pos < 0)
+            return FLAC__STREAM_DECODER_TELL_STATUS_ERROR;
+        *absolute_byte_offset = (FLAC__uint64)pos;
+    }
+    return FLAC__STREAM_DECODER_TELL_STATUS_OK;
+}
+
+static FLAC__StreamDecoderLengthStatus flac_xfile_length_callback(const FLAC__StreamDecoder *decoder, FLAC__uint64 *stream_length, void *client_data)
+{
+    FLACStreamState *st = (FLACStreamState *)client_data;
+    (void)decoder;
+    if (!st || !st->file || !stream_length)
+        return FLAC__STREAM_DECODER_LENGTH_STATUS_ERROR;
+    {
+        int32_t len = XFileGetLength(st->file);
+        if (len < 0)
+            return FLAC__STREAM_DECODER_LENGTH_STATUS_ERROR;
+        *stream_length = (FLAC__uint64)len;
+    }
+    return FLAC__STREAM_DECODER_LENGTH_STATUS_OK;
+}
+
+static FLAC__bool flac_xfile_eof_callback(const FLAC__StreamDecoder *decoder, void *client_data)
+{
+    FLACStreamState *st = (FLACStreamState *)client_data;
+    (void)decoder;
+    if (!st || !st->file)
+        return 1;
+    {
+        int32_t len = XFileGetLength(st->file);
+        int32_t pos = XFileGetPosition(st->file);
+        if (len >= 0 && pos >= 0)
+        {
+            return (pos >= len) ? 1 : 0;
+        }
+    }
+    return 0;
+}
+
+static FLAC__StreamDecoderWriteStatus flac_stream_write_callback(
+    const FLAC__StreamDecoder *decoder,
+    const FLAC__Frame *frame,
+    const FLAC__int32 *const buffer[],
+    void *client_data)
+{
+    FLACStreamState *st = (FLACStreamState *)client_data;
+    (void)decoder;
+
+    if (!st || !frame || !buffer)
+        return FLAC__STREAM_DECODER_WRITE_STATUS_ABORT;
+
+    const int bitDepth = (int)frame->header.bits_per_sample;
+    const uint32_t blocksize = (uint32_t)frame->header.blocksize;
+    const uint32_t channels = (uint32_t)frame->header.channels;
+
+    for (uint32_t i = 0; i < blocksize; i++)
+    {
+        for (uint32_t ch = 0; ch < channels; ch++)
+        {
+            int16_t s16 = PV_FlacConvertSampleToS16(buffer[ch][i], bitDepth);
+            XBYTE outBytes[2];
+            outBytes[0] = (XBYTE)(s16 & 0xFF);
+            outBytes[1] = (XBYTE)((s16 >> 8) & 0xFF);
+
+            // Prefer writing into the current request buffer
+            if (st->out && st->outWritten + 2 <= st->outNeed)
+            {
+                st->out[st->outWritten++] = outBytes[0];
+                st->out[st->outWritten++] = outBytes[1];
+            }
+            else
+            {
+                if (!PV_FlacStashEnsure(st, 2))
+                {
+                    st->err = MEMORY_ERR;
+                    return FLAC__STREAM_DECODER_WRITE_STATUS_ABORT;
+                }
+                st->stash[st->stashLen++] = outBytes[0];
+                st->stash[st->stashLen++] = outBytes[1];
+            }
+        }
+    }
+
+    return FLAC__STREAM_DECODER_WRITE_STATUS_CONTINUE;
+}
+
+static void flac_stream_metadata_callback(
+    const FLAC__StreamDecoder *decoder,
+    const FLAC__StreamMetadata *metadata,
+    void *client_data)
+{
+    FLACStreamState *st = (FLACStreamState *)client_data;
+    (void)decoder;
+    if (!st || !metadata)
+        return;
+    if (metadata->type == FLAC__METADATA_TYPE_STREAMINFO)
+    {
+        st->channels = (uint8_t)metadata->data.stream_info.channels;
+        st->sourceBits = (uint8_t)metadata->data.stream_info.bits_per_sample;
+        st->sampleRate = (uint32_t)metadata->data.stream_info.sample_rate;
+        st->totalSamples = (uint64_t)metadata->data.stream_info.total_samples;
+        st->metadataComplete = TRUE;
+    }
+}
+
+static void flac_stream_error_callback(
+    const FLAC__StreamDecoder *decoder,
+    FLAC__StreamDecoderErrorStatus status,
+    void *client_data)
+{
+    FLACStreamState *st = (FLACStreamState *)client_data;
+    (void)decoder;
+    (void)status;
+    if (st)
+    {
+        st->err = BAD_FILE;
+    }
+}
+
+static OPErr PV_FlacStreamEnsureInit(FLACStreamState *st, XFILE file)
+{
+    if (!st)
+        return PARAM_ERR;
+    if (st->initialized)
+        return NO_ERR;
+
+    st->file = file;
+    st->err = NO_ERR;
+    st->metadataComplete = FALSE;
+    st->eof = FALSE;
+    PV_FlacStashClear(st);
+
+    st->decoder = FLAC__stream_decoder_new();
+    if (!st->decoder)
+        return MEMORY_ERR;
+
+    (void)XFileSetPosition(file, 0);
+
+    FLAC__StreamDecoderInitStatus init_status = FLAC__stream_decoder_init_stream(
+        st->decoder,
+        flac_xfile_read_callback,
+        flac_xfile_seek_callback,
+        flac_xfile_tell_callback,
+        flac_xfile_length_callback,
+        flac_xfile_eof_callback,
+        flac_stream_write_callback,
+        flac_stream_metadata_callback,
+        flac_stream_error_callback,
+        st);
+
+    if (init_status != FLAC__STREAM_DECODER_INIT_STATUS_OK)
+    {
+        FLAC__stream_decoder_delete(st->decoder);
+        st->decoder = NULL;
+        return BAD_FILE;
+    }
+
+    if (!FLAC__stream_decoder_process_until_end_of_metadata(st->decoder) || !st->metadataComplete)
+    {
+        FLAC__stream_decoder_finish(st->decoder);
+        FLAC__stream_decoder_delete(st->decoder);
+        st->decoder = NULL;
+        return BAD_FILE;
+    }
+
+    st->initialized = TRUE;
+    return NO_ERR;
+}
+
+// Read FLAC metadata from an XFILE without reading the entire file into memory.
+// This is intended for stream setup (GM_ReadFileInformation), not full decode.
+static GM_Waveform *PV_ReadFileInformationFLACFile(XFILE file,
+                                                   int32_t *pFormat,
+                                                   void **ppBlockPtr,
+                                                   uint32_t *pBlockSize,
+                                                   OPErr *pError)
+{
+    GM_Waveform *wave = NULL;
+    FLACStreamState st;
+
+    if (!file || !pError)
+    {
+        if (pError)
+            *pError = PARAM_ERR;
+        return NULL;
+    }
+
+    if (pFormat)
+        *pFormat = X_NONE;
+    if (ppBlockPtr)
+        *ppBlockPtr = NULL;
+    if (pBlockSize)
+        *pBlockSize = 0;
+
+    XSetMemory(&st, (int32_t)sizeof(FLACStreamState), 0);
+
+    // Initialize decoder and parse STREAMINFO.
+    {
+        OPErr initErr = PV_FlacStreamEnsureInit(&st, file);
+        if (initErr != NO_ERR)
+        {
+            *pError = initErr;
+            if (st.decoder)
+            {
+                FLAC__stream_decoder_finish(st.decoder);
+                FLAC__stream_decoder_delete(st.decoder);
+                st.decoder = NULL;
+            }
+            if (st.stash)
+            {
+                XDisposePtr((XPTR)st.stash);
+                st.stash = NULL;
+            }
+            return NULL;
+        }
+    }
+
+    wave = (GM_Waveform *)XNewPtr((int32_t)sizeof(GM_Waveform));
+    if (!wave)
+    {
+        *pError = MEMORY_ERR;
+        goto cleanup;
+    }
+    XSetMemory(wave, (int32_t)sizeof(GM_Waveform), 0);
+
+    // miniBAE streams decode to 16-bit PCM.
+    wave->currentFilePosition = 0;
+    wave->compressionType = C_NONE;
+    wave->baseMidiPitch = 60;
+    wave->bitSize = 16;
+    wave->channels = st.channels ? st.channels : 2;
+    wave->sampledRate = (st.sampleRate ? st.sampleRate : 44100) << 16L;
+    wave->waveFrames = (st.totalSamples <= (uint64_t)0xFFFFFFFFu) ? (uint32_t)st.totalSamples : 0;
+    wave->waveSize = wave->waveFrames * (uint32_t)wave->channels * 2;
+    wave->startLoop = 0;
+    wave->endLoop = 0;
+    wave->numLoops = 0;
+    wave->theWaveform = NULL;
+
+    if (pFormat)
+        *pFormat = X_NONE;
+    if (pBlockSize)
+        *pBlockSize = 0;
+    if (ppBlockPtr)
+        *ppBlockPtr = NULL;
+
+    *pError = NO_ERR;
+
+cleanup:
+    if (st.decoder)
+    {
+        FLAC__stream_decoder_finish(st.decoder);
+        FLAC__stream_decoder_delete(st.decoder);
+        st.decoder = NULL;
+    }
+    if (st.stash)
+    {
+        XDisposePtr((XPTR)st.stash);
+        st.stash = NULL;
+    }
+    return wave;
+}
+
+#endif
 
 // functions used with GM_ReadAndDecodeFileStream to preserve state between decode calls.
 void * GM_CreateFileState(AudioFileType fileType)
@@ -3614,6 +4128,26 @@ void * GM_CreateFileState(AudioFileType fileType)
                 ((SunDecodeState *)state)->bits = 0;
             }
             break;
+
+#if USE_VORBIS_DECODER != FALSE
+        case FILE_VORBIS_TYPE:
+            state = (void *)XNewPtr(sizeof(VorbisStreamState));
+            if (state)
+            {
+                XSetMemory(state, (int32_t)sizeof(VorbisStreamState), 0);
+            }
+            break;
+#endif
+
+#if USE_FLAC_DECODER != FALSE
+        case FILE_FLAC_TYPE:
+            state = (void *)XNewPtr(sizeof(FLACStreamState));
+            if (state)
+            {
+                XSetMemory(state, (int32_t)sizeof(FLACStreamState), 0);
+            }
+            break;
+#endif
 	default:
 	    break;
     }
@@ -3699,9 +4233,48 @@ OPErr XExpandFLAC(GM_Waveform const* src, UINT32 startFrame, GM_Waveform* dst)
 
 void GM_DisposeFileState(AudioFileType fileType, void *state)
 {
+    if (!state)
+        return;
     if (fileType == FILE_AU_TYPE) {
 	XDisposePtr((XPTR)state);
+	return;
     }
+
+#if USE_VORBIS_DECODER != FALSE
+    if (fileType == FILE_VORBIS_TYPE)
+    {
+        VorbisStreamState *st = (VorbisStreamState *)state;
+        if (st->initialized)
+        {
+            ov_clear(&st->vf);
+            st->initialized = FALSE;
+        }
+        XDisposePtr((XPTR)state);
+        return;
+    }
+#endif
+
+#if USE_FLAC_DECODER != FALSE
+    if (fileType == FILE_FLAC_TYPE)
+    {
+        FLACStreamState *st = (FLACStreamState *)state;
+        if (st->decoder)
+        {
+            FLAC__stream_decoder_finish(st->decoder);
+            FLAC__stream_decoder_delete(st->decoder);
+            st->decoder = NULL;
+        }
+        if (st->stash)
+        {
+            XDisposePtr((XPTR)st->stash);
+            st->stash = NULL;
+        }
+        XDisposePtr((XPTR)state);
+        return;
+    }
+#endif
+
+    XDisposePtr((XPTR)state);
 /*
     switch (fileType)
     {
@@ -3808,6 +4381,11 @@ GM_Waveform     *waveform;
             waveform = PV_ReadIntoMemoryFLACFile(file, decodeData, NULL, NULL, NULL, &err);
             break;
     #endif
+    #if USE_VORBIS_DECODER != FALSE
+        case FILE_VORBIS_TYPE:
+            waveform = PV_ReadIntoMemoryVorbisFile(file, decodeData, NULL, NULL, NULL, &err);
+            break;
+    #endif
         default :
             err = PARAM_ERR;
             break;
@@ -3829,24 +4407,28 @@ GM_Waveform     *waveform;
 
 // Read file information from file, which is a fileType file. If pFormat is not NULL, then
 // store format specific format type
-GM_Waveform * GM_ReadFileInformation(XFILENAME *filename, AudioFileType fileType, 
-                                            int32_t *pFormat, 
-                                            void **ppBlockPtr, uint32_t *pBlockSize, 
+GM_Waveform * GM_ReadFileInformationFromOpenFile(XFILE file, AudioFileType fileType,
+                                            int32_t *pFormat,
+                                            void **ppBlockPtr, uint32_t *pBlockSize,
                                             OPErr *pErr)
 {
-XFILE           file;
 OPErr           err;
 GM_Waveform*    pWave = NULL;
 
+    err = NO_ERR;
+    if (!file)
+    {
+        if (pErr)
+            *pErr = FILE_NOT_FOUND;
+        return NULL;
+    }
     if (pBlockSize)
     {
         *pBlockSize = 0;
     }
-    file = XFileOpenForRead(filename);
-    if (file)
+
+    switch (fileType)
     {
-        switch (fileType)
-        {
         case FILE_WAVE_TYPE:
             pWave = PV_ReadIntoMemoryWaveFile(file, TRUE, pFormat, pBlockSize, &err);
             break;
@@ -3863,7 +4445,7 @@ GM_Waveform*    pWave = NULL;
 #endif
 #if USE_FLAC_DECODER != FALSE
         case FILE_FLAC_TYPE:
-            pWave = PV_ReadIntoMemoryFLACFile(file, FALSE, pFormat, ppBlockPtr, pBlockSize, &err);
+            pWave = PV_ReadFileInformationFLACFile(file, pFormat, ppBlockPtr, pBlockSize, &err);
             break;
 #endif
 #if USE_VORBIS_DECODER != FALSE
@@ -3876,7 +4458,32 @@ GM_Waveform*    pWave = NULL;
             err = PARAM_ERR;
             pWave = NULL;
             break;
-        }
+    }
+
+    if (pErr)
+    {
+        *pErr = err;
+    }
+    return pWave;
+}
+
+GM_Waveform * GM_ReadFileInformation(XFILENAME *filename, AudioFileType fileType, 
+                                            int32_t *pFormat, 
+                                            void **ppBlockPtr, uint32_t *pBlockSize, 
+                                            OPErr *pErr)
+{
+XFILE           file;
+OPErr           err;
+GM_Waveform*    pWave = NULL;
+
+    if (pBlockSize)
+    {
+        *pBlockSize = 0;
+    }
+    file = XFileOpenForRead(filename);
+    if (file)
+    {
+        pWave = GM_ReadFileInformationFromOpenFile(file, fileType, pFormat, ppBlockPtr, pBlockSize, &err);
         XFileClose(file);
     }
     else
@@ -3966,7 +4573,45 @@ OPErr GM_RepositionFileStream(XFILE fileReference,
 #endif
 #if USE_FLAC_DECODER != FALSE
         case FILE_FLAC_TYPE:
-            // FLAC handles seeking internally, use default positioning
+            // Seek by sample position using the per-stream decoder.
+            if (pBlockBuffer)
+            {
+                FLACStreamState *st = (FLACStreamState *)pBlockBuffer;
+                if (PV_FlacStreamEnsureInit(st, fileReference) == NO_ERR)
+                {
+                    PV_FlacStashClear(st);
+                    if (!FLAC__stream_decoder_seek_absolute(st->decoder, (FLAC__uint64)newSampleFramePosition))
+                    {
+                        fileError = BAD_FILE;
+                    }
+                    if (pOuputNewPlaybackPositionInBytes)
+                    {
+                        *pOuputNewPlaybackPositionInBytes = firstSampleInFileOffsetInBytes + (newSampleFramePosition * frameBlockSize);
+                    }
+                }
+            }
+            reSeek = FALSE;
+            break;
+#endif
+#if USE_VORBIS_DECODER != FALSE
+        case FILE_VORBIS_TYPE:
+            // Seek by PCM frame position using libvorbisfile.
+            if (pBlockBuffer)
+            {
+                VorbisStreamState *st = (VorbisStreamState *)pBlockBuffer;
+                if (PV_VorbisStreamEnsureInit(st, fileReference) == NO_ERR)
+                {
+                    if (ov_pcm_seek(&st->vf, (ogg_int64_t)newSampleFramePosition) != 0)
+                    {
+                        fileError = BAD_FILE;
+                    }
+                    if (pOuputNewPlaybackPositionInBytes)
+                    {
+                        *pOuputNewPlaybackPositionInBytes = firstSampleInFileOffsetInBytes + (newSampleFramePosition * frameBlockSize);
+                    }
+                }
+            }
+            reSeek = FALSE;
             break;
 #endif
         case FILE_AIFF_TYPE:
@@ -4102,14 +4747,123 @@ OPErr GM_ReadAndDecodeFileStream(XFILE fileReference,
 #endif
 #if USE_FLAC_DECODER != FALSE
             case FILE_FLAC_TYPE:
-                // FLAC files are read completely into memory, not streamed
-                fileError = PARAM_ERR;
+                if (pBlockBuffer)
+                {
+                    FLACStreamState *st = (FLACStreamState *)pBlockBuffer;
+                    fileError = PV_FlacStreamEnsureInit(st, fileReference);
+                    if (fileError != NO_ERR)
+                    {
+                        calculateFileSize = FALSE;
+                        returnedLength = 0;
+                        writeLength = 0;
+                        break;
+                    }
+
+                    // Drain stash first
+                    {
+                        uint32_t avail = PV_FlacStashAvailable(st);
+                        uint32_t want = bufferSize;
+                        uint32_t take = (avail < want) ? avail : want;
+                        if (take)
+                        {
+                            XBlockMove(st->stash + st->stashPos, pBuffer, take);
+                            st->stashPos += take;
+                            writeLength += take;
+                            if (st->stashPos >= st->stashLen)
+                            {
+                                st->stashPos = 0;
+                                st->stashLen = 0;
+                            }
+                        }
+                    }
+
+                    // Decode until the request buffer is full or EOF
+                    st->out = (XBYTE *)pBuffer + writeLength;
+                    st->outNeed = bufferSize - writeLength;
+                    st->outWritten = 0;
+                    while (st->outNeed > 0)
+                    {
+                        if (!FLAC__stream_decoder_process_single(st->decoder))
+                        {
+                            fileError = BAD_FILE;
+                            break;
+                        }
+                        if (st->err != NO_ERR)
+                        {
+                            fileError = st->err;
+                            break;
+                        }
+                        // If no progress and decoder hit EOF, stop
+                        if (st->outWritten == 0 &&
+                            FLAC__stream_decoder_get_state(st->decoder) == FLAC__STREAM_DECODER_END_OF_STREAM)
+                        {
+                            break;
+                        }
+
+                        st->out += st->outWritten;
+                        st->outNeed -= st->outWritten;
+                        writeLength += st->outWritten;
+                        st->outWritten = 0;
+                    }
+                    st->out = NULL;
+                    st->outNeed = 0;
+                    st->outWritten = 0;
+
+                    calculateFileSize = FALSE;
+                    returnedLength = writeLength;
+                }
+                else
+                {
+                    fileError = PARAM_ERR;
+                }
                 break;
 #endif
 #if USE_VORBIS_DECODER != FALSE
             case FILE_VORBIS_TYPE:
-                // Vorbis files are read completely into memory, not streamed
-                fileError = PARAM_ERR;
+                if (pBlockBuffer)
+                {
+                    VorbisStreamState *st = (VorbisStreamState *)pBlockBuffer;
+                    fileError = PV_VorbisStreamEnsureInit(st, fileReference);
+                    if (fileError != NO_ERR)
+                    {
+                        calculateFileSize = FALSE;
+                        returnedLength = 0;
+                        writeLength = 0;
+                        break;
+                    }
+
+                    // Decode directly into caller buffer.
+                    {
+                        long wantBytes = (long)bufferSize;
+                        long gotBytes = 0;
+                        int bitstream = 0;
+                        while (gotBytes < wantBytes)
+                        {
+                            long r = ov_read(&st->vf,
+                                             (char *)pBuffer + gotBytes,
+                                             (int)(wantBytes - gotBytes),
+                                             0,
+                                             2,
+                                             1,
+                                             &bitstream);
+                            if (r == 0)
+                                break; // EOF
+                            if (r < 0)
+                            {
+                                fileError = BAD_FILE;
+                                break;
+                            }
+                            gotBytes += r;
+                        }
+                        writeLength = (uint32_t)gotBytes;
+                        returnedLength = writeLength;
+                        calculateFileSize = FALSE;
+                    }
+                }
+                else
+                {
+                    fileError = PARAM_ERR;
+                }
                 break;
 #endif
             case FILE_AIFF_TYPE:

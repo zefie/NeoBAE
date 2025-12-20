@@ -626,7 +626,7 @@ OPErr BAE_TranslateBAErr(BAEResult theErr)
 
 
 
-#if USE_HIGHLEVEL_FILE_API != FALSE
+#if USE_HIGHLEVEL_FILE_API == TRUE
 AudioFileType BAE_TranslateBAEFileType(BAEFileType fileType)
 {
 	AudioFileType	haeFileType;
@@ -640,9 +640,14 @@ AudioFileType BAE_TranslateBAEFileType(BAEFileType fileType)
 		case BAE_WAVE_TYPE:
 			haeFileType = FILE_WAVE_TYPE;
 			break;
-#if USE_MPEG_DECODER != FALSE
+#if USE_MPEG_DECODER == TRUE
 		case BAE_MPEG_TYPE:
 			haeFileType = FILE_MPEG_TYPE;
+			break;
+#endif
+#if USE_VORBIS_DECODER == TRUE
+		case BAE_VORBIS_TYPE:
+			haeFileType = FILE_VORBIS_TYPE;
 			break;
 #endif
 		case BAE_AU_TYPE:

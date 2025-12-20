@@ -2292,6 +2292,11 @@ typedef int32_t UNIT_TYPE;
     GM_Waveform *GM_ReadFileInformation(XFILENAME *file, AudioFileType fileType, int32_t *pFormat,
                                         void **pBlockPtr, uint32_t *pBlockSize, OPErr *pErr);
 
+    // Same as GM_ReadFileInformation, but operates on an already-open file handle.
+    // The caller owns the file and is responsible for closing it.
+    GM_Waveform *GM_ReadFileInformationFromOpenFile(XFILE file, AudioFileType fileType, int32_t *pFormat,
+                                                    void **ppBlockPtr, uint32_t *pBlockSize, OPErr *pErr);
+
     // functions used with GM_ReadAndDecodeFileStream to preserve state between decode calls.
     void *GM_CreateFileState(AudioFileType fileType);
     void GM_DisposeFileState(AudioFileType fileType, void *state);
@@ -2459,6 +2464,15 @@ typedef int32_t UNIT_TYPE;
                                              uint32_t bufferSize,    // temp buffer to read file
                                              GM_Waveform *pFileInfo,
                                              XBOOL loopFile); // TRUE will loop file
+
+    // setup a streaming memory block
+    STREAM_REFERENCE GM_AudioStreamMemorySetup(void *threadContext,    // platform threadContext
+                                               XPTR memoryData,
+                                               uint32_t memorySize,
+                                               AudioFileType fileType,
+                                               uint32_t bufferSize,
+                                               GM_Waveform *pFileInfo,
+                                               XBOOL loopFile);
 #endif                                                        // USE_HIGHLEVEL_FILE_API
 
 #if USE_HIGHLEVEL_FILE_API

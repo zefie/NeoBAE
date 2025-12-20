@@ -684,6 +684,10 @@ struct sBAEStream
     BAE_UNSIGNED_FIXED mPauseVariable;
     BAE_AudioStreamCallbackPtr mCallback;
     uint32_t mCallbackReference;
+
+    // Optional owned memory backing for BAEStream_SetupMemory
+    XPTR mMemoryData;
+    uint32_t mMemoryDataSize;
 #if !TRACKING
     BAE_BOOL mValid;
 #endif
@@ -5625,21 +5629,32 @@ BAEStream BAEStream_New(BAEMixer mixer)
         stream = (BAEStream)XNewPtr(sizeof(struct sBAEStream));
         if (stream)
         {
-            if (BAEStream_SetMixer(stream, mixer) != BAE_NO_ERROR)
+            if (BAE_NewMutex(&stream->mLock, "bae", "str", __LINE__))
             {
-                XDisposePtr(stream);
-                stream = NULL;
+                if (BAEStream_SetMixer(stream, mixer) != BAE_NO_ERROR)
+                {
+                    BAE_DestroyMutex(stream->mLock);
+                    XDisposePtr(stream);
+                    stream = NULL;
+                }
+                else
+                {
+                    stream->mSoundStreamVoiceReference = DEAD_STREAM;
+                    stream->mPauseVariable = 0;
+                    stream->mPrerolled = FALSE;
+                    stream->mVolumeState = BAE_FIXED_1; // 1.0
+                    stream->mPanState = BAE_CENTER_PAN; // center;
+                    stream->mLoop = FALSE;
+                    stream->mPlaybackLength = 0;
+                    stream->mMemoryData = NULL;
+                    stream->mMemoryDataSize = 0;
+                    stream->mID = OBJECT_ID;
+                }
             }
             else
             {
-                stream->mSoundStreamVoiceReference = DEAD_STREAM;
-                stream->mPauseVariable = 0;
-                stream->mPrerolled = FALSE;
-                stream->mVolumeState = BAE_FIXED_1; // 1.0
-                stream->mPanState = BAE_CENTER_PAN; // center;
-                stream->mLoop = FALSE;
-                stream->mPlaybackLength = 0;
-                stream->mID = OBJECT_ID;
+                XDisposePtr(stream);
+                stream = NULL;
             }
 #if TRACKING
             PV_BAEMixer_AddObject(mixer, stream, BAE_STREAM_OBJECT);
@@ -5670,7 +5685,10 @@ BAEResult BAEStream_Delete(BAEStream stream)
 #else
         stream->mValid = 0;
 #endif
-        BAEStream_Unload(stream);
+    BAE_AcquireMutex(stream->mLock);
+    BAEStream_Unload(stream);
+    BAE_ReleaseMutex(stream->mLock);
+    BAE_DestroyMutex(stream->mLock);
         XDisposePtr(stream);
     }
     else
@@ -5703,6 +5721,13 @@ BAEResult BAEStream_Unload(BAEStream stream)
             BAEStream_Stop(stream, FALSE);
             //  GM_FreeWaveform(sound->pWave);
         }
+
+        if (stream->mMemoryData)
+        {
+            XDisposePtr(stream->mMemoryData);
+            stream->mMemoryData = NULL;
+            stream->mMemoryDataSize = 0;
+        }
     }
     else
     {
@@ -5710,6 +5735,10 @@ BAEResult BAEStream_Unload(BAEStream stream)
     }
     return BAE_TranslateOPErr(err);
 }
+
+// Forward declare (definition is later in this file)
+static void PV_DefaultStreamFileDoneCallback(void *reference);
+
 
 // BAEStream_GetMemoryUsed()
 // --------------------------------------
@@ -10560,15 +10589,32 @@ BAEResult BAELoadResult_Cleanup(BAELoadResult *result)
     if (!result)
         return BAE_PARAM_ERR;
 
-    if (result->data.song)
+    switch (result->type)
     {
-        BAESong_Delete(result->data.song);
-        result->data.song = NULL;
-    }
-    else if (result->data.sound)
-    {
-        BAESound_Delete(result->data.sound);
-        result->data.sound = NULL;
+        case BAE_LOAD_TYPE_SONG:
+            if (result->data.song)
+            {
+                BAESong_Delete(result->data.song);
+                result->data.song = NULL;
+            }
+            break;
+        case BAE_LOAD_TYPE_SOUND:
+            if (result->data.sound)
+            {
+                BAESound_Delete(result->data.sound);
+                result->data.sound = NULL;
+            }
+            break;
+        case BAE_LOAD_TYPE_STREAM:
+            if (result->data.stream)
+            {
+                BAEStream_Delete(result->data.stream);
+                result->data.stream = NULL;
+            }
+            break;
+        case BAE_LOAD_TYPE_NONE:
+        default:
+            break;
     }
 
     result->type = BAE_LOAD_TYPE_NONE;
@@ -10592,6 +10638,7 @@ BAEResult BAEMixer_LoadFromMemory(BAEMixer mixer, void const *pData, uint32_t da
     result->fileType = BAE_INVALID_TYPE;
     result->data.song = NULL;
     result->data.sound = NULL;
+    result->data.stream = NULL;
 
     // Detect file type from content
     int32_t probeSize = (int32_t)dataSize;
@@ -10627,7 +10674,6 @@ BAEResult BAEMixer_LoadFromMemory(BAEMixer mixer, void const *pData, uint32_t da
 
     if (isAudio)
     {
-        // Load as audio file using BAESound
         result->data.sound = BAESound_New(mixer);
         if (!result->data.sound)
         {

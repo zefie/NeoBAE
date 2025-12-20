@@ -18,7 +18,7 @@ data class IndexingProgress(
 
 class FileIndexer(private val context: Context) {
     private val database = SQLiteHelper.getInstance(context)
-    private val validExtensions = setOf("mid", "midi", "kar", "rmf", "rmi")
+    private fun getValidExtensions(): Set<String> = HomeFragment.getMusicExtensions(context)
     
     private val _progress = MutableStateFlow(IndexingProgress())
     val progress: StateFlow<IndexingProgress> = _progress
@@ -48,7 +48,8 @@ class FileIndexer(private val context: Context) {
             val root = File(rootPath)
             if (root.exists() && root.isDirectory) {
                 android.util.Log.i("FileIndexer", "Indexing directory: ${root.absolutePath}")
-                indexDirectory(root)
+                val validExtensions = getValidExtensions()
+                indexDirectory(root, validExtensions)
             }
             
             _progress.value = _progress.value.copy(isIndexing = false)
@@ -76,7 +77,8 @@ class FileIndexer(private val context: Context) {
             
             val root = File(rootPath)
             if (root.exists() && root.isDirectory) {
-                indexDirectoryIncremental(root)
+                val validExtensions = getValidExtensions()
+                indexDirectoryIncremental(root, validExtensions)
             }
             
             _progress.value = _progress.value.copy(isIndexing = false)
@@ -89,7 +91,7 @@ class FileIndexer(private val context: Context) {
     /**
      * Iterative directory traversal using queue (avoids recursion stack issues)
      */
-    private suspend fun indexDirectory(root: File) {
+    private suspend fun indexDirectory(root: File, validExtensions: Set<String>) {
         val queue = ArrayDeque<File>()
         queue.add(root)
         
@@ -172,7 +174,7 @@ class FileIndexer(private val context: Context) {
     /**
      * Incremental indexing - only update changed files
      */
-    private suspend fun indexDirectoryIncremental(root: File) {
+    private suspend fun indexDirectoryIncremental(root: File, validExtensions: Set<String>) {
         val queue = ArrayDeque<File>()
         queue.add(root)
         

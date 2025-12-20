@@ -299,6 +299,9 @@
 struct GM_AudioStreamFileInfo
 {
     XFILENAME               playbackFile;
+    XBOOL                   useMemory;
+    XPTR                    memoryData;
+    uint32_t                memorySize;
     XFILE                   fileOpenRef;
     uint32_t           fileStartPosition;      // units are in bytes but as a complete decoded sample
     uint32_t           filePlaybackPosition;   // for example: fileEndPosition for a MP3 file might be 40 MB.
@@ -1066,7 +1069,14 @@ static OPErr PV_FileStreamCallback(void *context, GM_StreamMessage message, GM_S
                     break;
 #endif
                 default:
-                    pASInfo->fileOpenRef = XFileOpenForRead(&pASInfo->playbackFile);
+                    if (pASInfo->useMemory)
+                    {
+                        pASInfo->fileOpenRef = XFileOpenForReadFromMemory(pASInfo->memoryData, pASInfo->memorySize);
+                    }
+                    else
+                    {
+                        pASInfo->fileOpenRef = XFileOpenForRead(&pASInfo->playbackFile);
+                    }
                     if (pASInfo->fileOpenRef)
                     {
                         pASInfo->pBlockBuffer = GM_CreateFileState(pASInfo->fileType);
@@ -1267,6 +1277,98 @@ static OPErr PV_FileStreamCallback(void *context, GM_StreamMessage message, GM_S
     }
     return error;
 }
+
+#if USE_HIGHLEVEL_FILE_API != FALSE
+// setup streaming from a memory block
+STREAM_REFERENCE GM_AudioStreamMemorySetup(void *threadContext,
+                                           XPTR memoryData,
+                                           uint32_t memorySize,
+                                           AudioFileType fileType,
+                                           uint32_t bufferSize,
+                                           GM_Waveform *pFileInfo,
+                                           XBOOL loopFile)
+{
+    STREAM_REFERENCE reference;
+    GM_Waveform *pWaveform;
+    GM_AudioStreamFileInfo *pStream;
+    int32_t format;
+    uint32_t blockSize;
+    OPErr err;
+    void *blockPtr;
+
+    reference = DEAD_STREAM;
+    blockPtr = NULL;
+    err = NO_ERR;
+
+    if (!memoryData || memorySize == 0)
+    {
+        return DEAD_STREAM;
+    }
+
+    // Currently only support memory-backed streaming for FLAC/Vorbis.
+    // (Other formats are generally already cheap to decode-to-memory.)
+    if (fileType != FILE_VORBIS_TYPE && fileType != FILE_FLAC_TYPE)
+    {
+        return DEAD_STREAM;
+    }
+
+    // Probe metadata using an XFILE opened from memory
+    {
+        XFILE f = XFileOpenForReadFromMemory(memoryData, memorySize);
+        if (!f)
+        {
+            return DEAD_STREAM;
+        }
+        pWaveform = GM_ReadFileInformationFromOpenFile(f, fileType, &format, &blockPtr, &blockSize, &err);
+        XFileClose(f);
+    }
+
+    if (!pWaveform || err != NO_ERR)
+    {
+        if (pWaveform)
+        {
+            XDisposePtr((XPTR)pWaveform);
+        }
+        return DEAD_STREAM;
+    }
+
+    pStream = (GM_AudioStreamFileInfo *)XNewPtr((int32_t)sizeof(GM_AudioStreamFileInfo));
+    if (!pStream)
+    {
+        XDisposePtr((XPTR)pWaveform);
+        return DEAD_STREAM;
+    }
+
+    XSetMemory(pStream, (int32_t)sizeof(GM_AudioStreamFileInfo), 0);
+    pStream->useMemory = TRUE;
+    pStream->memoryData = memoryData;
+    pStream->memorySize = memorySize;
+    pStream->loopFile = loopFile;
+    pStream->formatType = format;
+    pStream->fileType = fileType;
+    pStream->blockSize = blockSize;
+    pStream->pBlockBuffer = NULL;
+
+    // Start at beginning for memory-backed streams
+    pStream->filePlaybackPosition = pWaveform->currentFilePosition;
+    pStream->fileStartPosition = pWaveform->currentFilePosition;
+    pStream->fileEndPosition = pWaveform->waveSize + pStream->fileStartPosition;
+
+    if (pFileInfo)
+    {
+        *pFileInfo = *pWaveform;
+    }
+
+    reference = GM_AudioStreamSetup(threadContext, pStream, PV_FileStreamCallback,
+                                    bufferSize,
+                                    pWaveform->sampledRate,
+                                    pWaveform->bitSize,
+                                    pWaveform->channels);
+
+    XDisposePtr((XPTR)pWaveform);
+    return reference;
+}
+#endif
 #endif  // USE_HIGHLEVEL_FILE_API
 
 #if USE_HIGHLEVEL_FILE_API != FALSE

@@ -2712,7 +2712,8 @@ typedef enum
 {
     BAE_LOAD_TYPE_NONE = 0,
     BAE_LOAD_TYPE_SONG,  // Result contains a BAESong (MIDI/RMF/XMF)
-    BAE_LOAD_TYPE_SOUND  // Result contains a BAESound (audio file)
+    BAE_LOAD_TYPE_SOUND, // Result contains a BAESound (audio file)
+    BAE_LOAD_TYPE_STREAM // Result contains a BAEStream (streamed audio)
 } BAELoadType;
 
 typedef struct
@@ -2723,8 +2724,20 @@ typedef struct
     union {
         BAESong song;       // Valid if type == BAE_LOAD_TYPE_SONG
         BAESound sound;     // Valid if type == BAE_LOAD_TYPE_SOUND
+        BAEStream stream;   // Valid if type == BAE_LOAD_TYPE_STREAM
     } data;
 } BAELoadResult;
+
+// BAEStream_SetupMemory()
+// ------------------------------------
+// Prepare to play a formatted audio file from a memory block as a stream.
+// The stream takes ownership of an internal copy of the provided memory.
+BAEResult BAEStream_SetupMemory(BAEStream stream,
+                                void const *pData,
+                                uint32_t dataSize,
+                                BAEFileType fileType,
+                                uint32_t bufferSize,
+                                BAE_BOOL loopFile);
 
 // BAEMixer_LoadFromFile()
 // ------------------------------------

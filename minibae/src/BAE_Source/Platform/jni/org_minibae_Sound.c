@@ -333,6 +333,29 @@ JNIEXPORT jint JNICALL Java_org_minibae_Sound__1getSoundSampleRate
 	return (jint)(sound->pWave->sampledRate >> 16);
 }
 
+JNIEXPORT jint JNICALL Java_org_minibae_Sound__1setSoundPositionFrames
+	(JNIEnv* env, jclass clazz, jlong soundReference, jint sampleFrames)
+{
+	BAESound sound = (BAESound)(intptr_t)soundReference;
+	if(!sound) return (jint)BAE_PARAM_ERR;
+	if(sampleFrames < 0) sampleFrames = 0;
+	BAEResult r = BAESound_SetSamplePlaybackPosition(sound, (uint32_t)sampleFrames);
+	if(r != BAE_NO_ERROR){ __android_log_print(ANDROID_LOG_WARN, "miniBAE", "BAESound_SetSamplePlaybackPosition(%d) err=%d", (int)sampleFrames, r); }
+	return (jint)r;
+}
+
+JNIEXPORT jint JNICALL Java_org_minibae_Sound__1setSoundLoops
+	(JNIEnv* env, jclass clazz, jlong soundReference, jint loopCount)
+{
+	BAESound sound = (BAESound)(intptr_t)soundReference;
+	if(!sound) return (jint)BAE_PARAM_ERR;
+	uint32_t loops = (uint32_t)loopCount;
+	BAEResult r = BAESound_SetLoopCount(sound, loops);
+	__android_log_print(ANDROID_LOG_DEBUG, "miniBAE", "BAESound_SetLoopCount(%u) err=%d", (unsigned)loops, r);
+	if(r != BAE_NO_ERROR){ __android_log_print(ANDROID_LOG_WARN, "miniBAE", "BAESound_SetLoopCount(%u) err=%d", (unsigned)loops, r); }
+	return (jint)r;
+}
+
 // Helper to get mixer from sound - forward declaration (if not present in header)
 // Implement BAESound_GetMixer wrapper if missing
 

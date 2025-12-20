@@ -66,17 +66,31 @@ class HomeFragment : Fragment() {
 
     companion object {
         var velocityCurve = mutableStateOf(0)
+
+        private const val PREF_NAME = "miniBAE_prefs"
+        private const val KEY_ENABLE_AUDIO_FILES = "enable_audio_files"
         
         // Valid music file extensions
         private val MUSIC_EXTENSIONS_DEBUG = setOf("mid", "midi", "kar", "rmf", "xmf", "mxmf", "rmi")
+        private val AUDIO_EXTENSIONS = setOf("wav", "ogg", "flac", "au", "mp2", "mp3", "aif", "aiff")
         private val MUSIC_EXTENSIONS_RELEASE = setOf("mid", "midi", "kar", "rmf", "xmf", "mxmf", "rmi")
         
         // Valid sound bank file extensions
         val BANK_EXTENSIONS = setOf("sf2", "hsb", "sf3", "sfo", "dls")
         
         // Get appropriate music extensions based on build type
-        fun getMusicExtensions(): Set<String> {
-            return if (BuildConfig.DEBUG) MUSIC_EXTENSIONS_DEBUG else MUSIC_EXTENSIONS_RELEASE
+        fun getMusicExtensions(context: Context): Set<String> {
+            val base = if (BuildConfig.DEBUG) MUSIC_EXTENSIONS_DEBUG else MUSIC_EXTENSIONS_RELEASE
+            val prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+            return if (prefs.getBoolean(KEY_ENABLE_AUDIO_FILES, true)) {
+                base + AUDIO_EXTENSIONS
+            } else {
+                base
+            }
+        }
+
+        fun isSoundExtension(extension: String): Boolean {
+            return AUDIO_EXTENSIONS.contains(extension.lowercase())
         }
     }
 
@@ -113,6 +127,7 @@ class HomeFragment : Fragment() {
     // velocityCurve is now in companion object
     private var exportCodec = mutableStateOf(2) // Default to OGG
     private var searchResultLimit = mutableStateOf(1000) // Default to 1000
+    private var enableAudioFiles = mutableStateOf(true)
     
     // Bank browser state (completely separate from main browser)
     private var showBankBrowser = mutableStateOf(false)
@@ -440,6 +455,7 @@ class HomeFragment : Fragment() {
                     reverbType.value = prefs.getInt("default_reverb", 1)
                     velocityCurve.value = prefs.getInt("velocity_curve", 0)
                     exportCodec.value = prefs.getInt("export_codec", 2) // Default to OGG
+                    enableAudioFiles.value = prefs.getBoolean("enable_audio_files", true)
                     
                     // Initialize bank name
                     Thread {
@@ -667,6 +683,7 @@ class HomeFragment : Fragment() {
                         velocityCurve = velocityCurve.value,
                         exportCodec = exportCodec.value,
                         searchResultLimit = searchResultLimit.value,
+                        enableAudioFiles = enableAudioFiles.value,
                         onLoadBuiltin = {
                             loadBuiltInPatches()
                         },
@@ -696,6 +713,16 @@ class HomeFragment : Fragment() {
                             val prefs = requireContext().getSharedPreferences("miniBAE_prefs", Context.MODE_PRIVATE)
                             prefs.edit().putInt("search_result_limit", value).apply()
                         },
+                        onEnableAudioFilesChange = { enabled ->
+                            enableAudioFiles.value = enabled
+                            val prefs = requireContext().getSharedPreferences("miniBAE_prefs", Context.MODE_PRIVATE)
+                            prefs.edit().putBoolean("enable_audio_files", enabled).apply()
+
+                            // Refresh folder listing so Home updates immediately
+                            viewModel.currentFolderPath?.let { path ->
+                                loadFolderContents(path)
+                            }
+                        },
                         onExportRequest = { filename, codec ->
                             val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
                                 addCategory(Intent.CATEGORY_OPENABLE)
@@ -715,7 +742,9 @@ class HomeFragment : Fragment() {
                             } ?: loadFolderContents("/")
                         },
                         onRepeatModeChange = {
-                            currentSong?.setLoops(if (viewModel.repeatMode == RepeatMode.SONG) 32767 else 0)
+                            val loopCount = if (viewModel.repeatMode == RepeatMode.SONG) 32767 else 0
+                            currentSong?.setLoops(loopCount)
+                            currentSound?.setLoops(loopCount)
                         },
                         onAddAllMidi = {
                             addAllMidiInDirectory()
@@ -940,9 +969,11 @@ class HomeFragment : Fragment() {
                         setCurrentSound(sound)
                         setCurrentSong(null) // Clear song reference
                         applyVolume()
-                        
+                        val loopCount = if (viewModel.repeatMode == RepeatMode.SONG) 32767 else 0    
+                        sound.setLoops(loopCount)
                         val r = sound.start()
                         if (r == 0) {
+                            sound.setLoops(loopCount)
                             viewModel.isPlaying = true
                             viewModel.currentTitle = file.nameWithoutExtension
                             android.util.Log.d("HomeFragment", "Started ${loadResult.fileTypeString} sound: ${file.name}")
@@ -1042,12 +1073,13 @@ class HomeFragment : Fragment() {
     }
     
     private fun seekPlaybackToMs(ms: Int) {
-        // Sound doesn't support seeking yet
         if (!ensureMixerExists()) {
             return
         }
         if (hasActivePlayback() && currentSong?.isDone == false) {
             currentSong?.seekToMs(ms)
+        } else if (hasActivePlayback() && currentSound?.isDone == false) {
+            currentSound?.seekToMs(ms)
         }
     }
     
@@ -1088,7 +1120,7 @@ class HomeFragment : Fragment() {
                 val extension = fileName.substringAfterLast('.', "").lowercase()
                 
                 // Check if it's a supported MIDI format
-                val musicExtensions = getMusicExtensions()
+                val musicExtensions = getMusicExtensions(requireContext())
                 if (!musicExtensions.contains(extension)) {
                     requireActivity().runOnUiThread {
                         Toast.makeText(requireContext(), "Unsupported file format: $extension", Toast.LENGTH_SHORT).show()
@@ -1295,7 +1327,7 @@ class HomeFragment : Fragment() {
 
     private fun getMediaFiles(): List<File> {
         val musicDir = getMusicDir() ?: File("/sdcard/Music")
-        val validExtensions = getMusicExtensions()
+        val validExtensions = getMusicExtensions(requireContext())
         val map = LinkedHashMap<String, File>()
         if (musicDir.exists() && musicDir.isDirectory) {
             musicDir.listFiles { file -> file.isFile && file.extension.lowercase() in validExtensions }?.forEach { f ->
@@ -1332,7 +1364,7 @@ class HomeFragment : Fragment() {
         val currentDir = File(currentPath)
         if (!currentDir.exists() || !currentDir.isDirectory) return
         
-        val validExtensions = getMusicExtensions()
+        val validExtensions = getMusicExtensions(requireContext())
         val midiFiles = currentDir.listFiles { file -> 
             file.isFile && file.extension.lowercase() in validExtensions 
         }?.sortedBy { it.name.lowercase() } ?: return
@@ -1356,7 +1388,7 @@ class HomeFragment : Fragment() {
         val currentDir = File(currentPath)
         if (!currentDir.exists() || !currentDir.isDirectory) return
         
-        val validExtensions = getMusicExtensions()
+        val validExtensions = getMusicExtensions(requireContext())
         val midiFiles = mutableListOf<File>()
         
         fun scanDirectory(dir: File) {
@@ -1549,7 +1581,7 @@ class HomeFragment : Fragment() {
                     return@Thread
                 }
                 
-                val validExtensions = getMusicExtensions()
+                val validExtensions = getMusicExtensions(requireContext())
                 val allItems = folder.listFiles()?.let { allFiles ->
                     val folders = allFiles.filter { it.isDirectory && it.canRead() }
                         .sortedBy { it.name.lowercase() }
@@ -2170,11 +2202,13 @@ fun NewMusicPlayerScreen(
     velocityCurve: Int,
     exportCodec: Int,
     searchResultLimit: Int,
+    enableAudioFiles: Boolean,
     onLoadBuiltin: () -> Unit,
     onReverbChange: (Int) -> Unit,
     onCurveChange: (Int) -> Unit,
     onExportCodecChange: (Int) -> Unit,
     onSearchLimitChange: (Int) -> Unit,
+    onEnableAudioFilesChange: (Boolean) -> Unit,
     onExportRequest: (String, Int) -> Unit,
     onRefreshStorage: () -> Unit,
     onRepeatModeChange: () -> Unit,
@@ -2522,12 +2556,14 @@ fun NewMusicPlayerScreen(
                     velocityCurve = velocityCurve,
                     exportCodec = exportCodec,
                     searchResultLimit = searchResultLimit,
+                    enableAudioFiles = enableAudioFiles,
                     onLoadBuiltin = onLoadBuiltin,
                     onReverbChange = onReverbChange,
                     onCurveChange = onCurveChange,
                     onVolumeChange = onVolumeChange,
                     onExportCodecChange = onExportCodecChange,
                     onSearchLimitChange = onSearchLimitChange,
+                    onEnableAudioFilesChange = onEnableAudioFilesChange,
                     onBrowseBanks = onBrowseBanks
                 )
             }
@@ -2762,7 +2798,8 @@ private fun PortraitPlayerLayout(
             
             // Export button (disabled when repeat mode is SONG to prevent infinite looping)
             currentItem?.let { item ->
-                val isExportEnabled = viewModel.repeatMode != RepeatMode.SONG
+                val isSoundFile = HomeFragment.isSoundExtension(item.file.extension)
+                val isExportEnabled = viewModel.repeatMode != RepeatMode.SONG && !isSoundFile
                 IconButton(
                     onClick = {
                         val extension = when (exportCodec) {
@@ -3113,7 +3150,8 @@ private fun LandscapePlayerLayout(
             
             // Export button
             currentItem?.let { item ->
-                val isExportEnabled = viewModel.repeatMode != RepeatMode.SONG
+                val isSoundFile = HomeFragment.isSoundExtension(item.file.extension)
+                val isExportEnabled = viewModel.repeatMode != RepeatMode.SONG && !isSoundFile
                 IconButton(
                     onClick = {
                         val extension = when (exportCodec) {
@@ -3440,18 +3478,34 @@ fun HomeScreenContent(
     onAddAllMidiRecursive: () -> Unit
 ) {
     var refreshing by remember { mutableStateOf(false) }
+    val refreshScope = rememberCoroutineScope()
     val pullRefreshState = rememberPullRefreshState(
         refreshing = refreshing,
         onRefresh = {
             refreshing = true
             onRefreshStorage()
             // Reset refreshing after a short delay
-            kotlinx.coroutines.MainScope().launch {
+            refreshScope.launch {
                 kotlinx.coroutines.delay(500)
                 refreshing = false
             }
         }
     )
+
+    // Avoid re-filtering big lists on every unrelated recomposition (e.g. playback position ticks).
+    // These recompute only when the underlying SnapshotStateList content changes.
+    val folderFilesSnapshot by remember {
+        derivedStateOf { viewModel.folderFiles.toList() }
+    }
+    val folderAndSpecialItems by remember {
+        derivedStateOf { folderFilesSnapshot.filter { it.isFolder || it.title.startsWith("🔄") } }
+    }
+    val songFiles by remember {
+        derivedStateOf { folderFilesSnapshot.filter { !it.isFolder && !it.title.startsWith("🔄") } }
+    }
+    val favoritesSet by remember {
+        derivedStateOf { viewModel.favorites.toSet() }
+    }
     
     Column(modifier = Modifier.fillMaxSize()) {
         // File list
@@ -3480,7 +3534,6 @@ fun HomeScreenContent(
                 }
             }
             else -> {
-                val songFiles = viewModel.folderFiles.filter { !it.isFolder && !it.title.startsWith("🔄") }
                 Box(modifier = Modifier.fillMaxSize()) {
                     LazyColumn(
                         modifier = Modifier
@@ -3493,7 +3546,7 @@ fun HomeScreenContent(
                         val parentPath = file.parent
                         // Show parent unless we're already at root or parent is null
                         if (parentPath != null && currentPath != "/") {
-                            item {
+                            item(key = "parent:$parentPath") {
                                 Surface(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -3527,7 +3580,10 @@ fun HomeScreenContent(
                     }
                     
                     // Show folders and special items (refresh button and storage items)
-                    itemsIndexed(viewModel.folderFiles.filter { it.isFolder || it.title.startsWith("🔄") }) { _, item ->
+                    itemsIndexed(
+                        folderAndSpecialItems,
+                        key = { _, item -> item.id }
+                    ) { _, item ->
                         Surface(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -3568,7 +3624,7 @@ fun HomeScreenContent(
                     
                     // Show songs
                     if (songFiles.isEmpty()) {
-                        item {
+                        item(key = "empty_songs") {
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -3583,10 +3639,13 @@ fun HomeScreenContent(
                             }
                         }
                     } else {
-                        itemsIndexed(songFiles) { index, item ->
+                        itemsIndexed(
+                            songFiles,
+                            key = { _, item -> item.id }
+                        ) { index, item ->
                             FolderSongListItem(
                                 item = item,
-                                isFavorite = viewModel.isFavorite(item.path),
+                                isFavorite = favoritesSet.contains(item.path),
                                 onClick = { onPlaylistItemClick(item.file) },
                                 onToggleFavorite = { onToggleFavorite(item.path) },
                                 onAddToPlaylist = { onAddToPlaylist(item.file) }
@@ -4077,12 +4136,14 @@ fun SettingsScreenContent(
     velocityCurve: Int,
     exportCodec: Int,
     searchResultLimit: Int,
+    enableAudioFiles: Boolean,
     onLoadBuiltin: () -> Unit,
     onReverbChange: (Int) -> Unit,
     onCurveChange: (Int) -> Unit,
     onVolumeChange: (Int) -> Unit,
     onExportCodecChange: (Int) -> Unit,
     onSearchLimitChange: (Int) -> Unit,
+    onEnableAudioFilesChange: (Boolean) -> Unit,
     onBrowseBanks: () -> Unit
 ) {
     val reverbOptions = listOf(
@@ -4386,6 +4447,58 @@ fun SettingsScreenContent(
             }
             
             Spacer(modifier = Modifier.height(16.dp))
+
+        // Audio Files Section (full width in landscape)
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            elevation = 4.dp,
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(bottom = 12.dp)
+                ) {
+                    Icon(
+                        Icons.Filled.Audiotrack,
+                        contentDescription = null,
+                        tint = MaterialTheme.colors.primary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Audio Files",
+                        style = MaterialTheme.typography.h6,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colors.primary
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Enable Audio Files",
+                            style = MaterialTheme.typography.body1,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            text = "Enable wav, ogg vorbis, flac, au, mp2 and mp3 audio files",
+                            style = MaterialTheme.typography.caption,
+                            color = MaterialTheme.colors.onSurface.copy(alpha = 0.6f)
+                        )
+                    }
+                    Switch(
+                        checked = enableAudioFiles,
+                        onCheckedChange = onEnableAudioFilesChange
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
         
         // Search Result Limit Section (full width in landscape)
         Card(
@@ -4735,6 +4848,58 @@ fun SettingsScreenContent(
                 }
             }
             
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Audio Files Section
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                elevation = 4.dp,
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(bottom = 12.dp)
+                    ) {
+                        Icon(
+                            Icons.Filled.Audiotrack,
+                            contentDescription = null,
+                            tint = MaterialTheme.colors.primary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Audio Files",
+                            style = MaterialTheme.typography.h6,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colors.primary
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Enable Audio Files",
+                                style = MaterialTheme.typography.body1,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = "Enable wav, ogg vorbis, flac, au, mp2 and mp3 audio files",
+                                style = MaterialTheme.typography.caption,
+                                color = MaterialTheme.colors.onSurface.copy(alpha = 0.6f)
+                            )
+                        }
+                        Switch(
+                            checked = enableAudioFiles,
+                            onCheckedChange = onEnableAudioFilesChange
+                        )
+                    }
+                }
+            }
+
             Spacer(modifier = Modifier.height(16.dp))
             
             // Search Result Limit Section

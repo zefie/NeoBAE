@@ -3,6 +3,7 @@ package com.zefie.miniBAEDroid
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
@@ -16,6 +17,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
+@Stable
 class MusicPlayerViewModel : ViewModel() {
     // Playlist
     val playlist = mutableStateListOf<PlaylistItem>()
@@ -25,6 +27,7 @@ class MusicPlayerViewModel : ViewModel() {
     // Database and indexer (initialized lazily)
     private var database: SQLiteHelper? = null
     private var fileIndexer: FileIndexer? = null
+    private var appContext: Context? = null
     var isDatabaseReady by mutableStateOf(false)
     
     // Search state
@@ -224,6 +227,7 @@ class MusicPlayerViewModel : ViewModel() {
     fun initializeDatabase(context: Context) {
         if (database == null) {
             android.util.Log.d("MusicPlayerViewModel", "Initializing database...")
+            appContext = context.applicationContext
             database = SQLiteHelper.getInstance(context)
             fileIndexer = FileIndexer(context)
             
@@ -489,7 +493,8 @@ class MusicPlayerViewModel : ViewModel() {
             return emptyList()
         }
         
-        val validExtensions = setOf("mid", "midi", "kar", "rmf", "rmi")
+        val validExtensions = appContext?.let { HomeFragment.getMusicExtensions(it) }
+            ?: setOf("mid", "midi", "kar", "rmf", "rmi")
         val result = mutableListOf<PlaylistItem>()
         
         // Recursively scan directory for music files only (no folders)

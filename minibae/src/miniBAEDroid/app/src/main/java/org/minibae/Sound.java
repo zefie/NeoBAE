@@ -22,6 +22,8 @@ public class Sound
     private static native int _getSoundPositionFrames(long soundReference);
     private static native int _getSoundLengthFrames(long soundReference);
     private static native int _getSoundSampleRate(long soundReference);
+    private static native int _setSoundPositionFrames(long soundReference, int sampleFrames);
+    private static native int _setSoundLoops(long soundReference, int loopCount);
 
 	Sound(Mixer mixer)
 	{
@@ -137,6 +139,32 @@ public class Sound
         int sampleRate = _getSoundSampleRate(mReference);
         if (sampleRate <= 0) return 0;
         return (int)((frames * 1000L) / sampleRate);
+    }
+
+    public void seekToMs(int ms) {
+        if (ms < 0) ms = 0;
+        int sampleRate = _getSoundSampleRate(mReference);
+        if (sampleRate <= 0) return;
+        long framesLong = (ms * (long)sampleRate) / 1000L;
+        int lengthFrames = _getSoundLengthFrames(mReference);
+        if (lengthFrames > 0) {
+            if (framesLong > (long)lengthFrames) framesLong = (long)lengthFrames;
+        }
+        if (framesLong < 0) framesLong = 0;
+        _setSoundPositionFrames(mReference, (int)framesLong);
+    }
+
+    // Loop control for sounds (0 = none, positive = that many, 0xFFFFFFFF (-1) = infinite)
+    public int setLoops(int numLoops) {
+        int loops;
+        if (numLoops <= 0) {
+            loops = 0;
+        } else if (numLoops >= 32767) {
+            loops = 0xFFFFFFFF;
+        } else {
+            loops = numLoops;
+        }
+        return _setSoundLoops(mReference, loops);
     }
     
     public boolean isPlaying() {
