@@ -506,6 +506,7 @@ OPErr GM_LoadSF2SoundfontFromMemory(const unsigned char *data, size_t size) {
         g_suppress_not_sf2_error = TRUE;
         fluid_log_function_t prev_err = fluid_set_log_function(FLUID_ERR, pv_fluidsynth_log_filter, NULL);
         OPErr perr = GM_LoadSF2Soundfont(tmpl);
+        
         // Restore previous logging behavior
         fluid_set_log_function(FLUID_ERR, prev_err, NULL);
         g_suppress_not_sf2_error = FALSE;
@@ -741,10 +742,27 @@ OPErr GM_LoadSF2SoundfontAsXMFOverlay(const unsigned char *data, size_t size) {
 
         // Apply bank offset if bank 0 presets exist (offset to bank 2 in HSB mode)
         g_fluidsynth_xmf_overlay_bank_offset = hasBank0Presets ? 2 : 0;
-        g_fluidsynth_xmf_overlay_bank_offset = hasBank121Presets ? -121 : 0;
+        g_fluidsynth_xmf_overlay_bank_offset = hasBank121Presets ? -121 : g_fluidsynth_xmf_overlay_bank_offset;
         if (g_fluidsynth_xmf_overlay_bank_offset > 0) {
             BAE_PRINTF("[XMF] XMF DLS overlay has bank 0 presets, will apply bank offset +%d\n", 
                        g_fluidsynth_xmf_overlay_bank_offset);
+        } else {
+            // Debug: Dump all presets in the loaded soundfont
+            if (g_fluidsynth_synth && g_fluidsynth_xmf_overlay_id >= 0) {
+                fluid_sfont_t* sf = fluid_synth_get_sfont_by_id(g_fluidsynth_synth, g_fluidsynth_xmf_overlay_id);
+                if (sf) {
+                    fluid_preset_t* p = NULL;
+                    fluid_sfont_iteration_start(sf);
+                    while ((p = fluid_sfont_iteration_next(sf)) != NULL) {
+                        int bank = fluid_preset_get_banknum(p);
+                        int prog = fluid_preset_get_num(p);
+                        const char* name = fluid_preset_get_name(p);
+                            BAE_PRINTF("[XMF]  Bank %d, Program %d: %s\n", bank, prog, name ? name : "(null)");
+                    }
+                } else {
+                    BAE_PRINTF("[XMF] Could not get sfont for sfid=%d\n", g_fluidsynth_xmf_overlay_id);
+                }
+            }
         }
 
         BAE_PRINTF("[XMF] XMF DLS overlay loaded successfully (id=%d)\n", g_fluidsynth_xmf_overlay_id);
