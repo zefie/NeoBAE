@@ -602,11 +602,11 @@ OPErr GM_LoadSF2Soundfont(const char* sf2_path)
     }
     BAE_PRINTF("\n");
 
-    g_fluidsynth_soundfont_is_dls = false;
+    g_fluidsynth_soundfont_is_dls = FALSE;
     XBOOL isRIFF = (sf2_header[0]=='R' && sf2_header[1]=='I' && sf2_header[2]=='F' && sf2_header[3]=='F');
     if (isRIFF) {
         const unsigned char *type = sf2_header + 8;
-        g_fluidsynth_soundfont_is_dls = (type[0]=='D' && type[1]=='L' && type[2]=='S' && type[3]==' ');
+        g_fluidsynth_soundfont_is_dls = (type[0]=='D' && type[1]=='L' && type[2]=='S' && type[3]==' ') ? TRUE : FALSE;
     }
 
     // Load new soundfont
@@ -1115,21 +1115,14 @@ void GM_SF2_ProcessNoteOn(GM_Song* pSong, int16_t channel, int16_t note, int16_t
         return;
     }
     
-    BAE_PRINTF("[SF2 NoteOn] ch=%d note=%d vel=%d\n", channel, note, velocity);
     
     // Check what preset is selected on this channel
     fluid_preset_t* preset = fluid_synth_get_channel_preset(g_fluidsynth_synth, channel);
-    if (preset) {
-        BAE_PRINTF("[SF2 NoteOn] Channel %d has preset: bank=%d prog=%d name=%s\n",
-                   channel, fluid_preset_get_banknum(preset), fluid_preset_get_num(preset),
-                   fluid_preset_get_name(preset));
-    } else {
+    if (!preset) {
         BAE_PRINTF("[SF2 NoteOn] Channel %d has NO PRESET selected!\n", channel);
     }
     
-    int result = fluid_synth_noteon(g_fluidsynth_synth, channel, note, velocity);
-    BAE_PRINTF("[SF2 NoteOn] result=%d active_voices=%d\n", 
-               result, fluid_synth_get_active_voice_count(g_fluidsynth_synth));
+    fluid_synth_noteon(g_fluidsynth_synth, channel, note, velocity);
     
     // Update channel activity tracking
     PV_SF2_UpdateChannelActivity(channel, velocity, TRUE);
@@ -1205,7 +1198,7 @@ void GM_SF2_ProcessProgramChange(GM_Song* pSong, int16_t channel, int32_t progra
         // If not odd mapping, treat direct bank 128 as percussion
         // Convert back to MIDI bank first to test the external value
         uint16_t extBank = midiBank / 2; // internal even bank encodes extBank*2
-        if (extBank == 128)
+        if (extBank == 128 || (g_fluidsynth_soundfont_is_dls && extBank == 120))
             isMSB128Perc = TRUE;
     }
 
@@ -1217,14 +1210,22 @@ void GM_SF2_ProcessProgramChange(GM_Song* pSong, int16_t channel, int32_t progra
             // Route to SF2 percussion bank
             midiProgram = 0; // Standard drum kit preset
         }
-        midiBank = 128;  // SF2 percussion bank
+        if (g_fluidsynth_soundfont_is_dls) {
+            midiBank = 120;  // DLS percussion bank
+        } else {
+            midiBank = 128;  // SF2 percussion bank
+        }
     }
     else if (isMSB128Perc)
     {
         // Treat explicit MIDI bank 128 as percussion
         // Keep requested kit program if provided; use note from low 7 bits if present
         uint16_t extProgram = midiProgram; // may indicate kit variant
-        midiBank = 128;                    // enforce SF2 percussion bank
+        if (g_fluidsynth_soundfont_is_dls) {
+            midiBank = 120;  // DLS percussion bank
+        } else {
+            midiBank = 128;  // SF2 percussion bank
+        }
         midiProgram = extProgram;          // try requested kit first, fall back later if needed
     }
     else
@@ -1236,18 +1237,30 @@ void GM_SF2_ProcessProgramChange(GM_Song* pSong, int16_t channel, int32_t progra
     // hack for dumb midis
     if (midiBank == 0 && channel == BAE_PERCUSSION_CHANNEL) {
         // ch 10, percussions
-        midiBank = 128;
+        if (g_fluidsynth_soundfont_is_dls) {
+            midiBank = 120;  // DLS percussion bank
+        } else {
+            midiBank = 128;  // SF2 percussion bank
+        }
     }
 
     if (pSong->channelBankMode[channel] == USE_GM_PERC_BANK) {
         if (midiProgram == 0 && midiBank == 0) {
-            midiBank = 128;
+            if (g_fluidsynth_soundfont_is_dls) {
+                midiBank = 120;  // DLS percussion bank
+            } else {
+                midiBank = 128;  // SF2 percussion bank
+            }
         } else {
             // change back to normal channel if the program is not a percussion program
             pSong->channelBankMode[channel] = USE_GM_DEFAULT;
             midiBank = midiBank / 2;
         }
 
+    }
+
+    if (g_fluidsynth_soundfont_is_dls && midiBank == 128) {
+        midiBank = 120;  // Route to bank 120 for DLS percussion
     }
 
     BAE_PRINTF("final intepretation: midiBank: %i, midiProgram: %i, channel: %i\n", midiBank, midiProgram, channel);
@@ -1281,7 +1294,7 @@ void GM_SF2_ProcessProgramChange(GM_Song* pSong, int16_t channel, int32_t progra
     }
 
     if (!PV_SF2_PresetExists(useBank, useProg)) {
-        XBOOL percIntent = (channel == BAE_PERCUSSION_CHANNEL) || (useBank == 128);
+        XBOOL percIntent = (channel == BAE_PERCUSSION_CHANNEL) || (useBank == 128 || (g_fluidsynth_soundfont_is_dls && useBank == 120));
         XBOOL found = FALSE;
 
         // 1. Try fallback to Bank 0 (Capital Tone) with same program
@@ -1931,7 +1944,7 @@ static void PV_SF2_SetValidDefaultProgramsForAllChannels(void)
                 int bank = fluid_preset_get_banknum(p);
                 int prog = fluid_preset_get_num(p);
                 if (firstBank < 0) { firstBank = bank; firstProg = prog; }
-                if (bank == 128 && foundDrumBank < 0) {
+                if ((bank == 128 || (bank == 120 && g_fluidsynth_soundfont_is_dls)) && foundDrumBank < 0) {
                     foundDrumBank = bank; foundDrumProg = prog;
                 }
                 if (bank == 0 && foundMelodicBank < 0) { // capture first bank 0 as a generic melodic default
@@ -1963,5 +1976,10 @@ static void PV_SF2_SetValidDefaultProgramsForAllChannels(void)
         }
     }
 }
+
+XBOOL GM_SF2_isDLS(void)
+{
+    return g_fluidsynth_soundfont_is_dls;
+}   
 
 #endif // USE_SF2_SUPPORT && defined(_USING_FLUIDSYNTH)

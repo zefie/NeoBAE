@@ -2094,6 +2094,9 @@ static void PV_ProcessNoteOn(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTra
                     if (!GM_IsRMFChannel(pSong, MIDIChannel))
                     {
                         // Standard MIDI
+                        if (GM_SF2_isDLS() && bankId == 128) {
+                            bankId = 120;
+                        }
                         GM_SF2_ProcessNoteOn(pSong, MIDIChannel, note, volume);
                         if (pSong->songFlags == SONG_FLAG_IS_RMF) {
                             if (bankId != 0) {

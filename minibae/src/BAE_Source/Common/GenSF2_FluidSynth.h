@@ -115,6 +115,7 @@ XBOOL GM_SF2_CurrentFontHasAnyPreset(int *outPresetCount);
 XBOOL GM_SF2_HasXmfEmbeddedBank(GM_Song* pSong);
 XBOOL GM_SF2_XmfOverlayHasPreset(int bank, int program);
 void GM_SF2_SetChannelBankAndProgram(int16_t channel, int16_t bank, int16_t program);
+XBOOL GM_SF2_isDLS(void);
 #endif // USE_SF2_SUPPORT
 
 #ifdef __cplusplus
