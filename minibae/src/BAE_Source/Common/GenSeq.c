@@ -1772,6 +1772,13 @@ static void PV_ProcessProgramChange(GM_Song *pSong, INT16 MIDIChannel, INT16 cur
 #if USE_XMF_SUPPORT == TRUE
                 if (GM_SF2_HasXmfEmbeddedBank())
                 {
+                    if (GM_IsSF2Song(pSong))
+                    {
+                        // If SF2 is active for this song, send program change to SF2
+                        pSong->channelType[MIDIChannel] = CHANNEL_TYPE_SF2;
+                        INT32 combinedProgram = (theBank * 128) + thePatch;
+                        GM_SF2_ProcessProgramChange(pSong, MIDIChannel, combinedProgram);
+                    }
                     INT32 overlayBank = theBank / 2;  // Convert back to MIDI bank for overlay check
                     if (GM_SF2_XmfOverlayHasPreset(overlayBank, thePatch)) {
                         // Route this channel to FluidSynth overlay

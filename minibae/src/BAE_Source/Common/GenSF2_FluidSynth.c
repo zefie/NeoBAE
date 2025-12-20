@@ -1172,8 +1172,16 @@ void GM_SF2_SetChannelBankAndProgram(int16_t channel, int16_t bank, int16_t prog
     
     BAE_PRINTF("[SF2 Direct] Setting channel %d to bank %d (adjusted: %d) program %d\n", 
                channel, bank, adjustedBank, program);
-    fluid_synth_bank_select(g_fluidsynth_synth, channel, adjustedBank);
-    fluid_synth_program_change(g_fluidsynth_synth, channel, program);
+    
+    // If we have an XMF overlay, explicitly select from it to avoid conflicts with base soundfont
+    if (g_fluidsynth_xmf_overlay_id >= 0) {
+        fluid_synth_program_select(g_fluidsynth_synth, channel, g_fluidsynth_xmf_overlay_id, adjustedBank, program);
+        BAE_PRINTF("[SF2 Direct] Using program_select with XMF overlay (sfid=%d)\n", g_fluidsynth_xmf_overlay_id);
+    } else {
+        // No overlay, use standard bank select + program change
+        fluid_synth_bank_select(g_fluidsynth_synth, channel, adjustedBank);
+        fluid_synth_program_change(g_fluidsynth_synth, channel, program);
+    }
 }
 
 void GM_SF2_ProcessProgramChange(GM_Song* pSong, int16_t channel, int32_t program)
@@ -1290,10 +1298,16 @@ void GM_SF2_ProcessProgramChange(GM_Song* pSong, int16_t channel, int32_t progra
         if (overlayBank >= 0 && PV_SF2_PresetExistsInSoundFont(g_fluidsynth_xmf_overlay_id, overlayBank, useProg)) {
             BAE_PRINTF("[FluidProgChange] Using XMF overlay preset: requested bank %d -> overlay bank %d prog %d on channel %d\n", 
                        useBank, overlayBank, useProg, channel);
-            fluid_synth_bank_select(g_fluidsynth_synth, channel, overlayBank);
-            fluid_synth_program_change(g_fluidsynth_synth, channel, useProg);
-            BAE_PRINTF("[FluidProgChange] Called fluid_synth_bank_select(%d) and fluid_synth_program_change(%d)\n", overlayBank, useProg);
+            // Use program_select to explicitly select from the XMF overlay soundfont
+            // This avoids ambiguity if the base soundfont also has the same bank/program
+            fluid_synth_program_select(g_fluidsynth_synth, channel, g_fluidsynth_xmf_overlay_id, overlayBank, useProg);
+            BAE_PRINTF("[FluidProgChange] Called fluid_synth_program_select(sfid=%d, bank=%d, prog=%d)\n", 
+                       g_fluidsynth_xmf_overlay_id, overlayBank, useProg);            
             return;
+        } else if (overlayBank == -2) {
+            fluid_synth_program_select(g_fluidsynth_synth, channel, g_fluidsynth_base_soundfont_id, overlayBank, useProg);    
+            BAE_PRINTF("[FluidProgChange] Called fluid_synth_program_select(sfid=%d, bank=%d, prog=%d)\n", 
+                    g_fluidsynth_base_soundfont_id, overlayBank, useProg);
         } else {
             BAE_PRINTF("[FluidProgChange] XMF overlay check: requested bank %d -> overlay bank %d (offset=%d) prog %d - not found or invalid\n",
                        useBank, overlayBank, g_fluidsynth_xmf_overlay_bank_offset, useProg);
