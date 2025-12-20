@@ -3652,10 +3652,11 @@ static XBOOL PV_ProcessMetaMarkerEvents(GM_Song *pSong, char *markerText, long m
         }
     }
 
-    if ((pSong->AnalyzeMode == SCAN_NORMAL) && (markerLength >= 7) && (pSong->metaLoopDisabled == FALSE))
+    if ((pSong->AnalyzeMode == SCAN_NORMAL) && (markerLength >= 1) && (pSong->metaLoopDisabled == FALSE))
     {
-        if (XLStrnCmp("loopstart", markerText, 9) == 0)
+        if (XLStrnCmp("loopstart", markerText, 9) == 0 || XLStrnCmp("start", markerText, 5) == 0 || XLStrnCmp("[", markerText, 1) == 0)
         {
+            BAE_PRINTF("Loop Start found: %.*s\n", (int)markerLength, markerText);
             count = -1;                        // loop forever
             if (pSong->loopbackSaved == FALSE) // only allow one save
             {
@@ -3677,8 +3678,9 @@ static XBOOL PV_ProcessMetaMarkerEvents(GM_Song *pSong, char *markerText, long m
                 pSong->songMicrosecondsSave = pSong->songMicroseconds;
             }
         }
-        else if (XLStrnCmp("loopend", markerText, markerLength) == 0)
+        else if (XLStrnCmp("loopend", markerText, markerLength) == 0 || XLStrnCmp("end", markerText, 3) == 0 || XLStrnCmp("]", markerText, 1) == 0)
         {
+            BAE_PRINTF("Loop End found: %.*s\n", (int)markerLength, markerText);
             if (pSong->loopbackSaved) // have we saved a position?
             {
                 if ((pSong->loopbackCount > 0) && (pSong->loopbackCount < 100))
