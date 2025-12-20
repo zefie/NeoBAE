@@ -10,6 +10,7 @@ miniBAE is a cross-platform audio engine with these core components:
 - **Optional Formats**: SoundFont 2.0, SoundFont 3.0, DLS, XMF, MXMF
 - **Applications**: `playbae` (CLI) and `zefidi` (GUI) frontends
 - **Sample Cache**: Efficient memory management for audio samples
+- **Android App**: at `src/miniBAEDroid`
 
 ## Build System
 

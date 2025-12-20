@@ -38,7 +38,8 @@
         "USE_SF2_SUPPORT=1",
         "_USING_FLUIDSYNTH=1",
         "SUPPORT_MIDI_HW=1",
-        "SUPPORT_KARAOKE=1"
+        "SUPPORT_KARAOKE=1",
+        "USE_XMF_SUPPORT=1"
       ],
       "compilerPath": "/usr/bin/x86_64-w64-mingw32-gcc",
       "intelliSenseMode": "linux-gcc-x64",
