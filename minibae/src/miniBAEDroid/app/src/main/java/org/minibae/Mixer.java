@@ -75,7 +75,6 @@ public class Mixer
 	private static native int _addBankFromAsset(long reference, android.content.res.AssetManager assetManager, String assetName);
 	private static native int _addBankFromMemory(long reference, byte[] data);
 	private static native int _addBankFromMemoryWithFilename(long reference, byte[] data, String filename);
-	private static native int _addBuiltInPatches(long reference);
 	private static native void _setNativeCacheDir(String path);
 	private static native int _setMasterVolume(long reference, int fixedVolume);
 	private static native int _setDefaultVelocityCurve(int curveType);
@@ -96,7 +95,6 @@ public class Mixer
 	public static int addBankFromAsset(String assetName){ if(mMixer==null) return -1; return _addBankFromAsset(mMixer.mReference, mMixer.mAssetManager, assetName); }
 	public static int addBankFromMemory(byte[] data){ if(mMixer==null) return -1; return _addBankFromMemory(mMixer.mReference, data); }
 	public static int addBankFromMemory(byte[] data, String filename){ if(mMixer==null) return -1; return _addBankFromMemoryWithFilename(mMixer.mReference, data, filename); }
-	public static int addBuiltInPatches(){ if(mMixer==null) return -1; return _addBuiltInPatches(mMixer.mReference); }
 	public static void setNativeCacheDir(String path){ _setNativeCacheDir(path); }
 	public static int setMasterVolumePercent(int percent){
 		if(mMixer==null) return -1;

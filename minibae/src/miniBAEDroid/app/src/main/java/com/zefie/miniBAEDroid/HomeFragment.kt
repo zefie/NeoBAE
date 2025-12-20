@@ -1382,7 +1382,7 @@ class HomeFragment : Fragment() {
             
             if (!lastBankPath.isNullOrEmpty()) {
                 if (lastBankPath == "__builtin__") {
-                    if (Mixer.addBuiltInPatches() == 0) {
+                    if (loadBuiltInPatchesFromAssets(requireContext()) == 0) {
                         bankLoaded = true
                     }
                 } else {
@@ -1401,13 +1401,22 @@ class HomeFragment : Fragment() {
             
             // Fall back to built-in patches if no bank was loaded
             if (!bankLoaded) {
-                Mixer.addBuiltInPatches()
+                loadBuiltInPatchesFromAssets(requireContext())
             }
         } catch (_: Exception) {
             // If restoration fails, use built-in patches
             try {
-                Mixer.addBuiltInPatches()
+                loadBuiltInPatchesFromAssets(requireContext())
             } catch (_: Exception) {}
+        }
+    }
+
+    private fun loadBuiltInPatchesFromAssets(ctx: Context): Int {
+        return try {
+            val data = ctx.assets.open("patches.hsb").use { it.readBytes() }
+            Mixer.addBankFromMemory(data, "patches.hsb")
+        } catch (_: Throwable) {
+            -1
         }
     }
     
@@ -2006,7 +2015,7 @@ class HomeFragment : Fragment() {
             }
             
             // Mixer exists, load patches now
-            val r = Mixer.addBuiltInPatches()
+            val r = loadBuiltInPatchesFromAssets(requireContext())
             loadStatus = r
             postToMain {
                 if (r == 0) {
