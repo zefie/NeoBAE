@@ -5565,6 +5565,17 @@ BAEResult BAESound_SetLoopCount(BAESound sound, uint32_t loops)
     {
         BAE_AcquireMutex(sound->mLock);
         sound->mLoopCount = loops;
+
+        // Looping for BAESound is implemented via the sample "done" callback.
+        // BAESound_Start selects the looping vs non-looping callback at start time.
+        // If the loop count is changed while the sound is already playing, we must
+        // update the active voice's done callback so the mixer respects the new
+        // loop setting without requiring a restart/reload.
+        if (sound->voiceRef != DEAD_VOICE)
+        {
+            GM_SoundDoneCallbackPtr doneCallback = (loops > 0) ? PV_LoopingSoundDoneCallback : PV_DefaultSoundDoneCallback;
+            GM_SetSampleDoneCallback(sound->voiceRef, doneCallback, (void *)sound);
+        }
         BAE_ReleaseMutex(sound->mLock);
     }
     else
