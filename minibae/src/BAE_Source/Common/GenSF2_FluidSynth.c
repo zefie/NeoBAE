@@ -1426,7 +1426,7 @@ void GM_SF2_ProcessPitchBend(GM_Song* pSong, int16_t channel, int16_t bendMSB, i
 void GM_SF2_RenderAudioSlice(GM_Song* pSong, int32_t* mixBuffer, int32_t frameCount)
 {
     // Render if either SF2 mode is active OR there's an XMF overlay (for HSB mode with overlay channels)
-    if ((!GM_IsSF2Song(pSong) && !GM_SF2_HasXmfEmbeddedBank(pSong)) || !g_fluidsynth_synth || !mixBuffer || frameCount <= 0)
+    if ((!GM_IsSF2Song(pSong) && !GM_SF2_HasXmfEmbeddedBank()) || !g_fluidsynth_synth || !mixBuffer || frameCount <= 0)
     {
         return;
     }
