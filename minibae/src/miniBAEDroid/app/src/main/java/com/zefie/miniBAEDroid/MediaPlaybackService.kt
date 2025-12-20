@@ -12,6 +12,18 @@ class MediaPlaybackService : Service() {
 
     private val binder = LocalBinder()
     private lateinit var notificationHelper: MusicNotificationHelper
+
+    private data class NotificationKey(
+        val title: String,
+        val artist: String,
+        val isPlaying: Boolean,
+        val hasNext: Boolean,
+        val hasPrevious: Boolean,
+        val duration: Long,
+        val fileExtension: String
+    )
+
+    private var lastNotificationKey: NotificationKey? = null
     
     // Media state
     var currentSong: org.minibae.Song? = null
@@ -94,6 +106,26 @@ class MediaPlaybackService : Service() {
         duration: Long = 0,
         fileExtension: String = ""
     ) {
+        // Always keep MediaSession PlaybackState current so the system seek bar stays smooth.
+        // Avoid rebuilding/reposting the full notification unless something user-visible changed.
+        notificationHelper.updatePlaybackStateOnly(isPlaying, currentPosition)
+
+        val key = NotificationKey(
+            title = title,
+            artist = artist,
+            isPlaying = isPlaying,
+            hasNext = hasNext,
+            hasPrevious = hasPrevious,
+            duration = duration,
+            fileExtension = fileExtension
+        )
+
+        val shouldRebuild = (lastNotificationKey != key)
+        if (!shouldRebuild) {
+            return
+        }
+        lastNotificationKey = key
+
         val notification = notificationHelper.buildNotification(
             title, artist, isPlaying, hasNext, hasPrevious, currentPosition, duration, fileExtension
         )

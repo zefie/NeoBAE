@@ -42,6 +42,10 @@ class MusicNotificationHelper(private val context: Context) {
     private var playbackCallback: PlaybackCallback? = null
     private var currentIsPlaying: Boolean = false
     private var currentPosition: Long = 0
+
+    private var cachedAlbumArtKey: String? = null
+    private var cachedAlbumArtBitmap: Bitmap? = null
+    private var lastMetadataKey: String? = null
     
     init {
         createNotificationChannel()
@@ -151,6 +155,10 @@ class MusicNotificationHelper(private val context: Context) {
         
         mediaSession?.setPlaybackState(playbackState)
     }
+
+    fun updatePlaybackStateOnly(isPlaying: Boolean, currentPosition: Long) {
+        updatePlaybackState(isPlaying, currentPosition)
+    }
     
     private fun updateMetadata(title: String, artist: String, duration: Long, albumArt: Bitmap? = null) {
         val metadata = android.support.v4.media.MediaMetadataCompat.Builder()
@@ -168,9 +176,17 @@ class MusicNotificationHelper(private val context: Context) {
         
         mediaSession?.setMetadata(metadata.build())
     }
+
+    private fun updateMetadataIfChanged(title: String, artist: String, duration: Long, albumArtKey: String, albumArt: Bitmap?) {
+        val key = "$title\n$artist\n$duration\n$albumArtKey"
+        if (key == lastMetadataKey) {
+            return
+        }
+        lastMetadataKey = key
+        updateMetadata(title, artist, duration, albumArt)
+    }
     
     private fun createAlbumArt(fileExtension: String = ""): Bitmap {
-        android.util.Log.d("MusicNotificationHelper", "createAlbumArt called with extension: '$fileExtension'")
         val size = 256 // Smaller size for more compact notification
         val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
@@ -255,6 +271,22 @@ class MusicNotificationHelper(private val context: Context) {
         
         return bitmap
     }
+
+    private fun getOrCreateAlbumArt(fileExtension: String = ""): Pair<String, Bitmap> {
+        val key = fileExtension.trim().lowercase()
+        val existingKey = cachedAlbumArtKey
+        val existingBitmap = cachedAlbumArtBitmap
+
+        if (existingBitmap != null && existingKey == key) {
+            return key to existingBitmap
+        }
+
+        android.util.Log.d("MusicNotificationHelper", "createAlbumArt (cache miss) extension: '$fileExtension'")
+        val bitmap = createAlbumArt(fileExtension)
+        cachedAlbumArtKey = key
+        cachedAlbumArtBitmap = bitmap
+        return key to bitmap
+    }
     
     fun buildNotification(
         title: String,
@@ -298,11 +330,11 @@ class MusicNotificationHelper(private val context: Context) {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
         
-        // Create album art with file type badge
-        val albumArt = createAlbumArt(fileExtension)
-        
-        // Update metadata with album art for MediaSession
-        updateMetadata(title, artist, duration, albumArt)
+        // Create album art with file type badge (cached)
+        val (albumArtKey, albumArt) = getOrCreateAlbumArt(fileExtension)
+
+        // Update metadata for MediaSession only when it changes
+        updateMetadataIfChanged(title, artist, duration, albumArtKey, albumArt)
         
         // Build the notification with MediaStyle
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
