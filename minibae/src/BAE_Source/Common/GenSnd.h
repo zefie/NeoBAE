@@ -1391,6 +1391,8 @@ typedef int32_t UNIT_TYPE;
     XBYTE GM_GetReverbEnableThreshold(void);
     // Set the global reverb type
     void GM_SetReverbType(ReverbMode theReverbMode);
+    // Set the global reverb type and update BAEMixer's cached default
+    void GM_SetReverbTypeAndDefault(ReverbMode theReverbMode);
     // Get the global reverb type
     ReverbMode GM_GetReverbType(void);
 

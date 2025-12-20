@@ -509,11 +509,8 @@ class HomeFragment : Fragment() {
                                 delay(100)
                                 when (viewModel.repeatMode) {
                                     RepeatMode.SONG -> {
-                                        // Repeat current song
-                                        seekPlaybackToMs(0)
-                                        viewModel.currentPositionMs = 0
-                                        currentSong?.start()
-                                        currentSound?.start()
+                                        // BAE handles looping internally via setLoops()
+                                        // No manual restart needed here - BAE will loop automatically
                                     }
                                     RepeatMode.PLAYLIST -> {
                                         // Play next song, or loop back to first
@@ -698,7 +695,7 @@ class HomeFragment : Fragment() {
                             } ?: loadFolderContents("/")
                         },
                         onRepeatModeChange = {
-                            currentSong?.setLoops(if (viewModel.repeatMode == RepeatMode.SONG) 32768 else 0)
+                            currentSong?.setLoops(if (viewModel.repeatMode == RepeatMode.SONG) 32767 else 0)
                         },
                         onAddAllMidi = {
                             addAllMidiInDirectory()
@@ -878,10 +875,6 @@ class HomeFragment : Fragment() {
                         setCurrentSound(null) // Clear sound reference
                         applyVolume()
                         
-                        // Set loop count based on repeat mode
-                        val loopCount = if (viewModel.repeatMode == RepeatMode.SONG) 32768 else 0
-                        song.setLoops(loopCount)
-
                         // Apply velocity curve
                         if (song.isSF2Song()) {
                             song.setVelocityCurve(0)
@@ -891,6 +884,9 @@ class HomeFragment : Fragment() {
 
                         val r = song.start()
                         if (r == 0) {
+                            // Set loop count AFTER start (start clears songMaxLoopCount)
+                            
+                            
                             Mixer.setDefaultReverb(reverbType.value)
                             if (song.hasEmbeddedBank()) {
                                 currentBankName.value = "Embedded Bank"
@@ -904,7 +900,9 @@ class HomeFragment : Fragment() {
                                         song.resume()
                                     } catch (_: Exception) {}
                                 }, 250)
-                            }                                                
+                            }
+                            val loopCount = if (viewModel.repeatMode == RepeatMode.SONG) 32767 else 0
+                            song.setLoops(loopCount)                                          
                             viewModel.isPlaying = true
                             viewModel.currentTitle = file.nameWithoutExtension
                         } else {
