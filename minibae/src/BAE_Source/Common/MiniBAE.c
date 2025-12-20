@@ -315,6 +315,12 @@ const char *BAE_GetCompileInfo()
 #else
     snprintf(versionString, maxStrSize, "mingw32 v%d.%d (gcc v%d.%d)", __MINGW32_MAJOR_VERSION, __MINGW32_MINOR_VERSION, __GNUC__, __GNUC_MINOR__);
 #endif
+#elif __ANDROID__
+#ifdef __cplusplus
+    snprintf(versionString, maxStrSize, "g++ v%d.%d (Android NDK %d.%d)", __GNUC__, __GNUC_MINOR__, __NDK_MAJOR__, __NDK_MINOR__);
+#else
+    snprintf(versionString, maxStrSize, "gcc v%d.%d (Android NDK %d.%d)", __GNUC__, __GNUC_MINOR__, __NDK_MAJOR__, __NDK_MINOR__);
+#endif
 #elif __GNUC__
 #ifdef __cplusplus
     snprintf(versionString, maxStrSize, "g++ v%d.%d", __GNUC__, __GNUC_MINOR__);
@@ -364,11 +370,20 @@ const char *BAE_GetFeatureString()
     }
 
     // Built-in patches
-#ifdef _BUILT_IN_PATCHES
+#if _BUILT_IN_PATCHES == TRUE
     const char *patches = "Built-in Patches";
     if (patches && patches[0])
     {
         snprintf(featBuf + strlen(featBuf), sizeof(featBuf) - strlen(featBuf), "%s%s", first ? "" : ", ", patches);
+        first = FALSE;
+    }
+#endif
+
+#if USE_XMF_SUPPORT == TRUE
+    const char *xmf = "XMF Support";
+    if (xmf && xmf[0])
+    {
+        snprintf(featBuf + strlen(featBuf), sizeof(featBuf) - strlen(featBuf), "%s%s", first ? "" : ", ", xmf);
         first = FALSE;
     }
 #endif

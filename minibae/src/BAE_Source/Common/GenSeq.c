@@ -1769,7 +1769,8 @@ static void PV_ProcessProgramChange(GM_Song *pSong, INT16 MIDIChannel, INT16 cur
                 
                 // Check if XMF overlay has this preset (only in HSB mode)
                 // In SF2 mode, the overlay is already part of the soundfont stack
-                if (!GM_IsSF2Song(pSong) && GM_SF2_HasXmfEmbeddedBank())
+#if USE_XMF_SUPPORT == TRUE
+                if (GM_SF2_HasXmfEmbeddedBank())
                 {
                     INT32 overlayBank = theBank / 2;  // Convert back to MIDI bank for overlay check
                     if (GM_SF2_XmfOverlayHasPreset(overlayBank, thePatch)) {
@@ -1783,9 +1784,11 @@ static void PV_ProcessProgramChange(GM_Song *pSong, INT16 MIDIChannel, INT16 cur
                         pSong->channelType[MIDIChannel] = CHANNEL_TYPE_GM;
                     }
                 }
-                // If SF2 is active for this song, send program change to SF2
-                else if (GM_IsSF2Song(pSong))
+                else
+#endif
+                if (GM_IsSF2Song(pSong))
                 {
+                    // If SF2 is active for this song, send program change to SF2
                     pSong->channelType[MIDIChannel] = CHANNEL_TYPE_SF2;
                     INT32 combinedProgram = (theBank * 128) + thePatch;
                     GM_SF2_ProcessProgramChange(pSong, MIDIChannel, combinedProgram);
@@ -1796,8 +1799,9 @@ static void PV_ProcessProgramChange(GM_Song *pSong, INT16 MIDIChannel, INT16 cur
                     pSong->channelType[MIDIChannel] = CHANNEL_TYPE_GM;
                 }
             }
-        }
 #endif
+        }
+
 
         if (pSong->AnalyzeMode != SCAN_NORMAL)
         {

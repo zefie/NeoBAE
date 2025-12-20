@@ -7,10 +7,10 @@ if [ -n "${1}" ]; then
 	fi
 fi
 
-CURRENT=0
+CURRENT=1
 
 runtest() {
-    echo "Testing ${@} ..."
+    echo "${CURRENT}) Testing ${@} ..."
     if [ ${CURRENT} -lt ${START} ]; then
         echo "Skipping test ${CURRENT}"
         CURRENT=$((CURRENT + 1))

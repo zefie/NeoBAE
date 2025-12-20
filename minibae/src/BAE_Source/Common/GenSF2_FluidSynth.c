@@ -629,6 +629,7 @@ OPErr GM_LoadSF2Soundfont(const char* sf2_path)
     return NO_ERR;
 }
 
+#if USE_XMF_SUPPORT == TRUE
 // Load a soundfont as an XMF overlay (does not unload base soundfont)
 // The overlay soundfont takes priority for instruments it contains
 OPErr GM_LoadSF2SoundfontAsXMFOverlay(const unsigned char *data, size_t size) {
@@ -823,9 +824,10 @@ OPErr GM_LoadSF2SoundfontAsXMFOverlay(const unsigned char *data, size_t size) {
     // FluidSynth will automatically search the overlay first, then fall back to base soundfont
     return NO_ERR;
 }
-
+#endif
 void GM_UnloadXMFOverlaySoundFont(void)
 {
+#if USE_XMF_SUPPORT == TRUE
     if (g_fluidsynth_synth && g_fluidsynth_xmf_overlay_id >= 0)
     {
         BAE_PRINTF("[XMF] Unloading XMF overlay soundfont (id=%d)\n", g_fluidsynth_xmf_overlay_id);
@@ -851,6 +853,7 @@ void GM_UnloadXMFOverlaySoundFont(void)
         g_temp_xmf_overlay_path[0] = '\0';
         g_temp_xmf_overlay_is_tempfile = FALSE;
     }
+#endif
 }
 
 void GM_UnloadSF2Soundfont(void)

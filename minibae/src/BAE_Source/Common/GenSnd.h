@@ -2217,7 +2217,7 @@ typedef int32_t UNIT_TYPE;
         FILE_AIFF_TYPE = 1,
         FILE_WAVE_TYPE,
         FILE_AU_TYPE
-#if USE_MPEG_DECODER == TRUE
+#if USE_MPEG_DECODER == TRUE || USE_MPEG_ENCODER == TRUE
         ,
         FILE_MPEG_TYPE
 #endif
