@@ -728,21 +728,20 @@ OPErr GM_LoadSF2SoundfontAsXMFOverlay(const unsigned char *data, size_t size) {
 
         // Check if any presets exist in bank 0, if so we'll apply an offset
         XBOOL hasBank0Presets = FALSE;
+        XBOOL hasBank121Presets = FALSE;
         fluid_preset_t* preset;
         while ((preset = fluid_sfont_iteration_next(sf))) {
             int bankNum = fluid_preset_get_banknum(preset);
             if (bankNum == 0) {
                 hasBank0Presets = TRUE;
+            } else if (bankNum == 121) {
+                hasBank121Presets = TRUE;
             }
-            BAE_PRINTF("Preset: bank=%d program=%d name=%s\n",
-                bankNum,
-                fluid_preset_get_num(preset),
-                fluid_preset_get_name(preset)
-            );
         }
 
         // Apply bank offset if bank 0 presets exist (offset to bank 2 in HSB mode)
         g_fluidsynth_xmf_overlay_bank_offset = hasBank0Presets ? 2 : 0;
+        g_fluidsynth_xmf_overlay_bank_offset = hasBank121Presets ? -121 : 0;
         if (g_fluidsynth_xmf_overlay_bank_offset > 0) {
             BAE_PRINTF("[XMF] XMF DLS overlay has bank 0 presets, will apply bank offset +%d\n", 
                        g_fluidsynth_xmf_overlay_bank_offset);
