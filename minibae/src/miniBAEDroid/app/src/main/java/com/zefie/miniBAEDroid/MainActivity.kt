@@ -21,6 +21,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var openFileLauncher: androidx.activity.result.ActivityResultLauncher<Array<String>>
     private lateinit var permissionLauncher: androidx.activity.result.ActivityResultLauncher<Array<String>>
     var pendingBankReload = false
+    var pendingBankReloadResume = false
+    var pendingBankReloadPositionMs = 0
     var currentSong: org.minibae.Song? = null
     var currentSound: org.minibae.Sound? = null
     
@@ -219,6 +221,12 @@ class MainActivity : AppCompatActivity() {
     
     fun requestBankReload() {
         android.util.Log.d("MainActivity", "requestBankReload called, setting flag to true")
+        // Capture current playback intent so we can resume after bank swap.
+        try {
+            val viewModel = androidx.lifecycle.ViewModelProvider(this)[MusicPlayerViewModel::class.java]
+            pendingBankReloadResume = viewModel.isPlaying
+        } catch (_: Exception) {
+        }
         pendingBankReload = true
     }
     
@@ -232,79 +240,180 @@ class MainActivity : AppCompatActivity() {
             android.util.Log.d("MainActivity", "No current item to reload")
             return
         }
-        
-        // Only reload if it's a Song (Sound doesn't use banks)
-        if (currentSound != null) {
-            android.util.Log.d("MainActivity", "Current item is a Sound, bank change doesn't affect it")
-            return
-        }
-        
-        val song = currentSong
-        if (song == null) {
-            android.util.Log.d("MainActivity", "No song loaded")
-            return
-        }
-        
-        val wasPlaying = viewModel.isPlaying
-        val savedPosition = viewModel.currentPositionMs
-        android.util.Log.d("MainActivity", "Restarting song with new bank: ${currentItem.title}, wasPlaying=$wasPlaying, position=$savedPosition")
-        
+
+        val wasPlaying = pendingBankReloadResume || viewModel.isPlaying
+        pendingBankReloadResume = false
+        val savedPosition = (if (pendingBankReloadPositionMs > 0) pendingBankReloadPositionMs else viewModel.currentPositionMs)
+        pendingBankReloadPositionMs = 0
+        android.util.Log.d(
+            "MainActivity",
+            "Reloading current item after bank swap: ${currentItem.title}, wasPlaying=$wasPlaying, position=$savedPosition"
+        )
+
         try {
-            // Stop current playback
-            song.stop(false)
+            // Tear down any existing wrappers first (mixer may have been recreated).
+            try {
+                currentSong?.close()
+            } catch (_: Exception) {
+            }
+            try {
+                currentSound?.stop(true)
+            } catch (_: Exception) {
+            }
+            currentSong = null
+            currentSound = null
+
+            // If bank swap recreated the mixer, we must ensure it's present before reload.
+            if (Mixer.getMixer() == null) {
+                val status = Mixer.create(assets, 44100, 2, 64, 8, 64)
+                if (status != 0) {
+                    android.util.Log.e("MainActivity", "Failed to recreate mixer for reload: $status")
+                    runOnUiThread {
+                        Toast.makeText(this, "Failed to recreate mixer (err=$status)", Toast.LENGTH_SHORT).show()
+                    }
+                    return
+                }
+                Mixer.setNativeCacheDir(cacheDir.absolutePath)
+            }
+
             val bytes = currentItem.file.readBytes()
             val loadResult = org.minibae.LoadResult()
-
             val status = Mixer.loadFromMemory(bytes, loadResult)
 
             if (status != 0) {
-                android.util.Log.e("MainActivity", "Failed to reload song: $status")
+                android.util.Log.e("MainActivity", "Failed to reload item: $status")
                 runOnUiThread {
-                    Toast.makeText(this, "Failed to reload song (err=$status)", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, "Failed to reload (err=$status)", Toast.LENGTH_SHORT).show()
                 }
                 return
             }
+
+            // Restore user settings (prefs are authoritative here)
+            val prefs = getSharedPreferences("miniBAE_prefs", Context.MODE_PRIVATE)
+            val reverbType = prefs.getInt("default_reverb", 1)
+            val velocityCurve = prefs.getInt("velocity_curve", 0)
+            val volumePercent = prefs.getInt("volume_percent", viewModel.volumePercent)
+
+            Mixer.setMasterVolumePercent(volumePercent)
+            Mixer.setDefaultReverb(reverbType)
+            Mixer.setDefaultVelocityCurve(velocityCurve)
 
             viewModel.isPlaying = false
-            
-            // Bank has already been loaded by the caller
-            // Just restart the song from the beginning to let it initialize controllers
-            song.seekToMs(0)
-            song.preroll()
-            song.seekToMs(0)
 
-            val startResult = song.start()
-            if (startResult != 0) {
-                android.util.Log.e("MainActivity", "Failed to start song: $startResult")
-                runOnUiThread {
-                    Toast.makeText(this, "Failed to start song (err=$startResult)", Toast.LENGTH_SHORT).show()
+            if (loadResult.isSong) {
+                val song = loadResult.song
+                if (song == null) {
+                    runOnUiThread {
+                        Toast.makeText(this, "Failed to reload song", Toast.LENGTH_SHORT).show()
+                    }
+                    return
                 }
-                return
-            }
-            
-            // Give the MIDI a moment to initialize controllers before seeking
-            if (savedPosition > 0) {
-                Thread.sleep(100)
-                song.seekToMs(savedPosition)
-                viewModel.currentPositionMs = savedPosition
-            }
-            
-            // Handle playback state
-            if (wasPlaying) {
-                // Song was playing, keep it playing
-                viewModel.isPlaying = true
-                android.util.Log.d("MainActivity", "Song restarted and playing")
+
+                currentSong = song
+                currentSound = null
+
+                // Match HomeFragment behavior: SF2 songs force curve 0
+                if (song.isSF2Song()) {
+                    song.setVelocityCurve(0)
+                } else {
+                    song.setVelocityCurve(velocityCurve)
+                }
+                song.setVolumePercent(volumePercent)
+
+                // Start from 0 to re-init controllers cleanly
+                song.seekToMs(0)
+                song.preroll()
+                song.seekToMs(0)
+
+                val startResult = song.start()
+                if (startResult != 0) {
+                    android.util.Log.e("MainActivity", "Failed to start reloaded song: $startResult")
+                    runOnUiThread {
+                        Toast.makeText(this, "Failed to start song (err=$startResult)", Toast.LENGTH_SHORT).show()
+                    }
+                    return
+                }
+
+                // Must set loops AFTER start (start clears songMaxLoopCount).
+                val loopCount = if (viewModel.repeatMode == RepeatMode.SONG) 32767 else 0
+                song.setLoops(loopCount)
+
+                if (savedPosition > 0) {
+                    Thread.sleep(100)
+                    song.seekToMs(savedPosition)
+                    viewModel.currentPositionMs = savedPosition
+                }
+
+                if (song.isSF2Song()) {
+                    // Workaround for Fluidsynth drop: pause + delayed resume.
+                    song.pause()
+                    song.seekToMs(0)
+                    if (wasPlaying) {
+                        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                            try {
+                                song.resume()
+                            } catch (_: Exception) {
+                            }
+                        }, 250)
+                        viewModel.isPlaying = true
+                    } else {
+                        viewModel.isPlaying = false
+                    }
+                } else {
+                    if (wasPlaying) {
+                        viewModel.isPlaying = true
+                    } else {
+                        song.pause()
+                        viewModel.isPlaying = false
+                    }
+                }
+            } else if (loadResult.isSound) {
+                // Should be uncommon for a bank swap, but handle gracefully.
+                val sound = loadResult.sound
+                if (sound == null) {
+                    runOnUiThread {
+                        Toast.makeText(this, "Failed to reload sound", Toast.LENGTH_SHORT).show()
+                    }
+                    return
+                }
+
+                currentSound = sound
+                currentSong = null
+
+                sound.setVolumePercent(volumePercent)
+                val loopCount = if (viewModel.repeatMode == RepeatMode.SONG) 32767 else 0
+                sound.setLoops(loopCount)
+
+                val startResult = sound.start()
+                if (startResult != 0) {
+                    runOnUiThread {
+                        Toast.makeText(this, "Failed to start sound (err=$startResult)", Toast.LENGTH_SHORT).show()
+                    }
+                    return
+                }
+
+                if (savedPosition > 0) {
+                    Thread.sleep(50)
+                    sound.seekToMs(savedPosition)
+                    viewModel.currentPositionMs = savedPosition
+                }
+
+                if (wasPlaying) {
+                    viewModel.isPlaying = true
+                } else {
+                    sound.pause()
+                    viewModel.isPlaying = false
+                }
             } else {
-                // Song was stopped or paused, pause it now
-                song.pause()
-                viewModel.isPlaying = false
-                android.util.Log.d("MainActivity", "Song restarted and paused")
+                runOnUiThread {
+                    Toast.makeText(this, "Reload failed: unknown type", Toast.LENGTH_SHORT).show()
+                }
             }
         } catch (ex: Exception) {
             viewModel.isPlaying = false
-            android.util.Log.e("MainActivity", "Restart error: ${ex.message}")
+            android.util.Log.e("MainActivity", "Reload error: ${ex.message}")
             runOnUiThread {
-                Toast.makeText(this, "Restart error: ${ex.localizedMessage}", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Reload error: ${ex.localizedMessage}", Toast.LENGTH_SHORT).show()
             }
         }
     }
