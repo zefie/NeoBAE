@@ -1769,7 +1769,7 @@ static void PV_ProcessProgramChange(GM_Song *pSong, INT16 MIDIChannel, INT16 cur
                 
                 // Check if XMF overlay has this preset (only in HSB mode)
                 // In SF2 mode, the overlay is already part of the soundfont stack
-                if (!GM_IsSF2Song(pSong) && GM_SF2_HasXmfEmbeddedBank(pSong))
+                if (!GM_IsSF2Song(pSong) && GM_SF2_HasXmfEmbeddedBank())
                 {
                     INT32 overlayBank = theBank / 2;  // Convert back to MIDI bank for overlay check
                     if (GM_SF2_XmfOverlayHasPreset(overlayBank, thePatch)) {
@@ -2378,7 +2378,7 @@ void PV_ProcessController(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTrack,
         case B_BANK_MSB: // bank select MSB.
             pSong->channelRawBank[MIDIChannel] = (SBYTE)value;
 #if USE_SF2_SUPPORT == TRUE
-            if (!GM_IsSF2Song(pSong) && !GM_SF2_HasXmfEmbeddedBank(pSong)) {
+            if (!GM_IsSF2Song(pSong) && !GM_SF2_HasXmfEmbeddedBank()) {
 #endif          
                 if (value > (MAX_BANKS / 2))
                 { // if we're selecting outside of our range, default to 0

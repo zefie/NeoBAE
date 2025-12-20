@@ -7232,6 +7232,12 @@ BAEResult BAESong_LoadRmiFromFile(BAESong song, BAEPathName filePath, BAE_BOOL i
     theErr = NO_ERR;
     if ((song) && (song->mID == OBJECT_ID))
     {
+#if USE_SF2_SUPPORT == TRUE && _USING_FLUIDSYNTH == TRUE && USE_XMF_SUPPORT == TRUE
+        if (GM_SF2_HasXmfEmbeddedBank())
+        {
+            GM_UnloadXMFOverlaySoundFont();
+        }
+#endif        
         BAE_AcquireMutex(song->mLock);
         XConvertPathToXFILENAME(filePath, &name);
         pMidiData = PV_GetFileAsData(&name, &midiSize);
@@ -7310,6 +7316,12 @@ BAEResult BAESong_LoadMidiFromFile(BAESong song, BAEPathName filePath, BAE_BOOL 
     theErr = NO_ERR;
     if ((song) && (song->mID == OBJECT_ID))
     {
+#if USE_SF2_SUPPORT == TRUE && _USING_FLUIDSYNTH == TRUE && USE_XMF_SUPPORT == TRUE
+        if (GM_SF2_HasXmfEmbeddedBank())
+        {
+            GM_UnloadXMFOverlaySoundFont();
+        }
+#endif        
         BAE_AcquireMutex(song->mLock);
         XConvertPathToXFILENAME(filePath, &name);
         pMidiData = PV_GetFileAsData(&name, &midiSize);
@@ -7622,6 +7634,12 @@ BAEResult BAESong_LoadRmfFromFile(BAESong song, BAEPathName filePath, int16_t so
     theErr = NO_ERR;
     if ((song) && (song->mID == OBJECT_ID))
     {
+#if USE_SF2_SUPPORT == TRUE && _USING_FLUIDSYNTH == TRUE && USE_XMF_SUPPORT == TRUE
+        if (GM_SF2_HasXmfEmbeddedBank())
+        {
+            GM_UnloadXMFOverlaySoundFont();
+        }
+#endif        
         BAE_AcquireMutex(song->mLock);
         XConvertPathToXFILENAME(filePath, &name);
         fileRef = XFileOpenResource(&name, TRUE);
@@ -10479,12 +10497,11 @@ BAEResult BAEMixer_LoadFromFile(BAEMixer mixer, BAEPathName filePath, BAELoadRes
         }
 
         BAEResult sr = BAE_NO_ERROR;
-
         if (ftype == BAE_RMF)
         {
             sr = BAESong_LoadRmfFromFile(result->data.song, filePath, 0, TRUE);
         }
-#if USE_SF2_SUPPORT == TRUE && _USING_FLUIDSYNTH == TRUJE
+#if USE_SF2_SUPPORT == TRUE && _USING_FLUIDSYNTH == TRUE
         else if (ftype == BAE_RMI)
         {
             sr = BAESong_LoadRmiFromFile(result->data.song, filePath, 0, TRUE);

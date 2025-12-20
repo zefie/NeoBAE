@@ -112,7 +112,7 @@ void PV_SF2_SetBankPreset(GM_Song* pSong, int16_t channel, int16_t bank, int16_t
 // Query whether the currently loaded soundfont exposes any presets at all.
 // Optionally returns the counted number of presets.
 XBOOL GM_SF2_CurrentFontHasAnyPreset(int *outPresetCount);
-XBOOL GM_SF2_HasXmfEmbeddedBank(GM_Song* pSong);
+XBOOL GM_SF2_HasXmfEmbeddedBank();
 XBOOL GM_SF2_XmfOverlayHasPreset(int bank, int program);
 void GM_SF2_SetChannelBankAndProgram(int16_t channel, int16_t bank, int16_t program);
 XBOOL GM_SF2_isDLS(void);

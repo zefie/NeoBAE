@@ -1104,7 +1104,7 @@ OPErr GM_EnableSF2ForSong(GM_Song* pSong, XBOOL enable)
 // FluidSynth MIDI event processing
 void GM_SF2_ProcessNoteOn(GM_Song* pSong, int16_t channel, int16_t note, int16_t velocity)
 {
-    if ((!GM_IsSF2Song(pSong) && !GM_SF2_HasXmfEmbeddedBank(pSong)) || !g_fluidsynth_synth)
+    if ((!GM_IsSF2Song(pSong) && !GM_SF2_HasXmfEmbeddedBank()) || !g_fluidsynth_synth)
     {
         return;
     }
@@ -1130,7 +1130,7 @@ void GM_SF2_ProcessNoteOn(GM_Song* pSong, int16_t channel, int16_t note, int16_t
 
 void GM_SF2_ProcessNoteOff(GM_Song* pSong, int16_t channel, int16_t note, int16_t velocity)
 {
-    if ((!GM_IsSF2Song(pSong) && !GM_SF2_HasXmfEmbeddedBank(pSong)) || !g_fluidsynth_synth)
+    if ((!GM_IsSF2Song(pSong) && !GM_SF2_HasXmfEmbeddedBank()) || !g_fluidsynth_synth)
     {
         return;
     }
@@ -1141,7 +1141,7 @@ void GM_SF2_ProcessNoteOff(GM_Song* pSong, int16_t channel, int16_t note, int16_
     PV_SF2_UpdateChannelActivity(channel, 0, FALSE);
 }
 
-XBOOL GM_SF2_HasXmfEmbeddedBank(GM_Song* pSong)
+XBOOL GM_SF2_HasXmfEmbeddedBank()
 {
     return (g_fluidsynth_xmf_overlay_id >= 0) ? TRUE : FALSE;
 }
@@ -1175,7 +1175,7 @@ void GM_SF2_SetChannelBankAndProgram(int16_t channel, int16_t bank, int16_t prog
 
 void GM_SF2_ProcessProgramChange(GM_Song* pSong, int16_t channel, int32_t program)
 {
-    if ((!GM_IsSF2Song(pSong) && !GM_SF2_HasXmfEmbeddedBank(pSong)) || !g_fluidsynth_synth)
+    if ((!GM_IsSF2Song(pSong) && !GM_SF2_HasXmfEmbeddedBank()) || !g_fluidsynth_synth)
     {
         return;
     }
@@ -1281,16 +1281,20 @@ void GM_SF2_ProcessProgramChange(GM_Song* pSong, int16_t channel, int32_t progra
     int useProg = midiProgram;
     
     // First priority: Check if preset exists in XMF overlay (if loaded)
-    if (g_fluidsynth_xmf_overlay_id >= 0 && PV_SF2_PresetExistsInSoundFont(g_fluidsynth_xmf_overlay_id, useBank, useProg)) {
-        BAE_PRINTF("[FluidProgChange] Using XMF overlay preset: bank %d prog %d on channel %d\n", useBank, useProg, channel);
-        fluid_synth_bank_select(g_fluidsynth_synth, channel, useBank);
-        fluid_synth_program_change(g_fluidsynth_synth, channel, useProg);
-        BAE_PRINTF("[FluidProgChange] Called fluid_synth_bank_select(%d) and fluid_synth_program_change(%d)\n", useBank, useProg);
-        return;
-    } else {
-        BAE_PRINTF("[FluidProgChange] XMF overlay check failed: overlay_id=%d exists=%d\n",
-                   g_fluidsynth_xmf_overlay_id,
-                   (g_fluidsynth_xmf_overlay_id >= 0) ? PV_SF2_PresetExistsInSoundFont(g_fluidsynth_xmf_overlay_id, useBank, useProg) : 0);
+    // Apply bank offset: if overlay has bank 0 presets, HSB requests them as bank 2
+    if (g_fluidsynth_xmf_overlay_id >= 0) {
+        int overlayBank = useBank - g_fluidsynth_xmf_overlay_bank_offset;
+        if (overlayBank >= 0 && PV_SF2_PresetExistsInSoundFont(g_fluidsynth_xmf_overlay_id, overlayBank, useProg)) {
+            BAE_PRINTF("[FluidProgChange] Using XMF overlay preset: requested bank %d -> overlay bank %d prog %d on channel %d\n", 
+                       useBank, overlayBank, useProg, channel);
+            fluid_synth_bank_select(g_fluidsynth_synth, channel, overlayBank);
+            fluid_synth_program_change(g_fluidsynth_synth, channel, useProg);
+            BAE_PRINTF("[FluidProgChange] Called fluid_synth_bank_select(%d) and fluid_synth_program_change(%d)\n", overlayBank, useProg);
+            return;
+        } else {
+            BAE_PRINTF("[FluidProgChange] XMF overlay check: requested bank %d -> overlay bank %d (offset=%d) prog %d - not found or invalid\n",
+                       useBank, overlayBank, g_fluidsynth_xmf_overlay_bank_offset, useProg);
+        }
     }
 
     if (!PV_SF2_PresetExists(useBank, useProg)) {
@@ -1307,18 +1311,8 @@ void GM_SF2_ProcessProgramChange(GM_Song* pSong, int16_t channel, int32_t progra
             }
         }
 
-        // 2. If still not found, try finding ANY program in the requested bank
-        if (!found) {
-            int altProg;
-            if (PV_SF2_FindFirstPresetInBank(useBank, &altProg)) {
-                // Use first program available in requested bank
-                BAE_PRINTF("[FluidProgChange] Fallback: bank %d has no prog %d; using prog %d\n", useBank, useProg, altProg);
-                useProg = altProg;
-                found = TRUE;
-            }
-        }
 
-        // 3. If still not found, try bank 0 (or 128) default
+        // 2. If still not found, try bank 0 (or 128) default
         if (!found) {
             int fbBank = -1, fbProg = 0;
             if (g_fluidsynth_soundfont_is_dls) {
@@ -1353,7 +1347,7 @@ void GM_SF2_ProcessProgramChange(GM_Song* pSong, int16_t channel, int32_t progra
 
 void GM_SF2_ProcessController(GM_Song* pSong, int16_t channel, int16_t controller, int16_t value)
 {
-    if ((!GM_IsSF2Song(pSong) && !GM_SF2_HasXmfEmbeddedBank(pSong)) || !g_fluidsynth_synth)
+    if ((!GM_IsSF2Song(pSong) && !GM_SF2_HasXmfEmbeddedBank()) || !g_fluidsynth_synth)
     {
         return;
     }
@@ -1396,7 +1390,7 @@ void GM_SF2_ProcessController(GM_Song* pSong, int16_t channel, int16_t controlle
 
 void GM_SF2_ProcessPitchBend(GM_Song* pSong, int16_t channel, int16_t bendMSB, int16_t bendLSB)
 {
-    if ((!GM_IsSF2Song(pSong) && !GM_SF2_HasXmfEmbeddedBank(pSong)) || !g_fluidsynth_synth)
+    if ((!GM_IsSF2Song(pSong) && !GM_SF2_HasXmfEmbeddedBank()) || !g_fluidsynth_synth)
     {
         return;
     }
@@ -1669,7 +1663,7 @@ void GM_SF2_SetDefaultControllers(int16_t channel)
 
 void PV_SF2_SetBankPreset(GM_Song* pSong, int16_t channel, int16_t bank, int16_t preset) 
 {
-    if ((!GM_IsSF2Song(pSong) && !GM_SF2_HasXmfEmbeddedBank(pSong)) || !g_fluidsynth_synth)
+    if ((!GM_IsSF2Song(pSong) && !GM_SF2_HasXmfEmbeddedBank()) || !g_fluidsynth_synth)
     {
         return;
     }
@@ -1680,7 +1674,7 @@ void PV_SF2_SetBankPreset(GM_Song* pSong, int16_t channel, int16_t bank, int16_t
 
 void GM_SF2_AllNotesOffChannel(GM_Song* pSong, int16_t channel)
 {
-    if ((!GM_IsSF2Song(pSong) && !GM_SF2_HasXmfEmbeddedBank(pSong)) || !g_fluidsynth_synth)
+    if ((!GM_IsSF2Song(pSong) && !GM_SF2_HasXmfEmbeddedBank()) || !g_fluidsynth_synth)
     {
         return;
     }
@@ -1701,7 +1695,7 @@ void GM_SF2_AllNotesOffChannel(GM_Song* pSong, int16_t channel)
 
 void GM_SF2_SilenceSong(GM_Song* pSong)
 {
-    if ((!GM_IsSF2Song(pSong) && !GM_SF2_HasXmfEmbeddedBank(pSong)) || !g_fluidsynth_synth)
+    if ((!GM_IsSF2Song(pSong) && !GM_SF2_HasXmfEmbeddedBank()) || !g_fluidsynth_synth)
     {
         return;
     }

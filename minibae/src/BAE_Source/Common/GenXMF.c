@@ -1137,7 +1137,13 @@ BAEResult BAESong_LoadXmfFromFile(BAESong song, BAEPathName filePath, BAE_BOOL i
 {
     if (!(song))
         return BAE_NULL_OBJECT;
-
+        
+#if USE_SF2_SUPPORT == TRUE && _USING_FLUIDSYNTH == TRUE && USE_XMF_SUPPORT == TRUE
+    if (GM_SF2_HasXmfEmbeddedBank())
+    {
+        GM_UnloadXMFOverlaySoundFont();
+    }
+#endif        
     XFILENAME name;
     XConvertPathToXFILENAME(filePath, &name);
 
