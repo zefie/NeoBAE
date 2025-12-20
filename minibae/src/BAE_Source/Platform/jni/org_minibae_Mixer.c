@@ -142,14 +142,14 @@ JNIEXPORT jint JNICALL Java_org_minibae_Mixer__1addBankFromFile
 	{
 		// Load SF2/DLS bank
 		OPErr err = GM_LoadSF2Soundfont(cpath);		
-		(*env)->ReleaseStringUTFChars(env, path, cpath);
 		if (err != NO_ERR)
 		{
+			(*env)->ReleaseStringUTFChars(env, path, cpath);
 			__android_log_print(ANDROID_LOG_ERROR, "miniBAE", "SF2 bank load failed: %d", err);
 			return (jint)err;
 		}
 		GM_SetMixerSF2Mode(TRUE);
-		// Set friendly name to filename
+		// Set friendly name to filename (must happen before ReleaseStringUTFChars)
 		const char *base = cpath;
 		for (const char *p = cpath; *p; ++p) {
 			if (*p == '/' || *p == '\\') base = p + 1;
@@ -157,6 +157,7 @@ JNIEXPORT jint JNICALL Java_org_minibae_Mixer__1addBankFromFile
 		strncpy(g_lastBankFriendly, base, sizeof(g_lastBankFriendly)-1);
 		g_lastBankFriendly[sizeof(g_lastBankFriendly)-1] = '\0';
 		__android_log_print(ANDROID_LOG_DEBUG, "miniBAE", "SF2 bank loaded: %s", cpath);
+		(*env)->ReleaseStringUTFChars(env, path, cpath);
 		return 0;
 	}
 #endif

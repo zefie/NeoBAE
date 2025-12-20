@@ -5,7 +5,9 @@ import android.os.Bundle
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.os.Handler
 import android.os.Environment
+import android.os.Looper
 import android.os.storage.StorageManager
 import android.os.storage.StorageVolume
 import android.view.LayoutInflater
@@ -124,6 +126,12 @@ class HomeFragment : Fragment() {
     private lateinit var viewModel: MusicPlayerViewModel
     private var isAppInForeground = mutableStateOf(true)
     private var pendingExternalUri: Uri? = null
+
+    private val mainHandler = Handler(Looper.getMainLooper())
+
+    private fun postToMain(block: () -> Unit) {
+        mainHandler.post(block)
+    }
     
     private val currentSong: Song?
         get() = (activity as? MainActivity)?.currentSong
@@ -1380,9 +1388,12 @@ class HomeFragment : Fragment() {
                 } else {
                     val bankFile = java.io.File(lastBankPath)
                     if (bankFile.exists()) {
-                        val bytes = bankFile.readBytes()
-                        if (Mixer.addBankFromMemory(bytes, bankFile.name) == 0) {
-                            bankLoaded = true
+                        // Avoid extremely large banks on Android (likely OOM / long stall).
+                        if (bankFile.length() < BANK_SIZE_LIMIT_BYTES) {
+                            // Avoid OOM on large SF2/DLS banks: load by path (native loads from disk)
+                            if (Mixer.addBankFromFile(bankFile.absolutePath) == 0) {
+                                bankLoaded = true
+                            }
                         }
                     }
                 }
@@ -1880,11 +1891,34 @@ class HomeFragment : Fragment() {
     }
     
     private fun loadBankFromFile(file: File) {
+        val bankBytes = runCatching { file.length() }.getOrDefault(0L)
+        if (bankBytes >= BANK_SIZE_LIMIT_BYTES) {
+            showBankBrowser.value = false
+            postToMain {
+                isLoadingBank.value = false
+                context?.let {
+                    Toast.makeText(it, "Bank too large to load (>= 4 GB)", Toast.LENGTH_SHORT).show()
+                }
+            }
+            return
+        }
+
+        val wasPlaying = viewModel.isPlaying
+        // Pause before bank load to avoid glitchy audio and to keep state stable during reload.
+        if (wasPlaying && Mixer.getMixer() != null) {
+            postToMain {
+                try {
+                    pausePlayback()
+                } catch (_: Exception) {
+                }
+            }
+        }
+
         isLoadingBank.value = true
         showBankBrowser.value = false
         Thread {
+            var loadStatus: Int? = null
             try {
-                val bytes = file.readBytes()
                 val originalName = file.name
                 val prefs = requireContext().getSharedPreferences("miniBAE_prefs", Context.MODE_PRIVATE)
                 
@@ -1895,7 +1929,7 @@ class HomeFragment : Fragment() {
                 // If mixer doesn't exist, just save the path for lazy loading
                 if (Mixer.getMixer() == null) {
                     prefs.edit().putString("last_bank_path", file.absolutePath).apply()
-                    activity?.runOnUiThread {
+                    postToMain {
                         currentBankName.value = originalName
                         isLoadingBank.value = false
                     }
@@ -1903,45 +1937,69 @@ class HomeFragment : Fragment() {
                 }
                 
                 // Mixer exists, load bank now
-                val r = Mixer.addBankFromMemory(bytes, originalName)
+                // Avoid OOM on large SF2/DLS banks: load by path (native loads from disk)
+                val r = Mixer.addBankFromFile(file.absolutePath)
+                loadStatus = r
                 
                 if (r == 0) {
                     prefs.edit().putString("last_bank_path", file.absolutePath).apply()
                     
-                    activity?.runOnUiThread {
+                    postToMain {
                         currentBankName.value = originalName
-                        Toast.makeText(requireContext(), "Loaded: $originalName", Toast.LENGTH_SHORT).show()
+                        context?.let { Toast.makeText(it, "Loaded: $originalName", Toast.LENGTH_SHORT).show() }
                     }
                     
                     // Hot-swap: reload current song
                     reloadCurrentSongForBankSwap()
                 } else {
-                    activity?.runOnUiThread {
+                    postToMain {
                         currentBankName.value = "Failed to load: $originalName"
-                        Toast.makeText(requireContext(), "Failed to load bank (err=$r)", Toast.LENGTH_SHORT).show()
+                        context?.let { Toast.makeText(it, "Failed to load bank (err=$r)", Toast.LENGTH_SHORT).show() }
                     }
                 }
-                isLoadingBank.value = false
             } catch (ex: Exception) {
-                activity?.runOnUiThread {
+                postToMain {
+                    context?.let { Toast.makeText(it, "Error: ${ex.message}", Toast.LENGTH_SHORT).show() }
+                }
+            } finally {
+                postToMain {
+                    // If bank load succeeded and we reloaded a MIDI Song, MainActivity decides whether to
+                    // keep playing based on viewModel.isPlaying. For audio Sounds (or failures), resume here.
+                    val shouldResumeHere = wasPlaying && (currentSound != null || (loadStatus != null && loadStatus != 0))
+                    if (shouldResumeHere && Mixer.getMixer() != null && isAdded) {
+                        try {
+                            resumePlayback()
+                        } catch (_: Exception) {
+                        }
+                    }
                     isLoadingBank.value = false
-                    Toast.makeText(requireContext(), "Error: ${ex.message}", Toast.LENGTH_SHORT).show()
                 }
             }
         }.start()
     }
     
     private fun loadBuiltInPatches() {
+        val wasPlaying = viewModel.isPlaying
+        if (wasPlaying && Mixer.getMixer() != null) {
+            postToMain {
+                try {
+                    pausePlayback()
+                } catch (_: Exception) {
+                }
+            }
+        }
+
         isLoadingBank.value = true
         Thread {
             val prefs = requireContext().getSharedPreferences("miniBAE_prefs", Context.MODE_PRIVATE)
+            var loadStatus: Int? = null
             
             // If mixer doesn't exist, just save the preference for lazy loading
             if (Mixer.getMixer() == null) {
                 prefs.edit().putString("last_bank_path", "__builtin__").apply()
-                activity?.runOnUiThread {
+                postToMain {
                     currentBankName.value = "Built-in patches"
-                    Toast.makeText(requireContext(), "Built-in patches will load when playback starts", Toast.LENGTH_SHORT).show()
+                    context?.let { Toast.makeText(it, "Built-in patches will load when playback starts", Toast.LENGTH_SHORT).show() }
                     isLoadingBank.value = false
                 }
                 return@Thread
@@ -1949,7 +2007,8 @@ class HomeFragment : Fragment() {
             
             // Mixer exists, load patches now
             val r = Mixer.addBuiltInPatches()
-            activity?.runOnUiThread {
+            loadStatus = r
+            postToMain {
                 if (r == 0) {
                     val friendly = Mixer.getBankFriendlyName()
                     currentBankName.value = friendly ?: "Built-in patches"
@@ -1958,10 +2017,18 @@ class HomeFragment : Fragment() {
                     // Hot-swap: reload current song
                     reloadCurrentSongForBankSwap()
                     
-                    Toast.makeText(requireContext(), "Loaded built-in patches", Toast.LENGTH_SHORT).show()
+                    context?.let { Toast.makeText(it, "Loaded built-in patches", Toast.LENGTH_SHORT).show() }
                 } else {
                     currentBankName.value = "Failed to load built-in"
-                    Toast.makeText(requireContext(), "Failed to load built-in patches (err=$r)", Toast.LENGTH_SHORT).show()
+                    context?.let { Toast.makeText(it, "Failed to load built-in patches (err=$r)", Toast.LENGTH_SHORT).show() }
+                }
+
+                val shouldResumeHere = wasPlaying && (currentSound != null || (loadStatus != null && loadStatus != 0))
+                if (shouldResumeHere && Mixer.getMixer() != null && isAdded) {
+                    try {
+                        resumePlayback()
+                    } catch (_: Exception) {
+                    }
                 }
                 isLoadingBank.value = false
             }
@@ -2322,10 +2389,11 @@ fun NewMusicPlayerScreen(
     // State for delete confirmation dialog
     var showDeleteDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
-    
-    Scaffold(
-        modifier = Modifier.systemBarsPadding(),
-        topBar = {
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        Scaffold(
+            modifier = Modifier.systemBarsPadding(),
+            topBar = {
             // Header with folder navigation
             TopAppBar(
                 title = {
@@ -2391,7 +2459,7 @@ fun NewMusicPlayerScreen(
                 actions = {
                     // Close button for Bank Browser
                     if (showBankBrowser) {
-                        IconButton(onClick = onBankBrowserClose) {
+                        IconButton(onClick = onBankBrowserClose, enabled = !isLoadingBank) {
                             Icon(
                                 Icons.Filled.Close,
                                 contentDescription = "Close",
@@ -2401,7 +2469,7 @@ fun NewMusicPlayerScreen(
                     }
                     // Close button for File Types page
                     else if (!viewModel.showFullPlayer && viewModel.currentScreen == NavigationScreen.FILE_TYPES) {
-                        IconButton(onClick = { onNavigate(NavigationScreen.SETTINGS) }) {
+                        IconButton(onClick = { onNavigate(NavigationScreen.SETTINGS) }, enabled = !isLoadingBank) {
                             Icon(
                                 Icons.Filled.Close,
                                 contentDescription = "Close",
@@ -2418,7 +2486,7 @@ fun NewMusicPlayerScreen(
                         val hasExactDatabase = viewModel.hasExactDatabase
                         IconButton(
                             onClick = { showDeleteDialog = true },
-                            enabled = hasExactDatabase
+                            enabled = hasExactDatabase && !isLoadingBank
                         ) {
                             Icon(
                                 Icons.Filled.Delete,
@@ -2449,7 +2517,7 @@ fun NewMusicPlayerScreen(
                                     }
                                 }
                             },
-                            enabled = viewModel.currentFolderPath != null && viewModel.currentFolderPath != "/"
+                            enabled = !isLoadingBank && viewModel.currentFolderPath != null && viewModel.currentFolderPath != "/"
                         ) {
                             Icon(
                                 if (indexingProgress.isIndexing) Icons.Filled.Stop else Icons.Filled.Refresh,
@@ -2463,7 +2531,7 @@ fun NewMusicPlayerScreen(
                 elevation = 4.dp
             )
         },
-        bottomBar = {
+            bottomBar = {
             Column {
                 // Mini player (hidden when full player is shown)
                 if (!viewModel.showFullPlayer && viewModel.getCurrentItem() != null) {
@@ -2471,7 +2539,7 @@ fun NewMusicPlayerScreen(
                     Surface(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { viewModel.showFullPlayer = true },
+                            .clickable(enabled = !isLoadingBank) { viewModel.showFullPlayer = true },
                         elevation = 8.dp,
                         color = MaterialTheme.colors.surface
                     ) {
@@ -2553,7 +2621,7 @@ fun NewMusicPlayerScreen(
                                         strokeWidth = 3.dp
                                     )
                                     
-                                    IconButton(onClick = onPlayPause) {
+                                    IconButton(onClick = onPlayPause, enabled = !isLoadingBank) {
                                         Icon(
                                             if (viewModel.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
                                             contentDescription = "Play/Pause",
@@ -2563,7 +2631,7 @@ fun NewMusicPlayerScreen(
                                     }
                                 }
                                 
-                                IconButton(onClick = onNext, enabled = viewModel.hasNext()) {
+                                IconButton(onClick = onNext, enabled = !isLoadingBank && viewModel.hasNext()) {
                                     Icon(
                                         Icons.Filled.SkipNext,
                                         contentDescription = "Next",
@@ -2589,6 +2657,7 @@ fun NewMusicPlayerScreen(
                             viewModel.showFullPlayer = false
                             onNavigate(NavigationScreen.HOME)
                         },
+                        enabled = !isLoadingBank,
                         selectedContentColor = MaterialTheme.colors.primary,
                         unselectedContentColor = Color.Gray
                     )
@@ -2599,6 +2668,7 @@ fun NewMusicPlayerScreen(
                             viewModel.showFullPlayer = false
                             onNavigate(NavigationScreen.SEARCH)
                         },
+                        enabled = !isLoadingBank,
                         selectedContentColor = MaterialTheme.colors.primary,
                         unselectedContentColor = Color.Gray
                     )
@@ -2609,6 +2679,7 @@ fun NewMusicPlayerScreen(
                             viewModel.showFullPlayer = false
                             onNavigate(NavigationScreen.FAVORITES)
                         },
+                        enabled = !isLoadingBank,
                         selectedContentColor = MaterialTheme.colors.primary,
                         unselectedContentColor = Color.Gray
                     )
@@ -2619,6 +2690,7 @@ fun NewMusicPlayerScreen(
                             viewModel.showFullPlayer = false
                             onNavigate(NavigationScreen.SETTINGS)
                         },
+                        enabled = !isLoadingBank,
                         selectedContentColor = MaterialTheme.colors.primary,
                         unselectedContentColor = Color.Gray
                     )
@@ -2626,7 +2698,7 @@ fun NewMusicPlayerScreen(
                 }
             }
         }
-    ) { paddingValues ->
+            ) { paddingValues ->
         Box(modifier = Modifier.fillMaxSize()) {
             Column(
                 modifier = Modifier
@@ -2750,7 +2822,37 @@ fun NewMusicPlayerScreen(
                 )
             }
         }
-    }
+            }
+        }
+
+        if (isLoadingBank) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.7f))
+                    .clickable(
+                        indication = null,
+                        interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+                    ) { },
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(48.dp),
+                        color = MaterialTheme.colors.primary
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = "Loading bank...",
+                        style = MaterialTheme.typography.body1,
+                        color = Color.White
+                    )
+                }
+            }
+        }
     }
     
     // Delete database confirmation dialog
@@ -4141,6 +4243,24 @@ fun SongListItem(
         }
     }
 }
+
+private fun formatFileSize(bytes: Long): String {
+    if (bytes < 0) return "0 B"
+    val units = arrayOf("B", "KB", "MB", "GB", "TB")
+    var value = bytes.toDouble()
+    var unitIndex = 0
+    while (value >= 1024.0 && unitIndex < units.lastIndex) {
+        value /= 1024.0
+        unitIndex++
+    }
+    return if (unitIndex == 0) {
+        "${bytes.toLong()} ${units[unitIndex]}"
+    } else {
+        String.format("%.1f %s", value, units[unitIndex])
+    }
+}
+
+private const val BANK_SIZE_LIMIT_BYTES: Long = 4L * 1024L * 1024L * 1024L
 
 @Composable
 fun FolderSongListItem(
@@ -5568,10 +5688,15 @@ fun BankBrowserScreen(
                     
                     // Show bank files
                     itemsIndexed(files.filter { !it.isFolder }) { _, item ->
+                        val fileSizeBytes = runCatching { item.file.length() }.getOrDefault(0L)
+                        val isTooLarge = fileSizeBytes >= BANK_SIZE_LIMIT_BYTES
+                        val disabledColor = MaterialTheme.colors.onBackground.copy(alpha = 0.38f)
+                        val primaryTextColor = if (isTooLarge) disabledColor else MaterialTheme.colors.onBackground
+                        val secondaryTextColor = if (isTooLarge) disabledColor else MaterialTheme.colors.onBackground.copy(alpha = 0.6f)
                         Surface(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { onSelectBank(item.file) },
+                                .clickable(enabled = !isTooLarge) { onSelectBank(item.file) },
                             color = Color.Transparent
                         ) {
                             Row(
@@ -5583,7 +5708,7 @@ fun BankBrowserScreen(
                                 Icon(
                                     Icons.Filled.LibraryMusic,
                                     contentDescription = null,
-                                    tint = MaterialTheme.colors.secondary,
+                                    tint = if (isTooLarge) disabledColor else MaterialTheme.colors.secondary,
                                     modifier = Modifier.size(40.dp)
                                 )
                                 Spacer(modifier = Modifier.width(12.dp))
@@ -5592,20 +5717,23 @@ fun BankBrowserScreen(
                                         text = item.title,
                                         fontSize = 14.sp,
                                         fontWeight = FontWeight.Normal,
-                                        color = MaterialTheme.colors.onBackground,
+                                        color = primaryTextColor,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
                                     Text(
-                                        text = item.file.extension.uppercase(),
+                                        text = run {
+                                            val ext = item.file.extension.uppercase()
+                                            if (fileSizeBytes > 0) "$ext • ${formatFileSize(fileSizeBytes)}" else ext
+                                        },
                                         fontSize = 12.sp,
-                                        color = MaterialTheme.colors.onBackground.copy(alpha = 0.6f)
+                                        color = secondaryTextColor
                                     )
                                 }
                                 Icon(
                                     Icons.AutoMirrored.Filled.ArrowForward,
                                     contentDescription = null,
-                                    tint = MaterialTheme.colors.onBackground.copy(alpha = 0.4f)
+                                    tint = if (isTooLarge) disabledColor else MaterialTheme.colors.onBackground.copy(alpha = 0.4f)
                                 )
                             }
                         }
