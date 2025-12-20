@@ -2237,6 +2237,8 @@ fun NewMusicPlayerScreen(
                         // Dynamic title based on current screen or bank browser
                         val titleText = if (showBankBrowser) {
                             "Bank Select"
+                        } else if (viewModel.showFullPlayer) {
+                            "Now Playing"
                         } else {
                             when (viewModel.currentScreen) {
                                 NavigationScreen.HOME -> "Home"
@@ -2254,6 +2256,8 @@ fun NewMusicPlayerScreen(
                         // Dynamic subtitle based on current screen or bank browser
                         val subtitleText = if (showBankBrowser) {
                             "Choose a sound bank"
+                        } else if (viewModel.showFullPlayer) {
+                            viewModel.getCurrentItem()?.title ?: ""
                         } else {
                             when (viewModel.currentScreen) {
                                 NavigationScreen.HOME -> {
@@ -2298,7 +2302,7 @@ fun NewMusicPlayerScreen(
                         }
                     }
                     // Build Index button for Search screen
-                    else if (viewModel.currentScreen == NavigationScreen.SEARCH) {
+                    else if (!viewModel.showFullPlayer && viewModel.currentScreen == NavigationScreen.SEARCH) {
                         val indexingProgress by viewModel.getIndexingProgress()?.collectAsState() ?: remember { mutableStateOf(IndexingProgress()) }
                         
                         // Delete database icon (trash can) - only enabled when current folder exactly matches a database
@@ -3145,7 +3149,6 @@ private fun LandscapePlayerLayout(
                     tint = MaterialTheme.colors.onBackground
                 )
             }
-            
             Spacer(modifier = Modifier.weight(1f))
             
             // Export button
