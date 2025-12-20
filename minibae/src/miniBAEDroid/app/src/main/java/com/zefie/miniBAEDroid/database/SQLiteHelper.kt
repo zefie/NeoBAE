@@ -269,6 +269,51 @@ class SQLiteHelper private constructor(private val context: Context) {
     }
     
     /**
+     * Check if a path exactly matches an existing database (not just a parent)
+     */
+    fun hasExactIndexForPath(searchPath: String): Boolean {
+        val dbFiles = dbDir.listFiles { _, name -> name.startsWith("index_") && name.endsWith(".db") }
+        if (dbFiles == null || dbFiles.isEmpty()) return false
+        
+        dbFiles.forEach { dbFile ->
+            val dbPtr = nativeOpen(dbFile.absolutePath)
+            if (dbPtr != 0L) {
+                val indexPath = getIndexMetadata(dbPtr)
+                nativeClose(dbPtr)
+                if (indexPath == searchPath) {
+                    return true
+                }
+            }
+        }
+        return false
+    }
+    
+    /**
+     * Delete the database for a specific path
+     */
+    fun deleteDatabase(indexPath: String): Boolean {
+        // Close the database if it's open
+        openDatabases[indexPath]?.let { dbPtr ->
+            nativeClose(dbPtr)
+            openDatabases.remove(indexPath)
+        }
+        
+        // Delete the database file
+        val dbName = "index_${pathToHash(indexPath)}.db"
+        val dbFile = File(dbDir, dbName)
+        
+        Log.d("SQLiteHelper", "deleteDatabase: Attempting to delete ${dbFile.absolutePath}")
+        return if (dbFile.exists()) {
+            val deleted = dbFile.delete()
+            Log.d("SQLiteHelper", "deleteDatabase: deleted=$deleted")
+            deleted
+        } else {
+            Log.d("SQLiteHelper", "deleteDatabase: File does not exist")
+            false
+        }
+    }
+    
+    /**
      * Get file count for the database that covers the given path
      */
     fun getFileCountForPath(searchPath: String): Int {

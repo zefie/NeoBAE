@@ -2046,6 +2046,10 @@ fun NewMusicPlayerScreen(
     onBankBrowserSelect: (File) -> Unit,
     onBankBrowserClose: () -> Unit
 ) {
+    // State for delete confirmation dialog
+    var showDeleteDialog by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    
     Scaffold(
         modifier = Modifier.systemBarsPadding(),
         topBar = {
@@ -2119,8 +2123,22 @@ fun NewMusicPlayerScreen(
                     // Build Index button for Search screen
                     else if (viewModel.currentScreen == NavigationScreen.SEARCH) {
                         val indexingProgress by viewModel.getIndexingProgress()?.collectAsState() ?: remember { mutableStateOf(IndexingProgress()) }
-                        val context = LocalContext.current
                         
+                        // Delete database icon (trash can) - only enabled when current folder exactly matches a database
+                        // Read directly from observable state in ViewModel
+                        val hasExactDatabase = viewModel.hasExactDatabase
+                        IconButton(
+                            onClick = { showDeleteDialog = true },
+                            enabled = hasExactDatabase
+                        ) {
+                            Icon(
+                                Icons.Filled.Delete,
+                                contentDescription = "Delete Database",
+                                tint = if (hasExactDatabase) MaterialTheme.colors.onSurface else MaterialTheme.colors.onSurface.copy(alpha = 0.38f)
+                            )
+                        }
+                        
+                        // Build/Stop Index icon (refresh)
                         IconButton(
                             onClick = {
                                 if (indexingProgress.isIndexing) {
@@ -2438,6 +2456,48 @@ fun NewMusicPlayerScreen(
             }
         }
     }
+    }
+    
+    // Delete database confirmation dialog
+    if (showDeleteDialog) {
+        androidx.compose.material.AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            title = { Text("Delete Database") },
+            text = {
+                Text("Are you sure you want to delete the search database for \"${viewModel.currentFolderPath}\"? This action cannot be undone.")
+            },
+            confirmButton = {
+                androidx.compose.material.TextButton(
+                    onClick = {
+                        showDeleteDialog = false
+                        viewModel.deleteCurrentDatabase { success ->
+                            if (success) {
+                                Toast.makeText(
+                                    context,
+                                    "Database deleted successfully",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            } else {
+                                Toast.makeText(
+                                    context,
+                                    "Failed to delete database",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        }
+                    }
+                ) {
+                    Text("Delete", color = MaterialTheme.colors.error)
+                }
+            },
+            dismissButton = {
+                androidx.compose.material.TextButton(
+                    onClick = { showDeleteDialog = false }
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }
 

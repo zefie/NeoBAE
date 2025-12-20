@@ -62,6 +62,7 @@ class MusicPlayerViewModel : ViewModel() {
         }
         
     var isCurrentPathIndexed by mutableStateOf(false)
+    var hasExactDatabase by mutableStateOf(false)
     
     val favorites = mutableStateListOf<String>() // Store file paths of favorited songs
     var showFullPlayer by mutableStateOf(false)
@@ -258,10 +259,12 @@ class MusicPlayerViewModel : ViewModel() {
     fun checkIfCurrentPathIndexed() {
         viewModelScope.launch(Dispatchers.IO) {
             val indexed = isPathIndexed(currentFolderPath)
+            val hasExact = hasExactDatabaseForCurrentPath()
             // Update the indexed file count for the current path's database
             val count = fileIndexer?.getIndexedFileCountForPath(currentFolderPath) ?: 0
             withContext(Dispatchers.Main) {
                 isCurrentPathIndexed = indexed
+                hasExactDatabase = hasExact
                 indexedFileCount = count
             }
         }
@@ -412,6 +415,34 @@ class MusicPlayerViewModel : ViewModel() {
     // Stop indexing
     fun stopIndexing() {
         fileIndexer?.cancelIndexing()
+    }
+    
+    // Check if current path exactly matches a database (not just a parent)
+    fun hasExactDatabaseForCurrentPath(): Boolean {
+        val path = currentFolderPath ?: return false
+        return database?.hasExactIndexForPath(path) ?: false
+    }
+    
+    // Delete database for the current path
+    fun deleteCurrentDatabase(onComplete: (Boolean) -> Unit) {
+        val path = currentFolderPath
+        if (path == null) {
+            onComplete(false)
+            return
+        }
+        
+        viewModelScope.launch(Dispatchers.IO) {
+            val success = database?.deleteDatabase(path) ?: false
+            if (success) {
+                // Update indexed file count
+                indexedFileCount = fileIndexer?.getIndexedFileCount() ?: 0
+                // Update current path indexed status
+                checkIfCurrentPathIndexed()
+            }
+            withContext(Dispatchers.Main) {
+                onComplete(success)
+            }
+        }
     }
     
     // Get indexer progress flow
