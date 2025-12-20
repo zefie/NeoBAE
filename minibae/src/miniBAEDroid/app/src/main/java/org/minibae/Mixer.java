@@ -18,6 +18,9 @@ public class Mixer
 	private static native long _newMixer();
 	private static native void _deleteMixer(long reference);
 	private static native int _openMixer(long reference, int sampleRate, int terpMode, int maxSongVoices, int maxSoundVoices, int mixLevel);
+	private static native int _disengageAudio(long reference);
+	private static native int _reengageAudio(long reference);
+	private static native int _isAudioEngaged(long reference);
 	
 	// keep static constructor private.
 	private Mixer(AssetManager assetManager)
@@ -46,6 +49,23 @@ public class Mixer
 			mMixer.mReference = 0L;
 			mMixer = null;
 		}
+	}
+
+	// Suspend/resume the hardware audio output without destroying the mixer.
+	// This keeps the loaded bank(s) resident while stopping the audio thread.
+	public static int disengageAudio() {
+		if (mMixer == null || mMixer.mReference == 0L) return -1;
+		return _disengageAudio(mMixer.mReference);
+	}
+
+	public static int reengageAudio() {
+		if (mMixer == null || mMixer.mReference == 0L) return -1;
+		return _reengageAudio(mMixer.mReference);
+	}
+
+	public static boolean isAudioEngaged() {
+		if (mMixer == null || mMixer.mReference == 0L) return false;
+		return _isAudioEngaged(mMixer.mReference) != 0;
 	}
 
 	public static Sound create()

@@ -112,6 +112,41 @@ JNIEXPORT jint JNICALL Java_org_minibae_Mixer__1openMixer
 	return (jint)err;
 }
 
+JNIEXPORT jint JNICALL Java_org_minibae_Mixer__1disengageAudio
+	(JNIEnv* env, jclass clazz, jlong reference)
+{
+	(void)env;
+	(void)clazz;
+	BAEMixer mixer = (BAEMixer)(intptr_t)reference;
+	if (!mixer) return (jint)BAE_PARAM_ERR;
+	return (jint)BAEMixer_DisengageAudio(mixer);
+}
+
+JNIEXPORT jint JNICALL Java_org_minibae_Mixer__1reengageAudio
+	(JNIEnv* env, jclass clazz, jlong reference)
+{
+	(void)env;
+	(void)clazz;
+	BAEMixer mixer = (BAEMixer)(intptr_t)reference;
+	if (!mixer) return (jint)BAE_PARAM_ERR;
+	return (jint)BAEMixer_ReengageAudio(mixer);
+}
+
+JNIEXPORT jint JNICALL Java_org_minibae_Mixer__1isAudioEngaged
+	(JNIEnv* env, jclass clazz, jlong reference)
+{
+	(void)env;
+	(void)clazz;
+	BAEMixer mixer = (BAEMixer)(intptr_t)reference;
+	if (!mixer) return 0;
+	BAE_BOOL engaged = FALSE;
+	if (BAEMixer_IsAudioEngaged(mixer, &engaged) != BAE_NO_ERROR)
+	{
+		return 0;
+	}
+	return engaged ? 1 : 0;
+}
+
 /* Mixer helper JNI wrappers */
 JNIEXPORT jint JNICALL Java_org_minibae_Mixer__1setDefaultReverb
     (JNIEnv* env, jclass clazz, jlong reference, jint reverbType)
@@ -467,37 +502,6 @@ JNIEXPORT jint JNICALL Java_org_minibae_Mixer__1addBankFromMemoryWithFilename
 	}
 
 	(*env)->ReleaseByteArrayElements(env, data, bytes, JNI_ABORT);
-	return (jint)br;
-}
-
-/*
- * Class:     org_minibae_Mixer
- * Method:    _addBuiltInPatches
- * Signature: ()I
- */
-JNIEXPORT jint JNICALL Java_org_minibae_Mixer__1addBuiltInPatches
-	(JNIEnv* env, jclass clazz, jlong reference)
-{
-	BAEMixer mixer = (BAEMixer)(intptr_t)reference;
-	if(!mixer) return -1;
-
-	BAEBankToken token = 0;
-	BAEMixer_UnloadBanks(mixer);
-#if USE_SF2_SUPPORT == TRUE && _USING_FLUIDSYNTH == TRUE
-	__android_log_print(ANDROID_LOG_DEBUG, "miniBAE", "SF2 support is enabled");
-	GM_UnloadSF2Soundfont();
-	GM_SetMixerSF2Mode(FALSE);
-#endif
-	BAEResult br = BAEMixer_LoadBuiltinBank(mixer, &token);
-	if(br == BAE_NO_ERROR){
-		char friendlyBuf[256] = "";
-		if(BAE_GetBankFriendlyName(mixer, token, friendlyBuf, (uint32_t)sizeof(friendlyBuf)) == BAE_NO_ERROR) {
-			strncpy(g_lastBankFriendly, friendlyBuf, sizeof(g_lastBankFriendly)-1);
-			g_lastBankFriendly[sizeof(g_lastBankFriendly)-1] = '\0';
-		} else {
-			g_lastBankFriendly[0] = '\0';
-		}
-	}
 	return (jint)br;
 }
 

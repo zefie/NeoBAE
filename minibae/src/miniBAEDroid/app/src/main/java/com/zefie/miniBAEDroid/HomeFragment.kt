@@ -1099,16 +1099,25 @@ class HomeFragment : Fragment() {
     
     private fun scheduleMixerCleanup() {
         mixerIdleJob?.cancel()
-        // Aggressively destroy mixer immediately
+
+        // Suspend audio output without destroying the mixer.
+        // This keeps the loaded bank(s) resident (fast track-to-track loads)
+        // while stopping the hardware audio thread (low idle CPU).
         if (Mixer.getMixer() != null) {
-            Mixer.delete()
-            android.util.Log.d("HomeFragment", "Mixer deleted immediately")
+            val r = Mixer.disengageAudio()
+            android.util.Log.d("HomeFragment", "Mixer audio disengaged (r=$r)")
         }
     }
 
     private fun cancelMixerCleanup() {
         mixerIdleJob?.cancel()
         mixerIdleJob = null
+
+        // If we previously suspended audio, resume it before starting playback.
+        if (Mixer.getMixer() != null) {
+            val r = Mixer.reengageAudio()
+            android.util.Log.d("HomeFragment", "Mixer audio reengaged (r=$r)")
+        }
     }
 
     private fun pausePlayback() {
@@ -1117,6 +1126,9 @@ class HomeFragment : Fragment() {
         }
         currentSong?.pause()
         currentSound?.pause()
+
+        // Paused playback should not keep the audio thread running.
+        scheduleMixerCleanup()
     }
     
     private fun resumePlayback() {

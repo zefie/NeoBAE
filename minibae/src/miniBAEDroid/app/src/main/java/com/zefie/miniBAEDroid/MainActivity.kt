@@ -466,6 +466,18 @@ class MainActivity : AppCompatActivity() {
 
     override fun onPause() {
         super.onPause()
+
+        // If the UI is going to background while nothing is playing, suspend the
+        // native audio output thread to avoid idle CPU burn. Do NOT do this while
+        // actively playing, or we'd break background playback via the service.
+        try {
+            val viewModel = androidx.lifecycle.ViewModelProvider(this)[MusicPlayerViewModel::class.java]
+            if (!viewModel.isPlaying && Mixer.getMixer() != null) {
+                val r = Mixer.disengageAudio()
+                android.util.Log.d("MainActivity", "Mixer audio disengaged onPause (r=$r)")
+            }
+        } catch (_: Exception) {
+        }
     }
 
     override fun onDestroy() {

@@ -669,6 +669,17 @@ JNIEXPORT jint JNICALL Java_org_minibae_Mixer__1loadFromMemory
 {
 	BAEMixer mixer = (BAEMixer)(intptr_t)mixerReference;
 	if(!mixer || !data || !resultObj) return (jint)BAE_PARAM_ERR;
+
+#if USE_SF2_SUPPORT == TRUE && _USING_FLUIDSYNTH == TRUE && USE_XMF_SUPPORT == TRUE
+	// If the previous song loaded an XMF embedded bank as a FluidSynth overlay,
+	// make sure it is unloaded before loading the next file. We keep the mixer
+	// alive for performance (bank caching), so we must explicitly clear overlays.
+	if (GM_SF2_HasXmfEmbeddedBank())
+	{
+		__android_log_print(ANDROID_LOG_DEBUG, "miniBAE", "Clearing prior XMF overlay soundfont before LoadFromMemory");
+		GM_UnloadXMFOverlaySoundFont();
+	}
+#endif
 	
 	jsize len = (*env)->GetArrayLength(env, data);
 	jbyte* bytes = (*env)->GetByteArrayElements(env, data, NULL);

@@ -31,6 +31,15 @@ JNIEXPORT void JNICALL Java_org_minibae_Mixer__1deleteMixer
 JNIEXPORT jint JNICALL Java_org_minibae_Mixer__1openMixer
   (JNIEnv *, jclass, jlong, jint, jint, jint, jint, jint);
 
+JNIEXPORT jint JNICALL Java_org_minibae_Mixer__1disengageAudio
+  (JNIEnv *, jclass, jlong);
+
+JNIEXPORT jint JNICALL Java_org_minibae_Mixer__1reengageAudio
+  (JNIEnv *, jclass, jlong);
+
+JNIEXPORT jint JNICALL Java_org_minibae_Mixer__1isAudioEngaged
+  (JNIEnv *, jclass, jlong);
+
 JNIEXPORT jint JNICALL Java_org_minibae_Mixer__1setDefaultReverb
   (JNIEnv *, jclass, jlong, jint);
 
