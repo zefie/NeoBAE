@@ -4250,6 +4250,10 @@ OPErr PV_ProcessMidiSequencerSlice(void *threadContext, GM_Song *pSong)
                 {
                     // reconfigure song and loop
                     PV_ConfigureMusic(pSong);
+#if REVERB_USED != REVERB_DISABLED
+                    // Restore reverb setting after loop
+                    GM_SetReverbType(pSong->defaultReverbType);
+#endif
                     stopSong = FALSE;
                 }
                 if (stopSong)
