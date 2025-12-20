@@ -545,6 +545,12 @@ class HomeFragment : Fragment() {
                     }
                 }
 
+                // Track last position we pushed to the system notification. This is separate from
+                // the in-app UI updates because the system needs an explicit PlaybackState update
+                // when position jumps backwards (e.g. internal BAE looping / baeloop).
+                var lastNotificationPositionMs by remember { mutableStateOf(0) }
+                var lastNotificationUpdateTimeMs by remember { mutableStateOf(0L) }
+
                 LaunchedEffect(viewModel.isPlaying, viewModel.isDraggingSeekBar) {
                     while (viewModel.isPlaying && !viewModel.isDraggingSeekBar) {
                         try {
@@ -552,6 +558,36 @@ class HomeFragment : Fragment() {
                             val len = getPlaybackLengthMs()
                             viewModel.currentPositionMs = pos
                             if (len > 0) viewModel.totalDurationMs = len
+
+                            // Keep system notification progress in sync without spamming updates.
+                            // Key case: when audio loops internally, position jumps back to ~0 but
+                            // the system UI will keep showing the old (near-end) position unless we
+                            // push a fresh PlaybackState.
+                            val nowMs = android.os.SystemClock.elapsedRealtime()
+                            val wrappedBackwards = pos + 500 < lastNotificationPositionMs
+                            val periodicUpdate = nowMs - lastNotificationUpdateTimeMs >= 1000
+
+                            if (wrappedBackwards || periodicUpdate) {
+                                val currentItem = viewModel.getCurrentItem()
+                                if (currentItem != null && (viewModel.isPlaying || viewModel.currentTitle != "No song loaded")) {
+                                    val folderName = viewModel.currentFolderPath?.let { path ->
+                                        File(path).name
+                                    } ?: "Unknown Folder"
+
+                                    (activity as? MainActivity)?.updateServiceNotification(
+                                        title = viewModel.currentTitle,
+                                        artist = folderName,
+                                        isPlaying = viewModel.isPlaying,
+                                        hasNext = viewModel.hasNext(),
+                                        hasPrevious = viewModel.hasPrevious(),
+                                        currentPosition = pos.toLong(),
+                                        duration = viewModel.totalDurationMs.toLong(),
+                                        fileExtension = currentItem.file.extension
+                                    )
+                                    lastNotificationPositionMs = pos
+                                    lastNotificationUpdateTimeMs = nowMs
+                                }
+                            }
                             
                             // Handle playback completion
                             var playbackFinished = false
@@ -610,8 +646,9 @@ class HomeFragment : Fragment() {
                     prefs.edit().putInt("repeat_mode", viewModel.repeatMode.ordinal).apply()
                 }
                 
-                // Update notification when playback state changes
-                LaunchedEffect(viewModel.isPlaying, viewModel.currentTitle, viewModel.currentIndex) {
+                // Update notification when playback state or track metadata changes
+                // (Include duration so the system progress bar end time updates when length becomes known.)
+                LaunchedEffect(viewModel.isPlaying, viewModel.currentTitle, viewModel.currentIndex, viewModel.totalDurationMs) {
                     val currentItem = viewModel.getCurrentItem()
                     if (currentItem != null && (viewModel.isPlaying || viewModel.currentTitle != "No song loaded")) {
                         val folderName = viewModel.currentFolderPath?.let { path ->
@@ -1124,6 +1161,27 @@ class HomeFragment : Fragment() {
     // Public method to handle seeks from notification media controls
     fun handleSeekFromNotification(ms: Int) {
         seekPlaybackToMs(ms)
+        viewModel.isDraggingSeekBar = false
+        viewModel.currentPositionMs = ms
+
+        // Push an immediate MediaSession/notification update so the system seek bar doesn't get stuck.
+        val currentItem = viewModel.getCurrentItem()
+        if (currentItem != null) {
+            val folderName = viewModel.currentFolderPath?.let { path ->
+                File(path).name
+            } ?: "Unknown Folder"
+
+            (activity as? MainActivity)?.updateServiceNotification(
+                title = viewModel.currentTitle,
+                artist = folderName,
+                isPlaying = viewModel.isPlaying,
+                hasNext = viewModel.hasNext(),
+                hasPrevious = viewModel.hasPrevious(),
+                currentPosition = ms.toLong(),
+                duration = viewModel.totalDurationMs.toLong(),
+                fileExtension = currentItem.file.extension
+            )
+        }
     }
     
     // Public methods for notification media controls
@@ -2678,6 +2736,7 @@ fun NewMusicPlayerScreen(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
+                    .padding(paddingValues)
                     .background(MaterialTheme.colors.background)
             ) {
                 BankBrowserScreen(

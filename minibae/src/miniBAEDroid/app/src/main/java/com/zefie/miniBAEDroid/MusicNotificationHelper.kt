@@ -81,6 +81,11 @@ class MusicNotificationHelper(private val context: Context) {
                 override fun onSeekTo(pos: Long) {
                     super.onSeekTo(pos)
                     android.util.Log.d("MusicNotificationHelper", "onSeekTo: $pos")
+
+                    // Immediately update PlaybackState to the new position.
+                    // Without this, some system UIs stop animating the progress bar after a user-driven seek.
+                    updatePlaybackState(currentIsPlaying, pos)
+
                     playbackCallback?.onSeek(pos)
                 }
                 
