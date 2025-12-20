@@ -980,6 +980,41 @@ class HomeFragment : Fragment() {
             viewModel.getCurrentItem()?.let { startPlayback(it.file) }
         }
     }
+
+    private fun reloadSelectedHsbBankForNewSongIfNeeded(targetFile: File) {
+        // Guard against intermittent bank unloads across track changes on Android.
+        // Only do this for MIDI-ish song types (banks don't affect decoded audio files).
+        val ext = targetFile.extension.lowercase()
+        val isSongType = ext in setOf("mid", "midi", "kar", "rmf", "xmf", "mxmf", "rmi")
+        if (!isSongType) return
+
+        if (Mixer.getMixer() == null) return
+
+        val prefs = requireContext().getSharedPreferences("miniBAE_prefs", Context.MODE_PRIVATE)
+        val lastBankPath = prefs.getString("last_bank_path", null)
+
+        // Treat missing preference as "builtin" (default bank is patches.hsb).
+        val bankKey = if (lastBankPath.isNullOrBlank()) "__builtin__" else lastBankPath
+
+        val r = when {
+            bankKey == "__builtin__" -> loadBuiltInPatchesFromAssets(requireContext())
+            bankKey.endsWith(".hsb", ignoreCase = true) -> {
+                val bankFile = File(bankKey)
+                if (bankFile.exists() && bankFile.isFile) {
+                    Mixer.addBankFromFile(bankFile.absolutePath)
+                } else {
+                    // If the configured HSB disappeared, fall back to built-in patches.
+                    loadBuiltInPatchesFromAssets(requireContext())
+                }
+            }
+            else -> return
+        }
+
+        android.util.Log.d(
+            "HomeFragment",
+            "HSB bank refresh before song load: bank=$bankKey result=$r"
+        )
+    }
     
     private fun startPlayback(file: File) {
         try {
@@ -993,6 +1028,8 @@ class HomeFragment : Fragment() {
                 Toast.makeText(requireContext(), "Mixer not available", Toast.LENGTH_SHORT).show()
                 return
             }
+
+            reloadSelectedHsbBankForNewSongIfNeeded(file)
             
             val bytes = file.readBytes()
             val loadResult = org.minibae.LoadResult()
