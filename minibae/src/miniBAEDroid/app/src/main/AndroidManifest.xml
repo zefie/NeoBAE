@@ -24,10 +24,74 @@
         android:theme="@style/Theme.MiniBAEDroid.NoActionBar">
         <activity android:name=".MainActivity"
             android:exported="true"
-            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden">
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
+            android:launchMode="singleTask">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            
+            <!-- File association for audio files -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="file" />
+                <data android:scheme="content" />
+                <data android:mimeType="audio/midi" />
+                <data android:mimeType="audio/x-midi" />
+                <data android:mimeType="audio/mid" />
+            </intent-filter>
+            
+            <!-- MIDI file extensions (lowercase) -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="file" />
+                <data android:scheme="content" />
+                <data android:host="*" />
+                <data android:pathPattern=".*\\.mid" />
+                <data android:pathPattern=".*\\.midi" />
+                <data android:pathPattern=".*\\.kar" />
+                <data android:pathPattern=".*\\.rmf" />
+                <data android:pathPattern=".*\\.xmf" />
+                <data android:pathPattern=".*\\.mxmf" />
+                <data android:pathPattern=".*\\.rmi" />
+            </intent-filter>
+            
+            <!-- MIDI file extensions (uppercase) -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="file" />
+                <data android:scheme="content" />
+                <data android:host="*" />
+                <data android:pathPattern=".*\\.MID" />
+                <data android:pathPattern=".*\\.MIDI" />
+                <data android:pathPattern=".*\\.KAR" />
+                <data android:pathPattern=".*\\.RMF" />
+                <data android:pathPattern=".*\\.XMF" />
+                <data android:pathPattern=".*\\.MXMF" />
+                <data android:pathPattern=".*\\.RMI" />
+            </intent-filter>
+            
+            <!-- MIDI file extensions (mixed case) -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="file" />
+                <data android:scheme="content" />
+                <data android:host="*" />
+                <data android:pathPattern=".*\\.Mid" />
+                <data android:pathPattern=".*\\.Midi" />
+                <data android:pathPattern=".*\\.Kar" />
+                <data android:pathPattern=".*\\.Rmf" />
+                <data android:pathPattern=".*\\.Xmf" />
+                <data android:pathPattern=".*\\.Mxmf" />
+                <data android:pathPattern=".*\\.Rmi" />
             </intent-filter>
         </activity>
         

@@ -84,6 +84,7 @@ class HomeFragment : Fragment() {
     private var pickedFolderUri: Uri? = null
     private lateinit var viewModel: MusicPlayerViewModel
     private var isAppInForeground = mutableStateOf(true)
+    private var pendingExternalUri: Uri? = null
     
     private val currentSong: Song?
         get() = (activity as? MainActivity)?.currentSong
@@ -354,6 +355,18 @@ class HomeFragment : Fragment() {
             android.util.Log.d("HomeFragment", "Calling reloadCurrentSongForBankSwap")
             reloadCurrentSongForBankSwap()
         }
+        
+        // Check for pending file URI from external intent
+        mainActivity?.consumePendingFileUri()?.let { uri ->
+            android.util.Log.d("HomeFragment", "Found pending file URI: $uri")
+            if (::viewModel.isInitialized) {
+                handleExternalFile(uri)
+            } else {
+                // Store for later when viewModel is ready
+                android.util.Log.d("HomeFragment", "ViewModel not ready, storing pending URI")
+                pendingExternalUri = uri
+            }
+        }
     }
     
     override fun onPause() {
@@ -460,6 +473,13 @@ class HomeFragment : Fragment() {
                     
                     if (viewModel.favorites.isEmpty()) {
                         loadFavorites()
+                    }
+                
+                    // Handle pending external file URI after viewModel is ready
+                    pendingExternalUri?.let { uri ->
+                        android.util.Log.d("HomeFragment", "Processing pending external URI: $uri")
+                        handleExternalFile(uri)
+                        pendingExternalUri = null
                     }
                 
                     // Register notification action callbacks
@@ -1057,6 +1077,131 @@ class HomeFragment : Fragment() {
         stopPlayback(delete = true)
         viewModel.isPlaying = false
         (activity as? MainActivity)?.playbackService?.stopForegroundService()
+    }
+    
+    fun handleExternalFile(uri: Uri) {
+        android.util.Log.d("HomeFragment", "handleExternalFile: $uri")
+        lifecycleScope.launch {
+            try {
+                // Get file info from the URI
+                val fileName = DocumentFile.fromSingleUri(requireContext(), uri)?.name ?: "Unknown"
+                val extension = fileName.substringAfterLast('.', "").lowercase()
+                
+                // Check if it's a supported MIDI format
+                val musicExtensions = getMusicExtensions()
+                if (!musicExtensions.contains(extension)) {
+                    requireActivity().runOnUiThread {
+                        Toast.makeText(requireContext(), "Unsupported file format: $extension", Toast.LENGTH_SHORT).show()
+                    }
+                    return@launch
+                }
+                
+                // Try to determine the parent folder path from the URI
+                val parentPath = when {
+                    uri.scheme == "file" -> {
+                        // Direct file:// URI - get parent directory
+                        val file = File(uri.path ?: "")
+                        file.parent
+                    }
+                    uri.scheme == "content" -> {
+                        // Content URI - try to extract path from URI structure
+                        // This is a best-effort approach for SAF URIs
+                        val path = uri.path ?: ""
+                        val uriString = uri.toString()
+                        android.util.Log.d("HomeFragment", "Content URI path: $path, full URI: $uriString")
+                        when {
+                            path.contains("/document/primary:") -> {
+                                // Primary storage - extract folder path
+                                val afterPrimary = path.substringAfter("/document/primary:")
+                                val folderPath = afterPrimary.substringBeforeLast('/', "")
+                                if (folderPath.isNotEmpty()) {
+                                    "/sdcard/$folderPath"
+                                } else {
+                                    "/sdcard"
+                                }
+                            }
+                            path.contains("/storage/emulated/0/") -> {
+                                // FX File Manager and similar - extract path directly
+                                val extractedPath = path.substringAfter("/storage/emulated/0/")
+                                val folderPath = extractedPath.substringBeforeLast('/', "")
+                                if (folderPath.isNotEmpty()) {
+                                    "/sdcard/$folderPath"
+                                } else {
+                                    "/sdcard"
+                                }
+                            }
+                            else -> null
+                        }
+                    }
+                    else -> null
+                }
+                
+                requireActivity().runOnUiThread {
+                    if (parentPath != null && File(parentPath).exists()) {
+                        // Navigate to the parent folder first
+                        android.util.Log.d("HomeFragment", "Loading folder: $parentPath")
+                        viewModel.currentScreen = NavigationScreen.HOME
+                        loadFolderContents(parentPath)
+                        
+                        // Wait a moment for folder to load, then find and play the file
+                        lifecycleScope.launch {
+                            delay(500) // Give time for folder to load
+                            
+                            // Find the file in the loaded folder
+                            val matchingFile = viewModel.folderFiles.find { 
+                                it.file.name == fileName
+                            }
+                            
+                            if (matchingFile != null) {
+                                android.util.Log.d("HomeFragment", "Found file in folder, playing: ${matchingFile.file.absolutePath}")
+                                playFileFromBrowser(matchingFile.file)
+                            } else {
+                                // Fallback: create temp file and play directly
+                                android.util.Log.d("HomeFragment", "File not found in folder, using temp file")
+                                playExternalFileDirectly(uri, fileName)
+                            }
+                        }
+                    } else {
+                        // Can't determine parent folder, play file directly as temp
+                        android.util.Log.d("HomeFragment", "Can't determine parent folder, playing directly")
+                        playExternalFileDirectly(uri, fileName)
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("HomeFragment", "Error handling external file: ${e.message}")
+                requireActivity().runOnUiThread {
+                    Toast.makeText(requireContext(), "Error opening file: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+    
+    private fun playExternalFileDirectly(uri: Uri, fileName: String) {
+        lifecycleScope.launch {
+            try {
+                requireContext().contentResolver.openInputStream(uri)?.use { inputStream ->
+                    // Read file into memory
+                    val bytes = inputStream.readBytes()
+                    val tempFile = File(requireContext().cacheDir, fileName)
+                    tempFile.writeBytes(bytes)
+                    
+                    // Play the file directly
+                    requireActivity().runOnUiThread {
+                        stopPlayback(delete = true)
+                        viewModel.clearPlaylist()
+                        val item = PlaylistItem(tempFile)
+                        viewModel.addToPlaylist(item)
+                        viewModel.playAtIndex(0)
+                        startPlayback(tempFile)
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("HomeFragment", "Error playing external file: ${e.message}")
+                requireActivity().runOnUiThread {
+                    Toast.makeText(requireContext(), "Error playing file: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
     }
     
     private fun hasActivePlayback(): Boolean {

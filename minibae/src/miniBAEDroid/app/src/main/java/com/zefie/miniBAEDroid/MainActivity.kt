@@ -174,6 +174,39 @@ class MainActivity : AppCompatActivity() {
         homeTab.setOnClickListener {
             supportFragmentManager.beginTransaction().replace(R.id.fragment_container, HomeFragment()).commit()
         }
+        
+        // Handle file opened from external app
+        handleIntent(intent)
+    }
+    
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleIntent(intent)
+    }
+    
+    private fun handleIntent(intent: android.content.Intent?) {
+        if (intent?.action == android.content.Intent.ACTION_VIEW) {
+            intent.data?.let { uri ->
+                android.util.Log.d("MainActivity", "File opened from external app: $uri")
+                // Pass the URI to HomeFragment for playback
+                val fragment = supportFragmentManager.findFragmentById(R.id.fragment_container)
+                if (fragment is HomeFragment) {
+                    fragment.handleExternalFile(uri)
+                } else {
+                    // Store URI for later if fragment isn't ready
+                    pendingFileUri = uri
+                }
+            }
+        }
+    }
+    
+    var pendingFileUri: Uri? = null
+    
+    fun consumePendingFileUri(): Uri? {
+        val uri = pendingFileUri
+        pendingFileUri = null
+        return uri
     }
     
     fun requestFolderPicker() {
