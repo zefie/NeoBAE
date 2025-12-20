@@ -69,23 +69,48 @@ class HomeFragment : Fragment() {
 
         private const val PREF_NAME = "miniBAE_prefs"
         private const val KEY_ENABLE_AUDIO_FILES = "enable_audio_files"
+        private const val KEY_ENABLED_EXTENSIONS = "enabled_extensions"
         
         // Valid music file extensions
-        private val MUSIC_EXTENSIONS_DEBUG = setOf("mid", "midi", "kar", "rmf", "xmf", "mxmf", "rmi")
-        private val AUDIO_EXTENSIONS = setOf("wav", "ogg", "flac", "au", "mp2", "mp3", "aif", "aiff")
-        private val MUSIC_EXTENSIONS_RELEASE = setOf("mid", "midi", "kar", "rmf", "xmf", "mxmf", "rmi")
+        private val MUSIC_EXTENSIONS_DEBUG = listOf("mid", "midi", "kar", "rmf", "xmf", "mxmf", "rmi")
+        private val AUDIO_EXTENSIONS = listOf("wav", "ogg", "flac", "au", "mp2", "mp3", "aif", "aiff")
+        private val MUSIC_EXTENSIONS_RELEASE = listOf("mid", "midi", "kar", "rmf", "xmf", "mxmf", "rmi")
         
         // Valid sound bank file extensions
         val BANK_EXTENSIONS = setOf("sf2", "hsb", "sf3", "sfo", "dls")
         
         // Get appropriate music extensions based on build type
         fun getMusicExtensions(context: Context): Set<String> {
-            val base = if (BuildConfig.DEBUG) MUSIC_EXTENSIONS_DEBUG else MUSIC_EXTENSIONS_RELEASE
+            val base = (if (BuildConfig.DEBUG) MUSIC_EXTENSIONS_DEBUG else MUSIC_EXTENSIONS_RELEASE).toSet()
+            val supported = base + AUDIO_EXTENSIONS
             val prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
-            return if (prefs.getBoolean(KEY_ENABLE_AUDIO_FILES, true)) {
-                base + AUDIO_EXTENSIONS
+            val saved = prefs.getStringSet(KEY_ENABLED_EXTENSIONS, null)
+            if (saved != null) {
+                return saved.map { it.lowercase() }.toSet().intersect(supported)
+            }
+
+            // Backwards-compat: fall back to the old audio toggle if the per-extension
+            // list hasn't been set yet.
+            val enableAudio = prefs.getBoolean(KEY_ENABLE_AUDIO_FILES, true)
+            return if (enableAudio) base + AUDIO_EXTENSIONS else base
+        }
+
+        fun getSupportedExtensionsForSettings(context: Context): List<String> {
+            val base = if (BuildConfig.DEBUG) MUSIC_EXTENSIONS_DEBUG else MUSIC_EXTENSIONS_RELEASE
+            return (base + AUDIO_EXTENSIONS).distinct()
+        }
+
+        fun getEnabledExtensionsForSettings(context: Context): Set<String> {
+            val prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+            val supported = getSupportedExtensionsForSettings(context).toSet()
+            val saved = prefs.getStringSet(KEY_ENABLED_EXTENSIONS, null)
+            return if (saved != null) {
+                saved.map { it.lowercase() }.toSet().intersect(supported)
             } else {
-                base
+                // Fallback to legacy toggle
+                val base = (if (BuildConfig.DEBUG) MUSIC_EXTENSIONS_DEBUG else MUSIC_EXTENSIONS_RELEASE).toSet()
+                val enableAudio = prefs.getBoolean(KEY_ENABLE_AUDIO_FILES, true)
+                if (enableAudio) base + AUDIO_EXTENSIONS else base
             }
         }
 
@@ -127,7 +152,7 @@ class HomeFragment : Fragment() {
     // velocityCurve is now in companion object
     private var exportCodec = mutableStateOf(2) // Default to OGG
     private var searchResultLimit = mutableStateOf(1000) // Default to 1000
-    private var enableAudioFiles = mutableStateOf(true)
+    private var enabledExtensions = mutableStateOf<Set<String>>(emptySet())
     
     // Bank browser state (completely separate from main browser)
     private var showBankBrowser = mutableStateOf(false)
@@ -455,7 +480,7 @@ class HomeFragment : Fragment() {
                     reverbType.value = prefs.getInt("default_reverb", 1)
                     velocityCurve.value = prefs.getInt("velocity_curve", 0)
                     exportCodec.value = prefs.getInt("export_codec", 2) // Default to OGG
-                    enableAudioFiles.value = prefs.getBoolean("enable_audio_files", true)
+                    enabledExtensions.value = getEnabledExtensionsForSettings(requireContext())
                     
                     // Initialize bank name
                     Thread {
@@ -683,7 +708,7 @@ class HomeFragment : Fragment() {
                         velocityCurve = velocityCurve.value,
                         exportCodec = exportCodec.value,
                         searchResultLimit = searchResultLimit.value,
-                        enableAudioFiles = enableAudioFiles.value,
+                        enabledExtensions = enabledExtensions.value,
                         onLoadBuiltin = {
                             loadBuiltInPatches()
                         },
@@ -713,10 +738,23 @@ class HomeFragment : Fragment() {
                             val prefs = requireContext().getSharedPreferences("miniBAE_prefs", Context.MODE_PRIVATE)
                             prefs.edit().putInt("search_result_limit", value).apply()
                         },
-                        onEnableAudioFilesChange = { enabled ->
-                            enableAudioFiles.value = enabled
+                        onExtensionEnabledChange = { ext, enabled ->
+                            val normalized = ext.lowercase()
+                            val next = enabledExtensions.value.toMutableSet()
+                            if (enabled) {
+                                next.add(normalized)
+                            } else {
+                                next.remove(normalized)
+                            }
+
                             val prefs = requireContext().getSharedPreferences("miniBAE_prefs", Context.MODE_PRIVATE)
-                            prefs.edit().putBoolean("enable_audio_files", enabled).apply()
+                            val anyAudioEnabled = next.any { AUDIO_EXTENSIONS.contains(it) }
+                            prefs.edit()
+                                .putStringSet(KEY_ENABLED_EXTENSIONS, next)
+                                .putBoolean(KEY_ENABLE_AUDIO_FILES, anyAudioEnabled)
+                                .apply()
+
+                            enabledExtensions.value = next
 
                             // Refresh folder listing so Home updates immediately
                             viewModel.currentFolderPath?.let { path ->
@@ -2202,13 +2240,13 @@ fun NewMusicPlayerScreen(
     velocityCurve: Int,
     exportCodec: Int,
     searchResultLimit: Int,
-    enableAudioFiles: Boolean,
+    enabledExtensions: Set<String>,
     onLoadBuiltin: () -> Unit,
     onReverbChange: (Int) -> Unit,
     onCurveChange: (Int) -> Unit,
     onExportCodecChange: (Int) -> Unit,
     onSearchLimitChange: (Int) -> Unit,
-    onEnableAudioFilesChange: (Boolean) -> Unit,
+    onExtensionEnabledChange: (String, Boolean) -> Unit,
     onExportRequest: (String, Int) -> Unit,
     onRefreshStorage: () -> Unit,
     onRepeatModeChange: () -> Unit,
@@ -2245,6 +2283,7 @@ fun NewMusicPlayerScreen(
                                 NavigationScreen.SEARCH -> "Search"
                                 NavigationScreen.FAVORITES -> "Favorites"
                                 NavigationScreen.SETTINGS -> "Settings"
+                                NavigationScreen.FILE_TYPES -> "Settings"
                             }
                         }
                         Text(
@@ -2279,6 +2318,7 @@ fun NewMusicPlayerScreen(
                                     "$count favorite${if (count != 1) "s" else ""}"
                                 }
                                 NavigationScreen.SETTINGS -> "Configure miniBAE"
+                                NavigationScreen.FILE_TYPES -> "Choose file types to enable"
                             }
                         }
                         Text(
@@ -2294,6 +2334,16 @@ fun NewMusicPlayerScreen(
                     // Close button for Bank Browser
                     if (showBankBrowser) {
                         IconButton(onClick = onBankBrowserClose) {
+                            Icon(
+                                Icons.Filled.Close,
+                                contentDescription = "Close",
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                    }
+                    // Close button for File Types page
+                    else if (!viewModel.showFullPlayer && viewModel.currentScreen == NavigationScreen.FILE_TYPES) {
+                        IconButton(onClick = { onNavigate(NavigationScreen.SETTINGS) }) {
                             Icon(
                                 Icons.Filled.Close,
                                 contentDescription = "Close",
@@ -2506,7 +2556,7 @@ fun NewMusicPlayerScreen(
                     )
                     BottomNavigationItem(
                         icon = { Icon(Icons.Filled.Settings, contentDescription = "Settings") },
-                        selected = !viewModel.showFullPlayer && viewModel.currentScreen == NavigationScreen.SETTINGS,
+                        selected = !viewModel.showFullPlayer && (viewModel.currentScreen == NavigationScreen.SETTINGS || viewModel.currentScreen == NavigationScreen.FILE_TYPES),
                         onClick = {
                             viewModel.showFullPlayer = false
                             onNavigate(NavigationScreen.SETTINGS)
@@ -2560,15 +2610,18 @@ fun NewMusicPlayerScreen(
                     velocityCurve = velocityCurve,
                     exportCodec = exportCodec,
                     searchResultLimit = searchResultLimit,
-                    enableAudioFiles = enableAudioFiles,
                     onLoadBuiltin = onLoadBuiltin,
                     onReverbChange = onReverbChange,
                     onCurveChange = onCurveChange,
                     onVolumeChange = onVolumeChange,
                     onExportCodecChange = onExportCodecChange,
                     onSearchLimitChange = onSearchLimitChange,
-                    onEnableAudioFilesChange = onEnableAudioFilesChange,
+                    onOpenFileTypes = { onNavigate(NavigationScreen.FILE_TYPES) },
                     onBrowseBanks = onBrowseBanks
+                )
+                NavigationScreen.FILE_TYPES -> FileTypesScreenContent(
+                    enabledExtensions = enabledExtensions,
+                    onExtensionEnabledChange = onExtensionEnabledChange
                 )
             }
         }
@@ -4139,14 +4192,13 @@ fun SettingsScreenContent(
     velocityCurve: Int,
     exportCodec: Int,
     searchResultLimit: Int,
-    enableAudioFiles: Boolean,
     onLoadBuiltin: () -> Unit,
     onReverbChange: (Int) -> Unit,
     onCurveChange: (Int) -> Unit,
     onVolumeChange: (Int) -> Unit,
     onExportCodecChange: (Int) -> Unit,
     onSearchLimitChange: (Int) -> Unit,
-    onEnableAudioFilesChange: (Boolean) -> Unit,
+    onOpenFileTypes: () -> Unit,
     onBrowseBanks: () -> Unit
 ) {
     val reverbOptions = listOf(
@@ -4451,7 +4503,7 @@ fun SettingsScreenContent(
             
             Spacer(modifier = Modifier.height(16.dp))
 
-        // Audio Files Section (full width in landscape)
+        // File Types entry (full width in landscape)
         Card(
             modifier = Modifier.fillMaxWidth(),
             elevation = 4.dp,
@@ -4470,33 +4522,28 @@ fun SettingsScreenContent(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "Audio Files",
+                        text = "File Types",
                         style = MaterialTheme.typography.h6,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colors.primary
                     )
                 }
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
+                Text(
+                    text = "Choose which file types appear in Home and Search",
+                    style = MaterialTheme.typography.caption,
+                    color = MaterialTheme.colors.onSurface.copy(alpha = 0.6f)
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Button(
+                    onClick = onOpenFileTypes,
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Enable Audio Files",
-                            style = MaterialTheme.typography.body1,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        Text(
-                            text = "Enable wav, ogg vorbis, flac, au, mp2 and mp3 audio files",
-                            style = MaterialTheme.typography.caption,
-                            color = MaterialTheme.colors.onSurface.copy(alpha = 0.6f)
-                        )
-                    }
-                    Switch(
-                        checked = enableAudioFiles,
-                        onCheckedChange = onEnableAudioFilesChange
-                    )
+                    Icon(Icons.Filled.Audiotrack, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Choose File Types")
                 }
             }
         }
@@ -4853,7 +4900,7 @@ fun SettingsScreenContent(
             
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Audio Files Section
+            // File Types entry
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 elevation = 4.dp,
@@ -4872,33 +4919,28 @@ fun SettingsScreenContent(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Audio Files",
+                            text = "File Types",
                             style = MaterialTheme.typography.h6,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colors.primary
                         )
                     }
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
+                    Text(
+                        text = "Choose which file types appear in Home",
+                        style = MaterialTheme.typography.caption,
+                        color = MaterialTheme.colors.onSurface.copy(alpha = 0.6f)
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Button(
+                        onClick = onOpenFileTypes,
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Enable Audio Files",
-                                style = MaterialTheme.typography.body1,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            Text(
-                                text = "Enable wav, ogg vorbis, flac, au, mp2 and mp3 audio files",
-                                style = MaterialTheme.typography.caption,
-                                color = MaterialTheme.colors.onSurface.copy(alpha = 0.6f)
-                            )
-                        }
-                        Switch(
-                            checked = enableAudioFiles,
-                            onCheckedChange = onEnableAudioFilesChange
-                        )
+                        Icon(Icons.Filled.Audiotrack, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Choose File Types")
                     }
                 }
             }
@@ -5077,6 +5119,71 @@ fun SettingsScreenContent(
                         style = MaterialTheme.typography.caption,
                         color = MaterialTheme.colors.onSurface.copy(alpha = 0.6f)
                     )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun FileTypesScreenContent(
+    enabledExtensions: Set<String>,
+    onExtensionEnabledChange: (String, Boolean) -> Unit
+) {
+    val scrollState = rememberScrollState()
+    val context = LocalContext.current
+    val supportedExtensions = remember { HomeFragment.getSupportedExtensionsForSettings(context) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(scrollState)
+            .padding(16.dp)
+    ) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            elevation = 4.dp,
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(bottom = 12.dp)
+                ) {
+                    Icon(
+                        Icons.Filled.Audiotrack,
+                        contentDescription = null,
+                        tint = MaterialTheme.colors.primary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "File Types",
+                        style = MaterialTheme.typography.h6,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colors.primary
+                    )
+                }
+
+                supportedExtensions.forEach { ext ->
+                    val checked = enabledExtensions.contains(ext)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp)
+                            .clickable { onExtensionEnabledChange(ext, !checked) },
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Checkbox(
+                            checked = checked,
+                            onCheckedChange = { onExtensionEnabledChange(ext, it) }
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = ".$ext",
+                            style = MaterialTheme.typography.body1
+                        )
+                    }
                 }
             }
         }

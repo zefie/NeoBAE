@@ -525,7 +525,7 @@ class MusicPlayerViewModel : ViewModel() {
 }
 
 enum class NavigationScreen {
-    HOME, SEARCH, FAVORITES, SETTINGS
+    HOME, SEARCH, FAVORITES, SETTINGS, FILE_TYPES
 }
 
 enum class RepeatMode {
