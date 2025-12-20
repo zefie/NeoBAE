@@ -303,7 +303,13 @@ const char *BAE_GetCompileInfo()
 #else
     snprintf(versionString, maxStrSize, "clang v%d.%d, emscripten v%d.%d", __clang_major__, __clang_minor__, __EMSCRIPTEN_major__, __EMSCRIPTEN_minor__);
 #endif
-#elif __clang_major_
+#elif __ANDROID__
+#ifdef __cplusplus
+    snprintf(versionString, maxStrSize, "clang++ v%d.%d, (Android NDK %d.%d, API %d)", __clang_major__, __clang_minor__, __NDK_MAJOR__, __NDK_MINOR__, __ANDROID_API__);
+#else
+    snprintf(versionString, maxStrSize, "clang v%d.%d (Android NDK %d.%d, API %d)", __clang_major__, __clang_minor__, __NDK_MAJOR__, __NDK_MINOR__, __ANDROID_API__);
+#endif
+#elif __clang_major__
 #ifdef __cplusplus
     snprintf(versionString, maxStrSize, "clang++ v%d.%d", __clang_major__, __clang_minor__);
 #else
@@ -314,12 +320,6 @@ const char *BAE_GetCompileInfo()
     snprintf(versionString, maxStrSize, "mingw32 v%d.%d (g++ v%d.%d)", __MINGW32_MAJOR_VERSION, __MINGW32_MINOR_VERSION, __GNUC__, __GNUC_MINOR__);
 #else
     snprintf(versionString, maxStrSize, "mingw32 v%d.%d (gcc v%d.%d)", __MINGW32_MAJOR_VERSION, __MINGW32_MINOR_VERSION, __GNUC__, __GNUC_MINOR__);
-#endif
-#elif __ANDROID__
-#ifdef __cplusplus
-    snprintf(versionString, maxStrSize, "g++ v%d.%d (Android NDK %d.%d)", __GNUC__, __GNUC_MINOR__, __NDK_MAJOR__, __NDK_MINOR__);
-#else
-    snprintf(versionString, maxStrSize, "gcc v%d.%d (Android NDK %d.%d)", __GNUC__, __GNUC_MINOR__, __NDK_MAJOR__, __NDK_MINOR__);
 #endif
 #elif __GNUC__
 #ifdef __cplusplus
