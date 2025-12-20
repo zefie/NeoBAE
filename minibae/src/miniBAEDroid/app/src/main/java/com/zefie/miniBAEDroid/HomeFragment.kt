@@ -4465,15 +4465,6 @@ fun FolderSongListItem(
                 )
             }
             
-            // Add to playlist button
-            IconButton(onClick = onAddToPlaylist) {
-                Icon(
-                    Icons.Filled.Add,
-                    contentDescription = "Add to playlist",
-                    tint = Color.Gray
-                )
-            }
-            
             // Favorite button
             IconButton(onClick = onToggleFavorite) {
                 Icon(
