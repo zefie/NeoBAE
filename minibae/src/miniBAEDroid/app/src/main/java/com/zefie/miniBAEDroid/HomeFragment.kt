@@ -4820,22 +4820,110 @@ fun BankBrowserScreen(
                 }
             }
             files.isEmpty() -> {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            Icons.Filled.FolderOpen,
-                            contentDescription = null,
-                            modifier = Modifier.size(64.dp),
-                            tint = Color.Gray
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text("No bank files in this folder", color = Color.Gray)
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            "Supported: .sf2, .sf3, .sfo, .hsb, .dls",
-                            fontSize = 12.sp,
-                            color = Color.Gray
-                        )
+                LazyColumn(modifier = Modifier.fillMaxSize()) {
+                    // Built-in Patches option at the top
+                    item {
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { 
+                                    onLoadBuiltin()
+                                    onClose()
+                                },
+                            color = MaterialTheme.colors.primary.copy(alpha = 0.05f)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    Icons.Filled.GetApp,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colors.secondary,
+                                    modifier = Modifier.size(40.dp)
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "Built-in Patches",
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colors.onBackground
+                                    )
+                                    Text(
+                                        text = "Beatnik Standard sound bank",
+                                        fontSize = 12.sp,
+                                        color = MaterialTheme.colors.onBackground.copy(alpha = 0.6f)
+                                    )
+                                }
+                                Icon(
+                                    Icons.AutoMirrored.Filled.ArrowForward,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colors.onBackground.copy(alpha = 0.4f)
+                                )
+                            }
+                        }
+                        Divider(color = Color.Gray.copy(alpha = 0.2f))
+                    }
+                    
+                    // Show parent directory ".." if not at root
+                    val file = File(currentPath)
+                    val parentPath = file.parent
+                    if (parentPath != null && currentPath != "/") {
+                        item {
+                            Surface(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onNavigate(parentPath) },
+                                color = Color.Transparent
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        Icons.Filled.Folder,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colors.onBackground.copy(alpha = 0.6f),
+                                        modifier = Modifier.size(40.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Text(
+                                        text = "..",
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colors.onBackground.copy(alpha = 0.6f)
+                                    )
+                                }
+                            }
+                            Divider(color = Color.Gray.copy(alpha = 0.2f))
+                        }
+                    }
+                    
+                    // Empty folder message
+                    item {
+                        Box(modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp), contentAlignment = Alignment.Center) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(
+                                    Icons.Filled.FolderOpen,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(64.dp),
+                                    tint = Color.Gray
+                                )
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Text("No bank files in this folder", color = Color.Gray)
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    "Supported: .sf2, .sf3, .sfo, .hsb, .dls",
+                                    fontSize = 12.sp,
+                                    color = Color.Gray
+                                )
+                            }
+                        }
                     }
                 }
             }

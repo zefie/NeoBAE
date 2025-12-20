@@ -2209,7 +2209,7 @@ INLINE static void PV_ServeInstruments(void)
             for (si = 0; si < MAX_SONGS; ++si)
             {
                 GM_Song *song = pMixer->pSongsToPlay[si];
-                if (song && (GM_IsSF2Song(song) || GM_SF2_HasXmfEmbeddedBank(song)))
+                if (song && (GM_IsSF2Song(song) || GM_SF2_HasXmfEmbeddedBank()))
                 {
                     GM_SF2_RenderAudioSlice(song, (int32_t *)pMixer->songBufferDry, pMixer->One_Loop);
                 }
@@ -2244,7 +2244,7 @@ INLINE static void PV_ServeInstruments(void)
             for (si = 0; si < MAX_SONGS; ++si)
             {
                 GM_Song *song = pMixer->pSongsToPlay[si];
-                if (song && (GM_IsSF2Song(song) || GM_SF2_HasXmfEmbeddedBank(song)))
+                if (song && (GM_IsSF2Song(song) || GM_SF2_HasXmfEmbeddedBank()))
                 {
                     GM_SF2_RenderAudioSlice(song, (int32_t *)pMixer->songBufferDry, pMixer->One_Loop);
                 }
