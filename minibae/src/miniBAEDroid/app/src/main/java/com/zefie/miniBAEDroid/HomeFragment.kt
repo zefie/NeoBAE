@@ -67,7 +67,8 @@ import androidx.lifecycle.lifecycleScope
 class HomeFragment : Fragment() {
 
     companion object {
-        var velocityCurve = mutableStateOf(0)
+        // Default to the 2nd option ("Peaky S Curve" in the UI)
+        var velocityCurve = mutableStateOf(1)
 
         private const val PREF_NAME = "miniBAE_prefs"
         private const val KEY_ENABLE_AUDIO_FILES = "enable_audio_files"
@@ -486,7 +487,7 @@ class HomeFragment : Fragment() {
                     
                     // Load saved settings
                     reverbType.value = prefs.getInt("default_reverb", 1)
-                    velocityCurve.value = prefs.getInt("velocity_curve", 0)
+                    velocityCurve.value = prefs.getInt("velocity_curve", 1) // Default to 2nd option
                     exportCodec.value = prefs.getInt("export_codec", 2) // Default to OGG
                     enabledExtensions.value = getEnabledExtensionsForSettings(requireContext())
                     

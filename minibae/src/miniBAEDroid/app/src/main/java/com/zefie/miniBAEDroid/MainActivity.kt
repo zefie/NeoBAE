@@ -291,7 +291,7 @@ class MainActivity : AppCompatActivity() {
             // Restore user settings (prefs are authoritative here)
             val prefs = getSharedPreferences("miniBAE_prefs", Context.MODE_PRIVATE)
             val reverbType = prefs.getInt("default_reverb", 1)
-            val velocityCurve = prefs.getInt("velocity_curve", 0)
+            val velocityCurve = prefs.getInt("velocity_curve", 1)
             val volumePercent = prefs.getInt("volume_percent", viewModel.volumePercent)
 
             Mixer.setMasterVolumePercent(volumePercent)
