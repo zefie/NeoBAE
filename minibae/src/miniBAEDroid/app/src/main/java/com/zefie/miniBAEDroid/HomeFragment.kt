@@ -26,6 +26,7 @@ import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.background
 import androidx.compose.material.*
@@ -79,6 +80,8 @@ class HomeFragment : Fragment() {
         private const val PREF_NAME = "miniBAE_prefs"
         private const val KEY_ENABLE_AUDIO_FILES = "enable_audio_files"
         private const val KEY_ENABLED_EXTENSIONS = "enabled_extensions"
+        private const val KEY_HOME_SORT_MODE = "home_sort_mode"
+        private const val KEY_SEARCH_SORT_MODE = "search_sort_mode"
         
         // Valid music file extensions
         private val MUSIC_EXTENSIONS_DEBUG = listOf("mid", "midi", "kar", "rmf", "xmf", "mxmf", "rmi")
@@ -596,6 +599,14 @@ class HomeFragment : Fragment() {
                 LaunchedEffect(Unit) {
                     val prefs = requireContext().getSharedPreferences("miniBAE_prefs", Context.MODE_PRIVATE)
                     viewModel.volumePercent = prefs.getInt("volume_percent", 75)
+
+                    // Restore sort modes
+                    viewModel.homeSortMode = runCatching {
+                        SortMode.valueOf(prefs.getString(KEY_HOME_SORT_MODE, SortMode.NAME_ASC.name) ?: SortMode.NAME_ASC.name)
+                    }.getOrDefault(SortMode.NAME_ASC)
+                    viewModel.searchSortMode = runCatching {
+                        SortMode.valueOf(prefs.getString(KEY_SEARCH_SORT_MODE, SortMode.NAME_ASC.name) ?: SortMode.NAME_ASC.name)
+                    }.getOrDefault(SortMode.NAME_ASC)
                     
                     // Load saved settings
                     reverbType.value = prefs.getInt("default_reverb", 1)
@@ -2962,7 +2973,16 @@ fun NewMusicPlayerScreen(
 
                         // Sort icon (left of trash can)
                         IconButton(
-                            onClick = { viewModel.cycleSearchSortMode() },
+                            onClick = {
+                                viewModel.cycleSearchSortMode()
+                                try {
+                                    context.getSharedPreferences("miniBAE_prefs", Context.MODE_PRIVATE)
+                                        .edit()
+                                        .putString("search_sort_mode", viewModel.searchSortMode.name)
+                                        .apply()
+                                } catch (_: Exception) {
+                                }
+                            },
                             enabled = !isLoadingBank
                         ) {
                             SortModeIcon(viewModel.searchSortMode)
@@ -3040,7 +3060,16 @@ fun NewMusicPlayerScreen(
                     // Sort button for Home screen (placed where Search has the reindex control)
                     else if (!viewModel.showFullPlayer && viewModel.currentScreen == NavigationScreen.HOME) {
                         IconButton(
-                            onClick = { viewModel.cycleHomeSortMode() },
+                            onClick = {
+                                viewModel.cycleHomeSortMode()
+                                try {
+                                    context.getSharedPreferences("miniBAE_prefs", Context.MODE_PRIVATE)
+                                        .edit()
+                                        .putString("home_sort_mode", viewModel.homeSortMode.name)
+                                        .apply()
+                                } catch (_: Exception) {
+                                }
+                            },
                             enabled = !isLoadingBank
                         ) {
                             SortModeIcon(viewModel.homeSortMode)
@@ -4396,6 +4425,7 @@ fun HomeScreenContent(
     onAddAllMidi: () -> Unit,
     onAddAllMidiRecursive: () -> Unit
 ) {
+    val listState = rememberLazyListState()
     var refreshing by remember { mutableStateOf(false) }
     val refreshScope = rememberCoroutineScope()
     val pullRefreshState = rememberPullRefreshState(
@@ -4434,6 +4464,22 @@ fun HomeScreenContent(
         derivedStateOf { viewModel.getCurrentItem()?.file?.absolutePath }
     }
     val isPlaying by remember { derivedStateOf { viewModel.isPlaying } }
+
+    // If a song is playing and the user changes sort, jump to the current song in the list.
+    LaunchedEffect(viewModel.homeSortMode) {
+        if (!viewModel.isPlaying) return@LaunchedEffect
+
+        val currentPath = viewModel.getCurrentItem()?.file?.absolutePath ?: return@LaunchedEffect
+        if (songFiles.isEmpty()) return@LaunchedEffect
+
+        val idxInSongs = songFiles.indexOfFirst { it.file.absolutePath == currentPath }
+        if (idxInSongs < 0) return@LaunchedEffect
+
+        val currentFolderPath = viewModel.currentFolderPath
+        val hasParentItem = currentFolderPath != null && currentFolderPath != "/" && File(currentFolderPath).parent != null
+        val baseOffset = (if (hasParentItem) 1 else 0) + folderAndSpecialItems.size
+        listState.animateScrollToItem((baseOffset + idxInSongs).coerceAtLeast(0))
+    }
     
     Column(modifier = Modifier.fillMaxSize()) {
         // File list
@@ -4467,6 +4513,8 @@ fun HomeScreenContent(
                         modifier = Modifier
                             .fillMaxSize()
                             .pullRefresh(pullRefreshState)
+                        ,
+                        state = listState
                     ) {
                     // Show parent directory ".." option
                     viewModel.currentFolderPath?.let { currentPath ->
@@ -4607,6 +4655,7 @@ fun SearchScreenContent(
     searchResultLimit: Int
 ) {
     val context = LocalContext.current
+    val listState = rememberLazyListState()
     val indexingProgress by viewModel.getIndexingProgress()?.collectAsState() ?: remember { mutableStateOf(IndexingProgress()) }
     val searchResults by viewModel.searchResults.collectAsState()
     val sortedSearchResults by remember {
@@ -4620,6 +4669,16 @@ fun SearchScreenContent(
         derivedStateOf { viewModel.getCurrentItem()?.file?.absolutePath }
     }
     val isPlaying by remember { derivedStateOf { viewModel.isPlaying } }
+
+    // If a song is playing and the user changes sort, jump to the current song in the list.
+    LaunchedEffect(viewModel.searchSortMode) {
+        if (!viewModel.isPlaying) return@LaunchedEffect
+        val currentPath = viewModel.getCurrentItem()?.file?.absolutePath ?: return@LaunchedEffect
+        val idx = sortedSearchResults.indexOfFirst { it.file.absolutePath == currentPath }
+        if (idx >= 0) {
+            listState.animateScrollToItem(idx)
+        }
+    }
     
     // Initialize database on first composition
     LaunchedEffect(Unit) {
@@ -4804,7 +4863,7 @@ fun SearchScreenContent(
                     }
                 } else {
                     // Show all results
-                    LazyColumn(modifier = Modifier.fillMaxSize()) {
+                    LazyColumn(modifier = Modifier.fillMaxSize(), state = listState) {
                         itemsIndexed(sortedSearchResults) { index, item ->
                             FolderSongListItem(
                                 item = item,
@@ -4842,7 +4901,7 @@ fun SearchScreenContent(
             }
             else -> {
                 // Show results with count
-                LazyColumn(modifier = Modifier.fillMaxSize()) {
+                LazyColumn(modifier = Modifier.fillMaxSize(), state = listState) {
                     itemsIndexed(sortedSearchResults) { index, item ->
                         FolderSongListItem(
                             item = item,
