@@ -600,6 +600,48 @@ JNIEXPORT jint JNICALL Java_org_minibae_Song__1getSongVolume
 	return 0;
 }
 
+JNIEXPORT jint JNICALL Java_org_minibae_Song__1muteChannel
+	(JNIEnv* env, jclass clazz, jlong songReference, jint channel)
+{
+	BAESong song = (BAESong)(intptr_t)songReference;
+	if(!song) return (jint)BAE_PARAM_ERR;
+	if(channel < 0 || channel > 15) return (jint)BAE_PARAM_ERR;
+	return (jint)BAESong_MuteChannel(song, (uint16_t)channel);
+}
+
+JNIEXPORT jint JNICALL Java_org_minibae_Song__1unmuteChannel
+	(JNIEnv* env, jclass clazz, jlong songReference, jint channel)
+{
+	BAESong song = (BAESong)(intptr_t)songReference;
+	if(!song) return (jint)BAE_PARAM_ERR;
+	if(channel < 0 || channel > 15) return (jint)BAE_PARAM_ERR;
+	return (jint)BAESong_UnmuteChannel(song, (uint16_t)channel);
+}
+
+JNIEXPORT jbyteArray JNICALL Java_org_minibae_Song__1getChannelMuteStatus
+	(JNIEnv* env, jclass clazz, jlong songReference)
+{
+	BAESong song = (BAESong)(intptr_t)songReference;
+	if(!song) return NULL;
+
+	BAE_BOOL status[16];
+	memset(status, 0, sizeof(status));
+	BAEResult r = BAESong_GetChannelMuteStatus(song, status);
+	if(r != BAE_NO_ERROR) {
+		return NULL;
+	}
+
+	jbyteArray out = (*env)->NewByteArray(env, 16);
+	if(!out) return NULL;
+
+	jbyte tmp[16];
+	for(int i = 0; i < 16; i++) {
+		tmp[i] = status[i] ? 1 : 0;
+	}
+	(*env)->SetByteArrayRegion(env, out, 0, 16, tmp);
+	return out;
+}
+
 // Export functionality
 JNIEXPORT jint JNICALL Java_org_minibae_Mixer__1startOutputToFile
 	(JNIEnv* env, jclass clazz, jlong mixerReference, jstring filePath, jint outputType, jint compressionType)

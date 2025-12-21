@@ -880,6 +880,25 @@ class HomeFragment : Fragment() {
                             }
                             saveFilePicker.launch(intent)
                         },
+                        getMidiChannelMuteStatus = {
+                            try {
+                                currentSong?.getChannelMuteStatus() ?: viewModel.getMidiChannelMuteStatus()
+                            } catch (_: Exception) {
+                                viewModel.getMidiChannelMuteStatus()
+                            }
+                        },
+                        onSetMidiChannelMuted = { channel, muted ->
+                            try {
+                                viewModel.setMidiChannelMuted(channel, muted)
+                                currentSong?.let { song ->
+                                    if (muted) {
+                                        song.muteChannel(channel)
+                                    } else {
+                                        song.unmuteChannel(channel)
+                                    }
+                                }
+                            } catch (_: Exception) {}
+                        },
                         onRefreshStorage = { 
                             checkStoragePermissions()
                             viewModel.currentFolderPath?.let { path ->
@@ -1134,6 +1153,10 @@ class HomeFragment : Fragment() {
                             }
                             val loopCount = if (viewModel.repeatMode == RepeatMode.SONG) 32767 else 0
                             song.setLoops(loopCount)                                          
+
+                            // Reapply MIDI channel mutes on (re)start
+                            applyMidiChannelMuteState(song)
+
                             viewModel.isPlaying = true
                             viewModel.currentTitle = file.nameWithoutExtension
                         } else {
@@ -1198,6 +1221,19 @@ class HomeFragment : Fragment() {
 
         currentSong?.setVolumePercent(basePercent)
         currentSound?.setVolumePercent(basePercent)
+    }
+
+    private fun applyMidiChannelMuteState(song: Song) {
+        try {
+            for (channel in 0 until 16) {
+                val muted = !viewModel.midiChannelEnabled[channel]
+                if (muted) {
+                    song.muteChannel(channel)
+                } else {
+                    song.unmuteChannel(channel)
+                }
+            }
+        } catch (_: Exception) {}
     }
     
     // Helper functions to handle both Song and Sound uniformly
@@ -2469,6 +2505,9 @@ class HomeFragment : Fragment() {
                         if (startResult != 0) {
                             throw Exception("Failed to start song for export (err=$startResult)")
                         }
+
+                        // Reapply MIDI channel mutes after restarting song for export
+                        currentSong?.let { applyMidiChannelMuteState(it) }
                         
                         android.util.Log.d("HomeFragment", "Song started, letting first audio callback settle...")
                         
@@ -2716,6 +2755,8 @@ fun NewMusicPlayerScreen(
     onSearchLimitChange: (Int) -> Unit,
     onExtensionEnabledChange: (String, Boolean) -> Unit,
     onExportRequest: (String, Int) -> Unit,
+    getMidiChannelMuteStatus: () -> BooleanArray?,
+    onSetMidiChannelMuted: (Int, Boolean) -> Unit,
     onRefreshStorage: () -> Unit,
     onRepeatModeChange: () -> Unit,
     onAddAllMidi: () -> Unit,
@@ -3143,6 +3184,8 @@ fun NewMusicPlayerScreen(
                 onToggleFavorite = onToggleFavorite,
                 exportCodec = exportCodec,
                 onExportRequest = onExportRequest,
+                getMidiChannelMuteStatus = getMidiChannelMuteStatus,
+                onSetMidiChannelMuted = onSetMidiChannelMuted,
                 onRepeatModeChange = onRepeatModeChange
             )
         }
@@ -3284,6 +3327,8 @@ fun FullPlayerScreen(
     onToggleFavorite: (String) -> Unit,
     exportCodec: Int,
     onExportRequest: (String, Int) -> Unit,
+    getMidiChannelMuteStatus: () -> BooleanArray?,
+    onSetMidiChannelMuted: (Int, Boolean) -> Unit,
     onRepeatModeChange: () -> Unit
 ) {
     val currentPositionMs = viewModel.currentPositionMs
@@ -3319,6 +3364,8 @@ fun FullPlayerScreen(
             onToggleFavorite = onToggleFavorite,
             exportCodec = exportCodec,
             onExportRequest = onExportRequest,
+            getMidiChannelMuteStatus = getMidiChannelMuteStatus,
+            onSetMidiChannelMuted = onSetMidiChannelMuted,
             onRepeatModeChange = onRepeatModeChange
         )
     } else {
@@ -3339,6 +3386,8 @@ fun FullPlayerScreen(
             onToggleFavorite = onToggleFavorite,
             exportCodec = exportCodec,
             onExportRequest = onExportRequest,
+            getMidiChannelMuteStatus = getMidiChannelMuteStatus,
+            onSetMidiChannelMuted = onSetMidiChannelMuted,
             onRepeatModeChange = onRepeatModeChange
         )
     }
@@ -3362,6 +3411,8 @@ private fun PortraitPlayerLayout(
     onToggleFavorite: (String) -> Unit,
     exportCodec: Int,
     onExportRequest: (String, Int) -> Unit,
+    getMidiChannelMuteStatus: () -> BooleanArray?,
+    onSetMidiChannelMuted: (Int, Boolean) -> Unit,
     onRepeatModeChange: () -> Unit
 ) {
     Column(
@@ -3408,6 +3459,12 @@ private fun PortraitPlayerLayout(
                         tint = if (isExportEnabled) MaterialTheme.colors.onBackground else Color.Gray
                     )
                 }
+
+                MidiChannelMuteButton(
+                    enabled = !isSoundFile,
+                    getMidiChannelMuteStatus = getMidiChannelMuteStatus,
+                    onSetMidiChannelMuted = onSetMidiChannelMuted
+                )
             }
             
             // Favorite button
@@ -3697,6 +3754,124 @@ private fun PortraitPlayerLayout(
 }
 
 @Composable
+private fun MidiChannelMuteButton(
+    enabled: Boolean,
+    getMidiChannelMuteStatus: () -> BooleanArray?,
+    onSetMidiChannelMuted: (Int, Boolean) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val channelEnabled = remember { mutableStateListOf<Boolean>().apply { repeat(16) { add(true) } } }
+    val configuration = androidx.compose.ui.platform.LocalConfiguration.current
+    val columns = if (configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) 6 else 3
+
+    LaunchedEffect(expanded) {
+        if (expanded) {
+            val status = getMidiChannelMuteStatus()
+            if (status != null && status.size >= 16) {
+                for (i in 0 until 16) {
+                    channelEnabled[i] = !status[i]
+                }
+            } else {
+                for (i in 0 until 16) {
+                    channelEnabled[i] = true
+                }
+            }
+        }
+    }
+
+    Box {
+        IconButton(
+            onClick = { expanded = true },
+            enabled = enabled
+        ) {
+            Icon(
+                Icons.Filled.GraphicEq,
+                contentDescription = "MIDI Channels",
+                tint = if (enabled) MaterialTheme.colors.onBackground else Color.Gray
+            )
+        }
+
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            Column(
+                modifier = Modifier
+                    .padding(12.dp)
+                    .widthIn(min = if (columns == 6) 360.dp else 220.dp)
+            ) {
+                for (rowStart in 0 until 16 step columns) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        for (col in 0 until columns) {
+                            val channel = rowStart + col
+                            if (channel < 16) {
+                                val checked = channelEnabled[channel]
+                                Row(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .padding(end = if (col < columns - 1) 8.dp else 0.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Checkbox(
+                                        checked = checked,
+                                        onCheckedChange = { nextChecked ->
+                                            channelEnabled[channel] = nextChecked
+                                            onSetMidiChannelMuted(channel, !nextChecked)
+                                        }
+                                    )
+                                    Text(
+                                        text = "Ch ${channel + 1}",
+                                        color = MaterialTheme.colors.onSurface
+                                    )
+                                }
+                            } else {
+                                Spacer(modifier = Modifier.weight(1f))
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Button(
+                        onClick = {
+                            for (channel in 0 until 16) {
+                                channelEnabled[channel] = true
+                                onSetMidiChannelMuted(channel, false)
+                            }
+                        },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("All")
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Button(
+                        onClick = {
+                            for (channel in 0 until 16) {
+                                val nextChecked = !channelEnabled[channel]
+                                channelEnabled[channel] = nextChecked
+                                onSetMidiChannelMuted(channel, !nextChecked)
+                            }
+                        },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Invert")
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun LandscapePlayerLayout(
     viewModel: MusicPlayerViewModel,
     currentPositionMs: Int,
@@ -3714,6 +3889,8 @@ private fun LandscapePlayerLayout(
     onToggleFavorite: (String) -> Unit,
     exportCodec: Int,
     onExportRequest: (String, Int) -> Unit,
+    getMidiChannelMuteStatus: () -> BooleanArray?,
+    onSetMidiChannelMuted: (Int, Boolean) -> Unit,
     onRepeatModeChange: () -> Unit
 ) {
     Column(
@@ -3759,6 +3936,12 @@ private fun LandscapePlayerLayout(
                         tint = if (isExportEnabled) MaterialTheme.colors.onBackground else Color.Gray
                     )
                 }
+
+                MidiChannelMuteButton(
+                    enabled = !isSoundFile,
+                    getMidiChannelMuteStatus = getMidiChannelMuteStatus,
+                    onSetMidiChannelMuted = onSetMidiChannelMuted
+                )
             }
             
             // Favorite button

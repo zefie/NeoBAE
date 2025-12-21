@@ -26,6 +26,9 @@ public class Song
 	private static native int _setSongVelocityCurve(long songReference, int curve);
 	private static native boolean _isSF2Song(long songReference);
 	private static native boolean _hasEmbeddedBank(long songReference);
+	private static native int _muteChannel(long songReference, int channel);
+	private static native int _unmuteChannel(long songReference, int channel);
+	private static native byte[] _getChannelMuteStatus(long songReference);
 
 	private static native long _setMetaEventCallback(long songReference, MetaEventListener listener);
 	private static native void _cleanupMetaEventCallback(long callbackRef);
@@ -140,6 +143,20 @@ public class Song
 	public int setVelocityCurve(int curve) { return _setSongVelocityCurve(mReference, curve); }
 	public boolean isSF2Song() { return _isSF2Song(mReference); }
 	public boolean hasEmbeddedBank() { return _hasEmbeddedBank(mReference); }
+
+	// MIDI channel mute controls (0..15)
+	public int muteChannel(int channel) { return _muteChannel(mReference, channel); }
+	public int unmuteChannel(int channel) { return _unmuteChannel(mReference, channel); }
+	// Returns true for channels that are muted; null if unavailable.
+	public boolean[] getChannelMuteStatus() {
+		byte[] status = _getChannelMuteStatus(mReference);
+		if (status == null || status.length < 16) return null;
+		boolean[] out = new boolean[16];
+		for (int i = 0; i < 16; i++) {
+			out[i] = status[i] != 0;
+		}
+		return out;
+	}
 	
 	// Additional methods for export functionality
 	public boolean isPlaying() {

@@ -92,6 +92,22 @@ class MusicPlayerViewModel : ViewModel() {
     var repeatMode by mutableStateOf(RepeatMode.NONE)
     var isShuffled by mutableStateOf(false)
     private var shuffledIndices = mutableListOf<Int>()
+
+    // MIDI channel mutes (checked = enabled/unmuted in UI)
+    val midiChannelEnabled = mutableStateListOf<Boolean>().apply { repeat(16) { add(true) } }
+
+    fun setMidiChannelMuted(channel: Int, muted: Boolean) {
+        if (channel !in 0 until 16) return
+        midiChannelEnabled[channel] = !muted
+    }
+
+    fun getMidiChannelMuteStatus(): BooleanArray {
+        val muted = BooleanArray(16)
+        for (i in 0 until 16) {
+            muted[i] = !midiChannelEnabled[i]
+        }
+        return muted
+    }
     
     fun toggleShuffle() {
         isShuffled = !isShuffled
