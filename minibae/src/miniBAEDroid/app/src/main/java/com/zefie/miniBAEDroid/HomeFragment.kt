@@ -84,16 +84,15 @@ class HomeFragment : Fragment() {
         private const val KEY_SEARCH_SORT_MODE = "search_sort_mode"
         
         // Valid music file extensions
-        private val MUSIC_EXTENSIONS_DEBUG = listOf("mid", "midi", "kar", "rmf", "xmf", "mxmf", "rmi")
         private val AUDIO_EXTENSIONS = listOf("wav", "ogg", "flac", "au", "mp2", "mp3", "aif", "aiff")
-        private val MUSIC_EXTENSIONS_RELEASE = listOf("mid", "midi", "kar", "rmf", "xmf", "mxmf", "rmi")
+        private val SONG_EXTENSIONS = listOf("mid", "midi", "kar", "rmf", "xmf", "mxmf", "rmi")
         
         // Valid sound bank file extensions
         val BANK_EXTENSIONS = setOf("sf2", "hsb", "sf3", "sfo", "dls")
         
         // Get appropriate music extensions based on build type
         fun getMusicExtensions(context: Context): Set<String> {
-            val base = (if (BuildConfig.DEBUG) MUSIC_EXTENSIONS_DEBUG else MUSIC_EXTENSIONS_RELEASE).toSet()
+            val base = SONG_EXTENSIONS.toSet()
             val supported = base + AUDIO_EXTENSIONS
             val prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
             val saved = prefs.getStringSet(KEY_ENABLED_EXTENSIONS, null)
@@ -108,22 +107,8 @@ class HomeFragment : Fragment() {
         }
 
         fun getSupportedExtensionsForSettings(context: Context): List<String> {
-            val base = if (BuildConfig.DEBUG) MUSIC_EXTENSIONS_DEBUG else MUSIC_EXTENSIONS_RELEASE
+            val base = SONG_EXTENSIONS
             return (base + AUDIO_EXTENSIONS).distinct()
-        }
-
-        fun getEnabledExtensionsForSettings(context: Context): Set<String> {
-            val prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
-            val supported = getSupportedExtensionsForSettings(context).toSet()
-            val saved = prefs.getStringSet(KEY_ENABLED_EXTENSIONS, null)
-            return if (saved != null) {
-                saved.map { it.lowercase() }.toSet().intersect(supported)
-            } else {
-                // Fallback to legacy toggle
-                val base = (if (BuildConfig.DEBUG) MUSIC_EXTENSIONS_DEBUG else MUSIC_EXTENSIONS_RELEASE).toSet()
-                val enableAudio = prefs.getBoolean(KEY_ENABLE_AUDIO_FILES, true)
-                if (enableAudio) base + AUDIO_EXTENSIONS else base
-            }
         }
 
         fun isSoundExtension(extension: String): Boolean {
@@ -612,7 +597,7 @@ class HomeFragment : Fragment() {
                     reverbType.value = prefs.getInt("default_reverb", 1)
                     velocityCurve.value = prefs.getInt("velocity_curve", 1) // Default to 2nd option
                     exportCodec.value = prefs.getInt("export_codec", 2) // Default to OGG
-                    enabledExtensions.value = getEnabledExtensionsForSettings(requireContext())
+                    enabledExtensions.value = getMusicExtensions(requireContext())
                     
                     // Initialize bank name
                     Thread {
@@ -2219,7 +2204,7 @@ class HomeFragment : Fragment() {
         isLoadingBank.value = true
         showBankBrowser.value = false
         Thread {
-            var loadStatus: Int? = null
+            var loadStatus = -1
             try {
                 val originalName = file.name
                 val prefs = requireContext().getSharedPreferences("miniBAE_prefs", Context.MODE_PRIVATE)
@@ -2333,7 +2318,8 @@ class HomeFragment : Fragment() {
                 postToMain {
                     // If bank load succeeded and we reloaded a MIDI Song, MainActivity decides whether to
                     // keep playing based on viewModel.isPlaying. For audio Sounds (or failures), resume here.
-                    val shouldResumeHere = wasPlaying && (currentSound != null || (loadStatus != null && loadStatus != 0))
+                    val bankLoadFailed = loadStatus != 0
+                    val shouldResumeHere = wasPlaying && (currentSound != null || bankLoadFailed)
                     if (shouldResumeHere && Mixer.getMixer() != null && isAdded) {
                         try {
                             resumePlayback()
@@ -2379,7 +2365,7 @@ class HomeFragment : Fragment() {
         isLoadingBank.value = true
         Thread {
             val prefs = requireContext().getSharedPreferences("miniBAE_prefs", Context.MODE_PRIVATE)
-            var loadStatus: Int? = null
+            var loadStatus = -1
             
             // If mixer doesn't exist, just save the preference for lazy loading
             if (Mixer.getMixer() == null) {
@@ -2474,7 +2460,8 @@ class HomeFragment : Fragment() {
                     context?.let { Toast.makeText(it, "Failed to load built-in patches (err=$r)", Toast.LENGTH_SHORT).show() }
                 }
 
-                val shouldResumeHere = wasPlaying && (currentSound != null || (loadStatus != null && loadStatus != 0))
+                val bankLoadFailed = loadStatus != 0
+                val shouldResumeHere = wasPlaying && (currentSound != null || bankLoadFailed)
                 if (shouldResumeHere && Mixer.getMixer() != null && isAdded) {
                     try {
                         resumePlayback()
@@ -5215,7 +5202,7 @@ private fun formatFileSize(bytes: Long): String {
         unitIndex++
     }
     return if (unitIndex == 0) {
-        "${bytes.toLong()} ${units[unitIndex]}"
+        "${bytes} ${units[unitIndex]}"
     } else {
         String.format("%.1f %s", value, units[unitIndex])
     }
@@ -5259,7 +5246,7 @@ private fun SortModeIcon(sortMode: SortMode) {
 
         Box(modifier = Modifier.size(24.dp)) {
             Icon(
-                Icons.Filled.Sort,
+                Icons.AutoMirrored.Filled.Sort,
                 contentDescription = description,
                 modifier = Modifier.align(Alignment.Center)
             )
