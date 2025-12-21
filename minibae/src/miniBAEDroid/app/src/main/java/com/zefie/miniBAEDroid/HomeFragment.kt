@@ -2759,11 +2759,10 @@ fun NewMusicPlayerScreen(
                                     val searchResults by viewModel.searchResults.collectAsState()
                                     val resultCount = searchResults.size
                                     val totalResults = viewModel.indexedFileCount
-                                    val limitText = if (searchResultLimit == -1) "all" else "$searchResultLimit"
                                     if (resultCount == 0) {
                                         "No results"
                                     } else {
-                                        "Showing $resultCount of $totalResults result${if (totalResults != 1) "s" else ""} (max $limitText)"
+                                        "Showing $resultCount of $totalResults result${if (totalResults != 1) "s" else ""}"
                                     }
                                 }
                                 NavigationScreen.FAVORITES -> {
@@ -2807,6 +2806,14 @@ fun NewMusicPlayerScreen(
                     // Build Index button for Search screen
                     else if (!viewModel.showFullPlayer && viewModel.currentScreen == NavigationScreen.SEARCH) {
                         val indexingProgress by viewModel.getIndexingProgress()?.collectAsState() ?: remember { mutableStateOf(IndexingProgress()) }
+
+                        // Sort icon (left of trash can)
+                        IconButton(
+                            onClick = { viewModel.cycleSearchSortMode() },
+                            enabled = !isLoadingBank
+                        ) {
+                            SortModeIcon(viewModel.searchSortMode)
+                        }
                         
                         // Delete database icon (trash can) - only enabled when current folder exactly matches a database
                         // Read directly from observable state in ViewModel
@@ -2851,6 +2858,16 @@ fun NewMusicPlayerScreen(
                                 contentDescription = if (indexingProgress.isIndexing) "Stop Indexing" else "Build Index",
                                 tint = if (indexingProgress.isIndexing) MaterialTheme.colors.error else MaterialTheme.colors.onSurface
                             )
+                        }
+                    }
+
+                    // Sort button for Home screen (placed where Search has the reindex control)
+                    else if (!viewModel.showFullPlayer && viewModel.currentScreen == NavigationScreen.HOME) {
+                        IconButton(
+                            onClick = { viewModel.cycleHomeSortMode() },
+                            enabled = !isLoadingBank
+                        ) {
+                            SortModeIcon(viewModel.homeSortMode)
                         }
                     }
                 },
@@ -4057,7 +4074,10 @@ fun HomeScreenContent(
         derivedStateOf { folderFilesSnapshot.filter { it.isFolder || it.title.startsWith("🔄") } }
     }
     val songFiles by remember {
-        derivedStateOf { folderFilesSnapshot.filter { !it.isFolder && !it.title.startsWith("🔄") } }
+        derivedStateOf {
+            val base = folderFilesSnapshot.filter { !it.isFolder && !it.title.startsWith("🔄") }
+            sortPlaylistItems(base, viewModel.homeSortMode)
+        }
     }
     val favoritesSet by remember {
         derivedStateOf { viewModel.favorites.toSet() }
@@ -4235,6 +4255,9 @@ fun SearchScreenContent(
     val context = LocalContext.current
     val indexingProgress by viewModel.getIndexingProgress()?.collectAsState() ?: remember { mutableStateOf(IndexingProgress()) }
     val searchResults by viewModel.searchResults.collectAsState()
+    val sortedSearchResults by remember {
+        derivedStateOf { sortPlaylistItems(searchResults, viewModel.searchSortMode) }
+    }
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
     
@@ -4409,7 +4432,7 @@ fun SearchScreenContent(
             }
             viewModel.searchQuery.isEmpty() -> {
                 // Show all files when nothing typed
-                if (searchResults.isEmpty()) {
+                if (sortedSearchResults.isEmpty()) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Icon(Icons.Filled.Search, contentDescription = null, modifier = Modifier.size(64.dp), tint = Color.Gray)
@@ -4422,7 +4445,7 @@ fun SearchScreenContent(
                 } else {
                     // Show all results
                     LazyColumn(modifier = Modifier.fillMaxSize()) {
-                        itemsIndexed(searchResults) { index, item ->
+                        itemsIndexed(sortedSearchResults) { index, item ->
                             FolderSongListItem(
                                 item = item,
                                 isFavorite = viewModel.isFavorite(item.path),
@@ -4430,7 +4453,7 @@ fun SearchScreenContent(
                                 onToggleFavorite = { onToggleFavorite(item.path) },
                                 onAddToPlaylist = { onAddToPlaylist(item.file) }
                             )
-                            if (index < searchResults.size - 1) {
+                            if (index < sortedSearchResults.size - 1) {
                                 Divider(color = Color.Gray.copy(alpha = 0.2f))
                             }
                         }
@@ -4443,7 +4466,7 @@ fun SearchScreenContent(
                     CircularProgressIndicator()
                 }
             }
-            searchResults.isEmpty() -> {
+            sortedSearchResults.isEmpty() -> {
                 // No results found
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -4458,7 +4481,7 @@ fun SearchScreenContent(
             else -> {
                 // Show results with count
                 LazyColumn(modifier = Modifier.fillMaxSize()) {
-                    itemsIndexed(searchResults) { index, item ->
+                    itemsIndexed(sortedSearchResults) { index, item ->
                         FolderSongListItem(
                             item = item,
                             isFavorite = viewModel.isFavorite(item.path),
@@ -4466,7 +4489,7 @@ fun SearchScreenContent(
                             onToggleFavorite = { onToggleFavorite(item.path) },
                             onAddToPlaylist = { onAddToPlaylist(item.file) }
                         )
-                        if (index < searchResults.size - 1) {
+                        if (index < sortedSearchResults.size - 1) {
                             Divider(color = Color.Gray.copy(alpha = 0.2f))
                         }
                     }
@@ -4754,6 +4777,59 @@ private fun formatFileSize(bytes: Long): String {
         "${bytes.toLong()} ${units[unitIndex]}"
     } else {
         String.format("%.1f %s", value, units[unitIndex])
+    }
+}
+
+private fun sortPlaylistItems(items: List<PlaylistItem>, sortMode: SortMode): List<PlaylistItem> {
+    if (items.size <= 1) return items
+
+    fun safeSize(item: PlaylistItem): Long {
+        return runCatching { item.file.length() }.getOrDefault(-1L)
+    }
+
+    return when (sortMode) {
+        SortMode.NAME_ASC -> items.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.title })
+        SortMode.NAME_DESC -> items.sortedWith(compareByDescending(String.CASE_INSENSITIVE_ORDER) { it.title })
+        SortMode.SIZE_ASC -> items.sortedWith(compareBy<PlaylistItem>({ safeSize(it) }, { it.title.lowercase() }))
+        SortMode.SIZE_DESC -> items.sortedWith(compareByDescending<PlaylistItem> { safeSize(it) }.thenBy { it.title.lowercase() })
+    }
+}
+
+@Composable
+private fun SortModeIcon(sortMode: SortMode) {
+    val (label, arrow, description) = when (sortMode) {
+        SortMode.NAME_ASC -> Triple("Name", Icons.Filled.ArrowUpward, "Sort filename A-Z")
+        SortMode.NAME_DESC -> Triple("Name", Icons.Filled.ArrowDownward, "Sort filename Z-A")
+        SortMode.SIZE_ASC -> Triple("Size", Icons.Filled.ArrowUpward, "Sort size low to high")
+        SortMode.SIZE_DESC -> Triple("Size", Icons.Filled.ArrowDownward, "Sort size high to low")
+    }
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Text(
+            text = label,
+            fontSize = 9.sp,
+            lineHeight = 9.sp,
+            color = MaterialTheme.colors.onSurface.copy(alpha = 0.75f),
+            maxLines = 1
+        )
+
+        Box(modifier = Modifier.size(24.dp)) {
+            Icon(
+                Icons.Filled.Sort,
+                contentDescription = description,
+                modifier = Modifier.align(Alignment.Center)
+            )
+            Icon(
+                arrow,
+                contentDescription = null,
+                modifier = Modifier
+                    .size(12.dp)
+                    .align(Alignment.BottomEnd)
+            )
+        }
     }
 }
 

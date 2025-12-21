@@ -17,6 +17,22 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
+enum class SortMode {
+    NAME_ASC,
+    NAME_DESC,
+    SIZE_ASC,
+    SIZE_DESC
+}
+
+private fun nextSortMode(current: SortMode): SortMode {
+    return when (current) {
+        SortMode.NAME_ASC -> SortMode.NAME_DESC
+        SortMode.NAME_DESC -> SortMode.SIZE_ASC
+        SortMode.SIZE_ASC -> SortMode.SIZE_DESC
+        SortMode.SIZE_DESC -> SortMode.NAME_ASC
+    }
+}
+
 @Stable
 class MusicPlayerViewModel : ViewModel() {
     // Playlist
@@ -55,6 +71,10 @@ class MusicPlayerViewModel : ViewModel() {
     // Navigation state
     var currentScreen by mutableStateOf(NavigationScreen.HOME)
     var searchQuery by mutableStateOf("")
+
+    // Sorting
+    var homeSortMode by mutableStateOf(SortMode.NAME_ASC)
+    var searchSortMode by mutableStateOf(SortMode.NAME_ASC)
     
     private val _currentFolderPath = mutableStateOf<String?>(null)
     var currentFolderPath: String?
@@ -91,6 +111,14 @@ class MusicPlayerViewModel : ViewModel() {
             // Clear shuffle order
             shuffledIndices.clear()
         }
+    }
+
+    fun cycleHomeSortMode() {
+        homeSortMode = nextSortMode(homeSortMode)
+    }
+
+    fun cycleSearchSortMode() {
+        searchSortMode = nextSortMode(searchSortMode)
     }
     
     private fun getNextIndex(): Int? {
