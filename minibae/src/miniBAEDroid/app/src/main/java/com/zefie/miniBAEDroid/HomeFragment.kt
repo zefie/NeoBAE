@@ -138,6 +138,27 @@ class HomeFragment : Fragment() {
     private fun postToMain(block: () -> Unit) {
         mainHandler.post(block)
     }
+
+    private fun <T> runOnMainSync(block: () -> T): T {
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            return block()
+        }
+        val latch = java.util.concurrent.CountDownLatch(1)
+        val result = java.util.concurrent.atomic.AtomicReference<T>()
+        val error = java.util.concurrent.atomic.AtomicReference<Throwable?>()
+        postToMain {
+            try {
+                result.set(block())
+            } catch (t: Throwable) {
+                error.set(t)
+            } finally {
+                latch.countDown()
+            }
+        }
+        latch.await()
+        error.get()?.let { throw it }
+        return result.get()
+    }
     
     private val currentSong: Song?
         get() = (activity as? MainActivity)?.currentSong
@@ -175,6 +196,9 @@ class HomeFragment : Fragment() {
     private var bankBrowserLoading = mutableStateOf(false)
     
     private val karaokeHandler = KaraokeHandler()
+
+    // Prevent overlapping bank swap operations (mixer teardown/recreate is not re-entrant).
+    private val bankSwapInProgress = java.util.concurrent.atomic.AtomicBoolean(false)
 
     private inner class KaraokeHandler : Song.MetaEventListener {
         private val currentLine = StringBuilder()
@@ -329,7 +353,10 @@ class HomeFragment : Fragment() {
     }
 
     fun reloadCurrentSongForBankSwap() {
-        (activity as? MainActivity)?.reloadCurrentSongForBankSwap()
+        // Ensure the reload (which may open the mixer) happens on the main thread.
+        postToMain {
+            (activity as? MainActivity)?.reloadCurrentSongForBankSwap()
+        }
     }
     
     private fun checkStoragePermissions() {
@@ -1976,6 +2003,14 @@ class HomeFragment : Fragment() {
     }
     
     private fun loadBankFromFile(file: File) {
+        if (!bankSwapInProgress.compareAndSet(false, true)) {
+            // Avoid re-entrant bank loads if the user taps too quickly.
+            postToMain {
+                context?.let { Toast.makeText(it, "Bank swap already in progress", Toast.LENGTH_SHORT).show() }
+            }
+            return
+        }
+
         val bankBytes = runCatching { file.length() }.getOrDefault(0L)
         if (bankBytes >= BANK_SIZE_LIMIT_BYTES) {
             showBankBrowser.value = false
@@ -1985,10 +2020,12 @@ class HomeFragment : Fragment() {
                     Toast.makeText(it, "Bank too large to load (>= 4 GB)", Toast.LENGTH_SHORT).show()
                 }
             }
+            bankSwapInProgress.set(false)
             return
         }
 
         val wasPlaying = viewModel.isPlaying
+        val hadSong = currentSong != null
         // Preserve the playback intent across mixer teardown/recreate.
         (activity as? MainActivity)?.pendingBankReloadResume = wasPlaying
 
@@ -2028,6 +2065,7 @@ class HomeFragment : Fragment() {
                         currentBankName.value = originalName
                         isLoadingBank.value = false
                     }
+                    bankSwapInProgress.set(false)
                     return@Thread
                 }
                 
@@ -2048,12 +2086,35 @@ class HomeFragment : Fragment() {
                         }
                     }
 
-                    try {
-                        Mixer.delete()
+                    val status = try {
+                        runOnMainSync {
+                            try {
+                                Mixer.delete()
+                            } catch (_: Exception) {
+                            }
+                            val s = Mixer.create(requireActivity().assets, 44100, 2, 64, 8, 64)
+                            if (s == 0) {
+                                Mixer.setNativeCacheDir(requireContext().cacheDir.absolutePath)
+                                try {
+                                    Mixer.setDefaultReverb(reverbType.value)
+                                    Mixer.setDefaultVelocityCurve(velocityCurve.value)
+                                } catch (_: Exception) {
+                                }
+                                try {
+                                    applyVolume()
+                                } catch (_: Exception) {
+                                }
+                                try {
+                                    Mixer.reengageAudio()
+                                } catch (_: Exception) {
+                                }
+                            }
+                            s
+                        }
                     } catch (_: Exception) {
+                        -1
                     }
 
-                    val status = Mixer.create(requireActivity().assets, 44100, 2, 64, 8, 64)
                     if (status != 0) {
                         loadStatus = status
                         postToMain {
@@ -2061,18 +2122,6 @@ class HomeFragment : Fragment() {
                             context?.let { Toast.makeText(it, "Failed to recreate mixer (err=$status)", Toast.LENGTH_SHORT).show() }
                         }
                         return@Thread
-                    }
-
-                    // Restore critical settings on the new mixer
-                    Mixer.setNativeCacheDir(requireContext().cacheDir.absolutePath)
-                    try {
-                        Mixer.setDefaultReverb(reverbType.value)
-                        Mixer.setDefaultVelocityCurve(velocityCurve.value)
-                    } catch (_: Exception) {
-                    }
-                    try {
-                        applyVolume()
-                    } catch (_: Exception) {
                     }
                 }
 
@@ -2088,10 +2137,19 @@ class HomeFragment : Fragment() {
                         context?.let { Toast.makeText(it, "Loaded: $originalName", Toast.LENGTH_SHORT).show() }
                     }
                     
-                    // Hot-swap: only Songs need reload (Sounds don't use banks)
-                    if (currentSong != null) {
-                        reloadCurrentSongForBankSwap()
-                    }
+                        // Hot-swap: only Songs need reload (Sounds don't use banks)
+                        // For HSB swaps we may have torn down the mixer and cleared currentSong,
+                        // so use the pre-swap state.
+                        if (hadSong) {
+                            // If playback was active, force audio thread on before reload/resume.
+                            if (wasPlaying) {
+                                try {
+                                    Mixer.reengageAudio()
+                                } catch (_: Exception) {
+                                }
+                            }
+                            reloadCurrentSongForBankSwap()
+                        }
                 } else {
                     postToMain {
                         currentBankName.value = "Failed to load: $originalName"
@@ -2115,12 +2173,21 @@ class HomeFragment : Fragment() {
                     }
                     isLoadingBank.value = false
                 }
+                bankSwapInProgress.set(false)
             }
         }.start()
     }
     
     private fun loadBuiltInPatches() {
+        if (!bankSwapInProgress.compareAndSet(false, true)) {
+            postToMain {
+                context?.let { Toast.makeText(it, "Bank swap already in progress", Toast.LENGTH_SHORT).show() }
+            }
+            return
+        }
+
         val wasPlaying = viewModel.isPlaying
+        val hadSong = currentSong != null
         // Built-in patches may trigger a mixer teardown; preserve whether we should resume.
         (activity as? MainActivity)?.pendingBankReloadResume = wasPlaying
 
@@ -2153,6 +2220,7 @@ class HomeFragment : Fragment() {
                     context?.let { Toast.makeText(it, "Built-in patches will load when playback starts", Toast.LENGTH_SHORT).show() }
                     isLoadingBank.value = false
                 }
+                bankSwapInProgress.set(false)
                 return@Thread
             }
             
@@ -2172,12 +2240,35 @@ class HomeFragment : Fragment() {
                     }
                 }
 
-                try {
-                    Mixer.delete()
+                val status = try {
+                    runOnMainSync {
+                        try {
+                            Mixer.delete()
+                        } catch (_: Exception) {
+                        }
+                        val s = Mixer.create(requireActivity().assets, 44100, 2, 64, 8, 64)
+                        if (s == 0) {
+                            Mixer.setNativeCacheDir(requireContext().cacheDir.absolutePath)
+                            try {
+                                Mixer.setDefaultReverb(reverbType.value)
+                                Mixer.setDefaultVelocityCurve(velocityCurve.value)
+                            } catch (_: Exception) {
+                            }
+                            try {
+                                applyVolume()
+                            } catch (_: Exception) {
+                            }
+                            try {
+                                Mixer.reengageAudio()
+                            } catch (_: Exception) {
+                            }
+                        }
+                        s
+                    }
                 } catch (_: Exception) {
+                    -1
                 }
 
-                val status = Mixer.create(requireActivity().assets, 44100, 2, 64, 8, 64)
                 if (status != 0) {
                     loadStatus = status
                     postToMain {
@@ -2186,17 +2277,6 @@ class HomeFragment : Fragment() {
                         isLoadingBank.value = false
                     }
                     return@Thread
-                }
-
-                Mixer.setNativeCacheDir(requireContext().cacheDir.absolutePath)
-                try {
-                    Mixer.setDefaultReverb(reverbType.value)
-                    Mixer.setDefaultVelocityCurve(velocityCurve.value)
-                } catch (_: Exception) {
-                }
-                try {
-                    applyVolume()
-                } catch (_: Exception) {
                 }
             }
 
@@ -2209,7 +2289,14 @@ class HomeFragment : Fragment() {
                     prefs.edit().putString("last_bank_path", "__builtin__").apply()
                     
                     // Hot-swap: only Songs need reload (Sounds don't use banks)
-                    if (currentSong != null) {
+                    // Built-in patches are HSB; we may have cleared currentSong during teardown.
+                    if (hadSong) {
+                        if (wasPlaying) {
+                            try {
+                                Mixer.reengageAudio()
+                            } catch (_: Exception) {
+                            }
+                        }
                         reloadCurrentSongForBankSwap()
                     }
                     
@@ -2228,6 +2315,8 @@ class HomeFragment : Fragment() {
                 }
                 isLoadingBank.value = false
             }
+
+            bankSwapInProgress.set(false)
         }.start()
     }
     

@@ -25,6 +25,13 @@ class MainActivity : AppCompatActivity() {
     var pendingBankReloadPositionMs = 0
     var currentSong: org.minibae.Song? = null
     var currentSound: org.minibae.Sound? = null
+
+    // Bank swaps can schedule delayed resume/seek callbacks (SF2 workaround). If the user swaps banks
+    // again before the callback fires, we must cancel/ignore the stale callback to avoid calling into
+    // a Song that has been stopped/closed or whose mixer was recreated.
+    private val bankSwapHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    @Volatile private var bankSwapGeneration: Long = 0
+    private var pendingBankSwapRunnable: Runnable? = null
     
     // Service binding
     var playbackService: MediaPlaybackService? = null
@@ -231,7 +238,19 @@ class MainActivity : AppCompatActivity() {
     }
     
     fun reloadCurrentSongForBankSwap() {
+        // Mixer open/close and Song (re)load must be serialized on the main thread.
+        // Rapid bank swaps can otherwise race native audio device acquisition.
+        if (android.os.Looper.myLooper() != android.os.Looper.getMainLooper()) {
+            runOnUiThread { reloadCurrentSongForBankSwap() }
+            return
+        }
+
         android.util.Log.d("MainActivity", "reloadCurrentSongForBankSwap called")
+
+        // Invalidate any pending delayed callbacks from a previous swap.
+        bankSwapGeneration += 1
+        pendingBankSwapRunnable?.let { bankSwapHandler.removeCallbacks(it) }
+        pendingBankSwapRunnable = null
         
         // Get the ViewModel from the ViewModelStore
         val viewModel = androidx.lifecycle.ViewModelProvider(this)[MusicPlayerViewModel::class.java]
@@ -274,6 +293,16 @@ class MainActivity : AppCompatActivity() {
                     return
                 }
                 Mixer.setNativeCacheDir(cacheDir.absolutePath)
+            }
+
+            // During bank swaps, HomeFragment pauses playback and suspends the audio output thread
+            // via Mixer.disengageAudio(). If we intend to resume after reload, we must re-enable it
+            // here or the Song/Sound may "play" silently.
+            if (wasPlaying) {
+                try {
+                    Mixer.reengageAudio()
+                } catch (_: Exception) {
+                }
             }
 
             val bytes = currentItem.file.readBytes()
@@ -338,28 +367,65 @@ class MainActivity : AppCompatActivity() {
                 val loopCount = if (viewModel.repeatMode == RepeatMode.SONG) 32767 else 0
                 song.setLoops(loopCount)
 
-                if (savedPosition > 0) {
-                    Thread.sleep(100)
-                    song.seekToMs(savedPosition)
-                    viewModel.currentPositionMs = savedPosition
-                }
-
                 if (song.isSF2Song()) {
                     // Workaround for Fluidsynth drop: pause + delayed resume.
                     song.pause()
                     song.seekToMs(0)
                     if (wasPlaying) {
-                        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                        val localGen = bankSwapGeneration
+                        val runnable = Runnable {
+                            // Ignore if another bank swap happened.
+                            if (localGen != bankSwapGeneration) return@Runnable
+                            // Ignore if the current Song changed or was torn down.
+                            if (currentSong !== song) return@Runnable
+                            if (Mixer.getMixer() == null) return@Runnable
+
                             try {
+                                try {
+                                    Mixer.reengageAudio()
+                                } catch (_: Exception) {
+                                }
                                 song.resume()
                             } catch (_: Exception) {
+                                return@Runnable
                             }
-                        }, 250)
+
+                            // Restore position *after* the SF2 resume workaround.
+                            if (savedPosition > 0) {
+                                bankSwapHandler.postDelayed({
+                                    if (localGen != bankSwapGeneration) return@postDelayed
+                                    if (currentSong !== song) return@postDelayed
+                                    if (Mixer.getMixer() == null) return@postDelayed
+                                    try {
+                                        song.seekToMs(savedPosition)
+                                        viewModel.currentPositionMs = savedPosition
+                                    } catch (_: Exception) {
+                                    }
+                                }, 50)
+                            }
+                        }
+
+                        pendingBankSwapRunnable = runnable
+                        bankSwapHandler.postDelayed(runnable, 250)
                         viewModel.isPlaying = true
                     } else {
+                        // Keep paused, but restore the user's previous position.
+                        if (savedPosition > 0) {
+                            try {
+                                song.seekToMs(savedPosition)
+                                viewModel.currentPositionMs = savedPosition
+                            } catch (_: Exception) {
+                            }
+                        }
                         viewModel.isPlaying = false
                     }
                 } else {
+                    // Non-SF2: seek is stable without the pause/resume workaround.
+                    if (savedPosition > 0) {
+                        Thread.sleep(100)
+                        song.seekToMs(savedPosition)
+                        viewModel.currentPositionMs = savedPosition
+                    }
                     if (wasPlaying) {
                         viewModel.isPlaying = true
                     } else {
