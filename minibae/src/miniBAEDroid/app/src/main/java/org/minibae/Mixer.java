@@ -99,7 +99,6 @@ public class Mixer
 	private static native int _setMasterVolume(long reference, int fixedVolume);
 	// Android-only: post-mix output gain boost (0..512 where 256 == 1.0x)
 	private static native int _setAndroidOutputGainBoost(int boost256);
-	private static native int _setDefaultVelocityCurve(int curveType);
 	private static native String _getBankFriendlyName(long reference);
 	private static native String _getVersion();
 	private static native String _getCompileInfo();
@@ -141,7 +140,6 @@ public class Mixer
 	public static void setAndroidHsbBoostEnabled(boolean enabled){
 		setAndroidOutputGainBoost(enabled ? 512 : 256);
 	}
-	public static int setDefaultVelocityCurve(int curveType){ return _setDefaultVelocityCurve(curveType); }
 	public static String getBankFriendlyName(){ if(mMixer==null) return null; return _getBankFriendlyName(mMixer.mReference); }
 	public static String getVersion(){ return _getVersion(); }
 	public static String getCompileInfo(){ return _getCompileInfo(); }

@@ -821,9 +821,17 @@ class HomeFragment : Fragment() {
                         },
                         onCurveChange = { value ->
                             velocityCurve.value = value
-                            if (Mixer.getMixer() != null) {
-                                Mixer.setDefaultVelocityCurve(value)
-                            }
+                            // Velocity curve is per-song (BAESong_SetVelocityCurve).
+                            // Persist the preference and apply it to the active song if present.
+                            try {
+                                currentSong?.let { song ->
+                                    if (song.isSF2Song()) {
+                                        song.setVelocityCurve(0)
+                                    } else {
+                                        song.setVelocityCurve(value)
+                                    }
+                                }
+                            } catch (_: Exception) {}
                             val prefs = requireContext().getSharedPreferences("miniBAE_prefs", Context.MODE_PRIVATE)
                             prefs.edit().putInt("velocity_curve", value).apply()
                         },
@@ -1481,9 +1489,19 @@ class HomeFragment : Fragment() {
             try {
                 val prefs = requireContext().getSharedPreferences("miniBAE_prefs", android.content.Context.MODE_PRIVATE)
                 val reverbType = prefs.getInt("default_reverb", 1)
-                val velocityCurve = prefs.getInt("velocity_curve", 1)
+                val velocityCurvePref = prefs.getInt("velocity_curve", 1)
                 Mixer.setDefaultReverb(reverbType)
-                Mixer.setDefaultVelocityCurve(velocityCurve)
+                HomeFragment.velocityCurve.value = velocityCurvePref
+                // If we have an active song, apply the curve immediately.
+                try {
+                    currentSong?.let { song ->
+                        if (song.isSF2Song()) {
+                            song.setVelocityCurve(0)
+                        } else {
+                            song.setVelocityCurve(velocityCurvePref)
+                        }
+                    }
+                } catch (_: Exception) {}
             } catch (_: Exception) {}
         }
         return true
@@ -2109,7 +2127,6 @@ class HomeFragment : Fragment() {
                                 Mixer.setNativeCacheDir(requireContext().cacheDir.absolutePath)
                                 try {
                                     Mixer.setDefaultReverb(reverbType.value)
-                                    Mixer.setDefaultVelocityCurve(velocityCurve.value)
                                 } catch (_: Exception) {
                                 }
                                 try {
@@ -2263,7 +2280,6 @@ class HomeFragment : Fragment() {
                             Mixer.setNativeCacheDir(requireContext().cacheDir.absolutePath)
                             try {
                                 Mixer.setDefaultReverb(reverbType.value)
-                                Mixer.setDefaultVelocityCurve(velocityCurve.value)
                             } catch (_: Exception) {
                             }
                             try {

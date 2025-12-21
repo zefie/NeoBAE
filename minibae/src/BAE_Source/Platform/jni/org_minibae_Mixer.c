@@ -236,13 +236,6 @@ JNIEXPORT jint JNICALL Java_org_minibae_Mixer__1setAndroidOutputGainBoost
 }
 #endif
 
-JNIEXPORT jint JNICALL Java_org_minibae_Mixer__1setDefaultVelocityCurve
-	(JNIEnv* env, jclass clazz, jint curveType)
-{
-		BAE_SetDefaultVelocityCurve((int)curveType);
-		return 0;
-}
-
 JNIEXPORT jstring JNICALL Java_org_minibae_Mixer__1getBankFriendlyName
     (JNIEnv* env, jclass clazz, jlong reference)
 {

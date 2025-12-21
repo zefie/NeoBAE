@@ -332,7 +332,6 @@ class MainActivity : AppCompatActivity() {
 
             Mixer.setMasterVolumePercent(volumePercent)
             Mixer.setDefaultReverb(reverbType)
-            Mixer.setDefaultVelocityCurve(velocityCurve)
 
             viewModel.isPlaying = false
 
