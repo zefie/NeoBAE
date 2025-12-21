@@ -47,6 +47,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalContext
@@ -5460,6 +5461,27 @@ private fun formatTime(ms: Int): String {
     return String.format("%d:%02d", minutes, seconds)
 }
 
+private fun buildGitHubUrlForBaeVersion(versionString: String): String? {
+    val raw = versionString.trim()
+    if (raw.isEmpty()) return null
+
+    if (raw.startsWith("git-")) {
+        val sha = raw.removePrefix("git-").takeWhile { it != '-' }
+        return if (sha.isNotBlank()) {
+            "https://github.com/zefie/miniBAE/commit/$sha"
+        } else {
+            null
+        }
+    }
+
+    if (raw.startsWith("built", ignoreCase = true)) return null
+
+    val cleaned = if (raw.contains("-dirty")) raw.substringBefore("-dirty") else raw
+    if (cleaned.contains("dirty", ignoreCase = true)) return null
+
+    return "https://github.com/zefie/miniBAE/tree/$cleaned"
+}
+
 @Composable
 fun SettingsScreenContent(
     bankName: String,
@@ -5477,6 +5499,7 @@ fun SettingsScreenContent(
     onOpenFileTypes: () -> Unit,
     onBrowseBanks: () -> Unit
 ) {
+    val context = LocalContext.current
     val reverbOptions = listOf(
         "None", "Igor's Closet", "Igor's Garage", "Igor's Acoustic Lab",
         "Igor's Cavern", "Igor's Dungeon", "Small Reflections",
@@ -5576,6 +5599,23 @@ fun SettingsScreenContent(
                                 )
                             }
                         }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Get more from SoundMusicSys",
+                            style = MaterialTheme.typography.caption.copy(textDecoration = TextDecoration.Underline),
+                            color = MaterialTheme.colors.primary,
+                            modifier = Modifier.clickable {
+                                try {
+                                    val url = "https://www.soundmusicsys.com/content/PatchBanks/"
+                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    context.startActivity(intent)
+                                } catch (_: Exception) {
+                                    Toast.makeText(context, "Unable to open link", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        )
                     }
                     
                     Spacer(modifier = Modifier.height(12.dp))
@@ -5983,6 +6023,23 @@ fun SettingsScreenContent(
                                 )
                             }
                         }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Get more from SoundMusicSys",
+                            style = MaterialTheme.typography.caption.copy(textDecoration = TextDecoration.Underline),
+                            color = MaterialTheme.colors.primary,
+                            modifier = Modifier.clickable {
+                                try {
+                                    val url = "https://www.soundmusicsys.com/content/PatchBanks/"
+                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    context.startActivity(intent)
+                                } catch (_: Exception) {
+                                    Toast.makeText(context, "Unable to open link", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        )
                     }
                     
                     Spacer(modifier = Modifier.height(12.dp))
@@ -6365,11 +6422,34 @@ fun SettingsScreenContent(
                 
                 if (baeVersion.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(12.dp))
-                    Text(
-                        text = "Version: $baeVersion",
-                        style = MaterialTheme.typography.body2,
-                        color = MaterialTheme.colors.onSurface
-                    )
+                    val versionUrl = remember(baeVersion) { buildGitHubUrlForBaeVersion(baeVersion) }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "Version: ",
+                            style = MaterialTheme.typography.body2,
+                            color = MaterialTheme.colors.onSurface
+                        )
+                        Text(
+                            text = baeVersion,
+                            style = MaterialTheme.typography.body2.copy(
+                                textDecoration = if (versionUrl != null) TextDecoration.Underline else null
+                            ),
+                            color = if (versionUrl != null) MaterialTheme.colors.primary else MaterialTheme.colors.onSurface,
+                            modifier = if (versionUrl != null) {
+                                Modifier.clickable {
+                                    try {
+                                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(versionUrl))
+                                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                        context.startActivity(intent)
+                                    } catch (_: Exception) {
+                                        Toast.makeText(context, "Unable to open link", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            } else {
+                                Modifier
+                            }
+                        )
+                    }
                 }
                 
                 if (baeCompileInfo.isNotEmpty()) {
