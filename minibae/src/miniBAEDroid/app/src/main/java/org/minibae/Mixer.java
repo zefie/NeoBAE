@@ -97,6 +97,8 @@ public class Mixer
 	private static native int _addBankFromMemoryWithFilename(long reference, byte[] data, String filename);
 	private static native void _setNativeCacheDir(String path);
 	private static native int _setMasterVolume(long reference, int fixedVolume);
+	// Android-only: post-mix output gain boost (0..512 where 256 == 1.0x)
+	private static native int _setAndroidOutputGainBoost(int boost256);
 	private static native int _setDefaultVelocityCurve(int curveType);
 	private static native String _getBankFriendlyName(long reference);
 	private static native String _getVersion();
@@ -122,6 +124,22 @@ public class Mixer
 		// 16.16 fixed where 1.0 == 65536. Percent needs scaling /100.
 		int fixed = (int)( (percent * 65536L) / 100L );
 		return _setMasterVolume(mMixer.mReference, fixed);
+	}
+
+	// Android-only helper: set master volume directly (16.16 fixed).
+	// Unlike setMasterVolumePercent(), this does NOT clamp at 100%.
+	public static int setMasterVolumeFixed(int fixedVolume){
+		if(mMixer==null) return -1;
+		return _setMasterVolume(mMixer.mReference, fixedVolume);
+	}
+
+	// Android-only: post-mix output gain boost (applied in the platform audio callback).
+	public static int setAndroidOutputGainBoost(int boost256){
+		return _setAndroidOutputGainBoost(boost256);
+	}
+
+	public static void setAndroidHsbBoostEnabled(boolean enabled){
+		setAndroidOutputGainBoost(enabled ? 512 : 256);
 	}
 	public static int setDefaultVelocityCurve(int curveType){ return _setDefaultVelocityCurve(curveType); }
 	public static String getBankFriendlyName(){ if(mMixer==null) return null; return _getBankFriendlyName(mMixer.mReference); }

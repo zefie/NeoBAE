@@ -1175,9 +1175,21 @@ class HomeFragment : Fragment() {
     }
 
     private fun applyVolume() {
-        Mixer.setMasterVolumePercent(viewModel.volumePercent)
-        currentSong?.setVolumePercent(viewModel.volumePercent)
-        currentSound?.setVolumePercent(viewModel.volumePercent)
+        val basePercent = viewModel.volumePercent.coerceIn(0, 100)
+        val prefs = requireContext().getSharedPreferences("miniBAE_prefs", Context.MODE_PRIVATE)
+        val lastBankPath = prefs.getString("last_bank_path", "__builtin__")
+        val isHsbBank = lastBankPath == "__builtin__" || lastBankPath?.endsWith(".hsb", ignoreCase = true) == true
+
+        // Android-only: HSB banks are noticeably quieter than SF2. Use a post-mix output gain boost
+        // (implemented in the native Android audio callback) so we are not dependent on master-volume
+        // clamping/normalization inside the engine.
+        val shouldBoostHsb = isHsbBank && (currentSong != null) && (currentSong?.isSF2Song() == false)
+        Mixer.setAndroidHsbBoostEnabled(shouldBoostHsb)
+
+        Mixer.setMasterVolumePercent(basePercent)
+
+        currentSong?.setVolumePercent(basePercent)
+        currentSound?.setVolumePercent(basePercent)
     }
     
     // Helper functions to handle both Song and Sound uniformly

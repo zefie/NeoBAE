@@ -222,6 +222,20 @@ JNIEXPORT jint JNICALL Java_org_minibae_Mixer__1setMasterVolume
 		return 0;
 }
 
+#if defined(__ANDROID__)
+// Android-only: post-mix output gain boost control (0..512, where 256 == 1.0x).
+extern void BAE_Android_SetOutputGainBoost(int16_t boost256);
+
+JNIEXPORT jint JNICALL Java_org_minibae_Mixer__1setAndroidOutputGainBoost
+	(JNIEnv* env, jclass clazz, jint boost256)
+{
+	(void)env;
+	(void)clazz;
+	BAE_Android_SetOutputGainBoost((int16_t)boost256);
+	return 0;
+}
+#endif
+
 JNIEXPORT jint JNICALL Java_org_minibae_Mixer__1setDefaultVelocityCurve
 	(JNIEnv* env, jclass clazz, jint curveType)
 {

@@ -321,7 +321,14 @@ class MainActivity : AppCompatActivity() {
             val prefs = getSharedPreferences("miniBAE_prefs", Context.MODE_PRIVATE)
             val reverbType = prefs.getInt("default_reverb", 1)
             val velocityCurve = prefs.getInt("velocity_curve", 1)
-            val volumePercent = prefs.getInt("volume_percent", viewModel.volumePercent)
+            val volumePercent = prefs.getInt("volume_percent", viewModel.volumePercent).coerceIn(0, 100)
+            val lastBankPath = prefs.getString("last_bank_path", "__builtin__")
+            val isHsbBank = lastBankPath == "__builtin__" || (lastBankPath?.endsWith(".hsb", ignoreCase = true) == true)
+
+            // Android-only: boost output 2x in HSB mode (HSB banks are quieter).
+            // Keep SF2 (fluidsynth) behavior unchanged.
+            val shouldBoostHsb = isHsbBank && loadResult.isSong && (loadResult.song?.isSF2Song() == false)
+            Mixer.setAndroidHsbBoostEnabled(shouldBoostHsb)
 
             Mixer.setMasterVolumePercent(volumePercent)
             Mixer.setDefaultReverb(reverbType)

@@ -49,6 +49,14 @@ JNIEXPORT jint JNICALL Java_org_minibae_Mixer__1addBankFromFile
 JNIEXPORT jint JNICALL Java_org_minibae_Mixer__1setMasterVolume
   (JNIEnv *, jclass, jlong, jint);
 
+/*
+ * Class:     org_minibae_Mixer
+ * Method:    _setAndroidOutputGainBoost
+ * Signature: (I)I
+ */
+JNIEXPORT jint JNICALL Java_org_minibae_Mixer__1setAndroidOutputGainBoost
+  (JNIEnv *, jclass, jint);
+
 JNIEXPORT jint JNICALL Java_org_minibae_Mixer__1setDefaultVelocityCurve
   (JNIEnv *, jclass, jint);
 
