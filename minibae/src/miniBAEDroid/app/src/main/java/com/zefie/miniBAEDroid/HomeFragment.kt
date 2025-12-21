@@ -5592,7 +5592,7 @@ fun SettingsScreenContent(
                 }
 
                 Text(
-                    text = "Choose which file types appear in Home and Search",
+                    text = "Choose which file types appear in the app",
                     style = MaterialTheme.typography.caption,
                     color = MaterialTheme.colors.onSurface.copy(alpha = 0.6f)
                 )
@@ -5989,7 +5989,7 @@ fun SettingsScreenContent(
                     }
 
                     Text(
-                        text = "Choose which file types appear in Home",
+                        text = "Choose which file types appear in the app",
                         style = MaterialTheme.typography.caption,
                         color = MaterialTheme.colors.onSurface.copy(alpha = 0.6f)
                     )
