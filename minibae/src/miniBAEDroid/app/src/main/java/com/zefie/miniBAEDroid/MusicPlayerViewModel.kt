@@ -132,6 +132,7 @@ class MusicPlayerViewModel : ViewModel() {
         
     var isCurrentPathIndexed by mutableStateOf(false)
     var hasExactDatabase by mutableStateOf(false)
+    var currentIndexRootPath by mutableStateOf<String?>(null)
     
     val favorites = mutableStateListOf<String>() // Store file paths of favorited songs
     var showFullPlayer by mutableStateOf(false)
@@ -388,13 +389,20 @@ class MusicPlayerViewModel : ViewModel() {
     
     fun checkIfCurrentPathIndexed() {
         viewModelScope.launch(Dispatchers.IO) {
-            val indexed = isPathIndexed(currentFolderPath)
+            val path = currentFolderPath
+            val indexed = isPathIndexed(path)
             val hasExact = hasExactDatabaseForCurrentPath()
+            val root = if (database != null && path != null && path != "/") {
+                database!!.getIndexRootForPath(path)
+            } else {
+                null
+            }
             // Update the indexed file count for the current path's database
-            val count = fileIndexer?.getIndexedFileCountForPath(currentFolderPath) ?: 0
+            val count = fileIndexer?.getIndexedFileCountForPath(path) ?: 0
             withContext(Dispatchers.Main) {
                 isCurrentPathIndexed = indexed
                 hasExactDatabase = hasExact
+                currentIndexRootPath = root
                 indexedFileCount = count
             }
         }
@@ -564,9 +572,19 @@ class MusicPlayerViewModel : ViewModel() {
             onComplete(false)
             return
         }
+
+        val indexPath = database?.getIndexRootForPath(path) ?: path
+        deleteDatabaseForIndexPath(indexPath, onComplete)
+    }
+
+    fun deleteDatabaseForIndexPath(indexPath: String, onComplete: (Boolean) -> Unit) {
+        if (indexPath.isBlank()) {
+            onComplete(false)
+            return
+        }
         
         viewModelScope.launch(Dispatchers.IO) {
-            val success = database?.deleteDatabase(path) ?: false
+            val success = database?.deleteDatabase(indexPath) ?: false
             if (success) {
                 // Update indexed file count
                 indexedFileCount = fileIndexer?.getIndexedFileCount() ?: 0

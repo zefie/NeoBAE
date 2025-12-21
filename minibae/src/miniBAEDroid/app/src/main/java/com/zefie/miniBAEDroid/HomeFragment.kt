@@ -2865,6 +2865,9 @@ fun NewMusicPlayerScreen(
 ) {
     // State for delete confirmation dialog
     var showDeleteDialog by remember { mutableStateOf(false) }
+    var deleteTargetPath by remember { mutableStateOf<String?>(null) }
+    var showOverwriteIndexDialog by remember { mutableStateOf(false) }
+    var overwriteIndexTargetPath by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -2975,17 +2978,20 @@ fun NewMusicPlayerScreen(
                             SortModeIcon(viewModel.searchSortMode)
                         }
                         
-                        // Delete database icon (trash can) - only enabled when current folder exactly matches a database
-                        // Read directly from observable state in ViewModel
-                        val hasExactDatabase = viewModel.hasExactDatabase
+                        // Delete database icon (trash can) - enabled for any directory covered by an index
+                        val indexRootPath = viewModel.currentIndexRootPath
+                        val canDeleteDatabase = indexRootPath != null
                         IconButton(
-                            onClick = { showDeleteDialog = true },
-                            enabled = hasExactDatabase && !isLoadingBank
+                            onClick = {
+                                deleteTargetPath = indexRootPath
+                                showDeleteDialog = true
+                            },
+                            enabled = canDeleteDatabase && !isLoadingBank
                         ) {
                             Icon(
                                 Icons.Filled.Delete,
                                 contentDescription = "Delete Database",
-                                tint = if (hasExactDatabase) MaterialTheme.colors.onSurface else MaterialTheme.colors.onSurface.copy(alpha = 0.38f)
+                                tint = if (canDeleteDatabase) MaterialTheme.colors.onSurface else MaterialTheme.colors.onSurface.copy(alpha = 0.38f)
                             )
                         }
                         
@@ -2995,18 +3001,25 @@ fun NewMusicPlayerScreen(
                                 if (indexingProgress.isIndexing) {
                                     viewModel.stopIndexing()
                                 } else {
-                                    val rootPath = viewModel.currentFolderPath ?: "/sdcard"
-                                    viewModel.rebuildIndex(rootPath) { files, folders, size ->
-                                        Toast.makeText(
-                                            context,
-                                            "Indexed $files files in $folders folders (${size / 1024 / 1024} MB)",
-                                            Toast.LENGTH_LONG
-                                        ).show()
-                                        // Load the search results after indexing completes
-                                        if (viewModel.searchQuery.isNotEmpty()) {
-                                            viewModel.searchFilesInDatabase(viewModel.searchQuery, viewModel.currentFolderPath, searchResultLimit)
-                                        } else {
-                                            viewModel.getAllFilesInDatabase(viewModel.currentFolderPath, searchResultLimit)
+                                    val requestedPath = viewModel.currentFolderPath ?: "/sdcard"
+                                    val existingIndexRoot = viewModel.currentIndexRootPath
+
+                                    if (existingIndexRoot != null) {
+                                        overwriteIndexTargetPath = existingIndexRoot
+                                        showOverwriteIndexDialog = true
+                                    } else {
+                                        viewModel.rebuildIndex(requestedPath) { files, folders, size ->
+                                            Toast.makeText(
+                                                context,
+                                                "Indexed $files files in $folders folders (${size / 1024 / 1024} MB)",
+                                                Toast.LENGTH_LONG
+                                            ).show()
+                                            // Load the search results after indexing completes
+                                            if (viewModel.searchQuery.isNotEmpty()) {
+                                                viewModel.searchFilesInDatabase(viewModel.searchQuery, viewModel.currentFolderPath, searchResultLimit)
+                                            } else {
+                                                viewModel.getAllFilesInDatabase(viewModel.currentFolderPath, searchResultLimit)
+                                            }
                                         }
                                     }
                                 }
@@ -3407,17 +3420,27 @@ fun NewMusicPlayerScreen(
     
     // Delete database confirmation dialog
     if (showDeleteDialog) {
+        val target = deleteTargetPath ?: viewModel.currentIndexRootPath ?: viewModel.currentFolderPath
         androidx.compose.material.AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
             title = { Text("Delete Database") },
             text = {
-                Text("Are you sure you want to delete the search database for \"${viewModel.currentFolderPath}\"? This action cannot be undone.")
+                Text("This will delete the database for:\n\"$target\"\n\nAre you sure you wish to continue? This action cannot be undone.")
             },
             confirmButton = {
                 androidx.compose.material.TextButton(
                     onClick = {
                         showDeleteDialog = false
-                        viewModel.deleteCurrentDatabase { success ->
+                        val indexPathToDelete = target
+                        if (indexPathToDelete.isNullOrBlank()) {
+                            Toast.makeText(
+                                context,
+                                "No database found to delete",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                            return@TextButton
+                        }
+                        viewModel.deleteDatabaseForIndexPath(indexPathToDelete) { success ->
                             if (success) {
                                 Toast.makeText(
                                     context,
@@ -3440,6 +3463,55 @@ fun NewMusicPlayerScreen(
             dismissButton = {
                 androidx.compose.material.TextButton(
                     onClick = { showDeleteDialog = false }
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // Overwrite index confirmation dialog (shown when an index already exists for this path)
+    if (showOverwriteIndexDialog) {
+        val target = overwriteIndexTargetPath
+        androidx.compose.material.AlertDialog(
+            onDismissRequest = {
+                showOverwriteIndexDialog = false
+                overwriteIndexTargetPath = null
+            },
+            title = { Text("Rebuild Index") },
+            text = {
+                Text("An index already exists for:\n\"$target\"\n\nRebuilding will overwrite the current index. Continue?")
+            },
+            confirmButton = {
+                androidx.compose.material.TextButton(
+                    onClick = {
+                        showOverwriteIndexDialog = false
+                        val indexRoot = target
+                        overwriteIndexTargetPath = null
+                        if (indexRoot.isNullOrBlank()) return@TextButton
+                        viewModel.rebuildIndex(indexRoot) { files, folders, size ->
+                            Toast.makeText(
+                                context,
+                                "Indexed $files files in $folders folders (${size / 1024 / 1024} MB)",
+                                Toast.LENGTH_LONG
+                            ).show()
+                            if (viewModel.searchQuery.isNotEmpty()) {
+                                viewModel.searchFilesInDatabase(viewModel.searchQuery, viewModel.currentFolderPath, searchResultLimit)
+                            } else {
+                                viewModel.getAllFilesInDatabase(viewModel.currentFolderPath, searchResultLimit)
+                            }
+                        }
+                    }
+                ) {
+                    Text("Overwrite")
+                }
+            },
+            dismissButton = {
+                androidx.compose.material.TextButton(
+                    onClick = {
+                        showOverwriteIndexDialog = false
+                        overwriteIndexTargetPath = null
+                    }
                 ) {
                     Text("Cancel")
                 }
