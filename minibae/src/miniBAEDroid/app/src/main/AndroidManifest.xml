@@ -93,6 +93,39 @@
                 <data android:pathPattern=".*\\.Mxmf" />
                 <data android:pathPattern=".*\\.Rmi" />
             </intent-filter>
+
+            <!-- miniBAE Favorites (.mbae) (lowercase) -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="file" />
+                <data android:scheme="content" />
+                <data android:host="*" />
+                <data android:pathPattern=".*\\.mbae" />
+            </intent-filter>
+
+            <!-- miniBAE Favorites (.mbae) (uppercase) -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="file" />
+                <data android:scheme="content" />
+                <data android:host="*" />
+                <data android:pathPattern=".*\\.MBAE" />
+            </intent-filter>
+
+            <!-- miniBAE Favorites (.mbae) (mixed case) -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="file" />
+                <data android:scheme="content" />
+                <data android:host="*" />
+                <data android:pathPattern=".*\\.Mbae" />
+            </intent-filter>
         </activity>
         
         <service android:name=".MediaPlaybackService"

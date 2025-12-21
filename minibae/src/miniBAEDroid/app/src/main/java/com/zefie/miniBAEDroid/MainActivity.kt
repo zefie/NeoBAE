@@ -19,6 +19,8 @@ import org.minibae.Mixer
 class MainActivity : AppCompatActivity() {
     private lateinit var openFolderLauncher: androidx.activity.result.ActivityResultLauncher<Uri?>
     private lateinit var openFileLauncher: androidx.activity.result.ActivityResultLauncher<Array<String>>
+    private lateinit var importFavoritesLauncher: androidx.activity.result.ActivityResultLauncher<Array<String>>
+    private lateinit var exportFavoritesLauncher: androidx.activity.result.ActivityResultLauncher<String>
     private lateinit var permissionLauncher: androidx.activity.result.ActivityResultLauncher<Array<String>>
     var pendingBankReload = false
     var pendingBankReloadResume = false
@@ -178,6 +180,26 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        importFavoritesLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
+            uri?.let {
+                val fragment = supportFragmentManager.findFragmentById(R.id.fragment_container)
+                if (fragment is HomeFragment) {
+                    fragment.importFavoritesFromMbaeUri(it, navigateToFavorites = true)
+                }
+            }
+        }
+
+        // Use a generic MIME type so many document providers won't force a .xml extension.
+        // The file contents are XML, but the on-disk extension is .mbae.
+        exportFavoritesLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri: Uri? ->
+            uri?.let {
+                val fragment = supportFragmentManager.findFragmentById(R.id.fragment_container)
+                if (fragment is HomeFragment) {
+                    fragment.exportFavoritesToMbaeUri(it)
+                }
+            }
+        }
+
         supportFragmentManager.beginTransaction().replace(R.id.fragment_container, HomeFragment()).commit()
 
         homeTab.setOnClickListener {
@@ -224,6 +246,15 @@ class MainActivity : AppCompatActivity() {
     
     fun requestFilePicker() {
         openFileLauncher.launch(arrayOf("audio/midi", "audio/x-midi", "audio/*", "*/*"))
+    }
+
+    fun requestFavoritesImport() {
+        // Don't filter by extension here (per request); allow picking any file and validate as .mbae.
+        importFavoritesLauncher.launch(arrayOf("*/*"))
+    }
+
+    fun requestFavoritesExport() {
+        exportFavoritesLauncher.launch("favorites.mbae")
     }
     
     fun requestBankReload() {

@@ -68,6 +68,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import androidx.lifecycle.lifecycleScope
 import kotlin.math.roundToInt
+import java.io.IOException
 
 class HomeFragment : Fragment() {
 
@@ -509,6 +510,64 @@ class HomeFragment : Fragment() {
             android.util.Log.e("HomeFragment", "Failed to load favorites: ${ex.message}")
         }
     }
+
+    fun importFavoritesFromMbaeUri(uri: Uri, navigateToFavorites: Boolean) {
+        android.util.Log.d("HomeFragment", "Importing favorites from: $uri")
+        lifecycleScope.launch {
+            try {
+                val name = DocumentFile.fromSingleUri(requireContext(), uri)?.name
+                val ext = name?.substringAfterLast('.', "")?.lowercase()
+                if (ext != "mbae") {
+                    requireActivity().runOnUiThread {
+                        Toast.makeText(requireContext(), "Not a .mbae file", Toast.LENGTH_SHORT).show()
+                    }
+                    return@launch
+                }
+
+                val imported = requireContext().contentResolver.openInputStream(uri)?.use { input ->
+                    FavoritesMbaeXml.readFrom(input)
+                } ?: emptyList()
+
+                requireActivity().runOnUiThread {
+                    viewModel.favorites.clear()
+                    // Keep existing behavior: only store favorites that exist as files.
+                    viewModel.favorites.addAll(imported.filter { File(it).exists() })
+                    saveFavorites()
+                    syncVirtualPlaylistToFavoritesOrder()
+                    if (navigateToFavorites) {
+                        viewModel.showFullPlayer = false
+                        viewModel.currentScreen = NavigationScreen.FAVORITES
+                    }
+                    Toast.makeText(requireContext(), "Imported ${viewModel.favorites.size} favorites", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("HomeFragment", "Failed to import favorites: ${e.message}")
+                requireActivity().runOnUiThread {
+                    Toast.makeText(requireContext(), "Import failed: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    fun exportFavoritesToMbaeUri(uri: Uri) {
+        android.util.Log.d("HomeFragment", "Exporting favorites to: $uri")
+        lifecycleScope.launch {
+            try {
+                requireContext().contentResolver.openOutputStream(uri)?.use { output ->
+                    FavoritesMbaeXml.writeCompressedTo(output, viewModel.favorites.toList())
+                } ?: throw IOException("Unable to open output stream")
+
+                requireActivity().runOnUiThread {
+                    Toast.makeText(requireContext(), "Exported ${viewModel.favorites.size} favorites", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("HomeFragment", "Failed to export favorites: ${e.message}")
+                requireActivity().runOnUiThread {
+                    Toast.makeText(requireContext(), "Export failed: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
     
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         if (pickedFolderUri == null) {
@@ -782,6 +841,12 @@ class HomeFragment : Fragment() {
                         },
                         onAddFile = {
                             (activity as? MainActivity)?.requestFilePicker()
+                        },
+                        onImportFavorites = {
+                            (activity as? MainActivity)?.requestFavoritesImport()
+                        },
+                        onExportFavorites = {
+                            (activity as? MainActivity)?.requestFavoritesExport()
                         },
                         onNavigate = { screen ->
                             viewModel.currentScreen = screen
@@ -1403,6 +1468,12 @@ class HomeFragment : Fragment() {
                 // Get file info from the URI
                 val fileName = DocumentFile.fromSingleUri(requireContext(), uri)?.name ?: "Unknown"
                 val extension = fileName.substringAfterLast('.', "").lowercase()
+
+                // Favorites import file (.mbae)
+                if (extension == "mbae") {
+                    importFavoritesFromMbaeUri(uri, navigateToFavorites = true)
+                    return@launch
+                }
                 
                 // Check if it's a supported MIDI format
                 val musicExtensions = getMusicExtensions(requireContext())
@@ -2757,6 +2828,8 @@ fun NewMusicPlayerScreen(
     onToggleFavorite: (String) -> Unit,
     onAddFolder: () -> Unit,
     onAddFile: () -> Unit,
+    onImportFavorites: () -> Unit,
+    onExportFavorites: () -> Unit,
     onNavigate: (NavigationScreen) -> Unit,
     onShufflePlay: () -> Unit,
     onNavigateToFolder: (String) -> Unit,
@@ -2937,6 +3010,29 @@ fun NewMusicPlayerScreen(
                                 if (indexingProgress.isIndexing) Icons.Filled.Stop else Icons.Filled.Refresh,
                                 contentDescription = if (indexingProgress.isIndexing) "Stop Indexing" else "Build Index",
                                 tint = if (indexingProgress.isIndexing) MaterialTheme.colors.error else MaterialTheme.colors.onSurface
+                            )
+                        }
+                    }
+
+                    // Import/Export buttons for Favorites screen
+                    else if (!viewModel.showFullPlayer && viewModel.currentScreen == NavigationScreen.FAVORITES) {
+                        IconButton(
+                            onClick = onImportFavorites,
+                            enabled = !isLoadingBank
+                        ) {
+                            Icon(
+                                Icons.Filled.FileUpload,
+                                contentDescription = "Import Favorites"
+                            )
+                        }
+
+                        IconButton(
+                            onClick = onExportFavorites,
+                            enabled = !isLoadingBank
+                        ) {
+                            Icon(
+                                Icons.Filled.FileDownload,
+                                contentDescription = "Export Favorites"
                             )
                         }
                     }
