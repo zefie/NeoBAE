@@ -62,6 +62,48 @@ class MusicPlayerViewModel : ViewModel() {
     var currentPositionMs by mutableStateOf(0)
     var totalDurationMs by mutableStateOf(0)
     var volumePercent by mutableStateOf(75)
+
+    // Volume mute toggle state (speaker icon in the full player)
+    // This is intentionally separate from volumePercent==0 so that a user dragging the slider
+    // to 0 does not count as "muted" for the icon.
+    var volumeMutedByIcon by mutableStateOf(false)
+    var volumeBeforeMutePercent: Int? by mutableStateOf(null)
+    var lastNonZeroVolumePercent by mutableStateOf(75)
+
+    fun toggleMuteViaIcon(): Int {
+        val current = volumePercent.coerceIn(0, 100)
+
+        if (volumeMutedByIcon) {
+            val candidate = (volumeBeforeMutePercent ?: lastNonZeroVolumePercent).coerceIn(0, 100)
+            val restored = if (candidate <= 0) 75 else candidate
+            volumeMutedByIcon = false
+            volumeBeforeMutePercent = null
+            if (restored > 0) {
+                lastNonZeroVolumePercent = restored
+            }
+            return restored
+        }
+
+        val toSave = when {
+            current > 0 -> current
+            lastNonZeroVolumePercent > 0 -> lastNonZeroVolumePercent
+            else -> 75
+        }
+        volumeBeforeMutePercent = toSave
+        volumeMutedByIcon = true
+        return 0
+    }
+
+    fun onUserDraggedVolume(percent: Int) {
+        val clamped = percent.coerceIn(0, 100)
+        if (volumeMutedByIcon) {
+            volumeMutedByIcon = false
+            volumeBeforeMutePercent = null
+        }
+        if (clamped > 0) {
+            lastNonZeroVolumePercent = clamped
+        }
+    }
     var currentTitle by mutableStateOf("No song loaded")
     var currentLyric by mutableStateOf("")
     

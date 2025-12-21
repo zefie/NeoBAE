@@ -3641,16 +3641,28 @@ private fun PortraitPlayerLayout(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.VolumeUp,
-                        contentDescription = "Volume",
-                        tint = MaterialTheme.colors.onBackground.copy(alpha = 0.7f),
-                        modifier = Modifier.size(20.dp)
-                    )
+                    val mutedByIcon = viewModel.volumeMutedByIcon
+                    IconButton(
+                        onClick = {
+                            val nextVolume = viewModel.toggleMuteViaIcon()
+                            onVolumeChange(nextVolume)
+                        }
+                    ) {
+                        Icon(
+                            if (mutedByIcon) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp,
+                            contentDescription = if (mutedByIcon) "Unmute" else "Mute",
+                            tint = MaterialTheme.colors.onBackground.copy(alpha = 0.7f),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                     Spacer(modifier = Modifier.width(8.dp))
                     Slider(
                         value = viewModel.volumePercent.toFloat(),
-                        onValueChange = { onVolumeChange(it.toInt()) },
+                        onValueChange = {
+                            val v = it.toInt()
+                            viewModel.onUserDraggedVolume(v)
+                            onVolumeChange(v)
+                        },
                         valueRange = 0f..100f,
                         colors = SliderDefaults.colors(
                             thumbColor = MaterialTheme.colors.primary,
@@ -4226,16 +4238,28 @@ private fun LandscapePlayerLayout(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.VolumeUp,
-                        contentDescription = "Volume",
-                        tint = MaterialTheme.colors.onBackground.copy(alpha = 0.7f),
-                        modifier = Modifier.size(20.dp)
-                    )
+                    val mutedByIcon = viewModel.volumeMutedByIcon
+                    IconButton(
+                        onClick = {
+                            val nextVolume = viewModel.toggleMuteViaIcon()
+                            onVolumeChange(nextVolume)
+                        }
+                    ) {
+                        Icon(
+                            if (mutedByIcon) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp,
+                            contentDescription = if (mutedByIcon) "Unmute" else "Mute",
+                            tint = MaterialTheme.colors.onBackground.copy(alpha = 0.7f),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                     Spacer(modifier = Modifier.width(8.dp))
                     Slider(
                         value = viewModel.volumePercent.toFloat(),
-                        onValueChange = { onVolumeChange(it.toInt()) },
+                        onValueChange = {
+                            val v = it.toInt()
+                            viewModel.onUserDraggedVolume(v)
+                            onVolumeChange(v)
+                        },
                         valueRange = 0f..100f,
                         colors = SliderDefaults.colors(
                             thumbColor = MaterialTheme.colors.primary,
