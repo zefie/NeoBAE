@@ -305,6 +305,8 @@ int BAE_WASM_LoadSong(const uint8_t* data, int length) {
         gCurrentSong = NULL;
     }
 
+    BAEFileType ftype = X_DetermineFileTypeByData((void*)data, (unsigned long)length);
+
     // Create new song
     BAE_PRINTF("[BAE] LoadSong: Creating new BAESong...\n");
     gCurrentSong = BAESong_New(gMixer);
@@ -314,16 +316,32 @@ int BAE_WASM_LoadSong(const uint8_t* data, int length) {
     }
     BAE_PRINTF("[BAE] LoadSong: BAESong created=%p\n", (void*)gCurrentSong);
 
-    // Load from memory - detect file type
-    if (isRmfFile(data, length)) {
-        BAE_PRINTF("[BAE] LoadSong: Detected RMF file, loading...\n");
-        // RMF: song, data, size, songIndex, ignoreBadInstruments
-        err = BAESong_LoadRmfFromMemory(gCurrentSong, (void*)data, (unsigned long)length, 0, TRUE);
-    } else {
-        BAE_PRINTF("[BAE] LoadSong: Detected MIDI file (magic: %02X %02X %02X %02X), loading...\n",
-               data[0], data[1], data[2], data[3]);
-        // MIDI: song, data, size, ignoreBadInstruments
-        err = BAESong_LoadMidiFromMemory(gCurrentSong, (void*)data, (unsigned long)length, TRUE);
+    switch (ftype) {
+        case BAE_RMI:
+            BAE_PRINTF("[BAE] LoadSong: Detected RMI file, loading...\n");
+            err = BAESong_LoadRmfFromMemory(gCurrentSong, (void*)data, (unsigned long)length, 0, TRUE);
+            break;
+        case BAE_RMF:
+            BAE_PRINTF("[BAE] LoadSong: Detected RMF file, loading...\n");
+            // RMF: song, data, size, songIndex, ignoreBadInstruments
+            err = BAESong_LoadRmfFromMemory(gCurrentSong, (void*)data, (unsigned long)length, 0, TRUE);
+            break;
+#if USE_XMF_SUPPORT == TRUE 
+        case BAE_XMF:
+            BAE_PRINTF("[BAE] LoadSong: Detected XMF file, loading...\n");
+            err = BAESong_LoadXmfFromMemory(gCurrentSong, (void*)data, (unsigned long)length, TRUE);
+            break;
+#endif
+        case BAE_MIDI_TYPE:
+        default:
+            if (ftype == BAE_MIDI_TYPE) {
+                BAE_PRINTF("[BAE] LoadSong: Detected MIDI file by type, loading...\n");
+            } else {
+                BAE_PRINTF("[BAE] LoadSong: Unknown file type, assuming MIDI, loading...\n");
+            }
+            // MIDI: song, data, size, ignoreBadInstruments
+            err = BAESong_LoadMidiFromMemory(gCurrentSong, (void*)data, (unsigned long)length, TRUE);
+            break;
     }
 
     BAE_PRINTF("[BAE] LoadSong: Load result=%d\n", (int)err);

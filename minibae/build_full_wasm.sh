@@ -44,6 +44,7 @@ export NOAUTO=1
 export SF2_SUPPORT=1
 export USING_FLUIDSYNTH=1
 export MP3_DEC=1
+export XMF_SUPPORT=1
 echo "Building Enscripten WebAssembly (miniBAE & FluidSynth)..."
 runcmd make clean
 runcmd make -f Makefile.emcc-full "-j$(nproc)" all
