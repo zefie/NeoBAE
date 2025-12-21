@@ -3816,13 +3816,17 @@ private fun MidiChannelMuteButton(
 
     Box {
         IconButton(
-            onClick = { expanded = true },
+            onClick = { expanded = !expanded },
             enabled = enabled
         ) {
             Icon(
                 Icons.Filled.GraphicEq,
                 contentDescription = "MIDI Channels",
-                tint = if (enabled) MaterialTheme.colors.onBackground else Color.Gray
+                tint = when {
+                    !enabled -> Color.Gray
+                    expanded -> MaterialTheme.colors.primary
+                    else -> MaterialTheme.colors.onBackground
+                }
             )
         }
 
