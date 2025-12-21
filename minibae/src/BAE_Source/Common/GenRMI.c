@@ -512,9 +512,10 @@ OPErr GM_LoadRMIFromMemory(const unsigned char *buf, uint32_t len,
                 
                 if (hasPresets)
                 {
+#if _DEBUG                    
                     BAE_PRINTF("[RMI] %s soundbank loaded successfully (%d presets)\n", 
                                bankType, presetCount);
-                    
+#endif                    
                     // Set flag to indicate embedded soundbank was loaded
                     g_last_rmi_had_soundbank = TRUE;
                     
@@ -529,16 +530,20 @@ OPErr GM_LoadRMIFromMemory(const unsigned char *buf, uint32_t len,
                         // FluidSynth API to adjust preset bank numbers
                         // This is a TODO for future enhancement
                     }
-                }
+                }                
                 else
                 {
+#if _DEBUG                     
                     BAE_PRINTF("[RMI] %s soundbank loaded but has no presets\n", bankType);
+#endif
                     GM_UnloadSF2Soundfont();
                 }
             }
             else
             {
+#if _DEBUG 
                 BAE_PRINTF("[RMI] Failed to load %s soundbank (error %d)\n", bankType, err);
+#endif
                 // Return error so caller can handle fallback (e.g., restore user bank)
                 return err;
             }

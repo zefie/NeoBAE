@@ -8,6 +8,7 @@ SILENT=1
 
 if  [ "${1}" == "testing" ]; then
 	shift;
+	SILENT=0
 	function signit() {
   		echo "Skipping signing for testing build..."
 		mv "${1}" "${2}"
