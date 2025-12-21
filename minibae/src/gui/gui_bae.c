@@ -56,6 +56,8 @@ extern int g_keyboard_channel;
 extern int g_keyboard_mouse_note;
 extern uint32_t g_keyboard_suppress_until;
 extern bool g_show_rmf_info_dialog;
+extern int g_keyboard_program;
+extern int g_keyboard_msb;
 
 // Audio position tracking for audio files
 uint32_t audio_current_position = 0;
@@ -86,6 +88,38 @@ void set_status_message(const char *msg)
     strncpy(g_bae.status_message, msg, sizeof(g_bae.status_message) - 1);
     g_bae.status_message[sizeof(g_bae.status_message) - 1] = '\0';
     g_bae.status_message_time = SDL_GetTicks();
+}
+
+// Engine callback: fired on MIDI-file (or queued) CC0 / Program Change so the GUI can
+// update the MSB/Program widgets in realtime without polling.
+static void gui_program_bank_callback(void *threadContext, struct GM_Song *pSong,
+                                      uint8_t channel, uint8_t eventType, uint8_t value,
+                                      uint32_t timeMicroseconds, void *reference)
+{
+    (void)threadContext;
+    (void)pSong;
+    (void)timeMicroseconds;
+    (void)reference;
+
+    if (channel >= 16)
+        return;
+
+    if (eventType == GM_PROGRAM_BANK_EVENT_BANK_MSB)
+    {
+        g_midi_bank_msb[channel] = value;
+        if ((int)channel == g_keyboard_channel)
+        {
+            g_keyboard_msb = (int)value;
+        }
+    }
+    else if (eventType == GM_PROGRAM_BANK_EVENT_PROGRAM)
+    {
+        g_midi_bank_program[channel] = value;
+        if ((int)channel == g_keyboard_channel)
+        {
+            g_keyboard_program = (int)value;
+        }
+    }
 }
 
 // Forward declarations
@@ -188,8 +222,8 @@ bool load_bank(const char *path, bool current_playing_state, int transpose, int 
             BAE_PRINTF("Loaded built-in bank\n");
             set_status_message("Loaded built-in bank");
 
-            // Update MSB/LSB values for the current channel after loading a new bank
-            update_msb_lsb_for_channel();
+            // Update MSB/Program values for the current channel after loading a new bank
+            update_msb_program_for_channel();
 
 #ifdef SUPPORT_MIDI_HW
             // If external MIDI input is enabled, recreate mixer so live MIDI
@@ -858,6 +892,13 @@ bool bae_load_song(const char *path, bool use_embedded_banks)
         BAESong_SetMidiEventCallback(g_bae.song, gui_midi_event_callback, NULL);
     }
 #endif
+
+    // Always register Program/Bank change callback so MSB/Program UI stays in sync
+    // with MIDI-file playback (independent of MIDI output settings).
+    if (g_bae.song)
+    {
+        BAESong_SetProgramBankCallback(g_bae.song, gui_program_bank_callback, NULL);
+    }
 
     const char *base = path;
     for (const char *p = path; *p; ++p)

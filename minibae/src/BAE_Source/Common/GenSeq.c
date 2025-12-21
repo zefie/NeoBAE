@@ -992,10 +992,22 @@ void GM_SetSongMidiEventCallback(GM_Song *theSong, GM_MidiEventCallbackPtr theCa
     }
 }
 
+// Register Program/Bank change callback (CC0 + Program Change)
+void GM_SetSongProgramBankCallback(GM_Song *theSong, GM_ProgramBankCallbackPtr theCallback, void *reference)
+{
+    if (theSong)
+    {
+        theSong->programBankCallbackPtr = theCallback;
+        theSong->programBankCallbackReference = reference;
+    }
+}
+
 // Internal helper to invoke raw MIDI event callback with a status byte and up to two data bytes.
 static void PV_CallMidiEventCallback(void *threadContext, GM_Song *pSong, const unsigned char *message, int16_t length)
 {
     GM_MidiEventCallbackPtr cb;
+
+    GM_ProgramBankCallbackPtr pb;
 
     if (pSong == NULL || message == NULL || length <= 0)
         return;
@@ -1006,6 +1018,31 @@ static void PV_CallMidiEventCallback(void *threadContext, GM_Song *pSong, const 
         // Provide the song's current microsecond timestamp to the callback.
         uint32_t t_us = (uint32_t)pSong->songMicroseconds;
         (*cb)(threadContext, pSong, message, length, t_us, pSong->midiEventCallbackReference);
+    }
+
+    // Additionally notify interested UIs about instrument-selection changes.
+    pb = pSong->programBankCallbackPtr;
+    if (pb)
+    {
+        uint32_t t_us = (uint32_t)pSong->songMicroseconds;
+        unsigned char status = message[0];
+        unsigned char type = (unsigned char)(status & 0xF0);
+        uint8_t ch = (uint8_t)(status & 0x0F);
+
+        if (type == 0xB0 && length >= 3)
+        {
+            unsigned char cc = message[1];
+            unsigned char val = message[2];
+            if (cc == 0)
+            {
+                (*pb)(threadContext, pSong, ch, (uint8_t)GM_PROGRAM_BANK_EVENT_BANK_MSB, (uint8_t)(val & 0x7F), t_us, pSong->programBankCallbackReference);
+            }
+        }
+        else if (type == 0xC0 && length >= 2)
+        {
+            unsigned char prog = message[1];
+            (*pb)(threadContext, pSong, ch, (uint8_t)GM_PROGRAM_BANK_EVENT_PROGRAM, (uint8_t)(prog & 0x7F), t_us, pSong->programBankCallbackReference);
+        }
     }
 }
 

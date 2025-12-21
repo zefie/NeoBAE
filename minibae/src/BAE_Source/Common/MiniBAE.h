@@ -1785,6 +1785,9 @@ extern "C"
     // Reset lyric processing state (clears seen lyric flags)
     BAEResult BAESong_ResetLyricState(BAESong song);
     BAEResult BAESong_SetMidiEventCallback(BAESong song, GM_MidiEventCallbackPtr pCallback, void *callbackReference);
+    // Program/bank change callback (CC0 + Program Change). Useful for UIs to track
+    // live instrument selection changes during MIDI/RMF playback.
+    BAEResult BAESong_SetProgramBankCallback(BAESong song, GM_ProgramBankCallbackPtr pCallback, void *callbackReference);
     BAEResult BAESong_GetControllerCallback(BAESong song, BAE_SongControllerCallbackPtr *pResult);
     BAEResult BAESong_SetControllerCallback(BAESong song, BAE_SongControllerCallbackPtr pCallback, void *callbackReference, int16_t controller);
 

@@ -9115,6 +9115,15 @@ static void PV_BAESong_SetMidiEventCallback(BAESong song, GM_MidiEventCallbackPt
     }
 }
 
+static void PV_BAESong_SetProgramBankCallback(BAESong song, GM_ProgramBankCallbackPtr pCallback, void *callbackReference)
+{
+    if (song && song->pSong)
+    {
+        song->pSong->programBankCallbackPtr = pCallback;
+        song->pSong->programBankCallbackReference = callbackReference;
+    }
+}
+
 BAEResult BAESong_SetMidiEventCallback(BAESong song, GM_MidiEventCallbackPtr pCallback, void *callbackReference)
 {
     OPErr err = NO_ERR;
@@ -9122,6 +9131,22 @@ BAEResult BAESong_SetMidiEventCallback(BAESong song, GM_MidiEventCallbackPtr pCa
     {
         BAE_AcquireMutex(song->mLock);
         PV_BAESong_SetMidiEventCallback(song, pCallback, callbackReference);
+        BAE_ReleaseMutex(song->mLock);
+    }
+    else
+    {
+        err = NULL_OBJECT;
+    }
+    return BAE_TranslateOPErr(err);
+}
+
+BAEResult BAESong_SetProgramBankCallback(BAESong song, GM_ProgramBankCallbackPtr pCallback, void *callbackReference)
+{
+    OPErr err = NO_ERR;
+    if ((song) && (song->mID == OBJECT_ID))
+    {
+        BAE_AcquireMutex(song->mLock);
+        PV_BAESong_SetProgramBankCallback(song, pCallback, callbackReference);
         BAE_ReleaseMutex(song->mLock);
     }
     else

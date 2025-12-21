@@ -659,6 +659,18 @@ extern "C"
     // the user-provided context.
     typedef void (*GM_MidiEventCallbackPtr)(void *threadContext, struct GM_Song *pSong, const unsigned char *midiMessage, int16_t length, uint32_t timeMicroseconds, void *reference);
 
+    // Program/bank change callback.
+    // Fired when the song processes a Bank Select MSB (CC 0) or Program Change (0xC0).
+    // This is intended for UIs to reflect live MIDI-file changes without parsing all events.
+    enum
+    {
+        GM_PROGRAM_BANK_EVENT_BANK_MSB = 0,
+        GM_PROGRAM_BANK_EVENT_PROGRAM = 1
+    };
+    typedef void (*GM_ProgramBankCallbackPtr)(void *threadContext, struct GM_Song *pSong,
+                                              uint8_t channel, uint8_t eventType, uint8_t value,
+                                              uint32_t timeMicroseconds, void *reference);
+
     // mixer callbacks
     typedef void (*GM_AudioTaskCallbackPtr)(void *threadContext, void *reference);
     typedef void (*GM_AudioOutputCallbackPtr)(void *threadContext, void *samples, int32_t sampleSize, int32_t channels, uint32_t lengthInFrames);
@@ -1136,6 +1148,11 @@ typedef int32_t UNIT_TYPE;
         // called with the raw MIDI bytes for any MIDI event processed for this song.
         GM_MidiEventCallbackPtr midiEventCallbackPtr;
         void *midiEventCallbackReference;
+
+        // Optional Program/Bank change callback (CC0 + Program Change). If set, this will be
+        // called when the song processes changes that affect per-channel instrument selection.
+        GM_ProgramBankCallbackPtr programBankCallbackPtr;
+        void *programBankCallbackReference;
 
         // these pointers are NULL until used, then they are allocated
         GM_ControlCallbackPtr controllerCallback; // called during playback with controller info
@@ -2060,6 +2077,7 @@ typedef int32_t UNIT_TYPE;
 
     // Register a raw MIDI event callback for a song. Pass NULL to disable.
     void GM_SetSongMidiEventCallback(GM_Song *theSong, GM_MidiEventCallbackPtr theCallback, void *reference);
+    void GM_SetSongProgramBankCallback(GM_Song *theSong, GM_ProgramBankCallbackPtr theCallback, void *reference);
 
     // Display
     XSWORD GM_GetAudioSampleFrame(XSWORD *pLeft, XSWORD *pRight);
