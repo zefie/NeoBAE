@@ -157,7 +157,7 @@ void save_settings(const char *last_bank_path, int reverb_type, bool loop_enable
 // Settings load_settings(void);  // TODO: Define Settings type
 
 // MSB/LSB update function (from gui_main.c)
-void update_msb_lsb_for_channel(void);
+void update_msb_program_for_channel(void);
 
 // Rate conversion
 // BAERate map_rate_from_hz(int hz);  // TODO: Define if needed

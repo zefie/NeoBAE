@@ -102,8 +102,8 @@ void safe_strncpy(char *dst, const char *src, size_t size) {
     dst[size - 1] = '\0';
 }
 
-// Helper function to update MSB/LSB display values based on current channel's bank settings
-void update_msb_lsb_for_channel(void)
+// Helper function to update MSB/Program display values based on current channel's bank settings
+void update_msb_program_for_channel(void)
 {
 #ifdef SUPPORT_MIDI_HW
     // Check if we're actually in MIDI input mode
@@ -111,7 +111,7 @@ void update_msb_lsb_for_channel(void)
     {
         // Use the tracked MIDI bank values for the current channel when MIDI input is active
         g_keyboard_msb = g_midi_bank_msb[g_keyboard_channel];
-        g_keyboard_lsb = g_midi_bank_lsb[g_keyboard_channel];
+        g_keyboard_program = g_midi_bank_program[g_keyboard_channel];
         return;
     }
 #endif
@@ -125,43 +125,43 @@ void update_msb_lsb_for_channel(void)
         BAEResult result = BAESong_GetProgramBank(target, (unsigned char)g_keyboard_channel, &program, &bank);
         if (result == BAE_NO_ERROR)
         {
-            // For General MIDI compatibility, bank 0 typically maps to MSB=0, LSB=0
-            // Higher banks may use different MSB/LSB combinations depending on the sound bank
+            // For General MIDI compatibility, bank 0 typically maps to MSB=0, Program=0
+            // Higher banks may use different MSB/Program combinations depending on the sound bank
             g_keyboard_msb = bank;
-            g_keyboard_lsb = program;
+            g_keyboard_program = program;
         }
         else
         {
             // Fallback to default values if query fails
             g_keyboard_msb = 0;
-            g_keyboard_lsb = 0;
+            g_keyboard_program = 0;
         }
     }
     else
     {
         // No song available, use default values
         g_keyboard_msb = 0;
-        g_keyboard_lsb = 0;
+        g_keyboard_program = 0;
     }
 }
 
-// Helper function to send bank select messages when MSB/LSB values change
+// Helper function to send bank select messages when MSB/Program values change
 void send_bank_select_for_current_channel(void)
 {
 #ifdef SUPPORT_MIDI_HW
     // Update the tracked bank values for the current channel
     g_midi_bank_msb[g_keyboard_channel] = g_keyboard_msb;
-    g_midi_bank_lsb[g_keyboard_channel] = g_keyboard_lsb;
+    g_midi_bank_program[g_keyboard_channel] = g_keyboard_program;
 #endif
 
-    BAE_PRINTF("Bank Select - Channel %d: MSB=%d, LSB=%d\n", g_keyboard_channel + 1, g_keyboard_msb, g_keyboard_lsb);
+    BAE_PRINTF("Bank Select - Channel %d: MSB=%d, Program=%d\n", g_keyboard_channel + 1, g_keyboard_msb, g_keyboard_program);
 
     // Send bank select messages to both the engine and external MIDI output
     BAESong target = g_bae.song ? g_bae.song : g_live_song;
     if (target)
     {
-        BAESong_ProgramBankChange(target, (unsigned char)g_keyboard_channel, g_keyboard_lsb, g_keyboard_msb, 0);
-        BAESong_LoadInstrument(target, g_keyboard_lsb);
+        BAESong_ProgramBankChange(target, (unsigned char)g_keyboard_channel, g_keyboard_program, g_keyboard_msb, 0);
+        BAESong_LoadInstrument(target, g_keyboard_program);
     }
 
 #ifdef SUPPORT_MIDI_HW
@@ -169,9 +169,9 @@ void send_bank_select_for_current_channel(void)
     if (g_midi_output_enabled)
     {
         unsigned char msb_msg[3] = {(unsigned char)(0xB0 | (g_keyboard_channel & 0x0F)), 0, (unsigned char)g_keyboard_msb};
-        unsigned char lsb_msg[3] = {(unsigned char)(0xB0 | (g_keyboard_channel & 0x0F)), 32, (unsigned char)g_keyboard_lsb};
+        unsigned char program_msg[3] = {(unsigned char)(0xB0 | (g_keyboard_channel & 0x0F)), 32, (unsigned char)g_keyboard_program};
         midi_output_send(msb_msg, 3);
-        midi_output_send(lsb_msg, 3);
+        midi_output_send(program_msg, 3);
     }
 #endif
 }
@@ -402,9 +402,9 @@ extern bool g_voice_tooltip_visible;
 extern Rect g_voice_tooltip_rect;
 extern char g_voice_tooltip_text[520];
 
-extern bool g_lsb_tooltip_visible;
-extern Rect g_lsb_tooltip_rect;
-extern char g_lsb_tooltip_text[520];
+extern bool g_program_tooltip_visible;
+extern Rect g_program_tooltip_rect;
+extern char g_program_tooltip_text[520];
 
 extern bool g_msb_tooltip_visible;
 extern Rect g_msb_tooltip_rect;
@@ -1044,8 +1044,8 @@ int main(int argc, char *argv[])
         }
     }
 
-    // Initialize MSB/LSB values for the default channel
-    update_msb_lsb_for_channel();
+    // Initialize MSB/Program values for the default channel
+    update_msb_program_for_channel();
 
     // Load command line file if provided
     if (argc > 1)
@@ -1278,8 +1278,8 @@ int main(int argc, char *argv[])
                             if (nt != g_keyboard_channel)
                             {
                                 g_keyboard_channel = nt;
-                                // Update MSB/LSB display values for the newly selected channel
-                                update_msb_lsb_for_channel();
+                                // Update MSB/Program display values for the newly selected channel
+                                update_msb_program_for_channel();
                             }
                         }
                         else
@@ -1296,7 +1296,7 @@ int main(int argc, char *argv[])
                                 other playback controls disabled as before. */
                             bool volume_enabled_local = !g_reverbDropdownOpen;
 
-                            // Calculate the LSB/MSB rects the same way as in rendering
+                            // Calculate the Program/MSB rects the same way as in rendering
                             int keyboardPanelY_wheel = transportPanel.y + transportPanel.h + 10;
                             Rect keyboardPanel_wheel = {10, keyboardPanelY_wheel, 880, 110};
                             bool showKeyboard_wheel = g_show_virtual_keyboard && g_bae.song && !g_bae.is_audio_file && g_bae.song_loaded;
@@ -1306,32 +1306,32 @@ int main(int argc, char *argv[])
 
                             bool handled_wheel_event = false;
 
-                            // LSB/MSB number pickers wheel handling - check first
+                            // Program/MSB number pickers wheel handling - check first
                             if (showKeyboard_wheel && !(g_bae.is_audio_file && g_bae.sound))
                             {
-                                // Calculate MSB/LSB rects to match the actual rendering coordinates
+                                // Calculate MSB/Program rects to match the actual rendering coordinates
                                 int picker_y_wheel = keyboardPanel_wheel.y + 56; // below channel dropdown
                                 int picker_w_wheel = 35;                         // compact width for 3-digit numbers
                                 int picker_h_wheel = 18;
                                 int spacing_wheel = 5;
 
-                                // MSB and LSB number picker rects (match rendering exactly)
+                                // MSB and Program number picker rects (match rendering exactly)
                                 Rect msbRect_wheel = {keyboardPanel_wheel.x + 10, picker_y_wheel, picker_w_wheel, picker_h_wheel};
-                                Rect lsbRect_wheel = {msbRect_wheel.x + picker_w_wheel + spacing_wheel, picker_y_wheel, picker_w_wheel, picker_h_wheel};
+                                Rect programRect_wheel = {msbRect_wheel.x + picker_w_wheel + spacing_wheel, picker_y_wheel, picker_w_wheel, picker_h_wheel};
 
                                 if (point_in(mx, my, msbRect_wheel))
                                 {
                                     change_bank_value_for_current_channel(true, sdelta);
                                     handled_wheel_event = true;
                                 }
-                                else if (point_in(mx, my, lsbRect_wheel))
+                                else if (point_in(mx, my, programRect_wheel))
                                 {
                                     change_bank_value_for_current_channel(false, sdelta);
                                     handled_wheel_event = true;
                                 }
                             }
 
-                            // Try transpose/tempo/volume helpers in order (only if MSB/LSB didn't handle it)
+                            // Try transpose/tempo/volume helpers in order (only if MSB/Program didn't handle it)
                             if (!handled_wheel_event)
                             {
                                 if (!ui_adjust_transpose(mx, my, sdelta, playback_controls_enabled_local, &transpose))
@@ -1772,8 +1772,8 @@ int main(int argc, char *argv[])
                             if (nt != g_keyboard_channel)
                             {
                                 g_keyboard_channel = nt;
-                                // Update MSB/LSB display values for the newly selected channel
-                                update_msb_lsb_for_channel();
+                                // Update MSB/Program display values for the newly selected channel
+                                update_msb_program_for_channel();
                             }
                         }
                     }
@@ -1965,23 +1965,23 @@ int main(int argc, char *argv[])
                     {
                         unsigned char cc = midi_buf[1];
                         unsigned char val = midi_buf[2];
-                        // Track Bank Select MSB/LSB (CC 0 and 32)
+                        // Track Bank Select MSB/Program (CC 0 and 32)
                         if (cc == 0)
                         {
                             g_midi_bank_msb[mch] = val;
-                            // Update MSB/LSB display if this affects the current keyboard channel
+                            // Update MSB/Program display if this affects the current keyboard channel
                             if (mch == g_keyboard_channel)
                             {
-                                update_msb_lsb_for_channel();
+                                update_msb_program_for_channel();
                             }
                         }
                         else if (cc == 32)
                         {
-                            g_midi_bank_lsb[mch] = val;
-                            // Update MSB/LSB display if this affects the current keyboard channel
+                            g_midi_bank_program[mch] = val;
+                            // Update MSB/Program display if this affects the current keyboard channel
                             if (mch == g_keyboard_channel)
                             {
-                                update_msb_lsb_for_channel();
+                                update_msb_program_for_channel();
                             }
                         }
                         {
@@ -2022,18 +2022,18 @@ int main(int argc, char *argv[])
                             unsigned char target_ch = (unsigned char)mch;
                             if (target)
                             {
-                                // Send both MSB and LSB before program change
+                                // Send both MSB and Program before program change
                                 BAESong_ControlChange(target, target_ch, 0, g_midi_bank_msb[mch], 0);  // CC 0 = Bank Select MSB
-                                BAESong_ControlChange(target, target_ch, 32, g_midi_bank_lsb[mch], 0); // CC 32 = Bank Select LSB
+                                BAESong_ControlChange(target, target_ch, 32, g_midi_bank_program[mch], 0); // CC 32 = Bank Select Program
                                 BAESong_ProgramChange(target, target_ch, program, 0);
                             }
                         }
                         unsigned char out[2] = {(unsigned char)(0xC0 | (mch & 0x0F)), program};
                         FORWARD_OUT(out, 2);
-                        // Update MSB/LSB display if this program change affects the current keyboard channel
+                        // Update MSB/Program display if this program change affects the current keyboard channel
                         if (mch == g_keyboard_channel)
                         {
-                            update_msb_lsb_for_channel();
+                            update_msb_program_for_channel();
                         }
                     }
                     break;
@@ -2237,7 +2237,7 @@ int main(int argc, char *argv[])
         SDL_RenderClear(R);
 
         // Clear tooltips each frame
-        ui_clear_tooltip(&g_lsb_tooltip_visible);
+        ui_clear_tooltip(&g_program_tooltip_visible);
         ui_clear_tooltip(&g_msb_tooltip_visible);
 
         // Colors driven by theme globals
@@ -3448,7 +3448,7 @@ int main(int argc, char *argv[])
                 { /* no-op */
                 }
 
-                // LSB/MSB number pickers - compact layout below channel dropdown
+                // Program/MSB number pickers - compact layout below channel dropdown
                 int picker_y = keyboardPanel.y + 56; // below channel dropdown
                 int picker_w = 35;                   // compact width for 3-digit numbers
                 int picker_h = 18;
@@ -3472,30 +3472,30 @@ int main(int argc, char *argv[])
                     msbTextColor.a = 180; // Dim text when disabled
                 draw_text(R, msbRect.x + (msbRect.w - msb_tw) / 2, msbRect.y + (msbRect.h - msb_th) / 2, msbText, msbTextColor);
 
-                // LSB picker (now second)
-                Rect lsbRect = {msbRect.x + picker_w + spacing, picker_y, picker_w, picker_h};
-                bool lsbHover = !g_keyboard_channel_dd_open && point_in(ui_mx, ui_my, lsbRect);
-                SDL_Color lsbBg = lsbHover ? g_button_hover : g_button_base;
+                // Program picker (now second)
+                Rect programRect = {msbRect.x + picker_w + spacing, picker_y, picker_w, picker_h};
+                bool programHover = !g_keyboard_channel_dd_open && point_in(ui_mx, ui_my, programRect);
+                SDL_Color programBg = programHover ? g_button_hover : g_button_base;
                 if (g_keyboard_channel_dd_open)
-                    lsbBg.a = 180; // Make it appear disabled when channel dropdown is open
-                draw_rect(R, lsbRect, lsbBg);
-                draw_frame(R, lsbRect, g_button_border);
+                    programBg.a = 180; // Make it appear disabled when channel dropdown is open
+                draw_rect(R, programRect, programBg);
+                draw_frame(R, programRect, g_button_border);
 
-                char lsbText[8];
-                snprintf(lsbText, sizeof(lsbText), "%d", g_keyboard_lsb);
-                int lsb_tw = 0, lsb_th = 0;
-                measure_text(lsbText, &lsb_tw, &lsb_th);
-                SDL_Color lsbTextColor = g_button_text;
+                char programText[8];
+                snprintf(programText, sizeof(programText), "%d", g_keyboard_program);
+                int program_tw = 0, program_th = 0;
+                measure_text(programText, &program_tw, &program_th);
+                SDL_Color programTextColor = g_button_text;
                 if (g_keyboard_channel_dd_open)
-                    lsbTextColor.a = 180; // Dim text when disabled
-                draw_text(R, lsbRect.x + (lsbRect.w - lsb_tw) / 2, lsbRect.y + (lsbRect.h - lsb_th) / 2, lsbText, lsbTextColor);
+                    programTextColor.a = 180; // Dim text when disabled
+                draw_text(R, programRect.x + (programRect.w - program_tw) / 2, programRect.y + (programRect.h - program_th) / 2, programText, programTextColor);
 
                 // Handle tooltips (disabled when channel dropdown is open)
                 if (!g_keyboard_channel_dd_open)
                 {
-                    if (lsbHover)
+                    if (programHover)
                     {
-                        ui_set_tooltip((Rect){ui_mx + 10, ui_my - 25, 0, 0}, "LSB", &g_lsb_tooltip_visible, &g_lsb_tooltip_rect, g_lsb_tooltip_text, sizeof(g_lsb_tooltip_text));
+                        ui_set_tooltip((Rect){ui_mx + 10, ui_my - 25, 0, 0}, "Program", &g_program_tooltip_visible, &g_program_tooltip_rect, g_program_tooltip_text, sizeof(g_program_tooltip_text));
                     }
                     else if (msbHover)
                     {
@@ -3517,7 +3517,7 @@ int main(int argc, char *argv[])
                             change_bank_value_for_current_channel(true, -1);
                         }
                     }
-                    else if (lsbHover)
+                    else if (programHover)
                     {
                         if (ui_mclick) // Left click increments
                         {
@@ -5600,13 +5600,13 @@ int main(int argc, char *argv[])
             ui_draw_tooltip(R, g_voice_tooltip_rect, g_voice_tooltip_text, false, false);
         }
 
-        // Draw LSB tooltip
-        if (g_lsb_tooltip_visible)
+        // Draw Program tooltip
+        if (g_program_tooltip_visible)
         {
             int tooltip_w = 0, tooltip_h = 0;
-            measure_text(g_lsb_tooltip_text, &tooltip_w, &tooltip_h);
-            Rect tipRect = {g_lsb_tooltip_rect.x, g_lsb_tooltip_rect.y, tooltip_w + 8, tooltip_h + 8};
-            ui_draw_tooltip(R, tipRect, g_lsb_tooltip_text, false, false);
+            measure_text(g_program_tooltip_text, &tooltip_w, &tooltip_h);
+            Rect tipRect = {g_program_tooltip_rect.x, g_program_tooltip_rect.y, tooltip_w + 8, tooltip_h + 8};
+            ui_draw_tooltip(R, tipRect, g_program_tooltip_text, false, false);
         }
 
         // Draw MSB tooltip
@@ -5727,8 +5727,8 @@ int main(int argc, char *argv[])
                     }
                     g_keyboard_channel = i;
                     g_keyboard_channel_dd_open = false;
-                    // Update MSB/LSB display values for the newly selected channel
-                    update_msb_lsb_for_channel();
+                    // Update MSB/Program display values for the newly selected channel
+                    update_msb_program_for_channel();
                 }
             }
             if (mclick && !point_in(mx, my, box) && !point_in(mx, my, chanDD))

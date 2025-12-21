@@ -36,11 +36,11 @@ void change_bank_value_for_current_channel(bool is_msb, int delta)
     }
     else
     {
-        g_keyboard_lsb += delta;
-        if (g_keyboard_lsb < 0)
-            g_keyboard_lsb = 127;
-        if (g_keyboard_lsb > 127)
-            g_keyboard_lsb = 0;
+        g_keyboard_program += delta;
+        if (g_keyboard_program < 0)
+            g_keyboard_program = 127;
+        if (g_keyboard_program > 127)
+            g_keyboard_program = 0;
     }
     send_bank_select_for_current_channel();
 }
