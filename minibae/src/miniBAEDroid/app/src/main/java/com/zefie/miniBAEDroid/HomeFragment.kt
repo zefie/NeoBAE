@@ -4820,6 +4820,12 @@ fun FolderSongListItem(
                     .weight(1f)
                     .clickable(onClick = onClick)
             ) {
+                val fileSizeBytes = remember(item.path) {
+                    runCatching { item.file.length() }.getOrDefault(-1L)
+                }
+                val fileSizeText = remember(fileSizeBytes) {
+                    if (fileSizeBytes > 0L) formatFileSize(fileSizeBytes) else ""
+                }
                 Text(
                     text = item.title,
                     fontSize = 14.sp,
@@ -4828,6 +4834,16 @@ fun FolderSongListItem(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
+
+                if (fileSizeText.isNotEmpty()) {
+                    Text(
+                        text = fileSizeText,
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colors.onBackground.copy(alpha = 0.6f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
             
             // Favorite button
