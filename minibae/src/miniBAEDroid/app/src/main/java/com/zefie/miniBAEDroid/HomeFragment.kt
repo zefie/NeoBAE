@@ -998,6 +998,52 @@ class HomeFragment : Fragment() {
     }
     
     private fun playFileFromBrowser(file: File) {
+        // Determine the source list based on current screen.
+        // This is our "virtual playlist" for Next/Previous.
+        val sourceList = when (viewModel.currentScreen) {
+            NavigationScreen.SEARCH -> {
+                viewModel.playlistModeLabel = "Search"
+                val results = viewModel.searchResults.value
+                results.filter { !it.isFolder }
+            }
+            NavigationScreen.FAVORITES -> {
+                viewModel.playlistModeLabel = "Favorites"
+                viewModel.favorites.mapNotNull { path ->
+                    val f = File(path)
+                    if (f.exists() && !f.isDirectory) PlaylistItem(f) else null
+                }
+            }
+            else -> {
+                val folderPath = viewModel.currentFolderPath ?: "/"
+                val folderName = runCatching { File(folderPath).name }.getOrDefault("")
+                val displayName = if (folderName.isNotBlank()) folderName else folderPath
+                viewModel.playlistModeLabel = "Folder ($displayName)"
+                // HOME: exclude folders and any special (non-song) items.
+                viewModel.folderFiles.filter { !it.isFolder && !it.title.startsWith("🔄") }
+            }
+        }
+
+        // If the user taps the currently loaded file, don't reload it.
+        // Still update the virtual playlist to match where they tapped from,
+        // then bring them to the full page player.
+        val currentPath = viewModel.getCurrentItem()?.file?.absolutePath
+        if (currentPath != null && currentPath == file.absolutePath) {
+            val nextItems = sourceList.toMutableList()
+            if (nextItems.none { it.file.absolutePath == file.absolutePath }) {
+                nextItems.add(PlaylistItem(file))
+            }
+            viewModel.replacePlaylistPreservingCurrent(nextItems)
+
+            // Ensure title/index reflect the currently loaded file.
+            val idx = viewModel.playlist.indexOfFirst { it.file.absolutePath == file.absolutePath }
+            if (idx >= 0) {
+                viewModel.playAtIndex(idx)
+            }
+
+            viewModel.showFullPlayer = true
+            return
+        }
+
         // Use the current folder or search results as the playlist
         if (currentSong?.hasEmbeddedBank() == true) {
             android.util.Log.d("HomeFragment", "The previous song had an embedded bank, restoring last known bank")
@@ -1011,30 +1057,6 @@ class HomeFragment : Fragment() {
         }
         stopPlayback(true)
         viewModel.clearPlaylist()
-        
-        // Determine the source list based on current screen
-        val sourceList = when (viewModel.currentScreen) {
-            NavigationScreen.SEARCH -> {
-                // For search, we need to get the current results
-                val results = viewModel.searchResults.value
-                results.filter { !it.isFolder }
-            }
-            NavigationScreen.FAVORITES -> {
-                // Get favorites as PlaylistItems
-                viewModel.favorites.mapNotNull { path ->
-                    val f = File(path)
-                    if (f.exists() && !f.isDirectory) {
-                        PlaylistItem(f)
-                    } else {
-                        null
-                    }
-                }
-            }
-            else -> {
-                // Use folder files as playlist (HOME screen)
-                viewModel.folderFiles.filter { !it.isFolder }
-            }
-        }
         
         // Add all files from source list to playlist
         viewModel.addAllToPlaylist(sourceList)
@@ -2806,7 +2828,8 @@ fun NewMusicPlayerScreen(
                         val subtitleText = if (showBankBrowser) {
                             "Choose a sound bank"
                         } else if (viewModel.showFullPlayer) {
-                            viewModel.getCurrentItem()?.title ?: ""
+                            val label = viewModel.playlistModeLabel
+                            "Playlist: $label"
                         } else {
                             when (viewModel.currentScreen) {
                                 NavigationScreen.HOME -> {
@@ -4281,6 +4304,12 @@ fun HomeScreenContent(
     val favoritesSet by remember {
         derivedStateOf { viewModel.favorites.toSet() }
     }
+
+    // Used for the in-list "current item" status icon.
+    val currentLoadedPath by remember {
+        derivedStateOf { viewModel.getCurrentItem()?.file?.absolutePath }
+    }
+    val isPlaying by remember { derivedStateOf { viewModel.isPlaying } }
     
     Column(modifier = Modifier.fillMaxSize()) {
         // File list
@@ -4421,6 +4450,8 @@ fun HomeScreenContent(
                             FolderSongListItem(
                                 item = item,
                                 isFavorite = favoritesSet.contains(item.path),
+                                isCurrent = (currentLoadedPath != null && currentLoadedPath == item.file.absolutePath),
+                                isPlaying = isPlaying,
                                 onClick = { onPlaylistItemClick(item.file) },
                                 onToggleFavorite = { onToggleFavorite(item.path) },
                                 onAddToPlaylist = { onAddToPlaylist(item.file) }
@@ -4459,6 +4490,12 @@ fun SearchScreenContent(
     }
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+
+    // Used for the in-list "current item" status icon.
+    val currentLoadedPath by remember {
+        derivedStateOf { viewModel.getCurrentItem()?.file?.absolutePath }
+    }
+    val isPlaying by remember { derivedStateOf { viewModel.isPlaying } }
     
     // Initialize database on first composition
     LaunchedEffect(Unit) {
@@ -4648,6 +4685,8 @@ fun SearchScreenContent(
                             FolderSongListItem(
                                 item = item,
                                 isFavorite = viewModel.isFavorite(item.path),
+                                isCurrent = (currentLoadedPath != null && currentLoadedPath == item.file.absolutePath),
+                                isPlaying = isPlaying,
                                 onClick = { onPlaylistItemClick(item.file) },
                                 onToggleFavorite = { onToggleFavorite(item.path) },
                                 onAddToPlaylist = { onAddToPlaylist(item.file) }
@@ -4684,6 +4723,8 @@ fun SearchScreenContent(
                         FolderSongListItem(
                             item = item,
                             isFavorite = viewModel.isFavorite(item.path),
+                            isCurrent = (currentLoadedPath != null && currentLoadedPath == item.file.absolutePath),
+                            isPlaying = isPlaying,
                             onClick = { onPlaylistItemClick(item.file) },
                             onToggleFavorite = { onToggleFavorite(item.path) },
                             onAddToPlaylist = { onAddToPlaylist(item.file) }
@@ -4743,6 +4784,8 @@ fun FavoritesScreenContent(
                     val file = remember(path) { File(path) }
                     val item = remember(path) { PlaylistItem(file) }
                     val isDragging = draggingIndex == index
+                    val isCurrent = viewModel.getCurrentItem()?.file?.absolutePath == item.file.absolutePath
+                    val isPlaying = viewModel.isPlaying
 
                     Box(
                         modifier = Modifier
@@ -4754,7 +4797,7 @@ fun FavoritesScreenContent(
                     ) {
                         Surface(
                             modifier = Modifier.fillMaxWidth(),
-                            color = Color.Transparent
+                            color = if (isCurrent) MaterialTheme.colors.surface.copy(alpha = 0.5f) else Color.Transparent
                         ) {
                             Row(
                                 modifier = Modifier
@@ -4805,14 +4848,30 @@ fun FavoritesScreenContent(
                                         .weight(1f)
                                         .clickable { onPlaylistItemClick(item.file) }
                                 ) {
-                                    Text(
-                                        text = item.title,
-                                        fontSize = 14.sp,
-                                        fontWeight = FontWeight.Normal,
-                                        color = MaterialTheme.colors.onBackground,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        if (isCurrent) {
+                                            Icon(
+                                                imageVector = if (isPlaying) Icons.Filled.PlayArrow else Icons.Filled.Pause,
+                                                contentDescription = if (isPlaying) "Playing" else "Paused",
+                                                tint = MaterialTheme.colors.primary,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                        }
+
+                                        Text(
+                                            text = item.title,
+                                            fontSize = 14.sp,
+                                            fontWeight = FontWeight.Normal,
+                                            color = MaterialTheme.colors.onBackground,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                    }
                                 }
 
                                 // Favorite button
@@ -5038,13 +5097,15 @@ private const val BANK_SIZE_LIMIT_BYTES: Long = 4L * 1024L * 1024L * 1024L
 fun FolderSongListItem(
     item: PlaylistItem,
     isFavorite: Boolean,
+    isCurrent: Boolean = false,
+    isPlaying: Boolean = false,
     onClick: () -> Unit,
     onToggleFavorite: () -> Unit,
     onAddToPlaylist: () -> Unit
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        color = Color.Transparent
+        color = if (isCurrent) MaterialTheme.colors.surface.copy(alpha = 0.5f) else Color.Transparent
     ) {
         Row(
             modifier = Modifier
@@ -5101,14 +5162,29 @@ fun FolderSongListItem(
                 val fileSizeText = remember(fileSizeBytes) {
                     if (fileSizeBytes > 0L) formatFileSize(fileSizeBytes) else ""
                 }
-                Text(
-                    text = item.title,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Normal,
-                    color = MaterialTheme.colors.onBackground,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (isCurrent) {
+                        Icon(
+                            imageVector = if (isPlaying) Icons.Filled.PlayArrow else Icons.Filled.Pause,
+                            contentDescription = if (isPlaying) "Playing" else "Paused",
+                            tint = MaterialTheme.colors.primary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                    }
+                    Text(
+                        text = item.title,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Normal,
+                        color = MaterialTheme.colors.onBackground,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
 
                 if (fileSizeText.isNotEmpty()) {
                     Text(

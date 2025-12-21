@@ -72,6 +72,10 @@ class MusicPlayerViewModel : ViewModel() {
     var currentScreen by mutableStateOf(NavigationScreen.HOME)
     var searchQuery by mutableStateOf("")
 
+    // Tracks which list the current playlist came from (shown in the full player top bar)
+    // Expected values: "Folder", "Search", "Favorites".
+    var playlistModeLabel by mutableStateOf("Folder")
+
     // Sorting
     var homeSortMode by mutableStateOf(SortMode.NAME_ASC)
     var searchSortMode by mutableStateOf(SortMode.NAME_ASC)
