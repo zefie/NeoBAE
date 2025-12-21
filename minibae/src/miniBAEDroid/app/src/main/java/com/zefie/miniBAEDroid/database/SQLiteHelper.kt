@@ -267,6 +267,14 @@ class SQLiteHelper private constructor(private val context: Context) {
         Log.d("SQLiteHelper", "hasIndexForPath: searchPath=$searchPath, found=$indexPath")
         return indexPath != null
     }
+
+    /**
+     * Get the closest indexed root that covers the given path.
+     * Returns null if no index covers the path.
+     */
+    fun getIndexRootForPath(searchPath: String): String? {
+        return findParentIndex(searchPath)
+    }
     
     /**
      * Check if a path exactly matches an existing database (not just a parent)

@@ -522,8 +522,12 @@ class MusicPlayerViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 fileIndexer?.let { indexer ->
-                    // Start indexing from specified directory
-                    indexer.rebuildIndex(rootPath)
+                    // If we're inside an already-indexed directory tree, rebuild the parent index
+                    // rather than creating a new index for this subfolder.
+                    val effectiveRootPath = database?.getIndexRootForPath(rootPath) ?: rootPath
+
+                    // Start indexing from effective directory
+                    indexer.rebuildIndex(effectiveRootPath)
                     
                     // Update count when done
                     indexedFileCount = indexer.getIndexedFileCount()
