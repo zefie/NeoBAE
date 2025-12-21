@@ -473,9 +473,10 @@ OPErr GM_LoadRMIFromMemory(const unsigned char *buf, uint32_t len,
         if (PV_FindSoundbankInRMI(buf, len, &bankData, &bankLen, &isSF2))
         {
 #if USE_SF2_SUPPORT == TRUE && _USING_FLUIDSYNTH == TRUE
+#if _DEBUG
             const char *bankType = isSF2 ? "SF2/SF3" : "DLS";
             BAE_PRINTF("[RMI] Loading embedded %s soundbank...\n", bankType);
-            
+#endif            
             // Determine bank offset according to SF2 RMIDI spec:
             // - If DBNK specified: use that value
             // - If no embedded bank: offset is 0 (ignored anyway)

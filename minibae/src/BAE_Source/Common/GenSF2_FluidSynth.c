@@ -743,6 +743,7 @@ OPErr GM_LoadSF2SoundfontAsXMFOverlay(const unsigned char *data, size_t size) {
         // Apply bank offset if bank 0 presets exist (offset to bank 2 in HSB mode)
         g_fluidsynth_xmf_overlay_bank_offset = hasBank0Presets ? 2 : 0;
         g_fluidsynth_xmf_overlay_bank_offset = hasBank121Presets ? -121 : g_fluidsynth_xmf_overlay_bank_offset;
+#if _DEBUG
         if (g_fluidsynth_xmf_overlay_bank_offset > 0) {
             BAE_PRINTF("[XMF] XMF DLS overlay has bank 0 presets, will apply bank offset +%d\n", 
                        g_fluidsynth_xmf_overlay_bank_offset);
@@ -750,14 +751,14 @@ OPErr GM_LoadSF2SoundfontAsXMFOverlay(const unsigned char *data, size_t size) {
             // Debug: Dump all presets in the loaded soundfont
             if (g_fluidsynth_synth && g_fluidsynth_xmf_overlay_id >= 0) {
                 fluid_sfont_t* sf = fluid_synth_get_sfont_by_id(g_fluidsynth_synth, g_fluidsynth_xmf_overlay_id);
-                if (sf) {
+                 if (sf) {
                     fluid_preset_t* p = NULL;
                     fluid_sfont_iteration_start(sf);
                     while ((p = fluid_sfont_iteration_next(sf)) != NULL) {
                         int bank = fluid_preset_get_banknum(p);
                         int prog = fluid_preset_get_num(p);
                         const char* name = fluid_preset_get_name(p);
-                            BAE_PRINTF("[XMF]  Bank %d, Program %d: %s\n", bank, prog, name ? name : "(null)");
+                        BAE_PRINTF("[XMF]  Bank %d, Program %d: %s\n", bank, prog, name ? name : "(null)");
                     }
                 } else {
                     BAE_PRINTF("[XMF] Could not get sfont for sfid=%d\n", g_fluidsynth_xmf_overlay_id);
@@ -766,6 +767,7 @@ OPErr GM_LoadSF2SoundfontAsXMFOverlay(const unsigned char *data, size_t size) {
         }
 
         BAE_PRINTF("[XMF] XMF DLS overlay loaded successfully (id=%d)\n", g_fluidsynth_xmf_overlay_id);
+#endif
         return NO_ERR;
     }
 
@@ -824,6 +826,7 @@ OPErr GM_LoadSF2SoundfontAsXMFOverlay(const unsigned char *data, size_t size) {
                    g_fluidsynth_xmf_overlay_bank_offset);
     }
     
+#if _DEBUG
     // Debug: Show all loaded soundfonts and their order
     int sfcount = fluid_synth_sfcount(g_fluidsynth_synth);
     BAE_PRINTF("[XMF] XMF SF2 overlay loaded successfully (id=%d), total soundfonts loaded: %d\n", 
@@ -836,7 +839,8 @@ OPErr GM_LoadSF2SoundfontAsXMFOverlay(const unsigned char *data, size_t size) {
             BAE_PRINTF("[XMF]   Soundfont #%d: id=%d name='%s'\n", i, id, name ? name : "(null)");
         }
     }
-    
+#endif
+
     // Don't reset channel programs - let them keep their current settings
     // FluidSynth will automatically search the overlay first, then fall back to base soundfont
     return NO_ERR;

@@ -1071,18 +1071,25 @@ static XBOOL PV_TryLoadBankFromBlob(const unsigned char *buf, uint32_t len)
             XBOOL isSF2 = (type[0] == 's' && type[1] == 'f' && type[2] == 'b' && type[3] == 'k');
             if (!(isDLS || isSF2)) { i += (8 + sz) - 1; continue; }
             BAE_PRINTF("[XMF] RIFF at +%u type=%.4s size=%u (isDLS=%d isSF2=%d)\n", i, type, sz, (int)isDLS, (int)isSF2);
-            XBOOL hasWvpl = FALSE; uint32_t waveCount = 0;
+            XBOOL hasWvpl = FALSE;
+#if _DEBUG
+            uint32_t waveCount = 0;
+#endif            
             if (isDLS) {
                 const unsigned char *dls = buf + i + 12;
                 uint32_t dlsLen = (sz >= 4 ? sz - 4 : 0);
                 for (uint32_t k = 0; k + 4 <= dlsLen; ++k) {
                     if (!hasWvpl && dls[k]=='w' && dls[k+1]=='v' && dls[k+2]=='p' && dls[k+3]=='l') hasWvpl = TRUE;
+#if _DEBUG
                     if (dls[k]=='w' && dls[k+1]=='a' && dls[k+2]=='v' && dls[k+3]=='e') waveCount++;
+#endif
                 }
             }
             const uint32_t totalBytes = 8 + sz;
             if (isDLS && (!hasWvpl && totalBytes < 32u * 1024u)) {
+#if _DEBUG
                 BAE_PRINTF("[XMF] skipping tiny DLS (bytes=%u, hasWvpl=%d, wave tags=%u)\n", totalBytes, (int)hasWvpl, waveCount);
+#endif
                 i += (8 + sz) - 1; continue;
             }
             if (candCount < (int)(sizeof(cands)/sizeof(cands[0]))) {
