@@ -75,6 +75,7 @@ void GM_SF2_ProcessNoteOff(GM_Song* pSong, int16_t channel, int16_t note, int16_
 void GM_SF2_ProcessProgramChange(GM_Song* pSong, int16_t channel, int32_t program);
 void GM_SF2_ProcessController(GM_Song* pSong, int16_t channel, int16_t controller, int16_t value);
 void GM_SF2_ProcessPitchBend(GM_Song* pSong, int16_t channel, int16_t bendMSB, int16_t bendLSB);
+void GM_SF2_ProcessSysEx(GM_Song* pSong, const unsigned char* message, int32_t length);
 
 // FluidSynth audio rendering (called during mixer slice processing)
 void GM_SF2_RenderAudioSlice(GM_Song* pSong, int32_t* mixBuffer, int32_t frameCount);

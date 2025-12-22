@@ -1432,6 +1432,13 @@ void GM_SF2_ProcessPitchBend(GM_Song* pSong, int16_t channel, int16_t bendMSB, i
     {
         return;
     }
+
+    // Only apply pitch bend during normal playback to avoid scan/preroll phases
+    // leaving channels in a bent state.
+    if (pSong->AnalyzeMode != SCAN_NORMAL)
+    {
+        return;
+    }
     
     // Check if channel is muted
     if (PV_SF2_CheckChannelMuted(pSong, channel))
@@ -1441,6 +1448,39 @@ void GM_SF2_ProcessPitchBend(GM_Song* pSong, int16_t channel, int16_t bendMSB, i
     
     int pitchWheel = (bendMSB << 7) | bendLSB;
     fluid_synth_pitch_bend(g_fluidsynth_synth, channel, pitchWheel);
+}
+
+void GM_SF2_ProcessSysEx(GM_Song* pSong, const unsigned char* message, int32_t length)
+{
+    if ((!GM_IsSF2Song(pSong) && !GM_SF2_HasXmfEmbeddedBank()) || !g_fluidsynth_synth)
+    {
+        return;
+    }
+    if (!message || length <= 0)
+    {
+        return;
+    }
+
+    // Only forward SysEx during normal playback. This avoids scan/preroll phases
+    // mutating FluidSynth's global state (tuning, resets, etc.).
+    if (pSong->AnalyzeMode != SCAN_NORMAL)
+    {
+        return;
+    }
+
+    // FluidSynth may optionally return a response for some SysEx messages.
+    // We don't currently use it, but providing a buffer avoids NULL handling edge cases.
+    char response[256];
+    int response_len = (int)sizeof(response);
+    int handled = 0;
+
+    fluid_synth_sysex(g_fluidsynth_synth,
+                      (const char*)message,
+                      (int)length,
+                      response,
+                      &response_len,
+                      &handled,
+                      0);
 }
 
 // FluidSynth audio rendering - this gets called during mixer slice processing

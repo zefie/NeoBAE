@@ -2404,8 +2404,10 @@ void PV_ProcessController(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTrack,
             //}
         }    
 #endif
+        BAE_PRINTF("Controller %d on Channel %d to %d\n", controler, MIDIChannel, value);
         switch (controler)
         {
+            
         case B_BANK_LSB: // bank select LSB. This is GS.
 #if DISABLE_NOKIA_PATCH != TRUE
             if (pSong->channelRawBank[MIDIChannel] == 121) {
@@ -4200,6 +4202,15 @@ OPErr PV_ProcessMidiSequencerSlice(void *threadContext, GM_Song *pSong)
                     int sendLen = (int)value + 1;                          // include initial 0xF0
                     unsigned char *syx = (unsigned char *)midi_stream - 1; // points to 0xF0
                     PV_CallMidiEventCallback(threadContext, pSong, syx, sendLen);
+
+#if USE_SF2_SUPPORT == TRUE
+                    // FluidSynth CLI applies SysEx from MIDI files (GM reset, MTS tuning, etc.).
+                    // Forward SysEx during SF2 playback so synthesis matches.
+                    if (GM_IsSF2Song(pSong) || GM_SF2_HasXmfEmbeddedBank())
+                    {
+                        GM_SF2_ProcessSysEx(pSong, syx, (int32_t)sendLen);
+                    }
+#endif
                 }
                 midi_stream += value; // skip sysex
                 break;
