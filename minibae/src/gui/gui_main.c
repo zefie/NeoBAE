@@ -1266,6 +1266,10 @@ int main(int argc, char *argv[])
                             {
                                 reverbType = nt;
                                 bae_set_reverb(reverbType);
+                                if (g_current_bank_path[0] != '\0')
+                                {
+                                    save_settings(g_current_bank_path, reverbType, loopPlay);
+                                }
                             }
                         }
                         else if (point_in(mx, my, chanDD))
@@ -1760,6 +1764,10 @@ int main(int argc, char *argv[])
                             {
                                 reverbType = nt;
                                 bae_set_reverb(reverbType);
+                                if (g_current_bank_path[0] != '\0')
+                                {
+                                        save_settings(g_current_bank_path, reverbType, loopPlay);
+                                }
                             }
                         }
                         else if (point_in(mx, my, chanDD))

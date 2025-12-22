@@ -510,6 +510,7 @@ bool bae_start_mpeg_export(const char *output_file, int codec_index)
         BAEMixer_StopOutputToFile();
         return false;
     }
+    bae_set_reverb(g_bae.current_reverb_type); // ensure reverb is set for export
 
     g_bae.is_playing = true;
 
