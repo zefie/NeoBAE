@@ -59,7 +59,7 @@ static int g_fluidsynth_xmf_overlay_id = -1;     // XMF embedded bank overlay
 static int g_fluidsynth_xmf_overlay_bank_offset = 0;  // Bank offset for XMF overlay (0 or 2)
 static XBOOL g_fluidsynth_initialized = FALSE;
 static XBOOL g_fluidsynth_mono_mode = FALSE;
-static XFIXED g_fluidsynth_master_volume = (XFIXED)(XFIXED_1 / 256);
+static XFIXED g_fluidsynth_master_volume = (XFIXED)(XFIXED_1 / 384);
 static uint16_t g_fluidsynth_sample_rate = BAE_DEFAULT_SAMPLE_RATE;
 static char g_fluidsynth_sf2_path[256] = {0};
 // Track a temp file we create for DLS fallback so we can remove it on unload
