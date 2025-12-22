@@ -771,6 +771,8 @@ struct GM_Mixer
     XSDWORD             reverbPtr;              // delay line index into verb buffer
     XSDWORD             LPfilterL, LPfilterR;   // used for fixed verb
     XSDWORD             LPfilterLz, LPfilterRz;
+    XSDWORD             customReverbRoomSize;
+    XSDWORD             customReverbMaxRegen;
 #endif
 };
 typedef struct GM_Mixer GM_Mixer;

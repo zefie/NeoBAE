@@ -19,7 +19,8 @@ extern void send_bank_select_for_current_channel(void);
 bool ui_modal_blocking(void)
 {
     // Mirror the modal blocking condition used throughout gui_main.c
-    if (g_show_settings_dialog || g_show_about_dialog || (g_show_rmf_info_dialog && g_bae.is_rmf_file) || g_exporting)
+    if (g_show_settings_dialog || g_show_about_dialog || (g_show_rmf_info_dialog && g_bae.is_rmf_file) || g_exporting ||
+        g_show_reverb_preset_name_dialog || g_show_reverb_preset_delete_confirm)
         return true;
     return false;
 }
@@ -115,9 +116,17 @@ int get_reverb_count(void)
 const char *get_reverb_name(int idx)
 {
     int rc = get_reverb_count();
-    if (idx < 0 || idx >= rc)
+    if (idx < 0) {
         return "?";
-    return kReverbNames[idx];
+    } else if (idx > rc && idx <= rc + 1 + g_reverb_preset_count) {
+        return g_reverb_presets[idx - rc - 2].name;
+    } else if (idx == rc) {
+        return "Custom";
+    } else if (idx < rc) {
+        return kReverbNames[idx];
+    } else {
+        return "?"; 
+    }    
 }
 
 void compute_ui_layout(UiLayout *L)
@@ -128,15 +137,31 @@ void compute_ui_layout(UiLayout *L)
     L->transportPanel = (Rect){10, 160, 880, 85};
     int keyboardPanelY = L->transportPanel.y + L->transportPanel.h + 10;
     L->chanDD = (Rect){10 + 10, keyboardPanelY + 28, 90, 22};
-    L->ddRect = (Rect){687, 43, 160, 24};
+    // Match the rendering coords in gui_main.c (Reverb dropdown sits at y=33)
+    L->ddRect = (Rect){687, 33, 160, 24};
+
+    // Reverb/Chorus level pickers sit under the Reverb dropdown.
+    // Keep these in layout so wheel/key hit-tests match rendering.
+    int picker_label_y = L->ddRect.y + L->ddRect.h + 6;
+    int picker_y = picker_label_y + 16;
+    int picker_h = 18;
+    int picker_w = 52;  // smaller field width
+    int picker_gap = 12;
+    L->reverbLvlRect = (Rect){L->ddRect.x, picker_y, picker_w, picker_h};
+    L->chorusLvlRect = (Rect){L->ddRect.x + picker_w + picker_gap, picker_y, picker_w, picker_h};
+
+    int btn_gap = 4;
+    int btn_w = 18;
+    L->chorusMinusRect = (Rect){L->chorusLvlRect.x + L->chorusLvlRect.w + btn_gap, picker_y, btn_w, picker_h};
+    L->chorusPlusRect = (Rect){L->chorusMinusRect.x + btn_w + 2, picker_y, btn_w, picker_h};
 
     // Keyboard panel
     L->keyboardPanel = (Rect){10, keyboardPanelY, 880, 110};
 
     // MSB/LSB picker positions inside keyboard panel (match rendering math)
-    int picker_y = L->keyboardPanel.y + 56; // below channel dropdown
-    int picker_w = 35;
-    int picker_h = 18;
+    picker_y = L->keyboardPanel.y + 56; // below channel dropdown
+    picker_w = 35;
+    picker_h = 18;
     int spacing = 5;
     L->msbRect = (Rect){L->keyboardPanel.x + 10, picker_y, picker_w, picker_h};
     L->lsbRect = (Rect){L->msbRect.x + picker_w + spacing, picker_y, picker_w, picker_h};

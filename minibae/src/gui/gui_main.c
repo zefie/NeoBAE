@@ -52,6 +52,7 @@
 #include "gui_midi.h"     // for virtual keyboard functions
 #include "gui_playlist.h" // for playlist panel functions
 #include "gui_panels.h"
+#include "gui_settings.h" // for g_reverb_presets
 
 #if USE_SF2_SUPPORT == TRUE
     #if _USING_FLUIDSYNTH == TRUE
@@ -60,6 +61,10 @@
 #endif
 
 int g_thread_ch_enabled[BAE_MAX_MIDI_CHANNELS] = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
+
+// Reverb preset modal dialogs (global so ui_modal_blocking can see them)
+bool g_show_reverb_preset_name_dialog = false;
+bool g_show_reverb_preset_delete_confirm = false;
 /* Forward-declare dialog renderer from gui_dialogs.c to avoid including the
     full header (which defines globals that conflict with this file's statics). */
 void render_about_dialog(SDL_Renderer *R, int mx, int my, bool mclick);
@@ -96,6 +101,7 @@ bool recreate_mixer_and_restore(int sampleRateHz, bool stereo, int reverbType,
 bool load_bank(const char *path, bool current_playing_state, int transpose, int tempo, int volume, bool loop_enabled, int reverb_type, bool ch_enable[BAE_MAX_MIDI_CHANNELS], bool save_to_settings);
 bool load_bank_simple(const char *path, bool save_to_settings, int reverb_type, bool loop_enabled);
 int g_max_vu_channels = 16;
+int g_reverbLevel = 0, g_chorusLevel = 0;
 
 void safe_strncpy(char *dst, const char *src, size_t size) {
     strncpy(dst, src, size - 1);
@@ -534,7 +540,7 @@ bool recreate_mixer_and_restore(int sampleRateHz, bool stereo, int reverbType,
     }
     BAEMixer_SetAudioTask(g_bae.mixer, gui_audio_task, g_bae.mixer);
     BAEMixer_ReengageAudio(g_bae.mixer);
-    BAEMixer_SetDefaultReverb(g_bae.mixer, (BAEReverbType)reverbType);
+    bae_set_reverb(reverbType);
     BAEMixer_SetMasterVolume(g_bae.mixer, FLOAT_TO_UNSIGNED_FIXED(g_last_requested_master_volume));
 
     // Ensure the lightweight live song is recreated so external MIDI
@@ -777,14 +783,18 @@ int main(int argc, char *argv[])
     int transpose = 0;
     int tempo = 100;
     int volume = 100;
-    bool loopPlay = true;
-    int reverbLvl = 15, chorusLvl = 15;
-    (void)reverbLvl;
-    (void)chorusLvl;
+    bool loopPlay = true;    
     int progress = 0;
     int duration = 0;
     bool playing = false;
     int reverbType = 7;
+    bool g_last_reverb_custom_mode = false;
+
+    // Reverb preset dialogs (global so ui_modal_blocking can see them)
+    g_show_reverb_preset_name_dialog = false;
+    g_show_reverb_preset_delete_confirm = false;
+    char reverb_preset_name_buf[64] = {0};
+    int reverb_preset_delete_index = -1;
 
     Settings settings = load_settings();
     if (settings.has_reverb)
@@ -792,6 +802,35 @@ int main(int argc, char *argv[])
         reverbType = settings.reverb_type;
         if (reverbType == 0)
             reverbType = 1;
+        
+        // Deduce custom mode and preset from reverbType
+        int reverbCount = get_reverb_count();
+        int kCustomMenuIndex = BAE_REVERB_TYPE_CUSTOM;
+        
+        if (reverbType == kCustomMenuIndex)
+        {
+            // Custom mode, no preset
+            g_last_reverb_custom_mode = true;
+            g_last_reverb_custom_preset_index = -1;
+        }
+        else if (reverbType > kCustomMenuIndex)
+        {
+            // User preset selected
+            g_last_reverb_custom_mode = true;
+            g_last_reverb_custom_preset_index = reverbType - kCustomMenuIndex - 1;
+            // Load reverb/chorus values from the preset
+            if (g_last_reverb_custom_preset_index >= 0 && g_last_reverb_custom_preset_index < g_reverb_preset_count)
+            {
+                g_reverbLevel = g_reverb_presets[g_last_reverb_custom_preset_index].reverb_level;
+                g_chorusLevel = g_reverb_presets[g_last_reverb_custom_preset_index].chorus_level;
+            }
+        }
+        else
+        {
+            // Built-in reverb type
+            g_last_reverb_custom_mode = false;
+            g_last_reverb_custom_preset_index = -1;
+        }
     }
     if (settings.has_loop)
     {
@@ -1248,6 +1287,14 @@ int main(int argc, char *argv[])
                         Rect chanDD = L.chanDD;
                         Rect ddRect = L.ddRect;
                         int reverbCount = get_reverb_count();
+                        int presetCount = g_reverb_preset_count;
+                        if (presetCount < 0)
+                            presetCount = 0;
+                        if (presetCount > MAX_REVERB_PRESETS)
+                            presetCount = MAX_REVERB_PRESETS;
+
+                        int reverbMenuCount = reverbCount + 1 + presetCount; // includes "Custom" + presets
+                        const int kCustomMenuIndex = BAE_REVERB_TYPE_CUSTOM;                      // 1-based; inserted after engine type 6
 
                         // Dropdown delta preserves previous behavior (wheel up -> move up in list)
                         int delta = (wy > 0) ? -1 : 1; // wheel up -> move up (decrement index)
@@ -1257,15 +1304,75 @@ int main(int argc, char *argv[])
                         // First handle dropdowns (existing behavior)
                         if (point_in(mx, my, ddRect))
                         {
-                            int nt = reverbType + delta;
-                            if (nt < 1)
-                                nt = 1;
-                            if (nt > reverbCount)
-                                nt = reverbCount;
-                            if (nt != reverbType)
+                            int curMenuIndex = 1;
+                            if (g_last_reverb_custom_mode)
                             {
-                                reverbType = nt;
-                                bae_set_reverb(reverbType);
+                                if (g_last_reverb_custom_preset_index >= 0 && g_last_reverb_custom_preset_index < presetCount)
+                                    curMenuIndex = (kCustomMenuIndex + 1) + g_last_reverb_custom_preset_index;
+                                else
+                                    curMenuIndex = kCustomMenuIndex;
+                            }
+                            else
+                            {
+                                curMenuIndex = (reverbType < kCustomMenuIndex) ? reverbType : (reverbType + 1 + presetCount);
+                            }
+
+                            int newMenuIndex = curMenuIndex + delta;
+                            if (newMenuIndex < 1)
+                                newMenuIndex = 1;
+                            if (newMenuIndex > reverbMenuCount)
+                                newMenuIndex = reverbMenuCount;
+
+                            if (newMenuIndex != curMenuIndex)
+                            {
+                                if (newMenuIndex == kCustomMenuIndex)
+                                {
+                                    g_last_reverb_custom_mode = true;
+                                    g_last_reverb_custom_preset_index = -1;
+                                    reverbType = newMenuIndex;
+                                    g_reverbLevel = 0;
+                                    g_chorusLevel = 0;
+                                    bae_set_reverb(reverbType);
+                                    apply_reverb_if_needed();
+                                }
+                                else if (newMenuIndex > kCustomMenuIndex && newMenuIndex <= (kCustomMenuIndex + presetCount))
+                                {
+                                    int presetIndex = newMenuIndex - (kCustomMenuIndex + 1);
+                                    if (presetIndex >= 0 && presetIndex < presetCount)
+                                    {
+                                        reverbType = newMenuIndex;
+                                        g_last_reverb_custom_mode = true;
+                                        g_last_reverb_custom_preset_index = presetIndex;
+                                        g_reverbLevel = g_reverb_presets[presetIndex].reverb_level;
+                                        g_chorusLevel = g_reverb_presets[presetIndex].chorus_level;
+                                        if (g_reverbLevel < 0)
+                                            g_reverbLevel = 0;
+                                        if (g_reverbLevel > 127)
+                                            g_reverbLevel = 127;
+                                        if (g_chorusLevel < 0)
+                                            g_chorusLevel = 0;
+                                        if (g_chorusLevel > 127)
+                                            g_chorusLevel = 127;
+                                        bae_set_reverb(reverbType);
+                                        apply_reverb_if_needed();
+                                    }
+                                }
+                                else
+                                {
+                                    g_last_reverb_custom_mode = false;
+                                    g_last_reverb_custom_preset_index = -1;
+                                    int nt = (newMenuIndex < kCustomMenuIndex) ? newMenuIndex : (newMenuIndex - 1 - presetCount);
+                                    if (nt < 1)
+                                        nt = 1;
+                                    if (nt > reverbCount)
+                                        nt = reverbCount;
+                                    if (nt != reverbType)
+                                    {
+                                        reverbType = nt;
+                                        bae_set_reverb(reverbType);
+                                        apply_reverb_if_needed();
+                                    }
+                                }
                             }
                         }
                         else if (point_in(mx, my, chanDD))
@@ -1328,6 +1435,43 @@ int main(int argc, char *argv[])
                                 {
                                     change_bank_value_for_current_channel(false, sdelta);
                                     handled_wheel_event = true;
+                                }
+                            }
+
+                            // Reverb/Chorus level pickers wheel handling
+                            if (!handled_wheel_event)
+                            {
+                                bool reverb_enabled_local = !(g_bae.is_audio_file && g_bae.sound);
+                                bool fx_levels_enabled_local = reverb_enabled_local && !g_reverbDropdownOpen && (reverbType >= kCustomMenuIndex);
+                                if (fx_levels_enabled_local && g_bae.song)
+                                {
+                                    bool changed_fx = false;
+                                    if (point_in(mx, my, L.reverbLvlRect))
+                                    {
+                                        g_reverbLevel += sdelta;
+                                        if (g_reverbLevel < 0)
+                                            g_reverbLevel = 127;
+                                        if (g_reverbLevel > 127)
+                                            g_reverbLevel = 0;
+                                        changed_fx = true;
+                                        handled_wheel_event = true;
+                                    }
+                                    else if (point_in(mx, my, L.chorusLvlRect))
+                                    {
+                                        g_chorusLevel += sdelta;
+                                        if (g_chorusLevel < 0)
+                                            g_chorusLevel = 127;
+                                        if (g_chorusLevel > 127)
+                                            g_chorusLevel = 0;
+                                        changed_fx = true;
+                                        handled_wheel_event = true;
+                                    }
+
+                                    if (changed_fx)
+                                    {
+                                        bae_set_reverb(reverbType);
+                                        apply_reverb_if_needed();
+                                    }
                                 }
                             }
 
@@ -1640,6 +1784,11 @@ int main(int argc, char *argv[])
 
                 if (note != -1)
                 {
+                    // Don't trigger virtual keyboard when typing in dialog
+                    if (g_show_reverb_preset_name_dialog)
+                    {
+                        break;
+                    }
                     // While exporting we want to disable the virtual keyboard so
                     // user key presses don't affect the export audio. Preserve
                     // other keys like Escape—only ignore piano mapping here.
@@ -1732,8 +1881,47 @@ int main(int argc, char *argv[])
                     break;
                 }
 
-                // Escape still quits
-                if (sym == SDLK_ESCAPE)
+                // Handle special keys in preset name dialog (keydown only)
+                if (isDown && g_show_reverb_preset_name_dialog)
+                {
+                    if (sym == SDLK_BACKSPACE)
+                    {
+                        size_t len = strlen(reverb_preset_name_buf);
+                        if (len > 0)
+                            reverb_preset_name_buf[len - 1] = '\0';
+                    }
+                    else if (sym == SDLK_RETURN || sym == SDLK_RETURN2)
+                    {
+                        // Same logic as OK button
+                        if (reverb_preset_name_buf[0] != '\0')
+                        {
+                            if (g_reverb_preset_count < MAX_REVERB_PRESETS)
+                            {
+                                ReverbPreset* p = &g_reverb_presets[g_reverb_preset_count];
+                                strncpy(p->name, reverb_preset_name_buf, sizeof(p->name) - 1);
+                                p->name[sizeof(p->name) - 1] = '\0';
+                                p->reverb_level = g_reverbLevel;
+                                p->chorus_level = g_chorusLevel;
+                                g_reverb_preset_count++;
+                                g_last_reverb_custom_preset_index = g_reverb_preset_count - 1;
+                                g_last_reverb_custom_mode = false;
+                                reverbType = get_reverb_count() + 2 + g_last_reverb_custom_preset_index;
+                                save_settings(g_current_bank_path, reverbType, loopPlay);
+                            }
+                        }
+                        g_show_reverb_preset_name_dialog = false;
+                        SDL_StopTextInput(win);
+                    }
+                    else if (sym == SDLK_ESCAPE)
+                    {
+                        // Cancel
+                        g_show_reverb_preset_name_dialog = false;
+                        SDL_StopTextInput(win);
+                    }
+                }
+
+                // Escape still quits (but not when dialogs are open)
+                if (sym == SDLK_ESCAPE && !g_show_reverb_preset_name_dialog && !g_show_reverb_preset_delete_confirm)
                     running = false;
 
                 // Up/Down arrow control for hovered dropdowns (keydown only)
@@ -1746,20 +1934,45 @@ int main(int argc, char *argv[])
                         Rect chanDD = L.chanDD;
                         Rect ddRect = L.ddRect;
                         int reverbCount = get_reverb_count();
+                        int reverbMenuCount = reverbCount + 1 + g_reverb_preset_count; // includes "Custom"
+                        const int kCustomMenuIndex = reverbCount + 1;         // 1-based; inserted after engine type 6
 
                         int delta = (sym == SDLK_DOWN) ? 1 : -1;
 
                         if (point_in(mx, my, ddRect))
                         {
-                            int nt = reverbType + delta;
-                            if (nt < 1)
-                                nt = 1;
-                            if (nt > reverbCount)
-                                nt = reverbCount;
-                            if (nt != reverbType)
+                            int curMenuIndex = 1;
+                            if (g_last_reverb_custom_mode)
+                                curMenuIndex = kCustomMenuIndex;
+                            else
+                                curMenuIndex = (reverbType < kCustomMenuIndex) ? reverbType : (reverbType + 1);
+
+                            int newMenuIndex = curMenuIndex + delta;
+                            if (newMenuIndex < 1)
+                                newMenuIndex = 1;
+                            if (newMenuIndex > reverbMenuCount)
+                                newMenuIndex = reverbMenuCount;
+
+                            if (newMenuIndex != curMenuIndex)
                             {
-                                reverbType = nt;
-                                bae_set_reverb(reverbType);
+                                if (newMenuIndex == kCustomMenuIndex)
+                                {
+                                    g_last_reverb_custom_mode = true;
+                                }
+                                else
+                                {
+                                    g_last_reverb_custom_mode = false;
+                                    int nt = (newMenuIndex < kCustomMenuIndex) ? newMenuIndex : (newMenuIndex - 1);
+                                    if (nt < 1)
+                                        nt = 1;
+                                    if (nt > reverbCount)
+                                        nt = reverbCount;
+                                    if (nt != reverbType)
+                                    {
+                                        reverbType = nt;
+                                        bae_set_reverb(reverbType);
+                                    }
+                                }
                             }
                         }
                         else if (point_in(mx, my, chanDD))
@@ -1780,7 +1993,19 @@ int main(int argc, char *argv[])
                 }
             }
             break;
+
+            case SDL_EVENT_TEXT_INPUT:
+            {
+                if (g_show_reverb_preset_name_dialog)
+                {
+                    size_t len = strlen(reverb_preset_name_buf);
+                    if (len < sizeof(reverb_preset_name_buf) - 1)
+                    {
+                        strncat(reverb_preset_name_buf, e.text.text, sizeof(reverb_preset_name_buf) - len - 1);
+                    }
+                }
             }
+            break;
         }
 
         // If RMF Info dialog is visible, treat it as modal for input: swallow clicks
@@ -1833,6 +2058,8 @@ int main(int argc, char *argv[])
             g_bae.is_playing = false;
         }
 #endif
+
+        } // end of while (SDL_PollEvent(&e))
 
         // timing update
         Uint32 now = SDL_GetTicks();
@@ -2146,6 +2373,8 @@ int main(int argc, char *argv[])
                                     BAESong_Preroll(g_bae.song);
                                     if (BAESong_Start(g_bae.song, 0) == BAE_NO_ERROR)
                                     {
+                                        bae_set_reverb(reverbType);
+                                        apply_reverb_if_needed();
                                         playing = true;
                                         g_bae.is_playing = true;
                                         g_bae.song_finished = false;
@@ -2317,7 +2546,10 @@ int main(int argc, char *argv[])
         // Channel toggles in a neat grid (with measured label centering)
         // Block background interactions when a modal is active or when exporting.
         // Exporting will dim and lock most UI, but the Stop button remains active.
-        bool modal_block = g_show_settings_dialog || g_show_about_dialog || (g_show_rmf_info_dialog && g_bae.is_rmf_file) || g_exporting; // block when any modal/dialog open or export in progress
+        bool modal_block = g_show_settings_dialog || g_show_about_dialog ||
+                  (g_show_rmf_info_dialog && g_bae.is_rmf_file) ||
+                  g_show_reverb_preset_name_dialog || g_show_reverb_preset_delete_confirm ||
+                  g_exporting; // block when any modal/dialog open or export in progress
         // When a modal is active we fully swallow background hover/drag/click by using off-screen, inert inputs
         int ui_mx = mx, ui_my = my;
         bool ui_mdown = mdown;
@@ -2771,11 +3003,12 @@ int main(int argc, char *argv[])
         }
 
         // Reverb controls (we always leave Reverb interactive even when MIDI input is enabled)
-        draw_text(R, 687, 25, "Reverb:", labelCol);
+        // Shift slightly upward to make space for Reverb/Chorus pickers below.
+        draw_text(R, 687, 15, "Reverb:", labelCol);
         // Removed non-functional 'No Change' option; first entry now 'Default' (engine type 0)
         // Removed engine reverb index 0 (NO_CHANGE). UI list now maps i -> engine index (i+1)
         int reverbCount = get_reverb_count();
-        Rect ddRect = {687, 43, 160, 24}; // moved left 3px and down 3px
+        Rect ddRect = {687, 33, 160, 24};
         // Closed dropdown: use theme globals
         SDL_Color dd_bg = g_button_base;
         SDL_Color dd_txt = g_button_text;
@@ -2792,7 +3025,18 @@ int main(int argc, char *argv[])
         }
         draw_rect(R, ddRect, dd_bg);
         draw_frame(R, ddRect, dd_frame);
-        const char *cur = (reverbType >= 1 && reverbType <= reverbCount) ? get_reverb_name(reverbType - 1) : "?";
+        const char *cur = NULL;
+        if (g_last_reverb_custom_mode)
+        {
+            if (g_last_reverb_custom_preset_index >= 0 && g_last_reverb_custom_preset_index < g_reverb_preset_count && g_reverb_presets[g_last_reverb_custom_preset_index].name[0])
+                cur = g_reverb_presets[g_last_reverb_custom_preset_index].name;
+            else
+                cur = "Custom";
+        }
+        else
+        {
+            cur = ((reverbType >= 1 && reverbType <= reverbCount) ? get_reverb_name(reverbType - 1) : "?");
+        }
         draw_text(R, ddRect.x + 6, ddRect.y + 3, cur, dd_txt);
         draw_text(R, ddRect.x + ddRect.w - 16, ddRect.y + 3, g_reverbDropdownOpen ? "^" : "v", dd_txt);
         if (overMain && ui_mclick && reverb_enabled)
@@ -2800,19 +3044,173 @@ int main(int argc, char *argv[])
             g_reverbDropdownOpen = !g_reverbDropdownOpen;
         }
 
-        // Volume control (aligned with Tempo)
-        draw_text(R, 687, 85, "Volume:", labelCol);
+        // Reverb/Chorus level pickers (0-127) shown under the Reverb dropdown.
+        // Only enable when in Custom mode or a user preset (not built-in reverb types).
+        bool fx_levels_enabled = reverb_enabled && !g_reverbDropdownOpen && !modal_block && (reverbType >= BAE_REVERB_TYPE_CUSTOM);
+        int picker_label_y = ddRect.y + ddRect.h + 6;
+        int picker_y = picker_label_y + 16;
+        int picker_h = 18;
+        int picker_w = 52; // smaller fields
+        int picker_gap = 12;
+        Rect reverbLvlRect = {ddRect.x, picker_y, picker_w, picker_h};
+        Rect chorusLvlRect = {ddRect.x + picker_w + picker_gap, picker_y, picker_w, picker_h};
+
+        // Chorus +/- buttons (stub for now; wiring later)
+        int btn_gap = 4;
+        int btn_w = 18;
+        Rect chorusMinusRect = {chorusLvlRect.x + chorusLvlRect.w + btn_gap, picker_y, btn_w, picker_h};
+        Rect chorusPlusRect = {chorusMinusRect.x + btn_w + 2, picker_y, btn_w, picker_h};
+
+        // Labels
+        SDL_Color fxLabelCol = labelCol;
+        if (!fx_levels_enabled)
+            fxLabelCol.a = 180;
+        draw_text(R, reverbLvlRect.x, picker_label_y, "Reverb", fxLabelCol);
+        draw_text(R, chorusLvlRect.x, picker_label_y, "Chorus", fxLabelCol);
+
+        // Pickers (rect + centered value)
+        bool reverbLvlHover = fx_levels_enabled && point_in(ui_mx, ui_my, reverbLvlRect);
+        bool chorusLvlHover = fx_levels_enabled && point_in(ui_mx, ui_my, chorusLvlRect);
+        SDL_Color rvBg = reverbLvlHover ? g_button_hover : g_button_base;
+        SDL_Color chBg = chorusLvlHover ? g_button_hover : g_button_base;
+        SDL_Color rvTxt = g_button_text;
+        SDL_Color chTxt = g_button_text;
+        if (!fx_levels_enabled)
+        {
+            rvBg.a = 180;
+            chBg.a = 180;
+            rvTxt.a = 180;
+            chTxt.a = 180;
+        }
+        draw_rect(R, reverbLvlRect, rvBg);
+        draw_frame(R, reverbLvlRect, g_button_border);
+        draw_rect(R, chorusLvlRect, chBg);
+        draw_frame(R, chorusLvlRect, g_button_border);
+
+        // Draw chorus +/- buttons to the right of the chorus level field
+        // These are repurposed as Reverb preset add/remove when FX levels are enabled.
+        {
+            // Allow buttons to be enabled even when modal is showing (so they can open modals)
+            // but use modal_block for determining if the pickers themselves should be enabled
+            bool preset_buttons_enabled = reverb_enabled && !g_reverbDropdownOpen && (reverbType >= BAE_REVERB_TYPE_CUSTOM);
+            bool preset_add_enabled = preset_buttons_enabled && (g_reverb_preset_count < MAX_REVERB_PRESETS + 1);
+            bool preset_del_enabled = preset_buttons_enabled && (g_last_reverb_custom_mode && g_last_reverb_custom_preset_index >= 0 && g_last_reverb_custom_preset_index < g_reverb_preset_count);
+            SDL_Color bMinusBg = (preset_del_enabled && point_in(ui_mx, ui_my, chorusMinusRect)) ? g_button_hover : g_button_base;
+            SDL_Color bPlusBg = (preset_add_enabled && point_in(ui_mx, ui_my, chorusPlusRect)) ? g_button_hover : g_button_base;
+            SDL_Color bMinusTxt = g_button_text;
+            SDL_Color bPlusTxt = g_button_text;
+            if (!preset_del_enabled)
+            {
+                bMinusBg.a = 180;
+                bMinusTxt.a = 180;
+            }
+            if (!preset_add_enabled)
+            {
+                bPlusBg.a = 180;
+                bPlusTxt.a = 180;
+            }
+            draw_rect(R, chorusMinusRect, bMinusBg);
+            draw_frame(R, chorusMinusRect, g_button_border);
+            draw_rect(R, chorusPlusRect, bPlusBg);
+            draw_frame(R, chorusPlusRect, g_button_border);
+
+            int tw = 0, th = 0;
+            measure_text("-", &tw, &th);
+            draw_text(R, chorusMinusRect.x + (chorusMinusRect.w - tw) / 2, chorusMinusRect.y + (chorusMinusRect.h - th) / 2, "-", bMinusTxt);
+            measure_text("+", &tw, &th);
+            draw_text(R, chorusPlusRect.x + (chorusPlusRect.w - tw) / 2, chorusPlusRect.y + (chorusPlusRect.h - th) / 2, "+", bPlusTxt);
+
+            // Use raw mouse coords and mclick for preset buttons so they can open modals
+            if (mclick)
+            {
+                if (preset_add_enabled && point_in(mx, my, chorusPlusRect))
+                {
+                    // Open add-preset dialog
+                    g_reverbDropdownOpen = false;
+                    if (!g_show_reverb_preset_name_dialog)
+                    {
+                        memset(reverb_preset_name_buf, 0, sizeof(reverb_preset_name_buf));
+                        g_show_reverb_preset_name_dialog = true;
+                        SDL_StartTextInput(win);
+                    }
+                    mclick = false; // consume click
+                }
+                else if (preset_del_enabled && point_in(mx, my, chorusMinusRect))
+                {
+                    // Open delete confirmation dialog
+                    g_reverbDropdownOpen = false;
+                    reverb_preset_delete_index = g_last_reverb_custom_preset_index;
+                    g_show_reverb_preset_delete_confirm = true;
+                    mclick = false; // consume click
+                }
+            }
+        }
+
+        char rvBuf[8];
+        char chBuf[8];
+        snprintf(rvBuf, sizeof(rvBuf), "%d", g_reverbLevel);
+        snprintf(chBuf, sizeof(chBuf), "%d", g_chorusLevel);
+        int rv_tw = 0, rv_th = 0;
+        int ch_tw = 0, ch_th = 0;
+        measure_text(rvBuf, &rv_tw, &rv_th);
+        measure_text(chBuf, &ch_tw, &ch_th);
+        draw_text(R, reverbLvlRect.x + (reverbLvlRect.w - rv_tw) / 2, reverbLvlRect.y + (reverbLvlRect.h - rv_th) / 2, rvBuf, rvTxt);
+        draw_text(R, chorusLvlRect.x + (chorusLvlRect.w - ch_tw) / 2, chorusLvlRect.y + (chorusLvlRect.h - ch_th) / 2, chBuf, chTxt);
+
+        // Click handling: left click increments, right click decrements
+        if (fx_levels_enabled && g_bae.song)
+        {
+            bool changed_fx = false;
+            if (reverbLvlHover)
+            {
+                if (ui_mclick)
+                {
+                    if (++g_reverbLevel > 127)
+                        g_reverbLevel = 0;
+                    changed_fx = true;
+                }
+                else if (ui_rclick)
+                {
+                    if (--g_reverbLevel < 0)
+                        g_reverbLevel = 127;
+                    changed_fx = true;
+                }
+            }
+            else if (chorusLvlHover)
+            {
+                if (ui_mclick)
+                {
+                    if (++g_chorusLevel > 127)
+                        g_chorusLevel = 0;
+                    changed_fx = true;
+                }
+                else if (ui_rclick)
+                {
+                    if (--g_chorusLevel < 0)
+                        g_chorusLevel = 127;
+                    changed_fx = true;
+                }
+            }
+            if (changed_fx)
+            {
+               bae_set_reverb(reverbType);
+               apply_reverb_if_needed();
+            }
+        }
+
+        // Volume control (shifted down to make room for Reverb/Chorus pickers)
+        draw_text(R, 687, 115, "Volume:", labelCol);
         // Allow volume slider interaction when reverb dropdown is closed. We want
         // users to adjust master volume even while external MIDI input is active.
         // Disable volume interaction when a modal/dialog is open
         bool volume_enabled = !g_reverbDropdownOpen && !modal_block;
-        ui_slider(R, (Rect){687, 103, ddRect.w, 14}, &volume, 0, NEW_MAX_VOLUME_PCT,
+        ui_slider(R, (Rect){687, 133, ddRect.w, 14}, &volume, 0, NEW_MAX_VOLUME_PCT,
                   volume_enabled ? ui_mx : -1, volume_enabled ? ui_my : -1,
                   volume_enabled ? ui_mdown : false, volume_enabled ? ui_mclick : false);
         char vbuf[32];
         snprintf(vbuf, sizeof(vbuf), "%d%%", volume);
         int vtxt_x = ddRect.x + ddRect.w + 3;
-        int vtxt_y = 101;
+        int vtxt_y = 131;
         draw_text(R, vtxt_x, vtxt_y, vbuf, labelCol);
         /* Volume value is now non-interactive; clicking the percent label no longer resets to 100% */
 
@@ -2827,9 +3225,41 @@ int main(int argc, char *argv[])
             draw_frame(R, ddRect, dd_frame);
             draw_text(R, ddRect.x + 6, ddRect.y + 3, cur, dd_txt);
             draw_text(R, ddRect.x + ddRect.w - 16, ddRect.y + 3, g_reverbDropdownOpen ? "^" : "v", dd_txt);
-            // Also redraw Volume controls on top so they remain active/visible
-            draw_text(R, 687, 85, "Volume:", labelCol);
-            ui_slider(R, (Rect){687, 103, ddRect.w, 14}, &volume, 0, NEW_MAX_VOLUME_PCT,
+            // Also redraw Reverb/Chorus pickers + Volume controls on top so they remain active/visible
+            draw_text(R, 687, 15, "Reverb:", labelCol);
+            draw_text(R, reverbLvlRect.x, picker_label_y, "Reverb", fxLabelCol);
+            draw_text(R, chorusLvlRect.x, picker_label_y, "Chorus", fxLabelCol);
+            draw_rect(R, reverbLvlRect, rvBg);
+            draw_frame(R, reverbLvlRect, g_button_border);
+            draw_rect(R, chorusLvlRect, chBg);
+            draw_frame(R, chorusLvlRect, g_button_border);
+            draw_text(R, reverbLvlRect.x + (reverbLvlRect.w - rv_tw) / 2, reverbLvlRect.y + (reverbLvlRect.h - rv_th) / 2, rvBuf, rvTxt);
+            draw_text(R, chorusLvlRect.x + (chorusLvlRect.w - ch_tw) / 2, chorusLvlRect.y + (chorusLvlRect.h - ch_th) / 2, chBuf, chTxt);
+
+            // Redraw chorus +/- buttons on top as well
+            {
+                SDL_Color bMinusBg = (fx_levels_enabled && point_in(ui_mx, ui_my, chorusMinusRect)) ? g_button_hover : g_button_base;
+                SDL_Color bPlusBg = (fx_levels_enabled && point_in(ui_mx, ui_my, chorusPlusRect)) ? g_button_hover : g_button_base;
+                SDL_Color bTxt = g_button_text;
+                if (!fx_levels_enabled)
+                {
+                    bMinusBg.a = 180;
+                    bPlusBg.a = 180;
+                    bTxt.a = 180;
+                }
+                draw_rect(R, chorusMinusRect, bMinusBg);
+                draw_frame(R, chorusMinusRect, g_button_border);
+                draw_rect(R, chorusPlusRect, bPlusBg);
+                draw_frame(R, chorusPlusRect, g_button_border);
+                int tw = 0, th = 0;
+                measure_text("-", &tw, &th);
+                draw_text(R, chorusMinusRect.x + (chorusMinusRect.w - tw) / 2, chorusMinusRect.y + (chorusMinusRect.h - th) / 2, "-", bTxt);
+                measure_text("+", &tw, &th);
+                draw_text(R, chorusPlusRect.x + (chorusPlusRect.w - tw) / 2, chorusPlusRect.y + (chorusPlusRect.h - th) / 2, "+", bTxt);
+            }
+
+            draw_text(R, 687, 115, "Volume:", labelCol);
+            ui_slider(R, (Rect){687, 133, ddRect.w, 14}, &volume, 0, NEW_MAX_VOLUME_PCT,
                       volume_enabled ? ui_mx : -1, volume_enabled ? ui_my : -1,
                       volume_enabled ? ui_mdown : false, volume_enabled ? ui_mclick : false);
             draw_text(R, vtxt_x, vtxt_y, vbuf, labelCol);
@@ -2841,7 +3271,7 @@ int main(int argc, char *argv[])
             int n_y = controlPanel.y + controlPanel.h - n_h - 6;
             draw_text(R, n_x, n_y, notice, g_highlight_color);
             // Ensure the "Reverb:" label itself is also drawn above the dim layer
-            draw_text(R, 687, 25, "Reverb:", labelCol);
+            draw_text(R, 687, 15, "Reverb:", labelCol);
         }
 #endif
         // If playing an audio file (sound, not song), dim the control panel except volume-related controls
@@ -2853,8 +3283,8 @@ int main(int argc, char *argv[])
             // (Reverb is disabled when playing audio files)
             // Respect modal_block here so volume cannot be adjusted while a dialog is open
             bool audio_volume_enabled = !g_reverbDropdownOpen && !modal_block; // Volume should work when playing audio files
-            draw_text(R, 687, 85, "Volume:", labelCol);
-            ui_slider(R, (Rect){687, 103, ddRect.w, 14}, &volume, 0, NEW_MAX_VOLUME_PCT,
+            draw_text(R, 687, 115, "Volume:", labelCol);
+            ui_slider(R, (Rect){687, 133, ddRect.w, 14}, &volume, 0, NEW_MAX_VOLUME_PCT,
                       audio_volume_enabled ? ui_mx : -1, audio_volume_enabled ? ui_my : -1,
                       audio_volume_enabled ? ui_mdown : false, audio_volume_enabled ? ui_mclick : false);
             draw_text(R, vtxt_x, vtxt_y, vbuf, labelCol);
@@ -4537,6 +4967,8 @@ int main(int argc, char *argv[])
                                                 BAEResult rs = target ? BAESong_Start(target, 0) : BAE_NO_ERROR;
                                                 if (rs != BAE_NO_ERROR)
                                                 {
+                                                    bae_set_reverb(reverbType);
+                                                    apply_reverb_if_needed();
                                                     set_status_message("Failed to start song for WAV recording");
                                                     pcm_wav_finalize();
                                                     free(export_file);
@@ -4592,6 +5024,8 @@ int main(int argc, char *argv[])
                                                 BAEResult rs = target ? BAESong_Start(target, 0) : BAE_NO_ERROR;
                                                 if (rs != BAE_NO_ERROR)
                                                 {
+                                                    bae_set_reverb(reverbType);
+                                                    apply_reverb_if_needed();
                                                     set_status_message("Failed to start song for FLAC recording");
                                                     pcm_flac_finalize();
                                                     free(export_file);
@@ -4706,6 +5140,8 @@ int main(int argc, char *argv[])
                                                     BAEResult rs = target ? BAESong_Start(target, 0) : BAE_NO_ERROR;
                                                     if (rs != BAE_NO_ERROR)
                                                     {
+                                                        bae_set_reverb(reverbType);
+                                                        apply_reverb_if_needed();
                                                         set_status_message("Failed to start song for Vorbis recording");
                                                         pcm_vorbis_finalize();
                                                         free(export_file);
@@ -5622,24 +6058,40 @@ int main(int argc, char *argv[])
         if (g_reverbDropdownOpen)
         {
             int reverbCount = get_reverb_count();
-            Rect ddRect = {690, 40, 160, 24}; // Moved up 20 pixels from y=60 to y=40
+            int reverbMenuCount = reverbCount + 1 + g_reverb_preset_count; // includes "Custom"
+            const int kCustomMenuIndex = reverbCount + 1;        // 1-based; inserted after engine type 6
+            Rect ddRect = {687, 33, 160, 24};
 
             // Draw the dropdown list using theme globals
             int itemH = ddRect.h;
-            int totalH = itemH * reverbCount;
+            int totalH = itemH * reverbMenuCount;
             Rect box = {ddRect.x, ddRect.y + ddRect.h + 1, ddRect.w, totalH};
             draw_rect(R, box, g_panel_bg);
             draw_frame(R, box, g_panel_border);
 
-            for (int i = 0; i < reverbCount; i++)
+            int currentMenuIndex = 1;
+            if (g_last_reverb_custom_mode)
             {
+                if (g_last_reverb_custom_preset_index >= 0 && g_last_reverb_custom_preset_index < g_reverb_preset_count)
+                    currentMenuIndex = kCustomMenuIndex + 1 + g_last_reverb_custom_preset_index;
+                else
+                    currentMenuIndex = kCustomMenuIndex;
+            }
+            else
+            {
+                currentMenuIndex = reverbType;
+            }
+
+            for (int i = 0; i < reverbMenuCount; i++)
+            {
+                int menuIndex = i + 1; // 1-based
                 Rect ir = {box.x, box.y + i * itemH, box.w, itemH};
                 bool over = point_in(mx, my, ir);
-                SDL_Color ibg = ((i + 1) == reverbType) ? g_highlight_color : g_panel_bg;
+                SDL_Color ibg = (menuIndex == currentMenuIndex) ? g_highlight_color : g_panel_bg;
                 if (over)
                     ibg = g_button_hover;
                 draw_rect(R, ir, ibg);
-                if (i < reverbCount - 1)
+                if (i < reverbMenuCount - 1)
                 { // separator line
                     SDL_Color sep = g_panel_border;
                     sep.a = 255; // use panel border as separator
@@ -5648,16 +6100,89 @@ int main(int argc, char *argv[])
                 }
                 // Choose text color: use button text on selected/hover, otherwise normal text
                 SDL_Color itemTxt = g_text_color;
-                if ((i + 1) == reverbType)
+                if (menuIndex == currentMenuIndex)
                     itemTxt = g_button_text;
                 if (over)
                     itemTxt = g_button_text;
-                draw_text(R, ir.x + 6, ir.y + 6, get_reverb_name(i), itemTxt);
+
+                const char *label = "?";
+                if (menuIndex == kCustomMenuIndex)
+                {
+                    label = "Custom";
+                }
+                else if (menuIndex > kCustomMenuIndex)
+                {
+                    // User preset
+                    int presetIndex = menuIndex - kCustomMenuIndex - 1;
+                    if (presetIndex >= 0 && presetIndex < g_reverb_preset_count)
+                    {
+                        label = g_reverb_presets[presetIndex].name;
+                    }
+                }
+                else
+                {
+                    // Built-in reverb type
+                    int engineIndex0 = menuIndex - 1;
+                    label = get_reverb_name(engineIndex0);
+                }
+                draw_text(R, ir.x + 6, ir.y + 6, label, itemTxt);
+
                 if (over && mclick)
                 {
-                    reverbType = i + 1;
                     g_reverbDropdownOpen = false;
-                    bae_set_reverb(reverbType);
+
+                    if (menuIndex == kCustomMenuIndex)
+                    {
+                        g_last_reverb_custom_mode = true;
+                        g_last_reverb_custom_preset_index = -1;
+                        reverbType = kCustomMenuIndex;
+                        g_reverbLevel = 0;
+                        g_chorusLevel = 0;                        
+                        // Reset reverb and chorus to 0 for Custom
+                        bae_set_reverb(reverbType);
+                        apply_reverb_if_needed();
+                    }
+                    else if (menuIndex > kCustomMenuIndex)
+                    {
+                        // User preset selected
+                        int presetIndex = menuIndex - kCustomMenuIndex - 1;
+                        if (presetIndex >= 0 && presetIndex < g_reverb_preset_count)
+                        {
+                            g_last_reverb_custom_mode = true;
+                            g_last_reverb_custom_preset_index = presetIndex;
+                            reverbType = menuIndex;
+                            // Apply preset values
+                            g_reverbLevel = g_reverb_presets[presetIndex].reverb_level;
+                            g_chorusLevel = g_reverb_presets[presetIndex].chorus_level;
+                            if (g_reverbLevel < 0)
+                                g_reverbLevel = 0;
+                            if (g_reverbLevel > 127)
+                                g_reverbLevel = 127;
+                            if (g_chorusLevel < 0)
+                                g_chorusLevel = 0;
+                            if (g_chorusLevel > 127)
+                                g_chorusLevel = 127;
+                            bae_set_reverb(reverbType);
+                            apply_reverb_if_needed();
+                        }
+                    }
+                    else
+                    {
+                        // Built-in reverb type
+                        g_last_reverb_custom_mode = false;
+                        g_last_reverb_custom_preset_index = -1;
+                        int nt = menuIndex;
+                        if (nt < 1)
+                            nt = 1;
+                        if (nt > reverbCount)
+                            nt = reverbCount;
+                        reverbType = nt;
+                        // Reset reverb and chorus to 0 for built-in types
+                        g_reverbLevel = 0;
+                        g_chorusLevel = 0;
+                        bae_set_reverb(reverbType);
+                        apply_reverb_if_needed();                    }
+                    
                     // Save settings when reverb is changed
                     if (g_current_bank_path[0] != '\0')
                     {
@@ -5754,6 +6279,173 @@ int main(int argc, char *argv[])
         if (g_show_about_dialog)
         {
             render_about_dialog(R, mx, my, mclick);
+        }
+
+        // Reverb preset name dialog (modal text input)
+        if (g_show_reverb_preset_name_dialog)
+        {
+            int dlgW = 400;
+            int dlgH = 150;
+            int dlgX = (WINDOW_W - dlgW) / 2;
+            int dlgY = (g_window_h - dlgH) / 2;
+            Rect dlgRect = {dlgX, dlgY, dlgW, dlgH};
+            
+            // Dim background
+            SDL_Color dim = {0, 0, 0, 180};
+            draw_rect(R, (Rect){0, 0, WINDOW_W, g_window_h}, dim);
+            
+            // Dialog box
+            draw_rect(R, dlgRect, g_panel_bg);
+            draw_frame(R, dlgRect, g_panel_border);
+            
+            // Title
+            draw_text(R, dlgX + 10, dlgY + 10, "New Reverb Preset", g_text_color);
+            
+            // Input field
+            Rect inputRect = {dlgX + 10, dlgY + 40, dlgW - 20, 24};
+            draw_rect(R, inputRect, g_button_base);
+            draw_frame(R, inputRect, g_button_border);
+            draw_text(R, inputRect.x + 4, inputRect.y + 4, reverb_preset_name_buf, g_button_text);
+            
+            // OK button
+            Rect okBtn = {dlgX + dlgW - 170, dlgY + dlgH - 40, 70, 30};
+            bool overOk = point_in(mx, my, okBtn);
+            SDL_Color okBg = overOk ? g_button_hover : g_button_base;
+            draw_rect(R, okBtn, okBg);
+            draw_frame(R, okBtn, g_button_border);
+            int okW = 0, okH = 0;
+            measure_text("OK", &okW, &okH);
+            draw_text(R, okBtn.x + (okBtn.w - okW) / 2, okBtn.y + (okBtn.h - okH) / 2, "OK", g_button_text);
+            
+            // Cancel button
+            Rect cancelBtn = {dlgX + dlgW - 90, dlgY + dlgH - 40, 70, 30};
+            bool overCancel = point_in(mx, my, cancelBtn);
+            SDL_Color cancelBg = overCancel ? g_button_hover : g_button_base;
+            draw_rect(R, cancelBtn, cancelBg);
+            draw_frame(R, cancelBtn, g_button_border);
+            int cancelW = 0, cancelH = 0;
+            measure_text("Cancel", &cancelW, &cancelH);
+            draw_text(R, cancelBtn.x + (cancelBtn.w - cancelW) / 2, cancelBtn.y + (cancelBtn.h - cancelH) / 2, "Cancel", g_button_text);
+            
+            if (mclick)
+            {
+                if (overOk && reverb_preset_name_buf[0])
+                {
+                    // Add the preset
+                    if (g_reverb_preset_count < MAX_REVERB_PRESETS)
+                    {
+                        strncpy(g_reverb_presets[g_reverb_preset_count].name, reverb_preset_name_buf, sizeof(g_reverb_presets[g_reverb_preset_count].name) - 1);
+                        g_reverb_presets[g_reverb_preset_count].name[sizeof(g_reverb_presets[g_reverb_preset_count].name) - 1] = '\0';
+                        g_reverb_presets[g_reverb_preset_count].reverb_level = g_reverbLevel;
+                        g_reverb_presets[g_reverb_preset_count].chorus_level = g_chorusLevel;
+                        
+                        g_last_reverb_custom_mode = true;
+                        g_last_reverb_custom_preset_index = g_reverb_preset_count;
+                        
+                        int reverbCount = get_reverb_count();
+                        reverbType = reverbCount + 2 + g_reverb_preset_count;
+                        
+                        g_reverb_preset_count++;
+                        
+                        // Save settings
+                        if (g_current_bank_path[0] != '\0')
+                        {
+                            save_settings(g_current_bank_path, reverbType, loopPlay);
+                        }
+                    }
+                    g_show_reverb_preset_name_dialog = false;
+                    SDL_StopTextInput(win);
+                }
+                else if (overCancel)
+                {
+                    g_show_reverb_preset_name_dialog = false;
+                    SDL_StopTextInput(win);
+                }
+            }
+        }
+        
+        // Reverb preset delete confirmation dialog
+        if (g_show_reverb_preset_delete_confirm)
+        {
+            int dlgW = 400;
+            int dlgH = 150;
+            int dlgX = (WINDOW_W - dlgW) / 2;
+            int dlgY = (g_window_h - dlgH) / 2;
+            Rect dlgRect = {dlgX, dlgY, dlgW, dlgH};
+            
+            // Dim background
+            SDL_Color dim = {0, 0, 0, 180};
+            draw_rect(R, (Rect){0, 0, WINDOW_W, g_window_h}, dim);
+            
+            // Dialog box
+            draw_rect(R, dlgRect, g_panel_bg);
+            draw_frame(R, dlgRect, g_panel_border);
+            
+            // Title
+            draw_text(R, dlgX + 10, dlgY + 10, "Delete Reverb Preset", g_text_color);
+            
+            // Message
+            char msg[128];
+            if (reverb_preset_delete_index >= 0 && reverb_preset_delete_index < g_reverb_preset_count)
+            {
+                snprintf(msg, sizeof(msg), "Delete preset '%s'?", g_reverb_presets[reverb_preset_delete_index].name);
+            }
+            else
+            {
+                snprintf(msg, sizeof(msg), "Delete this preset?");
+            }
+            draw_text(R, dlgX + 10, dlgY + 50, msg, g_text_color);
+            
+            // Yes button
+            Rect yesBtn = {dlgX + dlgW - 170, dlgY + dlgH - 40, 70, 30};
+            bool overYes = point_in(mx, my, yesBtn);
+            SDL_Color yesBg = overYes ? g_button_hover : g_button_base;
+            draw_rect(R, yesBtn, yesBg);
+            draw_frame(R, yesBtn, g_button_border);
+            int yesW = 0, yesH = 0;
+            measure_text("Yes", &yesW, &yesH);
+            draw_text(R, yesBtn.x + (yesBtn.w - yesW) / 2, yesBtn.y + (yesBtn.h - yesH) / 2, "Yes", g_button_text);
+            
+            // No button
+            Rect noBtn = {dlgX + dlgW - 90, dlgY + dlgH - 40, 70, 30};
+            bool overNo = point_in(mx, my, noBtn);
+            SDL_Color noBg = overNo ? g_button_hover : g_button_base;
+            draw_rect(R, noBtn, noBg);
+            draw_frame(R, noBtn, g_button_border);
+            int noW = 0, noH = 0;
+            measure_text("No", &noW, &noH);
+            draw_text(R, noBtn.x + (noBtn.w - noW) / 2, noBtn.y + (noBtn.h - noH) / 2, "No", g_button_text);
+            
+            if (mclick)
+            {
+                if (overYes && reverb_preset_delete_index >= 0 && reverb_preset_delete_index < g_reverb_preset_count)
+                {
+                    // Delete the preset by shifting array
+                    for (int i = reverb_preset_delete_index; i < g_reverb_preset_count - 1; i++)
+                    {
+                        g_reverb_presets[i] = g_reverb_presets[i + 1];
+                    }
+                    g_reverb_preset_count--;
+                    
+                    // Reset to Custom mode
+                    g_last_reverb_custom_mode = true;
+                    g_last_reverb_custom_preset_index = -1;
+                    int reverbCount = get_reverb_count();
+                    reverbType = reverbCount + 1;
+                    
+                    // Save settings
+                    if (g_current_bank_path[0] != '\0')
+                    {
+                        save_settings(g_current_bank_path, reverbType, loopPlay);
+                    }
+                    
+                    g_show_reverb_preset_delete_confirm = false;
+                }
+                else if (overNo)
+                {
+                    g_show_reverb_preset_delete_confirm = false;
+                }
+            }
         }
 
         // Render export dropdown when Settings dialog is open and the export dropdown was triggered there
@@ -5938,6 +6630,7 @@ int main(int argc, char *argv[])
         if (reverbType != lastReverbType)
         {
             bae_set_reverb(reverbType);
+            apply_reverb_if_needed();
             lastReverbType = reverbType;
         }
     }

@@ -158,6 +158,7 @@ extern "C"
         BAE_REVERB_TYPE_9,     // Basement (variable verb)
         BAE_REVERB_TYPE_10,    // Banquet hall (variable verb)
         BAE_REVERB_TYPE_11,    // Catacombs (variable verb)
+        BAE_REVERB_TYPE_CUSTOM, // custom reverb
         BAE_REVERB_TYPE_COUNT
     } BAEReverbType;
 
@@ -2794,6 +2795,7 @@ BAEResult BAELoadResult_Cleanup(BAELoadResult *result);
 
 BAEResult BAESong_LoadRmiFromFile(BAESong song, BAEPathName filePath, BAE_BOOL ignoreBadInstruments, BAE_BOOL useEmbeddedBank);
 BAEResult BAESong_LoadRmiFromMemory(BAESong song, void const *pRmiData, uint32_t rmiSize, BAE_BOOL ignoreBadInstruments, BAE_BOOL useEmbeddedBank);
+BAEResult BAESong_SetReverbParams(BAESong song, XSDWORD mMaxRegen, XSDWORD mRoomSize);
 
 #ifdef __cplusplus
 } // extern "C"

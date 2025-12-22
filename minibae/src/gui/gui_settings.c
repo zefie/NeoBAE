@@ -13,9 +13,79 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
+
+static void write_reverb_presets(FILE *f)
+{
+    if (!f)
+        return;
+    if (g_reverb_preset_count < 0)
+        g_reverb_preset_count = 0;
+    if (g_reverb_preset_count > MAX_REVERB_PRESETS)
+        g_reverb_preset_count = MAX_REVERB_PRESETS;
+    fprintf(f, "reverb_preset_count=%d\n", g_reverb_preset_count);
+    for (int i = 0; i < g_reverb_preset_count; i++)
+    {
+        const char *nm = g_reverb_presets[i].name;
+        if (!nm)
+            nm = "";
+        fprintf(f, "reverb_preset_%d_name=%s\n", i, nm);
+        fprintf(f, "reverb_preset_%d_reverb=%d\n", i, g_reverb_presets[i].reverb_level);
+        fprintf(f, "reverb_preset_%d_chorus=%d\n", i, g_reverb_presets[i].chorus_level);
+    }
+}
+
+static char *trim_ws(char *s)
+{
+    if (!s)
+        return s;
+    while (*s == ' ' || *s == '\t' || *s == '\r' || *s == '\n')
+        s++;
+    size_t n = strlen(s);
+    while (n > 0)
+    {
+        char c = s[n - 1];
+        if (c == ' ' || c == '\t' || c == '\r' || c == '\n')
+        {
+            s[n - 1] = '\0';
+            n--;
+            continue;
+        }
+        break;
+    }
+    return s;
+}
+
+static bool parse_int_strict(const char *s, int *out)
+{
+    if (!s || !out)
+        return false;
+    s = trim_ws((char *)s);
+    if (!*s)
+        return false;
+    char *end = NULL;
+    long v = strtol(s, &end, 10);
+    if (!end)
+        return false;
+    end = trim_ws(end);
+    if (*end != '\0')
+        return false;
+    if (v < (long)INT32_MIN)
+        v = (long)INT32_MIN;
+    if (v > (long)INT32_MAX)
+        v = (long)INT32_MAX;
+    *out = (int)v;
+    return true;
+}
 
 // Settings dialog state
 bool g_show_settings_dialog = false;
+
+// Custom reverb presets
+ReverbPreset g_reverb_presets[MAX_REVERB_PRESETS];
+int g_reverb_preset_count = 0;
+int g_last_reverb_custom_mode = 0;
+int g_last_reverb_custom_preset_index = -1;
 
 // Volume curve settings
 int g_volume_curve = 0;
@@ -35,6 +105,15 @@ Settings load_settings(void)
 {
     Settings settings = {0};
 
+    // Clear presets each load
+    g_reverb_preset_count = 0;
+    for (int i = 0; i < MAX_REVERB_PRESETS; i++)
+    {
+        g_reverb_presets[i].name[0] = '\0';
+        g_reverb_presets[i].reverb_level = 0;
+        g_reverb_presets[i].chorus_level = 0;
+    }
+
     char exe_dir[512];
     get_executable_directory(exe_dir, sizeof(exe_dir));
 
@@ -53,94 +132,203 @@ Settings load_settings(void)
     }
 
     char line[512];
+    int maxPresetIndexSeen = -1;
+    bool sawValidPresetCount = false;
     while (fgets(line, sizeof(line), f))
     {
-        // Strip newline
+        // Strip newline(s)
         char *nl = strchr(line, '\n');
         if (nl)
             *nl = '\0';
+        nl = strchr(line, '\r');
+        if (nl)
+            *nl = '\0';
 
-        if (strncmp(line, "bank_path=", 10) == 0)
+        char *linep = trim_ws(line);
+        if (!*linep)
+            continue;
+        if (linep[0] == '#' || linep[0] == ';')
+            continue;
+
+        if (strncmp(linep, "bank_path=", 10) == 0)
         {
-            strncpy(settings.bank_path, line + 10, sizeof(settings.bank_path) - 1);
+            strncpy(settings.bank_path, linep + 10, sizeof(settings.bank_path) - 1);
             settings.bank_path[sizeof(settings.bank_path) - 1] = '\0';
             settings.has_bank = true;
         }
-        else if (strncmp(line, "reverb_type=", 12) == 0)
+        else if (strncmp(linep, "loop_enabled=", 13) == 0)
         {
-            settings.reverb_type = atoi(line + 12);
-            settings.has_reverb = true;
-        }
-        else if (strncmp(line, "loop_enabled=", 13) == 0)
-        {
-            settings.loop_enabled = (atoi(line + 13) != 0);
+            settings.loop_enabled = (atoi(linep + 13) != 0);
             settings.has_loop = true;
         }
-        else if (strncmp(line, "volume_curve=", 13) == 0)
+        else if (strncmp(linep, "volume_curve=", 13) == 0)
         {
-            settings.volume_curve = atoi(line + 13);
+            settings.volume_curve = atoi(linep + 13);
             settings.has_volume_curve = true;
         }
-        else if (strncmp(line, "stereo_output=", 14) == 0)
+        else if (strncmp(linep, "stereo_output=", 14) == 0)
         {
-            settings.stereo_output = (atoi(line + 14) != 0);
+            settings.stereo_output = (atoi(linep + 14) != 0);
             settings.has_stereo = true;
         }
-        else if (strncmp(line, "sample_rate=", 12) == 0)
+        else if (strncmp(linep, "sample_rate=", 12) == 0)
         {
-            settings.sample_rate_hz = atoi(line + 12);
+            settings.sample_rate_hz = atoi(linep + 12);
             if (settings.sample_rate_hz < 7000 || settings.sample_rate_hz > 50000)
             {
                 settings.sample_rate_hz = 44100;
             }
             settings.has_sample_rate = true;
         }
-        else if (strncmp(line, "show_keyboard=", 14) == 0)
+        else if (strncmp(linep, "show_keyboard=", 14) == 0)
         {
-            settings.show_keyboard = (atoi(line + 14) != 0);
+            settings.show_keyboard = (atoi(linep + 14) != 0);
             settings.has_show_keyboard = true;
         }
-        else if (strncmp(line, "disable_webtv_progress_bar=", 27) == 0)
+        else if (strncmp(linep, "disable_webtv_progress_bar=", 27) == 0)
         {
-            settings.disable_webtv_progress_bar = (atoi(line + 27) != 0);
+            settings.disable_webtv_progress_bar = (atoi(linep + 27) != 0);
             settings.has_webtv = true;
         }
-        else if (strncmp(line, "export_codec_index=", 19) == 0)
+        else if (strncmp(linep, "export_codec_index=", 19) == 0)
         {
-            settings.export_codec_index = atoi(line + 19);
+            settings.export_codec_index = atoi(linep + 19);
             settings.has_export_codec = true;
         }
-        else if (strncmp(line, "shuffle_enabled=", 16) == 0)
+        else if (strncmp(linep, "shuffle_enabled=", 16) == 0)
         {
-            settings.shuffle_enabled = (atoi(line + 16) != 0);
+            settings.shuffle_enabled = (atoi(linep + 16) != 0);
             settings.has_shuffle = true;
         }
-        else if (strncmp(line, "repeat_mode=", 12) == 0)
+        else if (strncmp(linep, "repeat_mode=", 12) == 0)
         {
-            settings.repeat_mode = atoi(line + 12);
+            settings.repeat_mode = atoi(linep + 12);
             if (settings.repeat_mode < 0 || settings.repeat_mode > 2)
             {
                 settings.repeat_mode = 0; // Default to no repeat
             }
             settings.has_repeat = true;
         }
-        else if (strncmp(line, "playlist_enabled=", 17) == 0)
+        else if (strncmp(linep, "playlist_enabled=", 17) == 0)
         {
-            settings.playlist_enabled = (atoi(line + 17) != 0);
+            settings.playlist_enabled = (atoi(linep + 17) != 0);
             settings.has_playlist_enabled = true;
         }
-        else if (strncmp(line, "window_x=", 9) == 0)
+        else if (strncmp(linep, "window_x=", 9) == 0)
         {
-            settings.window_x = atoi(line + 9);
+            settings.window_x = atoi(linep + 9);
             settings.has_window_pos = true;
         }
-        else if (strncmp(line, "window_y=", 9) == 0)
+        else if (strncmp(linep, "window_y=", 9) == 0)
         {
-            settings.window_y = atoi(line + 9);
+            settings.window_y = atoi(linep + 9);
             settings.has_window_pos = true;
         }
+        else if (strncmp(linep, "reverb_preset_count", 19) == 0)
+        {
+            char *eq = strchr(linep, '=');
+            if (!eq)
+                continue;
+            int c = 0;
+            if (!parse_int_strict(eq + 1, &c))
+                continue;
+            if (c < 0)
+                c = 0;
+            if (c > MAX_REVERB_PRESETS)
+                c = MAX_REVERB_PRESETS;
+            g_reverb_preset_count = c;
+            sawValidPresetCount = true;
+        }
+        else if (strncmp(linep, "reverb_preset_", 14) == 0)
+        {
+            // Format:
+            // reverb_preset_<idx>_name=<text>
+            // reverb_preset_<idx>_reverb=<0-127>
+            // reverb_preset_<idx>_chorus=<0-127>
+            const char *p = linep + 14;
+
+            // Parse <idx> strictly (must be digits)
+            int idx = 0;
+            const char *q = p;
+            if (*q < '0' || *q > '9')
+                continue;
+            while (*q >= '0' && *q <= '9')
+            {
+                idx = idx * 10 + (*q - '0');
+                if (idx > 100000)
+                    break;
+                q++;
+            }
+            if (idx < 0 || idx >= MAX_REVERB_PRESETS)
+                continue;
+            if (*q != '_')
+                continue;
+
+            const char *u = q + 1; // points at "name..." / "reverb..." / "chorus..."
+            const char *eq = strchr(u, '=');
+            if (!eq)
+                continue;
+
+            // Extract field name (allow whitespace around '=')
+            char field[32];
+            size_t flen = (size_t)(eq - u);
+            if (flen >= sizeof(field))
+                flen = sizeof(field) - 1;
+            memcpy(field, u, flen);
+            field[flen] = '\0';
+            char *fieldp = trim_ws(field);
+
+            if (strcmp(fieldp, "name") == 0)
+            {
+                char *val = trim_ws((char *)(eq + 1));
+                strncpy(g_reverb_presets[idx].name, val, sizeof(g_reverb_presets[idx].name) - 1);
+                g_reverb_presets[idx].name[sizeof(g_reverb_presets[idx].name) - 1] = '\0';
+            }
+            else if (strcmp(fieldp, "reverb") == 0)
+            {
+                int v = 0;
+                if (!parse_int_strict(eq + 1, &v))
+                    continue;
+                if (v < 0)
+                    v = 0;
+                if (v > 127)
+                    v = 127;
+                g_reverb_presets[idx].reverb_level = v;
+            }
+            else if (strcmp(fieldp, "chorus") == 0)
+            {
+                int v = 0;
+                if (!parse_int_strict(eq + 1, &v))
+                    continue;
+                if (v < 0)
+                    v = 0;
+                if (v > 127)
+                    v = 127;
+                g_reverb_presets[idx].chorus_level = v;
+            }           
+            else
+            {
+                continue;
+            }
+
+            if (idx > maxPresetIndexSeen)
+                maxPresetIndexSeen = idx;
+        }
+        else if (strncmp(linep, "reverb_type=", 12) == 0)
+        {
+            settings.reverb_type = atoi(linep + 12);
+            settings.has_reverb = true;
+        }        
     }
     fclose(f);
+
+    // If count wasn't present, infer it from the highest index we saw.
+    if (!sawValidPresetCount && maxPresetIndexSeen >= 0)
+    {
+        g_reverb_preset_count = maxPresetIndexSeen + 1;
+        if (g_reverb_preset_count > MAX_REVERB_PRESETS)
+            g_reverb_preset_count = MAX_REVERB_PRESETS;
+    }
     return settings;
 }
 
@@ -163,7 +351,6 @@ void save_settings(const char *last_bank_path, int reverb_type, bool loop_enable
         {
             fprintf(f, "bank_path=%s\n", last_bank_path);
         }
-        fprintf(f, "reverb_type=%d\n", reverb_type);
         fprintf(f, "loop_enabled=%d\n", loop_enabled ? 1 : 0);
         fprintf(f, "volume_curve=%d\n", g_volume_curve);
         fprintf(f, "stereo_output=%d\n", g_stereo_output ? 1 : 0);
@@ -176,6 +363,9 @@ void save_settings(const char *last_bank_path, int reverb_type, bool loop_enable
         fprintf(f, "repeat_mode=%d\n", g_playlist.repeat_mode);
         fprintf(f, "playlist_enabled=%d\n", g_playlist.enabled ? 1 : 0);
 #endif
+
+        // Custom reverb presets
+        write_reverb_presets(f);
         // Save window position if available
         extern SDL_Window *g_main_window;
         if (g_main_window)
@@ -185,6 +375,7 @@ void save_settings(const char *last_bank_path, int reverb_type, bool loop_enable
             fprintf(f, "window_x=%d\n", x);
             fprintf(f, "window_y=%d\n", y);
         }
+        fprintf(f, "reverb_type=%d\n", reverb_type);
 
         fclose(f);
     }
@@ -261,6 +452,9 @@ void save_full_settings(const Settings *settings)
             fprintf(f, "window_x=%d\n", settings->window_x);
             fprintf(f, "window_y=%d\n", settings->window_y);
         }
+
+        // Preserve custom reverb presets when writing full settings
+        write_reverb_presets(f);
         fclose(f);
     }
 }

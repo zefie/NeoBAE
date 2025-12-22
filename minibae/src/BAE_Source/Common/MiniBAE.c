@@ -896,7 +896,8 @@ static const ReverbMode translateInternal[] = {
     REVERB_TYPE_8,
     REVERB_TYPE_9,
     REVERB_TYPE_10,
-    REVERB_TYPE_11};
+    REVERB_TYPE_11,
+    REVERB_TYPE_CUSTOM};
 static const BAEReverbType translateExternal[] = {
     BAE_REVERB_NO_CHANGE,
     BAE_REVERB_TYPE_1,
@@ -909,7 +910,8 @@ static const BAEReverbType translateExternal[] = {
     BAE_REVERB_TYPE_8,
     BAE_REVERB_TYPE_9,
     BAE_REVERB_TYPE_10,
-    BAE_REVERB_TYPE_11};
+    BAE_REVERB_TYPE_11,
+    BAE_REVERB_TYPE_CUSTOM};
 // translate reverb types from BAEReverbType to ReverbMode
 ReverbMode BAE_TranslateFromBAEReverb(BAEReverbType igorVerb)
 {
@@ -1614,6 +1616,9 @@ BAEResult BAEMixer_GetDeviceName(BAEMixer mixer, int32_t deviceID, char *cName, 
 // Sets/Gets the master default reverb
 //
 static ReverbMode g_defaultReverbType = BAE_REVERB_NONE;
+// Global storage for custom reverb params (accessed from GenReverb.c)
+XSDWORD g_customReverbMaxRegen = 0;
+XSDWORD g_customReverbRoomSize = 0;
 BAEResult BAEMixer_SetDefaultReverb(BAEMixer mixer, BAEReverbType verb)
 {
 #if REVERB_USED != REVERB_DISABLED
@@ -10780,4 +10785,24 @@ BAEResult BAEMixer_LoadFromMemory(BAEMixer mixer, void const *pData, uint32_t da
         result->result = BAE_NO_ERROR;
         return BAE_NO_ERROR;
     }
+}
+
+
+BAEResult BAESong_SetReverbParams(BAESong song, XSDWORD mMaxRegen, XSDWORD mRoomSize)
+{
+    OPErr err;
+
+    err = NO_ERR;
+    if ((song) && (song->mID == OBJECT_ID))
+    {
+        BAE_AcquireMutex(song->mLock);
+        g_customReverbMaxRegen = mMaxRegen;
+        g_customReverbRoomSize = mRoomSize;
+        BAE_ReleaseMutex(song->mLock);
+    }
+    else
+    {
+        err = NULL_OBJECT;
+    }
+    return BAE_TranslateOPErr(err);
 }

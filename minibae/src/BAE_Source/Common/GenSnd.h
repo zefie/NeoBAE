@@ -494,10 +494,11 @@ extern "C"
         REVERB_TYPE_8,        // Early reflections (variable verb)
         REVERB_TYPE_9,        // Basement (variable verb)
         REVERB_TYPE_10,       // Banquet hall (variable verb)
-        REVERB_TYPE_11        // Catacombs (variable verb)
+        REVERB_TYPE_11,       // Catacombs (variable verb)
+        REVERB_TYPE_CUSTOM    // Custom reverb (variable verb)
     };
     typedef char ReverbMode;
-#define MAX_REVERB_TYPES 12
+#define MAX_REVERB_TYPES 13
 
     typedef void (*GM_ReverbProc)(ReverbMode which);
 
@@ -1242,6 +1243,7 @@ typedef int32_t UNIT_TYPE;
 #if REVERB_USED != REVERB_DISABLED
         XBYTE channelReverb[MAX_CHANNELS]; // current channel reverb
         XBYTE channelChorus[MAX_CHANNELS]; // current channel chorus
+        XSDWORD customReverbParams[2]; // current reverb parameters
 #endif
         XBYTE channelModWheel[MAX_CHANNELS];              // Mod wheel (primarily affects pitch bend)
         XBYTE channelLowPassAmount[MAX_CHANNELS];         // low pass amount controller (NOT CONNECTED as of 3.8.99)

@@ -11,6 +11,10 @@ typedef struct
     Rect transportPanel;
     Rect chanDD;
     Rect ddRect;
+    Rect reverbLvlRect;
+    Rect chorusLvlRect;
+    Rect chorusMinusRect;
+    Rect chorusPlusRect;
     Rect keyboardPanel;
     Rect msbRect;
     Rect lsbRect;

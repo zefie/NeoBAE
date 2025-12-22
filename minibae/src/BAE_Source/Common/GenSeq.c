@@ -453,6 +453,7 @@ void PV_ResetControlers(GM_Song *pSong, INT16 channel2Reset, XBOOL completeReset
         max = channel2Reset + 1;
         start = channel2Reset;
     }
+    memset(pSong->customReverbParams, 0, sizeof(pSong->customReverbParams));
     for (count = start; count < max; count++)
     {
         if (completeReset)

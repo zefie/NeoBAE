@@ -73,10 +73,36 @@ extern int g_export_stall_iters;
 extern char g_export_path[512];
 extern bool g_pcm_wav_recording;
 
+// Define global reverb/chorus MIDI effect levels (0-127)
+// These control MIDI CC reverb/chorus sends, not NEW reverb room parameters
+extern int g_reverbLevel;
+extern int g_chorusLevel;
+
 // External functions from other modules
 // Status message implementation
 static char g_status_message[512] = {0};
 static uint32_t g_status_message_time = 0;
+
+void apply_reverb_if_needed() {
+    BAESong target = g_bae.song ? g_bae.song : g_live_song;
+    if (target) {
+        if (g_bae.current_reverb_type >= BAE_REVERB_TYPE_CUSTOM) {
+            // Custom or user preset
+            if (g_bae.current_reverb_type != BAE_REVERB_TYPE_CUSTOM) {
+                // User preset
+                int presetIndex = g_bae.current_reverb_type - BAE_REVERB_TYPE_COUNT - 1;
+                if (presetIndex >= 0 && presetIndex < g_reverb_preset_count) {
+                    g_reverbLevel = g_reverb_presets[presetIndex].reverb_level;
+                    g_chorusLevel = g_reverb_presets[presetIndex].chorus_level;
+                }
+            }
+            BAESong_SetReverbParams(target, g_reverbLevel, g_chorusLevel);
+        }        
+    }
+    BAE_PRINTF("Applying reverb type %d (Reverb: %d, Chorus: %d)\n",
+               g_bae.current_reverb_type, g_reverbLevel, g_chorusLevel);
+    bae_set_reverb(g_bae.current_reverb_type);
+}
 
 void set_status_message(const char *msg)
 {
@@ -840,7 +866,7 @@ bool bae_load_song(const char *path, bool use_embedded_banks)
 
     // Restore Reverb after load
     Settings settings = load_settings();
-    BAEMixer_SetDefaultReverb(g_bae.mixer, (BAEReverbType)settings.reverb_type);
+    bae_set_reverb(settings.reverb_type);
     // Defer preroll until just before first Start so that any user settings
     // (transpose, tempo, channel mutes, reverb, loops) are applied first.
     BAESong_GetMicrosecondLength(g_bae.song, &g_bae.song_length_us);
@@ -1163,8 +1189,8 @@ void bae_set_reverb(int idx)
     {
         if (idx < 0)
             idx = 0;
-        if (idx >= BAE_REVERB_TYPE_COUNT)
-            idx = BAE_REVERB_TYPE_COUNT - 1;
+        if (idx >= BAE_REVERB_TYPE_CUSTOM)
+            idx = BAE_REVERB_TYPE_CUSTOM;
         BAEMixer_SetDefaultReverb(g_bae.mixer, (BAEReverbType)idx);
     }
 }
@@ -1357,8 +1383,7 @@ bool bae_play(bool *playing)
                     g_bae.preserve_position_on_next_start = false; // consumed
                 }
             }
-
-            bae_set_reverb(g_bae.current_reverb_type);
+            apply_reverb_if_needed();
 
             // Give mixer a few idle cycles to prime buffers (helps avoid initial stall)
             if (g_bae.mixer)

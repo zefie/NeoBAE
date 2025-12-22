@@ -87,6 +87,7 @@
 #include "GenPriv.h"
 #include "BAE_API.h"
 #include "X_API.h"
+#include "X_Assert.h"
 #include <stdint.h>
 
 #if USE_NEW_EFFECTS     // conditionally compile this file
@@ -331,7 +332,7 @@ XBOOL CheckReverbType()
     
     if (params->mIsInitialized)
     {
-        if(params->mReverbType != MusicGlobals->reverbUnitType)
+        if(params->mReverbType != MusicGlobals->reverbUnitType || MusicGlobals->reverbUnitType == REVERB_TYPE_CUSTOM)
         {
             params->mIsInitialized = FALSE; // set to false to stop playback
             changed = TRUE;
@@ -357,6 +358,20 @@ XBOOL CheckReverbType()
                 case REVERB_TYPE_11:    // Catacombs
                     params->mMaxRegen = 120;
                     params->mRoomSize = 80;
+                    break;
+                case REVERB_TYPE_CUSTOM:    // custom
+                    extern XSDWORD g_customReverbMaxRegen;
+                    extern XSDWORD g_customReverbRoomSize;
+                    if (MusicGlobals->customReverbRoomSize == g_customReverbRoomSize && MusicGlobals->customReverbMaxRegen == g_customReverbMaxRegen) {
+                        params->mIsInitialized = TRUE;
+                        return FALSE;
+                    } else {
+                        MusicGlobals->customReverbRoomSize = g_customReverbRoomSize;
+                        MusicGlobals->customReverbMaxRegen = g_customReverbMaxRegen;
+                        params->mDiffusedBalance = 0;
+                        params->mMaxRegen = g_customReverbMaxRegen;
+                        params->mRoomSize = g_customReverbRoomSize;
+                    }
                     break;
             }
             
@@ -909,7 +924,7 @@ void RunNewReverb(INT32 *sourceP, INT32 *destP, int nSampleFrames)
 
     if(!params->mIsInitialized) return; // we're not properly initialized for processing...
 
-    if(CheckReverbType() || params->mSampleRate != MusicGlobals->outputRate )
+    if(CheckReverbType(NULL) || params->mSampleRate != MusicGlobals->outputRate )
     {
         // sample rate has changed
         params->mSampleRate = MusicGlobals->outputRate;

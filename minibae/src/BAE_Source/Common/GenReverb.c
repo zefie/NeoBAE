@@ -836,7 +836,17 @@ static GM_ReverbConfigure verbTypes[MAX_REVERB_TYPES] =
             ((kCombBufferFrameSize*kNumberOfCombFilters + kEarlyReflectionBufferFrameSize) * sizeof(INT32)),
         NULL,
         PV_RunStereoNewReverb
-    }
+    },
+    {   // Custom Reverb
+        REVERB_TYPE_CUSTOM,
+        0,
+        FALSE,                          // fixed
+        (kNumberOfDiffusionStages * kDiffusionBufferFrameSize * sizeof(INT32)) +
+            (sizeof(INT32) * kStereoizerBufferFrameSize * 2) + 
+            ((kCombBufferFrameSize*kNumberOfCombFilters + kEarlyReflectionBufferFrameSize) * sizeof(INT32)),
+        NULL,
+        PV_RunStereoNewReverb
+    }    
 #else
 // else we match them to our exisiting verbs
     {   // Igor's Closet
@@ -952,6 +962,7 @@ void GM_ProcessReverb(void)
             case REVERB_TYPE_9:         // Basement (variable verb)
             case REVERB_TYPE_10:        // Banquet hall (variable verb)
             case REVERB_TYPE_11:        // Catacombs (variable verb)
+            case REVERB_TYPE_CUSTOM:    // Custom Reverb
                 break;
         }
         if (type != REVERB_TYPE_1)
@@ -1082,7 +1093,8 @@ void GM_SetReverbType(ReverbMode reverbMode)
                 case REVERB_TYPE_9:
                 case REVERB_TYPE_10:
                 case REVERB_TYPE_11:
-                    MusicGlobals->reverbUnitType = reverbMode;
+                case REVERB_TYPE_CUSTOM:                
+                    MusicGlobals->reverbUnitType = reverbMode;                    
 #if USE_NEW_EFFECTS == TRUE
                     CheckReverbType();
 #endif

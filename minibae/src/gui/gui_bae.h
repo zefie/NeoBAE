@@ -82,7 +82,12 @@ typedef struct
 extern BankEntry banks[32]; // Static array defined in gui_bae.c
 extern int bank_count;      // defined in gui_bae.c
 
+extern int g_reverbLevel;
+extern int g_chorusLevel;
+
 // Function declarations
+void apply_reverb_if_needed();
+
 void gui_audio_task(void *reference);
 void set_status_message(const char *msg);
 
@@ -159,7 +164,5 @@ void save_settings(const char *last_bank_path, int reverb_type, bool loop_enable
 // MSB/LSB update function (from gui_main.c)
 void update_msb_program_for_channel(void);
 
-// Rate conversion
-// BAERate map_rate_from_hz(int hz);  // TODO: Define if needed
 
 #endif // GUI_BAE_H

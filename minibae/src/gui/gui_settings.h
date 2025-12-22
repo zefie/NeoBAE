@@ -33,7 +33,34 @@ typedef struct
     bool has_window_pos;
     int window_x;
     int window_y;
+
+    // Reverb dropdown UI state
+    bool has_reverb_custom_mode;
+    bool reverb_custom_mode; // true when "Custom" or a user preset was selected last
+    bool has_reverb_custom_preset_index;
+    int reverb_custom_preset_index; // -1 for plain "Custom", >=0 for user preset
 } Settings;
+
+// Custom Reverb/Chorus presets (stored in zefidi.ini)
+#define MAX_REVERB_PRESETS 32
+
+typedef struct
+{
+    char name[64];
+    int reverb_level; // 0-127
+    int chorus_level; // 0-127
+} ReverbPreset;
+
+extern ReverbPreset g_reverb_presets[MAX_REVERB_PRESETS];
+extern int g_reverb_preset_count;
+
+// Last selected reverb dropdown UI state (written to zefidi.ini)
+extern int g_last_reverb_custom_mode;
+extern int g_last_reverb_custom_preset_index;
+
+// Reverb preset modal dialogs (owned by gui_main.c; referenced by ui_modal_blocking())
+extern bool g_show_reverb_preset_name_dialog;
+extern bool g_show_reverb_preset_delete_confirm;
 
 // Settings dialog state
 extern bool g_show_settings_dialog;
