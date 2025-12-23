@@ -57,7 +57,7 @@ extern int g_keyboard_mouse_note;
 extern uint32_t g_keyboard_suppress_until;
 extern bool g_show_rmf_info_dialog;
 extern int g_keyboard_program;
-extern int g_keyboard_msb;
+extern int g_keyboard_bank;
 
 // Audio position tracking for audio files
 uint32_t audio_current_position = 0;
@@ -106,10 +106,10 @@ static void gui_program_bank_callback(void *threadContext, struct GM_Song *pSong
 
     if (eventType == GM_PROGRAM_BANK_EVENT_BANK_MSB)
     {
-        g_midi_bank_msb[channel] = value;
+        g_midi_bank[channel] = value;
         if ((int)channel == g_keyboard_channel)
         {
-            g_keyboard_msb = (int)value;
+            g_keyboard_bank = (int)value;
         }
     }
     else if (eventType == GM_PROGRAM_BANK_EVENT_PROGRAM)
@@ -223,7 +223,7 @@ bool load_bank(const char *path, bool current_playing_state, int transpose, int 
             set_status_message("Loaded built-in bank");
 
             // Update MSB/Program values for the current channel after loading a new bank
-            update_msb_program_for_channel();
+            update_bank_program_for_channel();
 
 #ifdef SUPPORT_MIDI_HW
             // If external MIDI input is enabled, recreate mixer so live MIDI
@@ -287,7 +287,7 @@ bool load_bank(const char *path, bool current_playing_state, int transpose, int 
         BAE_PRINTF("Loaded bank %s\n", path);
 
         // Update MSB/LSB values for the current channel after loading a new bank
-        update_msb_program_for_channel();
+        update_bank_program_for_channel();
 
         // Save this as the last used bank only if requested
         if (save_to_settings)
@@ -850,7 +850,7 @@ bool bae_load_song(const char *path, bool use_embedded_banks)
     g_bae.is_audio_file = false; // is_rmf_file already set
 
     // Update MSB/LSB values for the current channel after loading a new song
-    update_msb_program_for_channel();
+    update_bank_program_for_channel();
 
     /* Apply current user-requested master volume to the newly loaded song
        so UI volume state is respected immediately on load. Songs do not get

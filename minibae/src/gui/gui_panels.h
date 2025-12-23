@@ -12,8 +12,8 @@ typedef struct
     Rect chanDD;
     Rect ddRect;
     Rect keyboardPanel;
-    Rect msbRect;
-    Rect lsbRect;
+    Rect bankRect;
+    Rect programRect;
     Rect playlistPanel;
     int playlistPanelHeight;
 } UiLayout;

@@ -17,7 +17,7 @@ extern int g_keyboard_pressed_note[512]; // SDL_NUM_SCANCODES
 extern int g_keyboard_base_octave;
 extern bool g_keyboard_map_initialized;
 extern int g_keyboard_program;
-extern int g_keyboard_msb;
+extern int g_keyboard_bank;
 
 // Function declarations
 void gui_panic_all_notes(BAESong s);

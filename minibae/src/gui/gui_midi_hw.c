@@ -93,7 +93,7 @@ int g_midi_device_port[64];
 int g_midi_device_count = 0;
 
 // Per-channel bank tracking
-unsigned char g_midi_bank_msb[16] = {0};
+unsigned char g_midi_bank[16] = {0};
 unsigned char g_midi_bank_program[16] = {0};
 
 // MIDI output control
@@ -618,7 +618,7 @@ int midi_service_thread_fn(void *unused)
                     unsigned char cc = midi_buf[1];
                     unsigned char val = midi_buf[2];
                     if (cc == 0)
-                        g_midi_bank_msb[mch] = val;
+                        g_midi_bank[mch] = val;
                     else if (cc == 32)
                         g_midi_bank_program[mch] = val;
                     // Always route All Notes Off / All Sound Off regardless of mute state to prevent hangs

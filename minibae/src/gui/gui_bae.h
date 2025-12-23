@@ -10,6 +10,9 @@
 #define NEW_BASELINE_PCT 100
 #define NEW_MAX_VOLUME_PCT 100
 
+const int16_t g_max_bank = 128;
+const int16_t g_max_program = 127;
+
 // BAE GUI state structure (shared between gui_main.c and gui_bae.c)
 typedef struct
 {
@@ -156,8 +159,8 @@ void bae_set_master_muted_for_midi_out(bool muted);
 void save_settings(const char *last_bank_path, int reverb_type, bool loop_enabled);
 // Settings load_settings(void);  // TODO: Define Settings type
 
-// MSB/LSB update function (from gui_main.c)
-void update_msb_program_for_channel(void);
+// Bank/Program update function (from gui_main.c)
+void update_bank_program_for_channel(void);
 
 // Rate conversion
 // BAERate map_rate_from_hz(int hz);  // TODO: Define if needed

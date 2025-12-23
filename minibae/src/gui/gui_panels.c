@@ -24,22 +24,22 @@ bool ui_modal_blocking(void)
     return false;
 }
 
-void change_bank_value_for_current_channel(bool is_msb, int delta)
+void change_bank_value_for_current_channel(bool is_bank, int delta)
 {
-    if (is_msb)
+    if (is_bank)
     {
-        g_keyboard_msb += delta;
-        if (g_keyboard_msb < 0)
-            g_keyboard_msb = 127;
-        if (g_keyboard_msb > 127)
-            g_keyboard_msb = 0;
+        g_keyboard_bank += delta;
+        if (g_keyboard_bank < 0)
+            g_keyboard_bank = g_max_bank;
+        if (g_keyboard_bank > g_max_bank)
+            g_keyboard_bank = 0;
     }
     else
     {
         g_keyboard_program += delta;
         if (g_keyboard_program < 0)
-            g_keyboard_program = 127;
-        if (g_keyboard_program > 127)
+            g_keyboard_program = g_max_program;
+        if (g_keyboard_program > g_max_program)
             g_keyboard_program = 0;
     }
     send_bank_select_for_current_channel();
@@ -133,13 +133,13 @@ void compute_ui_layout(UiLayout *L)
     // Keyboard panel
     L->keyboardPanel = (Rect){10, keyboardPanelY, 880, 110};
 
-    // MSB/LSB picker positions inside keyboard panel (match rendering math)
+    // Bank/Program picker positions inside keyboard panel (match rendering math)
     int picker_y = L->keyboardPanel.y + 56; // below channel dropdown
     int picker_w = 35;
     int picker_h = 18;
     int spacing = 5;
-    L->msbRect = (Rect){L->keyboardPanel.x + 10, picker_y, picker_w, picker_h};
-    L->lsbRect = (Rect){L->msbRect.x + picker_w + spacing, picker_y, picker_w, picker_h};
+    L->bankRect = (Rect){L->keyboardPanel.x + 10, picker_y, picker_w, picker_h};
+    L->programRect = (Rect){L->bankRect.x + picker_w + spacing, picker_y, picker_w, picker_h};
 
 #if SUPPORT_PLAYLIST == TRUE
     // Playlist panel

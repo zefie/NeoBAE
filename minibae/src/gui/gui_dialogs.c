@@ -60,10 +60,6 @@ bool g_program_tooltip_visible = false;
 Rect g_program_tooltip_rect;
 char g_program_tooltip_text[520];
 
-bool g_msb_tooltip_visible = false;
-Rect g_msb_tooltip_rect;
-char g_msb_tooltip_text[520];
-
 // External references
 extern bool g_exporting;
 extern bool g_exportDropdownOpen;
@@ -1125,7 +1121,7 @@ void dialogs_init(void)
     ui_clear_tooltip(&g_file_tooltip_visible);
     ui_clear_tooltip(&g_loop_tooltip_visible);
     ui_clear_tooltip(&g_program_tooltip_visible);
-    ui_clear_tooltip(&g_msb_tooltip_visible);
+    ui_clear_tooltip(&g_bank_tooltip_visible);
 }
 
 // Dialog cleanup
@@ -1137,5 +1133,5 @@ void dialogs_cleanup(void)
     ui_clear_tooltip(&g_file_tooltip_visible);
     ui_clear_tooltip(&g_loop_tooltip_visible);
     ui_clear_tooltip(&g_program_tooltip_visible);
-    ui_clear_tooltip(&g_msb_tooltip_visible);
+    ui_clear_tooltip(&g_bank_tooltip_visible);
 }

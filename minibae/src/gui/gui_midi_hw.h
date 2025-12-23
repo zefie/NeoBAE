@@ -45,7 +45,7 @@ extern int g_midi_device_port[64];
 extern int g_midi_device_count;
 
 // Per-channel bank tracking
-extern unsigned char g_midi_bank_msb[16];
+extern unsigned char g_midi_bank[16];
 extern unsigned char g_midi_bank_program[16];
 
 // MIDI output control
