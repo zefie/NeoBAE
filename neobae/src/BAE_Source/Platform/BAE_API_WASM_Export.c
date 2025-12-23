@@ -23,7 +23,7 @@
 #endif
 
 // Include miniBAE headers
-#include "MiniBAE.h"
+#include "NeoBAE.h"
 #include "X_API.h"
 #include "X_Assert.h"
 #include "GenSnd.h"
@@ -1188,7 +1188,7 @@ int BAE_WASM_GetProgram(int channel) {
     unsigned char program = 0;
     unsigned char bank = 0;
     // BAE uses 0-based channels internally
-    BAEResult err = BAESong_GetProgramBank(gCurrentSong, (unsigned char)channel, &program, &bank);
+    BAEResult err = BAESong_GetProgramBank(gCurrentSong, (unsigned char)channel, &program, &bank, FALSE);
     if (err != BAE_NO_ERROR) {
         return -1;
     }
