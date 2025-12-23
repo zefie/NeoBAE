@@ -74,6 +74,7 @@ static XBOOL g_suppress_not_sf2_error = FALSE;
 static XBOOL g_fluidsynth_soundfont_is_dls = FALSE;
 // Flag to prevent audio thread from accessing synth during unload (prevents race condition crashes)
 static volatile XBOOL g_fluidsynth_unloading = FALSE;
+static XBOOL g_hasBank121Presets = FALSE;
 
 // Minimal FluidSynth log filter used for DLS loads to suppress the expected error
 static void pv_fluidsynth_log_filter(int level, const char* message, void* data)
@@ -728,21 +729,21 @@ OPErr GM_LoadSF2SoundfontAsXMFOverlay(const unsigned char *data, size_t size) {
         fluid_sfont_iteration_start(sf);
 
         // Check if any presets exist in bank 0, if so we'll apply an offset
+        g_hasBank121Presets = FALSE;
         XBOOL hasBank0Presets = FALSE;
-        XBOOL hasBank121Presets = FALSE;
         fluid_preset_t* preset;
         while ((preset = fluid_sfont_iteration_next(sf))) {
             int bankNum = fluid_preset_get_banknum(preset);
             if (bankNum == 0) {
                 hasBank0Presets = TRUE;
             } else if (bankNum == 121) {
-                hasBank121Presets = TRUE;
+                g_hasBank121Presets = TRUE;
             }
         }
 
         // Apply bank offset if bank 0 presets exist (offset to bank 2 in HSB mode)
         g_fluidsynth_xmf_overlay_bank_offset = hasBank0Presets ? 2 : 0;
-        g_fluidsynth_xmf_overlay_bank_offset = hasBank121Presets ? -121 : g_fluidsynth_xmf_overlay_bank_offset;
+        // Bank 121 presets stay at bank 121 - we'll alias bank 0 requests to check bank 121 first
 #if _DEBUG
         if (g_fluidsynth_xmf_overlay_bank_offset > 0) {
             BAE_PRINTF("[XMF] XMF DLS overlay has bank 0 presets, will apply bank offset +%d\n", 
@@ -866,6 +867,7 @@ void GM_UnloadXMFOverlaySoundFont(void)
         fluid_synth_sfunload(g_fluidsynth_synth, g_fluidsynth_xmf_overlay_id, TRUE);
         g_fluidsynth_xmf_overlay_id = -1;
         g_fluidsynth_xmf_overlay_bank_offset = 0;
+        g_hasBank121Presets = FALSE;
     }
     
     // Clean up temp file if it exists
@@ -1179,6 +1181,12 @@ XBOOL GM_SF2_XmfOverlayHasPreset(int bank, int program)
     int adjustedBank = bank - g_fluidsynth_xmf_overlay_bank_offset;
     if (adjustedBank < 0) return FALSE;  // Invalid after offset
     
+    // Alias bank 0 → bank 121 if overlay has bank 121 presets
+    if (g_hasBank121Presets && bank == 0) {
+        if (PV_SF2_PresetExistsInSoundFont(g_fluidsynth_xmf_overlay_id, 121, program))
+            return TRUE;
+    }
+    
     return PV_SF2_PresetExistsInSoundFont(g_fluidsynth_xmf_overlay_id, adjustedBank, program);
 }
 
@@ -1190,6 +1198,14 @@ void GM_SF2_SetChannelBankAndProgram(int16_t channel, int16_t bank, int16_t prog
     
     // Apply bank offset: if overlay has bank 0 presets, they're accessed via offset bank in HSB mode
     int adjustedBank = bank - g_fluidsynth_xmf_overlay_bank_offset;
+    
+    // Alias bank 0 → bank 121 if overlay has bank 121 presets
+    if (g_fluidsynth_xmf_overlay_id >= 0 && g_hasBank121Presets && bank == 0) {
+        if (PV_SF2_PresetExistsInSoundFont(g_fluidsynth_xmf_overlay_id, 121, program)) {
+            adjustedBank = 121;
+            BAE_PRINTF("[SF2 Direct] Aliasing bank 0 → bank 121 for channel %d program %d\n", channel, program);
+        }
+    }
     
     BAE_PRINTF("[SF2 Direct] Setting channel %d to bank %d (adjusted: %d) program %d\n", 
                channel, bank, adjustedBank, program);
@@ -1316,6 +1332,13 @@ void GM_SF2_ProcessProgramChange(GM_Song* pSong, int16_t channel, int32_t progra
     // Apply bank offset: if overlay has bank 0 presets, HSB requests them as bank 2
     if (g_fluidsynth_xmf_overlay_id >= 0) {
         int overlayBank = useBank - g_fluidsynth_xmf_overlay_bank_offset;
+        
+        // Alias bank 0 → bank 121 if overlay has bank 121 presets
+        if (g_hasBank121Presets && useBank == 0 && PV_SF2_PresetExistsInSoundFont(g_fluidsynth_xmf_overlay_id, 121, useProg)) {
+            overlayBank = 121;
+            BAE_PRINTF("[FluidProgChange] Aliasing bank 0 → bank 121 for overlay preset\n");
+        }
+        
         if (overlayBank >= 0 && PV_SF2_PresetExistsInSoundFont(g_fluidsynth_xmf_overlay_id, overlayBank, useProg)) {
             BAE_PRINTF("[FluidProgChange] Using XMF overlay preset: requested bank %d -> overlay bank %d prog %d on channel %d\n", 
                        useBank, overlayBank, useProg, channel);
@@ -1325,10 +1348,6 @@ void GM_SF2_ProcessProgramChange(GM_Song* pSong, int16_t channel, int32_t progra
             BAE_PRINTF("[FluidProgChange] Called fluid_synth_program_select(sfid=%d, bank=%d, prog=%d)\n", 
                        g_fluidsynth_xmf_overlay_id, overlayBank, useProg);            
             return;
-        } else if (overlayBank == -2) {
-            fluid_synth_program_select(g_fluidsynth_synth, channel, g_fluidsynth_base_soundfont_id, overlayBank, useProg);    
-            BAE_PRINTF("[FluidProgChange] Called fluid_synth_program_select(sfid=%d, bank=%d, prog=%d)\n", 
-                    g_fluidsynth_base_soundfont_id, overlayBank, useProg);
         } else {
             BAE_PRINTF("[FluidProgChange] XMF overlay check: requested bank %d -> overlay bank %d (offset=%d) prog %d - not found or invalid\n",
                        useBank, overlayBank, g_fluidsynth_xmf_overlay_bank_offset, useProg);

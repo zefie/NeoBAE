@@ -17,9 +17,9 @@ neobae/bin/
 neobae/out/
 neobae/.vscode/
 neobae/.vs/
-neobae/src/neobaeDroid/.gradle/
+neobae/src/NeoBAEDroid/.gradle/
 neobae/src/thirdparty/bassmidi/
 
-neobae/src/neobaeDroid/neobaeDroid.iws
-neobae/src/neobaeDroid/neobaeDroid.ipr
-neobae/src/neobaeDroid/app/release/
+neobae/src/NeoBAEDroid/NeoBAEDroid.iws
+neobae/src/NeoBAEDroid/NeoBAEDroid.ipr
+neobae/src/NeoBAEDroid/app/release/
