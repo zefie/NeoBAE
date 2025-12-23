@@ -1308,6 +1308,21 @@ void GM_SF2_ProcessProgramChange(GM_Song* pSong, int16_t channel, int32_t progra
         return;
     }
 
+    // If this soundfont has no canonical drum kit preset, don't load any bank for channel 10.
+    // (Avoid incorrectly falling back to melodic bank 0 on the percussion channel.)
+    if (channel == BAE_PERCUSSION_CHANNEL)
+    {
+        const int drumBank = g_fluidsynth_soundfont_is_dls ? 120 : 128;
+        if (!PV_SF2_PresetExists(drumBank, 0))
+        {
+            BAE_PRINTF("[FluidProgChange] No drum kit preset %d:0 found; unsetting program on percussion channel %d\n", drumBank, channel);
+            fluid_synth_all_sounds_off(g_fluidsynth_synth, channel);
+            fluid_synth_all_notes_off(g_fluidsynth_synth, channel);
+            fluid_synth_unset_program(g_fluidsynth_synth, channel);
+            return;
+        }
+    }
+
     // Validate bank/program exist in current font; apply fallback if not
     int useBank = midiBank;
     int useProg = midiProgram;
@@ -2000,10 +2015,13 @@ static void PV_SF2_SetValidDefaultProgramsForAllChannels(void)
         return;
 
     // Try to find a default melodic preset and a drum kit preset
-    // We prefer: melodic -> bank 0, drums -> bank 128. If those don't exist, fall back to first preset found.
+    // We prefer: melodic -> bank 0, drums -> bank 128:0 (SF2) or 120:0 (DLS).
+    // If the canonical drum kit preset doesn't exist, do NOT fall back to any other bank on the percussion channel.
     int foundMelodicBank = -1, foundMelodicProg = 0;
     int foundDrumBank = -1, foundDrumProg = 0; // look for bank 128 if available
     int firstBank = -1, firstProg = 0;         // fallback to the very first preset seen
+
+    const int preferredDrumBank = g_fluidsynth_soundfont_is_dls ? 120 : 128;
     
     // Search through ALL loaded soundfonts (overlay + base)
     int sfcount = fluid_synth_sfcount(g_fluidsynth_synth);
@@ -2016,9 +2034,6 @@ static void PV_SF2_SetValidDefaultProgramsForAllChannels(void)
                 int bank = fluid_preset_get_banknum(p);
                 int prog = fluid_preset_get_num(p);
                 if (firstBank < 0) { firstBank = bank; firstProg = prog; }
-                if ((bank == 128 || (bank == 120 && g_fluidsynth_soundfont_is_dls)) && foundDrumBank < 0) {
-                    foundDrumBank = bank; foundDrumProg = prog;
-                }
                 if (bank == 0 && foundMelodicBank < 0) { // capture first bank 0 as a generic melodic default
                     foundMelodicBank = bank; foundMelodicProg = prog;
                 }
@@ -2026,9 +2041,15 @@ static void PV_SF2_SetValidDefaultProgramsForAllChannels(void)
         }
     }
 
+    // Only accept the canonical drum kit preset.
+    if (PV_SF2_PresetExists(preferredDrumBank, 0))
+    {
+        foundDrumBank = preferredDrumBank;
+        foundDrumProg = 0;
+    }
+
     // Fallbacks if preferred banks not found
     if (foundMelodicBank < 0 && firstBank >= 0) { foundMelodicBank = firstBank; foundMelodicProg = firstProg; }
-    if (foundDrumBank   < 0 && firstBank >= 0)   { foundDrumBank   = firstBank; foundDrumProg   = firstProg; }
 
     BAE_PRINTF("[FluidMem] Default presets: melodic bank=%d prog=%d, drums bank=%d prog=%d (first=%d:%d)\n",
                foundMelodicBank, foundMelodicProg, foundDrumBank, foundDrumProg, firstBank, firstProg);
@@ -2039,6 +2060,8 @@ static void PV_SF2_SetValidDefaultProgramsForAllChannels(void)
             if (foundDrumBank >= 0) {
                 fluid_synth_bank_select(g_fluidsynth_synth, ch, foundDrumBank);
                 fluid_synth_program_change(g_fluidsynth_synth, ch, foundDrumProg);
+            } else {
+                fluid_synth_unset_program(g_fluidsynth_synth, ch);
             }
         } else {
             if (foundMelodicBank >= 0) {
