@@ -1,12 +1,16 @@
-# miniBAE
+# NeoBAE
 
 A cross-platform audio engine and music player supporting multiple audio formats including MIDI, RMF, WAV, AIFF, AU, FLAC, and more.
 
-## About
+## About & History
 
-[miniBAE](miniBAE_README.md) (Beatnik Audio Engine, mini edition) is a mature, well-tested audio engine originally developed by Beatnik, Inc. for embedded applications and small footprint environments. The engine has been used in everything from set-top boxes like Microsoft's WebTV to programming languages like Java, as well as several mobile phones, and has found its way into dozens of games and applications over its lifetime.
+[miniBAE](miniBAE_README.md) (Beatnik Audio Engine, mini edition) is a mature, well-tested audio engine for embedded applications and small footprint environments. The engine has been used in everything from set-top boxes like Microsoft's WebTV to programming languages like Java, as well as several mobile phones, and has found its way into dozens of games and applications over its lifetime.
+
+Originally created by Steve Hales and Jim Nitchals at Halestorm/Igor Labs, miniBAE evolved through several companies including Beatnik and Danger. The audio engine powered everything from web browser plugins to mobile devices, demonstrating its versatility and reliability.
 
 When Beatnik ended business in December 2009, the source code was released under a BSD license. A big thanks to [Steve Hales](https://github.com/heyigor/miniBAE) for not letting this valuable piece of technology disappear.
+
+NeoBAE is the modernization of miniBAE, with added features such as [FluidSynth](https://github.com/zefie/FluidSynth) support, 64-bit code, and more.
 
 ## Features
 
@@ -16,6 +20,7 @@ When Beatnik ended business in December 2009, the source code was released under
 - **Cross-platform**: Runs on Linux, Windows, macOS, and can be compiled to WebAssembly
 - **Command-line player**: `playbae` - a versatile audio file player
 - **GUI application**: `zefidi` - a graphical interface with playlist support
+- **Android App**: `NeoBAE for Android`
 - **WebAssembly API**: Bring Beatnik back to the web with modern WebAssembly
 - **Hardware MIDI support**: MIDI input/output on supported platforms (GUI Only)
 - **Audio export**: Convert MIDI files to audio formats like WAV, MP3, FLAC, and Vorbis
@@ -36,7 +41,7 @@ apt-get update
 apt-get install libc6-dev libsdl3-dev
 
 # Build
-cd minibae
+cd neobae
 make clean
 make -j$(nproc)
 
@@ -51,7 +56,7 @@ make -j$(nproc)
 apt-get install binutils-mingw-w64-x86_64 g++-mingw-w64-x86_64 gcc-mingw-w64-x86_64
 
 # Build with SDL3 support
-cd minibae
+cd neobae
 make clean
 make -f Makefile.mingw USE_SDL3=1 -j$(nproc)
 ```
@@ -61,10 +66,12 @@ make -f Makefile.mingw USE_SDL3=1 -j$(nproc)
 ```bash
 # Linux
 apt-get install libsdl3-dev libsdl3-ttf-dev
+cd neobae
 make clean
 make -f Makefile.gui -j$(nproc)
 
 # Windows
+cd neobae
 make clean
 make -f Makefile.gui-mingw -j$(nproc)
 ```
@@ -73,6 +80,7 @@ make -f Makefile.gui-mingw -j$(nproc)
 
 ```bash
 apt-get install emscripten
+cd neobae
 make clean
 make -f Makefile.emcc -j$(nproc)
 ```
@@ -118,7 +126,7 @@ The GUI provides an intuitive interface for:
 
 ### WebAssembly
 
-A brand new WebAssembly API for the miniBAE engine is available thanks to [webcd](https://github.com/charlie3684)!
+A brand new WebAssembly API for the NeoBAE engine is available thanks to [webcd](https://github.com/charlie3684)!
 
 The new API can be used to build your own player, but a sample of webcd's Music Studio is included to demonstrate the WebAssembly's capabilities.
 
@@ -135,7 +143,7 @@ Please note that the WebAssembly engine does not yet support FluidSynth, and is 
 
 ## Architecture
 
-miniBAE consists of several key components:
+NeoBAE consists of several key components:
 
 - **Audio Engine**: Core synthesis and playback engine
 - **Platform Layer**: Abstraction for different operating systems
@@ -144,18 +152,12 @@ miniBAE consists of several key components:
 
 ## License
 
-miniBAE is released under the BSD 3-Clause License. See [LICENSE](LICENSE) for details.
+NeoBAE is released under the BSD 3-Clause License, like the original miniBAE. See [LICENSE](LICENSE) for details.
 
 ## Contributing
 
 This project welcomes contributions! Whether it's bug fixes, new features, or platform support, feel free to submit pull requests.
 
-## History
-
-Originally created by Steve Hales and Jim Nitchals at Halestorm/Igor Labs, miniBAE evolved through several companies including Beatnik and Danger. The audio engine powered everything from web browser plugins to mobile devices, demonstrating its versatility and reliability.
-
-The project has been modernized with contemporary build systems, updated dependencies, and new features while maintaining compatibility with the original API.
-
 ## Acknowledgments
 
-See [ACKNOWLEDGEMENTS](minibae/ACKNOWLEDGEMENTS) for the complete list of contributors who made this project possible.
+See [ACKNOWLEDGEMENTS](neobae/ACKNOWLEDGEMENTS) for the complete list of contributors who made this project possible.
