@@ -1,15 +1,15 @@
-[submodule "minibae/src/thirdparty/minimp3"]
-	path = minibae/src/thirdparty/minimp3
+[submodule "neobae/src/thirdparty/minimp3"]
+	path = neobae/src/thirdparty/minimp3
 	url = https://github.com/lieff/minimp3.git
-[submodule "minibae/src/thirdparty/rtmidi"]
-	path = minibae/src/thirdparty/rtmidi
+[submodule "neobae/src/thirdparty/rtmidi"]
+	path = neobae/src/thirdparty/rtmidi
 	url = https://github.com/thestk/rtmidi
-[submodule "minibae/src/thirdparty/libogg"]
-	path = minibae/src/thirdparty/libogg
+[submodule "neobae/src/thirdparty/libogg"]
+	path = neobae/src/thirdparty/libogg
 	url = https://github.com/xiph/ogg
-[submodule "minibae/src/thirdparty/libvorbis"]
-	path = minibae/src/thirdparty/libvorbis
+[submodule "neobae/src/thirdparty/libvorbis"]
+	path = neobae/src/thirdparty/libvorbis
 	url = https://github.com/xiph/vorbis
-[submodule "minibae/src/thirdparty/flac"]
-	path = minibae/src/thirdparty/flac
+[submodule "neobae/src/thirdparty/flac"]
+	path = neobae/src/thirdparty/flac
 	url = https://github.com/zefie/flac_android.git

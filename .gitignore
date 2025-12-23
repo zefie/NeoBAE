@@ -13,13 +13,13 @@ tests/
 
 local.properties
 .idea/
-minibae/bin/
-minibae/out/
-minibae/.vscode/
-minibae/.vs/
-minibae/src/miniBAEDroid/.gradle/
-minibae/src/thirdparty/bassmidi/
+neobae/bin/
+neobae/out/
+neobae/.vscode/
+neobae/.vs/
+neobae/src/neobaeDroid/.gradle/
+neobae/src/thirdparty/bassmidi/
 
-minibae/src/miniBAEDroid/miniBAEDroid.iws
-minibae/src/miniBAEDroid/miniBAEDroid.ipr
-minibae/src/miniBAEDroid/app/release/
+neobae/src/neobaeDroid/neobaeDroid.iws
+neobae/src/neobaeDroid/neobaeDroid.ipr
+neobae/src/neobaeDroid/app/release/

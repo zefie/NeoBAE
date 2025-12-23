@@ -1,0 +1,126 @@
+BAE_BUILT_IN_PATCHES	:= 1
+BAE_API			:= SDL3
+
+include inc/Makefile.common
+
+ARCH		:= -static
+CC		:= clang
+CXX		:= clang++
+# Use C++ linker if we have any C++ sources
+ifneq ($(filter %.cpp,$(SRC) $(SRC_BIN)),)
+LD		:= $(CXX)
+LIBS	:= $(LIBS) -lstdc++
+else
+LD		:= $(CC)
+endif
+AR      	:= ar
+STRIP		:= strip
+
+OPTI		:= -O2 -fPIC
+ifeq ($(LDEBUG),1)
+    OPTI := -g -O0 -ggdb3 -fPIC
+endif
+
+CLANG_SANI	:= -fsanitize=integer
+CFLAGS  	:= $(ARCH) $(OPTI) $(INC_PATH) -D_THREAD_SAFE -Wno-pragma-pack -Wno-unused-value
+
+ifneq ($(BAE_FLAGS),)
+	CFLAGS	+= $(BAE_FLAGS)
+endif
+
+include inc/Makefile.versioning
+CFLAGS		+= -D_VERSION=\""$(VERSION)"\"
+
+CXXFLAGS 	:= $(CFLAGS)
+LDFLAGS		:= $(ARCH) $(OPTI)
+
+ifneq ($(LDEBUG),1)
+	LDFLAGS += -s
+endif
+
+
+ifeq ($(DEBUG),1)
+	CFLAGS		+= $(CLANG_SANI)
+	LDFLAGS		+= $(CLANG_SANI)
+endif
+ifneq ($(BAE_LD_FLAGS),)
+	LDFLAGS += $(BAE_LD_FLAGS)
+endif
+
+LIBS	= 	-lpthread -lm -ldl
+
+ifneq ($(BAE_LIBS),)
+	LIBS += $(BAE_LIBS)
+endif
+
+# ------------------------------------------------------------
+# SDL2 integration (vendored static or system dynamic)
+# Mirrors logic in main Makefile (gcc). Use:
+#   make -f Makefile.clang BAE_API=SDL2            (system via pkg-config)
+#   make -f Makefile.clang BAE_API=SDL2 VENDORED_SDL2=../SDL2-prefix  (static)
+# ------------------------------------------------------------
+UNAME_S:=$(shell uname -s 2>/dev/null)
+
+ifneq (,$(findstring Linux,$(UNAME_S)))
+	SDL3_CFLAGS := $(shell pkg-config --cflags sdl3 2>/dev/null)
+	SDL3_LIBS   := $(shell pkg-config --libs sdl3 2>/dev/null)
+	ifneq ($(SDL3_LIBS),)
+		CFLAGS += $(SDL3_CFLAGS)
+		LIBS   := $(SDL3_LIBS) $(filter-out -lSDL3,$(LIBS))
+		# Drop -static if present to allow dynamic SDL
+		ifneq (,$(findstring -static,$(ARCH)))
+			ARCH := $(filter-out -static,$(ARCH))
+			LDFLAGS := $(filter-out -static,$(LDFLAGS))
+		endif
+	else
+		CFLAGS += -I/usr/include/SDL3
+		LIBS := -lSDL3 $(LIBS)
+	endif
+else
+	SDL3_CFLAGS := $(shell pkg-config --cflags sdl3 2>/dev/null)
+	SDL3_LIBS   := $(shell pkg-config --libs sdl3 2>/dev/null)
+	ifneq ($(SDL3_LIBS),)
+		CFLAGS += $(SDL3_CFLAGS)
+		LIBS := $(SDL3_LIBS) $(LIBS)
+	else
+		CFLAGS += -I/usr/include/SDL3
+		LIBS := -lSDL3 $(LIBS)
+	endif
+endif
+all: $(TARGET_LIB).a ${TARGET_LIB}.so $(TARGET_BIN)
+
+$(TARGET_LIB).a: $(OBJ)
+	@mkdir -p $(TARGET_OUT)
+	$(AR) rcs $(TARGET_OUT)$(TARGET_LIB).a $(OBJ)
+
+$(TARGET_LIB).so: ${OBJ}
+	@mkdir -p $(TARGET_OUT)
+	${LD} -shared $(LDFLAGS) ${OBJ} $(LIBS) -o $(TARGET_OUT)${TARGET_LIB}.so
+
+$(TARGET_BIN): ${OBJ_BIN}
+	@mkdir -p $(TARGET_OUT)
+	${LD} -o $(TARGET_OUT)${TARGET_BIN} ${LDFLAGS} ${OBJ_BIN} ${LIBS}
+	
+# Rules for compiling source files to object files
+$(OBJ_DIR)%.o : %.cpp
+	@echo @compile $<
+	@mkdir -p $(OBJ_DIR)
+	$(SILENT)${CXX} -c ${CXXFLAGS} $< -o $@
+
+$(OBJ_DIR)%.o : %.c
+	@echo @compile $<
+	@mkdir -p $(OBJ_DIR)
+	$(SILENT)${CC} -c ${CFLAGS} $< -o $@
+
+clean:
+	@rm -rf $(TARGET_OUT)
+	@rm -rf $(OBJ_DIR)
+	@rm -rf $(BUILD_DIR)
+	@rm -rf $(TEST_OUT_DIR)
+	@echo Cleaned!
+
+# Generate rules for all unique source files (same approach as top-level Makefile)
+ALL_SOURCES := $(sort $(SRC) $(SRC_BIN))
+$(foreach src,$(ALL_SOURCES),$(eval $(call make_obj_rule,$(src))))
+
+include inc/Makefile.tests

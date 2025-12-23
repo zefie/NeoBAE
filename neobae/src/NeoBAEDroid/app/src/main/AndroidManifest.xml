@@ -1,0 +1,145 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+   
+    <!-- Storage permissions for reading -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" 
+        android:maxSdkVersion="32" />
+    
+    <!-- For accessing external storage devices like SD cards, USB drives on Android 11+ -->
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" 
+        tools:ignore="ScopedStorage" />
+    
+    <!-- Notification permission for Android 13+ -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+
+    <application
+        android:allowBackup="true"
+        android:label="NeoBAE for Android"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.NeoBAEDroid.NoActionBar">
+        <activity android:name=".MainActivity"
+            android:exported="true"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
+            android:launchMode="singleTask">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            
+            <!-- File association for audio files -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="file" />
+                <data android:scheme="content" />
+                <data android:mimeType="audio/midi" />
+                <data android:mimeType="audio/x-midi" />
+                <data android:mimeType="audio/mid" />
+            </intent-filter>
+            
+            <!-- MIDI file extensions (lowercase) -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="file" />
+                <data android:scheme="content" />
+                <data android:host="*" />
+                <data android:pathPattern=".*\\.mid" />
+                <data android:pathPattern=".*\\.midi" />
+                <data android:pathPattern=".*\\.kar" />
+                <data android:pathPattern=".*\\.rmf" />
+                <data android:pathPattern=".*\\.xmf" />
+                <data android:pathPattern=".*\\.mxmf" />
+                <data android:pathPattern=".*\\.rmi" />
+            </intent-filter>
+            
+            <!-- MIDI file extensions (uppercase) -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="file" />
+                <data android:scheme="content" />
+                <data android:host="*" />
+                <data android:pathPattern=".*\\.MID" />
+                <data android:pathPattern=".*\\.MIDI" />
+                <data android:pathPattern=".*\\.KAR" />
+                <data android:pathPattern=".*\\.RMF" />
+                <data android:pathPattern=".*\\.XMF" />
+                <data android:pathPattern=".*\\.MXMF" />
+                <data android:pathPattern=".*\\.RMI" />
+            </intent-filter>
+            
+            <!-- MIDI file extensions (mixed case) -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="file" />
+                <data android:scheme="content" />
+                <data android:host="*" />
+                <data android:pathPattern=".*\\.Mid" />
+                <data android:pathPattern=".*\\.Midi" />
+                <data android:pathPattern=".*\\.Kar" />
+                <data android:pathPattern=".*\\.Rmf" />
+                <data android:pathPattern=".*\\.Xmf" />
+                <data android:pathPattern=".*\\.Mxmf" />
+                <data android:pathPattern=".*\\.Rmi" />
+            </intent-filter>
+
+            <!-- NeoBAE Favorites (.nbae) (lowercase) -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="file" />
+                <data android:scheme="content" />
+                <data android:host="*" />
+                <data android:pathPattern=".*\\.nbae" />
+            </intent-filter>
+
+            <!-- NeoBAE Favorites (.nbae) (uppercase) -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="file" />
+                <data android:scheme="content" />
+                <data android:host="*" />
+                <data android:pathPattern=".*\\.NBAE" />
+            </intent-filter>
+
+            <!-- NeoBAE Favorites (.nbae) (mixed case) -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="file" />
+                <data android:scheme="content" />
+                <data android:host="*" />
+                <data android:pathPattern=".*\\.Nbae" />
+            </intent-filter>
+        </activity>
+        
+        <service android:name=".MediaPlaybackService"
+            android:foregroundServiceType="mediaPlayback"
+            android:exported="false" />
+            
+        <receiver android:name=".MusicNotificationReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.zefie.NeoBAEDroid.PLAY_PAUSE" />
+                <action android:name="com.zefie.NeoBAEDroid.NEXT" />
+                <action android:name="com.zefie.NeoBAEDroid.PREVIOUS" />
+                <action android:name="com.zefie.NeoBAEDroid.CLOSE" />
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>

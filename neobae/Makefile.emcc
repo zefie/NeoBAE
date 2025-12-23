@@ -1,0 +1,105 @@
+BAE_BUILT_IN_PATCHES	:= 1
+BAE_API			:= WASM
+WASM			:= 1
+SF2_SUPPORT		:= 0
+USE_FLUIDSYNTH  := 0
+NOAUTO			:= 1
+MP3_DEC			:= 1
+KARAOKE			:= 1
+
+TARGET_JS	:= engine.js
+PACK_FILENAME	:= miniBAE_WASM.tar.gz
+
+include inc/Makefile.common
+
+ARCH		:= -static
+CC		:= emcc
+CXX		:= emcc
+# Use C++ linker if we have any C++ sources
+ifneq ($(filter %.cpp,$(SRC) $(SRC_BIN)),)
+LD		:= $(CXX)
+else
+LD		:= $(CC)
+endif
+AR      	:= emar
+STRIP		:= strip
+
+
+OPTI		:= -fPIC
+CFLAGS  	:= $(ARCH) $(OPTI) $(INC_PATH) -DWASM -D_THREAD_SAFE -Wno-pragma-pack -Wno-unused-value
+
+ifneq ($(BAE_FLAGS),)
+	CFLAGS	+= $(BAE_FLAGS)
+endif
+
+include inc/Makefile.versioning
+CFLAGS		+= -D_VERSION=\""$(VERSION)"\"
+
+
+
+CXXFLAGS 	:= $(CFLAGS)
+LDFLAGS		:= $(ARCH) $(OPTI) -O3 -DNDEBUG -s WASM=1 -s ALLOW_MEMORY_GROWTH=1 -s INITIAL_MEMORY=67108864 -s MAXIMUM_MEMORY=536870912 \
+-s EXPORTED_FUNCTIONS="['_BAE_WASM_Init', '_BAE_WASM_LoadSoundbank', '_BAE_WASM_LoadSong', '_BAE_WASM_Play', '_BAE_WASM_Pause', '_BAE_WASM_Resume', '_BAE_WASM_Stop', '_BAE_WASM_IsPlaying', '_BAE_WASM_GetPosition', '_BAE_WASM_SetPosition', '_BAE_WASM_GetDuration', '_BAE_WASM_SetVolume', '_BAE_WASM_SetTempo', '_BAE_WASM_SetTranspose', '_BAE_WASM_MuteChannel', '_BAE_WASM_MuteTrack', '_BAE_WASM_SoloTrack', '_BAE_WASM_GetTrackMuteStatus', '_BAE_WASM_GetTrackSoloStatus', '_BAE_WASM_ProgramChange', '_BAE_WASM_ProgramBankChange', '_BAE_WASM_GetProgram', '_BAE_WASM_SetReverbType', '_BAE_WASM_GenerateAudio', '_BAE_WASM_GetAudioBuffer', '_BAE_WASM_GetBufferFrames', '_BAE_WASM_Shutdown', '_BAE_WASM_GetSongInfo', '_BAE_WASM_SetOutputGain', '_BAE_WASM_GetOutputGain', '_BAE_WASM_LoadEffect', '_BAE_WASM_PlayEffect', '_BAE_WASM_StopEffect', '_BAE_WASM_IsEffectPlaying', '_BAE_WASM_LoadSampleBank', '_BAE_WASM_TriggerSample', '_malloc', '_free']" \
+-s EXPORTED_RUNTIME_METHODS="['ccall','cwrap','UTF8ToString','HEAPU8','HEAP16','FS','addFunction']" -s MODULARIZE=1 -s EXPORT_NAME='BeatnikModule' -s ASSERTIONS=0 --no-entry \
+-Wno-unused-command-line-argument
+
+ifeq ($(TESTING),1)
+    LDFLAGS += --pre-js src/wasm/testing.js # search for /testing/engine.wasm on server
+else
+	ifeq ($(PROD),1)
+    	LDFLAGS += --pre-js src/wasm/prod.js # search for /player/engine.wasm on server
+	endif
+endif
+
+LIBS	= 	-lpthread
+
+all: ${TARGET_JS} extra-files
+
+extra-files:
+	@mkdir -p $(TARGET_OUT)
+	@cp src/wasm/player.js $(TARGET_OUT)
+	@cp src/wasm/miniplayer.js $(TARGET_OUT)
+	@cp src/wasm/miniplayer-demo.html $(TARGET_OUT)
+	@cp src/wasm/player-class.js $(TARGET_OUT)
+	@cp src/wasm/player.html $(TARGET_OUT)
+	@cp src/wasm/player.css $(TARGET_OUT)
+	@cp src/gui/beatnik.ico $(TARGET_OUT)/favicon.ico
+
+
+	
+$(TARGET_JS): ${OBJ}
+	@mkdir -p $(TARGET_OUT)
+	${LD} -o $(TARGET_OUT)${TARGET_JS} ${LDFLAGS} ${OBJ} $(LIBS)
+
+pack: ${TARGET_JS}
+	@rm -f $(TARGET_OUT)$(PACK_FILENAME)
+	@tar -zcf $(PACK_FILENAME) -C $(TARGET_OUT) --exclude "./$(PACK_FILENAME)" .
+	@mv $(PACK_FILENAME) $(TARGET_OUT)$(PACK_FILENAME)
+
+$(DST_FILES): ${TARGET_OUT}/% : %
+	@echo "$< ==> $@"
+	@[ -e $< ] || (echo "unspecified error copying $<" && false)
+	@mkdir -p $(dir $@)
+	@cp  $< $@
+
+# Rules for compiling source files to object files
+$(OBJ_DIR)%.o : %.cpp
+	@echo @compile $<
+	@mkdir -p $(OBJ_DIR)
+	$(SILENT)${CXX} -c ${CXXFLAGS} $< -o $@
+
+$(OBJ_DIR)%.o : %.c
+	@echo @compile $<
+	@mkdir -p $(OBJ_DIR)
+	$(SILENT)${CC} -c ${CFLAGS} $< -o $@
+
+clean:
+	@rm -rf $(TARGET_OUT)
+	@rm -rf $(OBJ_DIR)
+	@rm -rf $(BUILD_DIR)
+	@rm -rf $(TEST_OUT_DIR)
+	@echo Cleaned!
+
+# Generate rules for all unique source files (same approach as top-level Makefile)
+ALL_SOURCES := $(sort $(SRC) $(SRC_BIN))
+$(foreach src,$(ALL_SOURCES),$(eval $(call make_obj_rule,$(src))))

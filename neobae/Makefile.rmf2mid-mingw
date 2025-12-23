@@ -1,0 +1,93 @@
+BAE_API := WinOS
+NOAUTO := 1
+EMBED_PATCHES := 0
+SF2_SUPPORT := 0
+MP3_DEC := 0
+MP3_ENC := 0
+OGG_SUPPORT := 0
+VORBIS_DEC := 0
+VORBIS_ENC := 0
+FLAC_DEC := 0
+FLAC_ENC := 0
+RMF2MID := 1
+include inc/Makefile.common
+
+TARGET_BIN := rmf2mid.exe
+
+ifeq ($(BITS),32)
+    ARCH		:= -m32 -static
+    CC		:= i686-w64-mingw32-gcc-win32
+    CXX		:= i686-w64-mingw32-g++-win32
+    LD		:= $(CC)
+    AR      	:= i686-w64-mingw32-gcc-ar-win32
+    STRIP      	:= i686-w64-mingw32-strip
+    DLLTOOL		:= i686-w64-mingw32-dlltool
+    OPTI            := -O2 
+    ifeq ($(LDEBUG),1)
+        OPTI := -g -O0 -ggdb3 -fPIC
+    endif 
+    CFLAGS  	:= $(ARCH) $(OPTI) $(INC_PATH) -D_THREAD_SAFE -Wno-unused-value 
+else
+    ARCH		:= -m64 -static
+    CC		:= x86_64-w64-mingw32-gcc-win32
+    CXX		:= x86_64-w64-mingw32-g++-win32
+    LD		:= $(CC)
+    AR      	:= x86_64-w64-mingw32-gcc-ar-win32
+    STRIP      	:= x86_64-w64-mingw32-strip
+    DLLTOOL		:= x86_64-w64-mingw32-dlltool
+    OPTI            := -O2
+    ifeq ($(LDEBUG),1)
+        OPTI := -g -O0 -ggdb3 -fPIC
+    endif 
+    CFLAGS  	:= $(ARCH) $(OPTI) $(INC_PATH) -D_THREAD_SAFE -Wno-unused-value 
+endif
+
+ifneq ($(BAE_FLAGS),)
+	CFLAGS	+= $(BAE_FLAGS)
+endif
+
+include inc/Makefile.versioning
+CFLAGS		+= -D_VERSION=\""$(VERSION)"\" -DUSE_DIRECTSOUND=0 -DWIN32_EXTRA_LEAN=1
+
+
+LDFLAGS		:= $(OPTI)
+ifneq ($(BAE_LD_FLAGS),)
+	LDFLAGS += $(BAE_LD_FLAGS)
+endif
+
+ifneq ($(DEBUG),1)
+	LDFLAGS += -s
+endif
+
+LIBS   = \
+    -lwinmm
+
+ifneq ($(BAE_LIBS),)
+	LIBS += $(BAE_LIBS)
+endif
+
+CXXFLAGS 	:= $(CFLAGS)
+# Use C++ linker if we have any C++ sources
+ifneq ($(filter %.cpp,$(SRC) $(SRC_BIN)),)
+    LD := $(CXX)
+    LIBS += -lstdc++
+endif
+
+all: $(TARGET_BIN)
+
+$(TARGET_BIN): ${OBJ_BIN}
+	@mkdir -p $(TARGET_OUT)
+	${LD} -o $(TARGET_OUT)${TARGET_BIN} ${LDFLAGS} ${OBJ_BIN} ${LIBS}
+
+# Generate rules for all unique source files
+ALL_SOURCES := $(sort $(SRC) $(SRC_BIN))
+$(foreach src,$(ALL_SOURCES),$(eval $(call make_obj_rule,$(src))))
+
+clean:
+	@rm -rf $(TARGET_OUT)
+	@rm -rf $(OBJ_DIR)
+	@rm -rf $(BUILD_DIR)
+	@rm -rf $(TEST_OUT_DIR)
+	@echo Cleaned!
+
+include inc/Makefile.tests

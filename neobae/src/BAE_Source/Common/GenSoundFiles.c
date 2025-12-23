@@ -1,0 +1,5577 @@
+/*
+    Copyright (c) 2009 Beatnik, Inc All rights reserved.
+    
+    Redistribution and use in source and binary forms, with or without
+    modification, are permitted provided that the following conditions are
+    met:
+    
+    Redistributions of source code must retain the above copyright notice,
+    this list of conditions and the following disclaimer.
+    
+    Redistributions in binary form must reproduce the above copyright
+    notice, this list of conditions and the following disclaimer in the
+    documentation and/or other materials provided with the distribution.
+    
+    Neither the name of the Beatnik, Inc nor the names of its contributors
+    may be used to endorse or promote products derived from this software
+    without specific prior written permission.
+    
+    THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS
+    IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+    TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
+    PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+    HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+    SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED
+    TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+    PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+    LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+    NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+    SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+*/
+/*****************************************************************************/
+/*
+**  GenSoundFiles.c
+**
+**  Reads AIFF, WAVE, MPEG audio (MP2/MP3), Sun AU sound files
+**
+**  © Copyright 1989-2001 Beatnik, Inc, All Rights Reserved.
+**  Written by Steve Hales
+**
+**  Beatnik products contain certain trade secrets and confidential and
+**  proprietary information of Beatnik.  Use, reproduction, disclosure
+**  and distribution by any means are prohibited, except pursuant to
+**  a written license from Beatnik. Use of copyright notice is
+**  precautionary and does not imply publication or disclosure.
+**
+**  Restricted Rights Legend:
+**  Use, duplication, or disclosure by the Government is subject to
+**  restrictions as set forth in subparagraph (c)(1)(ii) of The
+**  Rights in Technical Data and Computer Software clause in DFARS
+**  252.227-7013 or subparagraphs (c)(1) and (2) of the Commercial
+**  Computer Software--Restricted Rights at 48 CFR 52.227-19, as
+**  applicable.
+**
+**  Confidential-- Internal use only
+**
+**  History -
+**  10/1/96     Created
+**  10/13/96    Added GM_ReadIntoMemoryWaveFile & GM_ReadIntoMemoryAIFFFile
+**  11/5/96     Changed WaveformInfo to GM_Waveform
+**              Added more error checking
+**              Added GM_FreeWaveform
+**  12/30/96    Changed copyright
+**  1/20/97     Added support for Sun AU files
+**  1/23/97     More memory fail checking code
+**  1/29/97     Changed PV_ConvertFromIeeeExtended to return a XFIXED
+**              instead of a double
+**  2/4/97      Fixed problem with PV_ReadSunAUFile. Didn't define the procptr
+**  2/5/97      Added GM_ReadFileIntoMemoryFromMemory with the ability to parse a
+**              memory mapped file as a fileType
+**  3/19/97     Fixed a positioning and platform word swap bug 
+**              with PV_ReadIntoMemorySunAUFile
+**  3/29/97     Removed 4 character constants and changed to use macro FOUR_CHAR
+**  5/3/97      Fixed a few potential problems that the MOT compiler found
+**  5/15/97     Put in code for ADPCM decoding for WAVE files & AIFF files
+**  6/2/97      Finished up GM_ReadAndDecodeFileStream to support AU streaming files
+**  6/9/97      Added support for X_WAVE_FORMAT_ALAW & X_WAVE_FORMAT_MULAW for wave files
+**  7/8/97      Fixed divide by zero when reading WAVE files.
+**  7/25/97     Added PV_ConvertToIeeeExtended
+**  11/10/97    Changed some preprocessor tests and flags to explicity test for flags rather
+**              than assume
+**  12/18/97    Cleaned up some warnings
+**  3/20/98 MOE: Changed code that deals with XExpandAiffImaStream(),
+**                  which now accepts a short[2] parameter
+**                  PV_ReadAIFFAndDecompressIMA() and
+**                  PV_ReadIntoMemoryAIFFFile() were altered
+**  3/20/98 MOE: Change name of call to XExpandWavIma()
+**  3/23/98     Fixed warnings in PV_ReadAIFFAndDecompressIMA
+**              Renamed PV_ConvertToIeeeExtended to XConvertToIeeeExtended and moved into
+**              X_Formats.h. Renamed PV_ConvertFromIeeeExtended to XConvertFromIeeeExtended and
+**              moved into X_Formats.h
+**  5/5/98      Changed PV_ReadSunAUFile & PV_ReadAIFFAndDecompressIMA to return an OPErr.
+**              Added OPErr parameter to PV_ReadIntoMemorySunAUFile & PV_ReadIntoMemoryAIFFFile &
+**              PV_ReadAIFFAndDecompressIMA
+**              Modified all the IFF_ functions to return OPErr's correctly
+**  5/7/98      Changed GM_ReadFileInformation & GM_ReadFileIntoMemory & GM_ReadFileIntoMemoryFromMemory
+**              to set an error code if failure
+**  5/12/98     MOE: Changed PV_ReadAIFFAndDecompressIMA() to use short[] predictor
+**              array rather than int[] index array.
+**  5/14/98     Added support for loop points in WAV files. See IFF_GetWAVLoopPoints
+**  5/21/98     Changed IFF_GetAIFFSampleSize to use AIFF_IMA_BLOCK_FRAMES constant instead of 64.
+**              Changed all structures to be typedef structures
+**
+**  6/5/98      Jim Nitchals RIP    1/15/62 - 6/5/98
+**              I'm going to miss your irreverent humor. Your coding style and desire
+**              to make things as fast as possible. Your collaboration behind this entire
+**              codebase. Your absolute belief in creating the best possible relationships 
+**              from honesty and integrity. Your ability to enjoy conversation. Your business 
+**              savvy in understanding the big picture. Your gentleness. Your willingness 
+**              to understand someone else's way of thinking. Your debates on the latest 
+**              political issues. Your generosity. Your great mimicking of cartoon voices. 
+**              Your friendship. - Steve Hales
+**
+**  7/6/98      Fixed a compiler warning in PV_ReadWAVEAndDecompressIMA about testing for a negitive number
+**              with an unsigned value (destLength < 0)
+**  9/9/98      Added support for MPEG stream decode
+**  9/10/98     Changed various routines that passed the file position in the GM_Waveform structure
+**              in the waveformID element to now use the currentFilePosition element
+**  9/14/98     Added PV_ReadIntoMemoryMPEGFile
+**  2/12/99     Renamed USE_HAE_FOR_MPEG to USE_MPEG_DECODER
+**  6/11/99     Added FILE_NOT_FOUND to PV_ReadIntoMemoryWaveFile & PV_ReadIntoMemoryMPEGFile &
+**              PV_ReadIntoMemorySunAUFile & PV_ReadIntoMemoryAIFFFile
+**  6/28/99     Fixed bug in PV_ReadIntoMemoryMPEGFile inwhich the file was opened, but not closed.
+**  8/1/99      Changed structure XSampleLoop to define loops[] as loops[1]
+**  8/3/99      Added the ability to write RAW wave files from a GM_Waveform. The infrastructure is
+**              in place to add more types as required.
+**  8/5/99      Fixed bug in PV_WriteFromMemoryWaveFile() affecting
+**              8 bit data on Motorola-byte-order platforms. Fixed bug in IFF_WriteSize in which data
+**              was not being written out in the correct order.
+**  8/9/99      Moved error transfer in PV_ReadIntoMemoryAIFFFile to end of function.
+**  8/28/99     Added a default to GM_WriteFileFromMemory
+**  9/8/99      MOE: Changed several uses of XSwapShort() in loops to XSwapShorts()
+**  9/8/99      MOE: Added decodeData parameter to GM_ReadFileIntoMemory(),
+**              GM_ReadFileIntoMemoryFromMemory(), and related PV_ functions
+**  10/21/99    MSD: Added PV_WriteFromMemoryAiffFile()
+**  10/26/99    MSD: Added (SBYTE*) cast to wave->theWaveform in PV_ReadIntoMemoryMPEGFile()
+**              to appease certain compilers (visual, CW Solaris)
+**  10/28/99    MSD: Added PV_WriteFromMemorySunAUFile()
+**  1/26/00     Changed PV_ReadIntoMemoryMPEGFile to close the mpeg stream after getting info
+**              and setting variables up that are used for streaming.
+**  2/4/2000    Changed copyright. We're Y2K compliant!
+**  2/14/2000   Fixed an endian bug in PV_ReadSunAUFile()
+**  2/17/2000   Put creation wrappers around GM_WriteFileFromMemory and its associated code.
+**  4/5/2000    Removed warnings in PV_ReadIntoMemoryWaveFile & PV_ReadIntoMemorySunAUFile
+**  2000.04.24 msd  Added GM_FinalizeFileHeader() to support writing output to file
+**  2000.04.25 msd  added GM_ReadRawAudioIntoMemoryFromMemory() to support MiniBAE API lego.
+**  2000.04.27 msd  Fixed problem of not closing AU file after saving.
+**                  Added AU and AIFF support to writing output to file
+**                  Encapsulated writing mixer slices to audio files in GM_WriteAudioBufferToFile()
+**  2000.05.08 msd  Fixed problem in writing AIFF header in GM_FinalizeFileHeader()
+**  8/28/2000   sh  Changed the way PV_ReadIntoMemoryAIFFFile gets loop points and base pitch. Now
+**                  correctly follows the AIFF spec.
+**  8/30/2000   sh  Fixed bug in IFF_GetAIFFMarkerValue that forgot to check for the number
+**                  of markers.
+**  12/13/2000  sh  Added GM_CreateFileState & GM_DisposeFileState so that we can stream data
+**                  for AU files and preserve state between calls to GM_ReadAndDecodeFileStream.
+**                  Changed PV_ReadSunAUFile & PV_UnpackInput to handle passed in state. Eliminated
+**                  use of global variables.
+**  12/29/2000  sh  Added IFF_WriteWAVLoopPoints, and modifed PV_WriteFromMemoryWaveFile to call 
+**                  IFF_WriteWAVLoopPoints when writing out WAV data.
+**                  Added IFF_WriteAIFFLoopPoints and modified PV_WriteFromMemoryAiffFile to call
+**                  it.
+**              sh  Fixed two problems with AIF and the - 8 issue. 1) Turns out we were writing
+**                  an extra 8 bytes when writing out the X_SoundData chunk without increasing
+**                  the size of the block written, so it was wrong in length. The extra 8 bytes
+**                  are an offset and a alignment value. 2) we thinking wrongly about why we
+**                  need to subtract 8 when writing out the total lenght. The 8 is that case
+**                  is not the 8 for the samples, but for the FORM/TYPE header size.
+**  1/3/2001    sh  Added GM_RepositionFileStream for support in repositioning a stream.
+**  1/12/2001   sh  Modifed PV_ReadIntoMemorySunAUFile to set the GM_Waveform member waveFrames,
+**                  correctly.
+**  1/23/2001   sh  inital pass as position code
+**  1/25/2001   sh  fixed decoding of AU files, it was skipping frames when the size
+**                  of the decode was not the entire file.
+**  1/26/2001   sh  Fixed a problem with uncompressed samples and GM_ReadAndDecodeFileStream.
+**                  We were reading past the end of the file and responding to and error
+**                  and ignoring the last buffer of data. This was for AIF, and WAV only.
+**  2/2/2001    sh  Changed IFF_PutChunk & IFF_WriteBlock to return an OPErr. Just a type change.
+**                  Changed IFF_WriteAIFFLoopPoints to pass through error codes.
+**  3/19/2001   sh  Fixed a few warnings.
+**  5/20/2001   sh  New structure packing stuff, and now compiling more code even when
+**                  USE_HIGHLEVEL_FILE_API is FALSE
+*/
+/*****************************************************************************/
+
+//#define USE_DEBUG 2
+
+#include "X_API.h"
+#include "X_Formats.h"
+#include "X_Assert.h"
+#include "GenSnd.h"
+#if USE_FLAC_DECODER != FALSE
+#include "FLAC/stream_decoder.h"
+#endif
+#if USE_FLAC_ENCODER != FALSE
+#include "FLAC/stream_encoder.h"
+#endif
+#if USE_VORBIS_DECODER != FALSE || USE_VORBIS_ENCODER != FALSE
+#include <vorbis/codec.h>
+#include <vorbis/vorbisfile.h>
+#if USE_VORBIS_ENCODER != FALSE
+#include <vorbis/vorbisenc.h>
+#endif
+#endif
+#include <stdint.h>
+#include <limits.h>
+
+#if USE_HIGHLEVEL_FILE_API == TRUE
+    #include <math.h>
+    // The functions:   XConvertFromIeeeExtended & XConvertToIeeeExtended
+    //                  rely on floating point. This needs to be changed in order to
+    //                  read AIF files.
+#endif
+#if USE_MPEG_DECODER != FALSE
+    #include "XMPEG_BAE_API.h"
+#endif
+
+#define ODD(x)          ((int32_t)(x) & 1L)
+
+#if USE_VORBIS_DECODER != FALSE
+// Forward declaration for Vorbis file reading
+static GM_Waveform* PV_ReadIntoMemoryVorbisFile(XFILE file, XBOOL decodeData, 
+                                               int32_t *pFormat, void **ppBlockPtr, uint32_t *pBlockSize, OPErr *pError);
+
+// Callback functions for libvorbisfile to read from XFILE
+static size_t PV_VorbisReadFunc(void *ptr, size_t size, size_t nmemb, void *datasource)
+{
+    XFILE file = (XFILE)datasource;
+    size_t bytes_to_read = size * nmemb;
+    XERR err;
+    
+    if (bytes_to_read == 0) return 0;
+    
+    /* Cap the requested size to the remaining bytes to allow partial/EOF reads */
+    {
+        int32_t file_len = XFileGetLength(file);
+        int32_t file_pos = XFileGetPosition(file);
+        if (file_len >= 0 && file_pos >= 0) {
+            int32_t remaining = file_len - file_pos;
+            if (remaining <= 0) return 0; /* EOF */
+            if ((uint64_t)bytes_to_read > (uint64_t)remaining) {
+                bytes_to_read = (size_t)remaining;
+            }
+        }
+    }
+    
+    err = XFileRead(file, ptr, (int32_t)bytes_to_read);
+    if (err != 0) {
+        return 0; /* Error reading */
+    }
+    
+    /* Return number of 'items' read as fread would */
+    return bytes_to_read / size;
+}
+
+static int PV_VorbisSeekFunc(void *datasource, ogg_int64_t offset, int whence)
+{
+    XFILE file = (XFILE)datasource;
+    
+    switch (whence) {
+        case 0: // SEEK_SET - absolute position from start
+            return XFileSetPosition(file, (long)offset) == NO_ERR ? 0 : -1;
+        case 1: // SEEK_CUR - relative to current position  
+            return XFileSetPositionRelative(file, (long)offset) == NO_ERR ? 0 : -1;
+        case 2: // SEEK_END - relative to end
+            {
+                int32_t file_length = XFileGetLength(file);
+                if (file_length >= 0) {
+                    int32_t new_pos = file_length + (int32_t)offset;
+                    return XFileSetPosition(file, new_pos) == NO_ERR ? 0 : -1;
+                }
+                return -1;
+            }
+        default:
+            return -1;
+    }
+}
+
+static int PV_VorbisCloseFunc(void *datasource)
+{
+    // We don't close the file here, let the caller handle it
+    return 0;
+}
+
+static long PV_VorbisTellFunc(void *datasource)
+{
+    XFILE file = (XFILE)datasource;
+    return XFileGetPosition(file);
+}
+#endif
+
+#undef X_PACK_FAST
+#include "X_PackStructures.h"
+
+/**********************- WAVe Defines -**************************/
+//
+//  extended waveform format structure used for all non-PCM formats. this
+//  structure is common to all non-PCM formats.
+//
+typedef struct X_PACKBY1
+{
+    XWORD       wFormatTag;         /* format type */
+    XWORD       nChannels;          /* number of channels (i.e. mono, stereo...) */
+    XDWORD      nSamplesPerSec;     /* sample rate */
+    XDWORD      nAvgBytesPerSec;    /* for buffer estimation */
+    XWORD       nBlockAlign;        /* block size of data */
+    XWORD       wBitsPerSample;     /* number of bits per sample of mono data */
+    XWORD       cbSize;             /* the count in bytes of the size of */
+                                    /* extra information (after cbSize) */
+} XWaveHeader;
+
+
+//
+//  IMA endorsed ADPCM structure definitions--note that this is exactly
+//  the same format as Intel's DVI ADPCM.
+//
+//      for WAVE_FORMAT_IMA_ADPCM   (0x0011)
+//
+//
+typedef struct X_PACKBY1
+{
+        XWaveHeader     wfx;
+        XWORD           wSamplesPerBlock;
+} XWaveHeaderIMA;
+
+
+
+
+typedef struct X_PACKBY1
+{
+  XDWORD            dwIdentifier;       // a unique number (ie, different than the ID number of any other SampleLoop structure). This field may
+                                        // correspond with the dwIdentifier field of some CuePoint stored in the Cue chunk. In other words, the CuePoint structure which has the
+                                        // same ID number would be considered to be describing the same loop as this SampleLoop structure. Furthermore, this field corresponds to
+                                        // the dwIndentifier field of any label stored in the Associated Data List. In other words, the text string (within some chunk in the Associated
+                                        // Data List) which has the same ID number would be considered to be this loop's "name" or "label".
+
+  XDWORD            dwType;             // the loop type (ie, how the loop plays back) as so:
+                                        // 0 - Loop forward (normal)
+                                        // 1 - Alternating loop (forward/backward)
+                                        // 2 - Loop backward
+                                        // 3-31 - reserved for future standard types
+                                        // 32-? - sampler specific types (manufacturer defined)   
+
+  XDWORD            dwStart;            // the startpoint of the loop. In sample frames
+  XDWORD            dwEnd;              // the endpoint of the loop. In sample frames
+  XDWORD            dwFraction;         // allows fine-tuning for loop fractional areas between samples. Values range from 0x00000000 to 0xFFFFFFFF. A
+                                        // value of 0x80000000 represents 1/2 of a sample length.
+  XDWORD            dwPlayCount;        // number of times to play the loop. A value of 0 specifies an infinite sustain loop (ie, the wave keeps looping
+                                        // until some external force interrupts playback, such as the musician releasing the key that triggered that wave's playback).
+} XSampleLoop;
+
+typedef struct X_PACKBY1
+{
+  XDWORD            dwManufacturer;     // the MMA Manufacturer code for the intended sampler
+  XDWORD            dwProduct;          // Product code (ie, model ID) of the intended sampler for the dwManufacturer.
+
+  XDWORD            dwSamplePeriod;     // specifies the period of one sample in nanoseconds (normally 1/nSamplesPerSec from the Format chunk. But
+                                        // note that this field allows finer tuning than nSamplesPerSec). For example, 44.1 KHz would be specified as 22675 (0x00005893).
+
+  XDWORD            dwMIDIUnityNote;    // MIDI note number at which the instrument plays back the waveform data without pitch modification
+                                        // (ie, at the same sample rate that was used when the waveform was created). This value ranges 0 through 127, inclusive. Middle C is 60
+
+  XDWORD            dwMIDIPitchFraction;// specifies the fraction of a semitone up from the specified dwMIDIUnityNote. A value of 0x80000000 is
+                                        // 1/2 semitone (50 cents); a value of 0x00000000 represents no fine tuning between semitones.
+
+  XDWORD            dwSMPTEFormat;      // specifies the SMPTE time format used in the dwSMPTEOffset field. Possible values are:
+                                        //  0  = no SMPTE offset (dwSMPTEOffset should also be 0)
+                                        //  24 = 24 frames per second
+                                        //  25 = 25 frames per second
+                                        //  29 = 30 frames per second with frame dropping ('30 drop')
+                                        //  30 = 30 frames per second       
+
+  XDWORD            dwSMPTEOffset;      // specifies a time offset for the sample if it is to be syncronized or calibrated according to a start time other than
+                                        // 0. The format of this value is 0xhhmmssff. hh is a signed Hours value [-23..23]. mm is an unsigned Minutes value [0..59]. ss is
+                                        // unsigned Seconds value [0..59]. ff is an unsigned value [0..( - 1)]. 
+
+  XDWORD            cSampleLoops;       // number (count) of SampleLoop structures that are appended to this chunk. These structures immediately
+                                        // follow the cbSamplerData field. This field will be 0 if there are no SampleLoop structures.
+
+  XDWORD            cbSamplerData;      // The cbSamplerData field specifies the size (in bytes) of any optional fields that an application wishes to append to this chunk.
+
+  XSampleLoop       loops[1];
+} XSamplerChunk;
+
+// WAVE form wFormatTag IDs
+
+// supported 
+enum 
+{
+    X_WAVE_FORMAT_PCM                   =   0x0001,
+    X_WAVE_FORMAT_ALAW                  =   0x0006, /*  Microsoft Corporation  */
+    X_WAVE_FORMAT_MULAW                 =   0x0007, /*  Microsoft Corporation  */
+    X_WAVE_FORMAT_DVI_ADPCM             =   0x0011, /*  Intel Corporation  */
+    X_WAVE_FORMAT_IMA_ADPCM             =   0x0011  /*  Intel Corporation  */
+};
+
+// not supported yet.
+enum 
+{
+    X_WAVE_FORMAT_UNKNOWN               =   0x0000, /*  Microsoft Corporation  */
+    X_WAVE_FORMAT_ADPCM                 =   0x0002, /*  Microsoft Corporation  */
+    X_WAVE_FORMAT_IBM_CVSD              =   0x0005, /*  IBM Corporation  */
+    X_WAVE_FORMAT_OKI_ADPCM             =   0x0010, /*  OKI  */
+    X_WAVE_FORMAT_MEDIASPACE_ADPCM      =   0x0012, /*  Videologic  */
+    X_WAVE_FORMAT_SIERRA_ADPCM          =   0x0013, /*  Sierra Semiconductor Corp  */
+    X_WAVE_FORMAT_G723_ADPCM            =   0x0014, /*  Antex Electronics Corporation  */
+    X_WAVE_FORMAT_DIGISTD               =   0x0015, /*  DSP Solutions, Inc.  */
+    X_WAVE_FORMAT_DIGIFIX               =   0x0016, /*  DSP Solutions, Inc.  */
+    X_WAVE_FORMAT_DIALOGIC_OKI_ADPCM    =   0x0017, /*  Dialogic Corporation  */
+    X_WAVE_FORMAT_YAMAHA_ADPCM          =   0x0020, /*  Yamaha Corporation of America  */
+    X_WAVE_FORMAT_SONARC                =   0x0021, /*  Speech Compression  */
+    X_WAVE_FORMAT_DSPGROUP_TRUESPEECH   =   0x0022, /*  DSP Group, Inc  */
+    X_WAVE_FORMAT_ECHOSC1               =   0x0023, /*  Echo Speech Corporation  */
+    X_WAVE_FORMAT_AUDIOFILE_AF36        =   0x0024, /*    */
+    X_WAVE_FORMAT_APTX                  =   0x0025, /*  Audio Processing Technology  */
+    X_WAVE_FORMAT_AUDIOFILE_AF10        =   0x0026, /*    */
+    X_WAVE_FORMAT_DOLBY_AC2             =   0x0030, /*  Dolby Laboratories  */
+    X_WAVE_FORMAT_GSM610                =   0x0031, /*  Microsoft Corporation  */
+    X_WAVE_FORMAT_ANTEX_ADPCME          =   0x0033, /*  Antex Electronics Corporation  */
+    X_WAVE_FORMAT_CONTROL_RES_VQLPC     =   0x0034, /*  Control Resources Limited  */
+    X_WAVE_FORMAT_DIGIREAL              =   0x0035, /*  DSP Solutions, Inc.  */
+    X_WAVE_FORMAT_DIGIADPCM             =   0x0036, /*  DSP Solutions, Inc.  */
+    X_WAVE_FORMAT_CONTROL_RES_CR10      =   0x0037, /*  Control Resources Limited  */
+    X_WAVE_FORMAT_NMS_VBXADPCM          =   0x0038, /*  Natural MicroSystems  */
+    X_WAVE_FORMAT_CS_IMAADPCM           =   0x0039, /* Crystal Semiconductor IMA ADPCM */
+    X_WAVE_FORMAT_G721_ADPCM            =   0x0040, /*  Antex Electronics Corporation  */
+    X_WAVE_FORMAT_MPEG                  =   0x0050, /*  Microsoft Corporation  */
+    X_WAVE_FORMAT_CREATIVE_ADPCM        =   0x0200, /*  Creative Labs, Inc  */
+    X_WAVE_FORMAT_CREATIVE_FASTSPEECH8  =   0x0202, /*  Creative Labs, Inc  */
+    X_WAVE_FORMAT_CREATIVE_FASTSPEECH10 =   0x0203, /*  Creative Labs, Inc  */
+    X_WAVE_FORMAT_FM_TOWNS_SND          =   0x0300, /*  Fujitsu Corp.  */
+    X_WAVE_FORMAT_OLIGSM                =   0x1000, /*  Ing C. Olivetti & C., S.p.A.  */
+    X_WAVE_FORMAT_OLIADPCM              =   0x1001, /*  Ing C. Olivetti & C., S.p.A.  */
+    X_WAVE_FORMAT_OLICELP               =   0x1002, /*  Ing C. Olivetti & C., S.p.A.  */
+    X_WAVE_FORMAT_OLISBC                =   0x1003, /*  Ing C. Olivetti & C., S.p.A.  */
+    X_WAVE_FORMAT_OLIOPR                =   0x1004  /*  Ing C. Olivetti & C., S.p.A.  */
+};
+
+enum 
+{
+    X_WAVE          = FOUR_CHAR('W','A','V','E'),       //      'WAVE'
+    X_RIFF          = FOUR_CHAR('R','I','F','F'),       //      'RIFF'
+    X_DATA          = FOUR_CHAR('d','a','t','a'),       //      'data'
+    X_FMT           = FOUR_CHAR('f','m','t',' '),       //      'fmt '
+    X_SMPL          = FOUR_CHAR('s','m','p','l'),       //      'smpl'
+    X_FLAC          = FOUR_CHAR('f','L','a','C')        //      'flac'
+};
+
+/**********************- AIFF Defines -**************************/
+
+enum 
+{
+    X_AIFF          = FOUR_CHAR('A','I','F','F'),       //      'AIFF'
+    X_AIFC          = FOUR_CHAR('A','I','F','C'),       //      'AIFC'
+    X_Common        = FOUR_CHAR('C','O','M','M'),       //      'COMM'
+    X_SoundData     = FOUR_CHAR('S','S','N','D'),       //      'SSND'
+    X_Marker        = FOUR_CHAR('M','A','R','K'),       //      'MARK'
+    X_Instrument    = FOUR_CHAR('I','N','S','T'),       //      'INST'
+    X_FORM          = FOUR_CHAR('F','O','R','M'),       //      'FORM'
+    X_CAT           = FOUR_CHAR('C','A','T',' '),       //      'CAT '
+    X_LIST          = FOUR_CHAR('L','I','S','T'),       //      'LIST'
+    X_BODY          = FOUR_CHAR('B','O','D','Y')        //      'BODY'
+};
+
+typedef struct X_PACKBY1
+{
+    int32_t    ckID;      /* ID */
+    int32_t    ckSize;    /* size */
+    int32_t    ckData;
+} XIFFChunk;
+
+typedef struct X_PACKBY1
+{
+    int16_t       numChannels;
+    uint32_t   numSampleFrames;
+    int16_t       sampleSize;
+    unsigned char   sampleRate[10];
+} XAIFFHeader;
+
+typedef struct X_PACKBY1
+{
+    int16_t       numChannels;
+    uint32_t   numSampleFrames;
+    int16_t       sampleSize;
+    unsigned char   sampleRate[10];
+    uint32_t   compressionType;
+    char            compressionName[256];           /* variable length array, Pascal string */
+} XAIFFExtenedHeader;
+
+typedef struct X_PACKBY1
+{
+    uint16_t  numMarkers; // 2
+    int16_t       id1;        // 0
+    uint32_t   position1;
+    char            name1[8];   // 076265674C6F6F70 'begLoop'
+    int16_t       id2;        // 1
+    uint32_t   position2;
+    char            name2[8];   // 07656E644C6F6F70 'endLoop'
+} XSingleLoopMarker;
+
+typedef struct X_PACKBY1
+{
+    unsigned char   baseFrequency;
+    unsigned char   detune;
+    unsigned char   lowFrequency;
+    unsigned char   highFrequency;
+    unsigned char   lowVelocity;
+    unsigned char   highVelocity;
+    int16_t       gain;
+
+    int16_t       sustainLoop_playMode;
+    int16_t       sustainLoop_beginLoop;
+    int16_t       sustainLoop_endLoop;
+    int16_t       releaseLoop_beginLoop;
+    int16_t       releaseLoop_endLoop;
+    int16_t       extra;
+} XInstrumentHeader;
+
+typedef struct X_PACKBY1
+{
+    uint32_t   offset;
+    uint32_t   blockSize;
+} XSoundData;
+
+/**********************- AU Defines -**************************/
+    
+#include "g72x.h"
+
+typedef struct
+{
+    uint32_t magic;          // magic number 
+    uint32_t hdr_size;       // size of the whole header, including optional comment.
+    uint32_t data_size;      // optional data size - usually unusalble. 
+    uint32_t encoding;       // format of data contained in this file 
+    uint32_t sample_rate;    // sample rate of data in this file 
+    uint32_t channels;       // numbder of interleaved channels (usually 1 or 2) 
+} SunAudioFileHeader;
+
+typedef struct
+{
+    struct g72x_state   state;
+    unsigned int        buffer;
+    int                 bits;
+} SunDecodeState;
+
+// Note these are defined for big-endian architectures 
+#define SUN_AUDIO_FILE_MAGIC_NUMBER (0x2E736E64L)       // '.snd'
+
+// Define the encoding fields 
+#define SUN_AUDIO_FILE_ENCODING_MULAW_8         (1)     // 8-bit ISDN u-law 
+#define SUN_AUDIO_FILE_ENCODING_LINEAR_8        (2)     // 8-bit linear PCM 
+#define SUN_AUDIO_FILE_ENCODING_LINEAR_16       (3)     // 16-bit linear PCM 
+#define SUN_AUDIO_FILE_ENCODING_LINEAR_24       (4)     // 24-bit linear PCM 
+#define SUN_AUDIO_FILE_ENCODING_LINEAR_32       (5)     // 32-bit linear PCM 
+#define SUN_AUDIO_FILE_ENCODING_FLOAT           (6)     // 32-bit IEEE floating point 
+#define SUN_AUDIO_FILE_ENCODING_DOUBLE          (7)     // 64-bit IEEE floating point 
+#define SUN_AUDIO_FILE_ENCODING_ADPCM_G721      (23)    // 4-bit CCITT g.721 ADPCM 
+#define SUN_AUDIO_FILE_ENCODING_ADPCM_G722      (24)    // CCITT g.722 ADPCM 
+#define SUN_AUDIO_FILE_ENCODING_ADPCM_G723_3    (25)    // CCITT g.723 3-bit ADPCM 
+#define SUN_AUDIO_FILE_ENCODING_ADPCM_G723_5    (26)    // CCITT g.723 5-bit ADPCM 
+#define SUN_AUDIO_FILE_ENCODING_ALAW_8          (27)    // 8-bit ISDN A-law 
+
+#include "X_UnpackStructures.h"
+
+// internal structures
+typedef struct
+{
+    int32_t            formType;               //  either X_RIFF, or X_FORM;
+    int32_t            headerType;
+    int32_t            formPosition;           //  position in file of current FORM
+    int32_t            formLength;             //  length of FORM
+    OPErr           lastError;
+    XFILE           fileReference;
+} X_IFF;
+
+#if USE_HIGHLEVEL_FILE_API == TRUE
+
+// IFF functions
+
+#if 0
+    #pragma mark ## IFF/RIFF read and general scan code ##
+#endif
+
+/*
+static OPErr IFF_Error(X_IFF *pIFF)
+{
+    if (pIFF)
+    {
+        return pIFF->lastError;
+    }
+    return NO_ERR;
+}
+*/
+
+static void IFF_SetFormType(X_IFF *pIFF, int32_t formType)
+{
+    if (pIFF)
+    {
+        pIFF->formType = formType;
+    }
+}
+
+
+/* -1 is error */
+static int32_t IFF_GetNextGroup(X_IFF *pIFF, XIFFChunk *pChunk)
+{
+    int32_t    err = 0;
+
+    if (XFileRead(pIFF->fileReference, pChunk, (int32_t)sizeof(XIFFChunk) - sizeof(int32_t)) != -1)   // get chunk ID
+    {
+        if (pIFF->formType == X_RIFF)
+        {
+            #if X_WORD_ORDER == FALSE   // motorola?
+            pChunk->ckSize = XSwapLong(pChunk->ckSize);
+            #endif
+        }
+        else
+        {
+            pChunk->ckSize = XGetLong(&pChunk->ckSize);
+        }
+        pChunk->ckData = 0L;
+        pChunk->ckID = XGetLong(&pChunk->ckID);     // swap if not motorola
+        switch(pChunk->ckID)
+        {
+            case X_FORM:
+            case X_RIFF:
+            case X_LIST:
+            case X_CAT:
+                pIFF->formPosition = XFileGetPosition(pIFF->fileReference);  /* get current pos */
+                pIFF->formLength = pChunk->ckSize;
+
+                if (XFileRead(pIFF->fileReference, &pChunk->ckData, (int32_t)sizeof(int32_t)) == -1)
+                {
+                    pIFF->lastError = BAD_FILE;
+                }
+                pChunk->ckData = XGetLong(&pChunk->ckData);
+                break;
+	   default:
+		break;
+        }
+    }
+    else
+    {
+        pIFF->lastError = BAD_FILE;
+        err = -1;
+    }
+    return err;
+}
+
+
+/******- Determine if a file is a IFF type -******************************/
+
+static int32_t IFF_FileType(X_IFF *pIFF)
+{
+    XIFFChunk type;
+
+    if (pIFF)
+    {
+        XFileSetPosition(pIFF->fileReference, 0L);  /* set to begining of file */
+
+        pIFF->formPosition = 0;
+        pIFF->formLength = 0;
+        XSetMemory(&type, (int32_t)sizeof(XIFFChunk), 0);
+        IFF_GetNextGroup(pIFF, &type);
+        return( (type.ckID == pIFF->formType) ? type.ckData : -1L);
+    }
+    return -1L;
+}
+
+/*- scan past nested FORM's -*/
+static int32_t IFF_NextBlock(X_IFF *pIFF, int32_t blockID)
+{
+    int32_t saveFORM, saveFLEN;
+    XIFFChunk type;
+    int32_t flag;
+
+    flag = -1;
+    while (XFileGetPosition(pIFF->fileReference) < (pIFF->formPosition + pIFF->formLength))
+    {
+         saveFORM = pIFF->formPosition;
+         saveFLEN = pIFF->formLength;
+         if (IFF_GetNextGroup(pIFF, &type) == -1)   /* error? */
+         {
+            break;
+         }
+         if (type.ckID == pIFF->formType)
+         {
+            type.ckSize -= 4L;
+         }
+         pIFF->formPosition = saveFORM;
+         pIFF->formLength = saveFLEN;
+         if (type.ckID != blockID)
+         {
+            if (XFileSetPositionRelative(pIFF->fileReference, type.ckSize + (type.ckSize&1)))
+            {
+                  flag = -1;  /* error */
+                  break;
+            }
+         }
+         else
+         {
+            flag = 0;   /* ok, found block ID */
+            break;
+         }
+    }
+    if (flag == -1)
+    {
+        pIFF->lastError = BAD_FILE;
+    }
+    return flag;
+}
+
+
+/******- Scan a FORM for a 4 letter block -*******************************/
+static int32_t IFF_ScanToBlock(X_IFF *pIFF, int32_t block)
+{
+    if (XFileSetPosition(pIFF->fileReference, pIFF->formPosition + 4) == 0)     // set to inside of FORM
+    {
+        return IFF_NextBlock(pIFF, block);
+    }
+    else
+    {
+        pIFF->lastError = BAD_FILE;
+        return -1;
+    }
+}
+
+/******************- Return Chunk size -**********************************/
+/*
+static int32_t IFF_ChunkSize(X_IFF *pIFF, int32_t block)
+{
+    int32_t size;
+
+    // must back up. Variable length change based upon block ID
+    if (IFF_ScanToBlock(pIFF, block) == -1L)
+    {
+        return -1;  // bad
+    }
+    XFileSetPositionRelative(pIFF->fileReference, -4L);     // back-up and get size
+    if (XFileRead(pIFF->fileReference, &size, 4L) == -1)
+    {
+        pIFF->lastError = BAD_FILE;
+        return -1;
+    }
+    if (pIFF->formType == X_RIFF)
+    {
+        #if X_WORD_ORDER == FALSE   // motorola?
+        size = XSwapLong(size);
+        #endif
+    }
+    return size;
+}
+*/
+
+/*- go inside a FORM that has been found -*/
+/*
+static int32_t IFF_NextForm(X_IFF *pIFF)
+{
+    XIFFChunk type;
+
+    XFileSetPosition(pIFF->fileReference, pIFF->formPosition);  // set to inside of FORM
+    
+    if (IFF_GetNextGroup(pIFF, &type) != -1)
+    {
+        if (type.ckID == pIFF->formType)
+        {
+            return type.ckData;
+        }
+    }
+    pIFF->lastError =  BAD_FILE;
+    return -1;
+}
+*/
+
+/*
+static int32_t IFF_CurrentForm(X_IFF *pIFF)
+{
+    pIFF->formPosition = XFileGetPosition(pIFF->fileReference);
+    return IFF_NextForm(pIFF);
+}
+*/
+
+static int32_t IFF_ReadBlock(X_IFF *pIFF, XPTR pData, int32_t Length)
+{
+    if (XFileRead(pIFF->fileReference, pData, Length) == -1)
+    {
+        pIFF->lastError = BAD_FILE;
+    }
+    return Length;
+}
+
+
+static int32_t IFF_GetChunk(X_IFF *pIFF, int32_t block, int32_t size, XPTR p)
+{
+    if (IFF_ScanToBlock(pIFF, block) == -1L)
+    {
+         return(-1); /* bad */
+    }
+    if (size == -1L)    /* size not known? */
+    {
+        XFileSetPositionRelative(pIFF->fileReference, -4L);     // back-up and get size
+        if (XFileRead(pIFF->fileReference, &size, (int32_t)sizeof(int32_t)) == -1)
+        {
+            pIFF->lastError = BAD_FILE;
+        }
+        if (pIFF->formType == X_RIFF)
+        {
+            #if X_WORD_ORDER == FALSE   // motorola?
+            size = XSwapLong(size);
+            #endif
+        }
+        else
+        {
+            size = XGetLong(&size);
+        }
+    }
+
+    IFF_ReadBlock(pIFF, p, size);   /* read block */
+    pIFF->lastError = NO_ERR;
+    if (size&1) /* odd? */
+    {
+        XFileSetPositionRelative(pIFF->fileReference, 1L);      // skip one byte
+    }
+    return pIFF->lastError;
+}
+
+
+/*
+static int32_t IFF_NextChunk(X_IFF *pIFF, int32_t block, int32_t size, XPTR p)
+{
+    if (IFF_NextBlock(pIFF, block) == -1)
+    {
+         return(-1); // bad
+    }
+    if (size == -1L)    // size not known?
+    {
+        XFileSetPositionRelative(pIFF->fileReference, -4L);     // back-up and get size
+        if (XFileRead(pIFF->fileReference, &size, (int32_t)sizeof(int32_t)) == -1)
+        {
+            pIFF->lastError = BAD_FILE;
+        }
+        if (pIFF->formType == X_RIFF)
+        {
+            #if X_WORD_ORDER == FALSE   // motorola?
+            size = XSwapLong(size);
+            #endif
+        }
+        else
+        {
+            size = XGetLong(&size);
+        }
+    }
+    IFF_ReadBlock(pIFF, p, size);   // read block
+    if (size&1) // odd? 
+    {
+        XFileSetPositionRelative(pIFF->fileReference, 1L);      // skip one byte
+    }
+    return pIFF->lastError;
+}
+*/
+
+#if 0
+    #pragma mark ## IFF/RIFF write code ##
+#endif
+
+#if USE_CREATION_API == TRUE
+static void IFF_WriteType(X_IFF *pIFF, uint32_t type)
+{
+    uint32_t   theType;
+
+    theType = type;
+    XPutLong(&theType, type);       // makes sure its motorola order
+    XFileWrite(pIFF->fileReference, &theType, sizeof(int32_t));
+}
+
+static OPErr IFF_WriteBlock(X_IFF *pIFF, XPTR pData, uint32_t Length)
+{
+    pIFF->lastError = NO_ERR;
+    if (XFileWrite(pIFF->fileReference, pData, (int32_t)Length) == -1)
+    {
+        pIFF->lastError = BAD_FILE;
+    }
+    return pIFF->lastError;
+}
+
+// write size of block, but order in the format particulars
+static int32_t IFF_WriteSize(X_IFF *pIFF, uint32_t size)
+{
+    uint32_t theSize;
+
+    theSize = size;
+    if (pIFF->formType == X_RIFF)
+    {
+        #if X_WORD_ORDER == FALSE   // motorola?
+        theSize = XSwapLong(size);
+        #endif
+    }
+    else if (pIFF->formType == X_FORM)
+    {
+        #if X_WORD_ORDER == TRUE
+        theSize = XSwapLong(size);
+        #endif
+    }
+    else
+    {
+        XPutLong(&theSize, size);       // makes sure its motorola order
+    }
+    return IFF_WriteBlock(pIFF, &theSize, (int32_t)sizeof(uint32_t));
+}
+#endif
+
+#if USE_CREATION_API == TRUE
+static OPErr IFF_PutChunk(X_IFF *pIFF, int32_t block, uint32_t size, XPTR p)
+{
+    OPErr err;
+
+    pIFF->lastError = NO_ERR;
+    IFF_WriteType(pIFF, block);
+
+    // SSND chunk in AIFF requires 8 bytes between size and sample data.
+    if (pIFF->formType == X_FORM && block == X_SoundData)
+    {
+        int32_t tmp = 0;
+
+        IFF_WriteSize(pIFF, size + 8);
+        IFF_WriteBlock(pIFF, (XPTR)&tmp, sizeof(int32_t));     // offset to first sample
+        IFF_WriteBlock(pIFF, (XPTR)&tmp, sizeof(int32_t));     // alignment block
+    }
+    else
+    {
+        IFF_WriteSize(pIFF, size);
+    }
+    err = IFF_WriteBlock(pIFF, p, size);
+    if (err == NO_ERR)
+    {
+         if (ODD(size)) /* is it odd? */
+         {
+            size = 0L;
+            XFileWrite(pIFF->fileReference, &size, (int32_t)sizeof(char));
+        }
+    }
+    return pIFF->lastError;
+}
+#endif
+
+// Sun AU file code
+#if 0
+    #pragma mark ## Sun AU file code ##
+#endif
+
+// Unpack input codes and pass them back as bytes. Returns 1 if there is residual input, returns -1 if eof, else returns 0.
+static int PV_UnpackInput(XFILE fileReference, unsigned int *in_buffer, int *in_bits, 
+                                    unsigned char *code, int bits)
+{
+    unsigned char       in_byte;
+
+    if (*in_bits < bits) 
+    {
+        if (XFileRead(fileReference, &in_byte, 1L) == -1)
+        {
+            *code = 0;
+            return -1;
+        }
+        *in_buffer |= (in_byte << *in_bits);
+        *in_bits += 8;
+    }
+    *code = *in_buffer & ((1 << bits) - 1);
+    *in_buffer >>= bits;
+    *in_bits -= bits;
+    return (*in_bits > 0);
+}
+
+#define MAX_AU_DECODE_BLOCK_SIZE        1024L
+// decode a sun file. If pState is non-zero then this is used between calls, otherwise it
+// uses clean state on the stack.
+static OPErr PV_ReadSunAUFile(  int32_t encoding,
+                                XFILE fileReference, 
+                                void *pSample,
+                                uint32_t sampleByteLength,
+                                uint32_t *pBufferLength,
+                                SunDecodeState *pState
+                                )
+{
+    OPErr               err;
+    int16_t               sample;
+    unsigned char       code;
+    int                 count;
+    int                 (*dec_routine)(int i, int out_coding, struct g72x_state *state_ptr);
+    int                 dec_bits;
+    int16_t           *pSample16;
+    unsigned char       codeBlock[MAX_AU_DECODE_BLOCK_SIZE];
+    uint32_t       writeLength;
+    SunDecodeState      state;
+
+    writeLength = 0;
+    err = NO_ERR;
+    dec_bits = 0;
+    pSample16 = (int16_t *)pSample;
+    switch (encoding)
+    {
+        case SUN_AUDIO_FILE_ENCODING_LINEAR_16:
+            writeLength = sampleByteLength;
+            XFileRead(fileReference, pSample, writeLength);
+
+            #if X_WORD_ORDER != FALSE   // intel?
+                XSwapShorts(pSample16, writeLength/2);
+            #endif
+
+            break;
+        case SUN_AUDIO_FILE_ENCODING_LINEAR_8:
+            writeLength = sampleByteLength;
+            XFileRead(fileReference, pSample, writeLength);
+            break;
+        case SUN_AUDIO_FILE_ENCODING_MULAW_8:
+#if 0   // slow
+            while (sampleByteLength > 0)
+            {
+                XFileRead(fileReference, codeBlock, 1);
+                *pSample16++ = ulaw2linear(codeBlock[0]);
+                writeLength += 2;
+                sampleByteLength -= 2;
+            }
+#else
+// fast
+            sampleByteLength = sampleByteLength / (MAX_AU_DECODE_BLOCK_SIZE*2);
+            while (sampleByteLength > 0)
+            {
+                XFileRead(fileReference, codeBlock, MAX_AU_DECODE_BLOCK_SIZE);
+                for (count = 0; count < MAX_AU_DECODE_BLOCK_SIZE; count++)
+                {
+                    *pSample16++ = ulaw2linear(codeBlock[count]);
+                    writeLength += 2;
+                }
+                sampleByteLength--;
+            }
+#endif
+            break;
+        case SUN_AUDIO_FILE_ENCODING_ALAW_8:
+            sampleByteLength = sampleByteLength / (MAX_AU_DECODE_BLOCK_SIZE*2);
+            while (sampleByteLength > 0)
+            {
+                XFileRead(fileReference, codeBlock, MAX_AU_DECODE_BLOCK_SIZE);
+                for (count = 0; count < MAX_AU_DECODE_BLOCK_SIZE; count++)
+                {
+                    *pSample16++ = alaw2linear(codeBlock[count]);
+                    writeLength += 2;
+                }
+                sampleByteLength--;
+            }
+            break;
+
+        case SUN_AUDIO_FILE_ENCODING_ADPCM_G721:
+            dec_routine = bae_g721_decoder;
+            dec_bits = 4;
+            goto decode_adpcm;
+        case SUN_AUDIO_FILE_ENCODING_ADPCM_G723_3:
+            dec_routine = bae_g723_24_decoder;
+            dec_bits = 3;
+            goto decode_adpcm;
+        case SUN_AUDIO_FILE_ENCODING_ADPCM_G723_5:
+            dec_routine = bae_g723_40_decoder;
+            dec_bits = 5;
+
+decode_adpcm:
+            if (pState == NULL)
+            {   // a one time call, so create a new state
+                g72x_init_state(&state.state);
+                state.bits = 0;
+                state.buffer = 0;
+                pState = &state;
+            }
+            /* Read and unpack input codes and process them */
+            while (PV_UnpackInput(fileReference, &pState->buffer, &pState->bits, &code, dec_bits) >= 0) 
+            {
+                sample = (*dec_routine)(code, AUDIO_ENCODING_LINEAR, &pState->state);
+                *pSample16++ = sample;
+                writeLength += sizeof(int16_t);
+                if (sampleByteLength > 0)
+                {
+                    sampleByteLength -= sizeof(int16_t);
+                }
+                else
+                {
+                    break;
+                }
+            }
+            break;
+	default:
+	    break;
+    }
+    if (pBufferLength)
+    {
+        *pBufferLength = writeLength;
+    }
+    return err;
+}
+
+
+
+
+
+
+// WAVE functions
+#if 0
+    #pragma mark ## WAVE read functions ##
+#endif
+
+/*
+static int32_t IFF_GetWAVFormatTag(X_IFF *pIFF)
+{
+    XWaveHeader header;
+
+    IFF_GetChunk(pIFF, X_FMT, (int32_t)sizeof(XWaveHeader), (void *)&header);
+
+    #if X_WORD_ORDER == FALSE   // motorola?
+        header.wFormatTag = XSwapShort(header.wFormatTag);
+    #endif
+    return (int32_t)header.wFormatTag;
+}
+*/
+
+/*
+static int32_t IFF_GetWAVHeader(X_IFF *pIFF, XWaveHeader * pHeaderInfo)
+{
+    int32_t    theErr;
+
+    theErr = IFF_GetChunk(pIFF, X_FMT, (int32_t)sizeof(XWaveHeader), (void *)pHeaderInfo);
+
+    #if X_WORD_ORDER == FALSE   // motorola?
+        pHeaderInfo->nSamplesPerSec = XSwapLong(pHeaderInfo->nSamplesPerSec);
+        pHeaderInfo->nAvgBytesPerSec = XSwapLong(pHeaderInfo->nAvgBytesPerSec);
+        pHeaderInfo->wFormatTag = XSwapShort(pHeaderInfo->wFormatTag);
+        pHeaderInfo->nChannels = XSwapShort(pHeaderInfo->nChannels);
+        pHeaderInfo->nBlockAlign = XSwapShort(pHeaderInfo->nBlockAlign);
+        pHeaderInfo->wBitsPerSample = XSwapShort(pHeaderInfo->wBitsPerSample);
+        pHeaderInfo->cbSize = XSwapShort(pHeaderInfo->cbSize);
+    #endif
+    return theErr;
+}
+*/
+
+static int32_t IFF_GetWAVIMAHeader(X_IFF *pIFF, XWaveHeaderIMA * pHeaderInfo)
+{
+    int32_t    theErr;
+
+    theErr = IFF_GetChunk(pIFF, X_FMT, (int32_t)sizeof(XWaveHeaderIMA), (void *)pHeaderInfo);
+
+    #if X_WORD_ORDER == FALSE   // motorola?
+        pHeaderInfo->wfx.nSamplesPerSec = XSwapLong(pHeaderInfo->wfx.nSamplesPerSec);
+        pHeaderInfo->wfx.nAvgBytesPerSec = XSwapLong(pHeaderInfo->wfx.nAvgBytesPerSec);
+        pHeaderInfo->wfx.wFormatTag = XSwapShort(pHeaderInfo->wfx.wFormatTag);
+        pHeaderInfo->wfx.nChannels = XSwapShort(pHeaderInfo->wfx.nChannels);
+        pHeaderInfo->wfx.nBlockAlign = XSwapShort(pHeaderInfo->wfx.nBlockAlign);
+        pHeaderInfo->wfx.wBitsPerSample = XSwapShort(pHeaderInfo->wfx.wBitsPerSample);
+        pHeaderInfo->wfx.cbSize = XSwapShort(pHeaderInfo->wfx.cbSize);
+        pHeaderInfo->wSamplesPerBlock = XSwapShort(pHeaderInfo->wSamplesPerBlock);
+    #endif
+    return theErr;
+}
+
+// Get compressed and uncompressed size. Return 0 if successful, 1 if failure
+static int32_t IFF_GetWAVSampleSize(X_IFF *pIFF, uint32_t *pUncompressedSize, uint32_t *pCompressedSize)
+{
+    int32_t            size, error;
+    XWaveHeaderIMA  header;
+
+    error = 0;
+    size = 0;
+    if ( (IFF_GetWAVIMAHeader(pIFF, &header) == 0) && pUncompressedSize && pCompressedSize)
+    {
+        if (IFF_ScanToBlock(pIFF, X_DATA) == 0) /* skip to body */
+        {
+            XFileSetPositionRelative(pIFF->fileReference, -4L);     // back-up and get size
+            if (XFileRead(pIFF->fileReference, &size, (int32_t)sizeof(int32_t)) == -1)
+            {
+                pIFF->lastError = BAD_FILE;
+            }
+            if (pIFF->formType == X_RIFF)
+            {
+                #if X_WORD_ORDER == FALSE   // motorola?
+                    size = XSwapLong(size);
+                #endif
+            }
+            *pCompressedSize = size;
+            switch(header.wfx.wFormatTag)
+            {
+                default:
+                    size = 0;
+                    error = 1;
+                    break;
+                case X_WAVE_FORMAT_ALAW:
+                case X_WAVE_FORMAT_MULAW:
+                    size *= 2;  // double size
+                    break;
+                case X_WAVE_FORMAT_PCM:
+                    // size will be valid
+                    break;
+                // calculate the uncompressed byte size
+                case X_WAVE_FORMAT_IMA_ADPCM:
+                    size *= 4;
+/*
+                    {
+                        uint32_t   cBlocks;
+                        uint32_t   cbBytesPerBlock;
+
+                        //
+                        //  how many destination PCM bytes are needed to hold
+                        //  the decoded ADPCM data
+                        //
+                        //  always round UP
+                        //
+                        cBlocks = size / header.wfx.nBlockAlign;
+                        if (cBlocks)
+                        {
+                            cbBytesPerBlock = header.wSamplesPerBlock * 2; // dest block aline
+
+                            if ( ! ((0xFFFFFFFFL / cbBytesPerBlock) < cBlocks) )
+                            {
+                                if ((size % header.wfx.nBlockAlign) == 0)
+                                {
+                                    size = cBlocks * cbBytesPerBlock;
+                                }
+                                else
+                                {
+                                    size = (cBlocks + 1) * cbBytesPerBlock;
+                                }
+                            }
+                            else
+                            {
+                                size = 0;   // out of range
+                                error = 1;
+                            }
+                        }
+                        else
+                        {
+                            size = 0;   // out of range
+                            error = 1;
+                        }
+                    }
+*/
+                    break;
+            }
+            *pUncompressedSize = size;
+        }
+    }
+    else
+    {
+        error = 1;
+    }
+    return error;
+}
+
+#if USE_CREATION_API == TRUE
+// Create and write out loop points if there's any in the waveform.
+static OPErr IFF_WriteWAVLoopPoints(X_IFF *pIFF, GM_Waveform const* pWaveform)
+{
+    XSamplerChunk   sample;
+
+    if (pWaveform)
+    {
+        if (pWaveform->startLoop && pWaveform->endLoop)
+        {
+            XSetMemory(&sample, (int32_t)sizeof(XSamplerChunk), 0);
+
+            // this rather complex process in setting these values makes sure the values in the structure are intel ordered, reguardless
+            // of platform we're on. The structure pWaveform is always host ordered.
+            XPutLong(&sample.cSampleLoops, XSwapLong(1));   // one loop point
+
+            XPutLong(&sample.dwMIDIUnityNote, XSwapLong(pWaveform->baseMidiPitch)); // MIDI note number
+
+            XPutLong(&sample.loops[0].dwStart, XSwapLong(pWaveform->startLoop));    // the startpoint of the loop. In sample frames
+            XPutLong(&sample.loops[0].dwEnd, XSwapLong(pWaveform->endLoop));        // the endpoint of the loop. In sample frames
+            XPutLong(&sample.loops[0].dwPlayCount, XSwapLong(pWaveform->numLoops));
+
+            // write WAVE loop block
+            return IFF_PutChunk(pIFF, X_SMPL, (int32_t)sizeof(XSamplerChunk), (XPTR)&sample);
+        }
+    }
+    return NO_ERR;
+}
+#endif
+
+// Returns WAV loop points, if there. Return 0 if successful, -1 if failure
+static int32_t IFF_GetWAVLoopPoints(X_IFF *pIFF, uint32_t *pLoopStart, uint32_t *pLoopEnd, uint32_t *pLoopCount)
+{
+    XSamplerChunk   *pSampler;
+    int32_t            theErr;
+    uint32_t   size;
+
+    *pLoopStart = 0;
+    *pLoopEnd = 0;
+    theErr = 0;
+    if (IFF_ScanToBlock(pIFF, X_SMPL) == 0) /* skip to body */
+    {
+        XFileSetPositionRelative(pIFF->fileReference, -4L);     // back-up and get size
+        if (XFileRead(pIFF->fileReference, &size, (int32_t)sizeof(int32_t)) == -1)
+        {
+            pIFF->lastError = BAD_FILE;
+            theErr = -1;
+        }
+        if (pIFF->formType == X_RIFF)
+        {
+            #if X_WORD_ORDER == FALSE   // motorola?
+                size = XSwapLong(size);
+            #endif
+        }
+        if (theErr == 0)
+        {
+            pSampler = (XSamplerChunk *)XNewPtr(size);
+            if (pSampler)
+            {
+                if (XFileRead(pIFF->fileReference, pSampler, size) == -1)
+                {
+                    pIFF->lastError = BAD_FILE;
+                    theErr = -1;
+                }
+                else
+                {   // ok
+                    #if X_WORD_ORDER == FALSE   // motorola?
+                    if (XSwapLong(pSampler->cSampleLoops))
+                    #else
+                    if (pSampler->cSampleLoops)
+                    #endif
+                    {
+                        #if X_WORD_ORDER == FALSE   // motorola?
+                        if (XSwapLong(pSampler->loops[0].dwType) == 0)
+                        #else
+                        if (pSampler->loops[0].dwType == 0)
+                        #endif
+                        {
+                            // WAV loop points are in bytes not in frames
+                            #if X_WORD_ORDER == FALSE   // motorola?
+                            *pLoopStart = XSwapLong(pSampler->loops[0].dwStart);
+                            *pLoopEnd = XSwapLong(pSampler->loops[0].dwEnd);
+                            #else
+                            *pLoopStart = pSampler->loops[0].dwStart;
+                            *pLoopEnd = pSampler->loops[0].dwEnd;
+                            #endif
+                            #if X_WORD_ORDER == FALSE   // motorola?
+                            *pLoopCount = XSwapLong(pSampler->loops[0].dwPlayCount);
+                            #else
+                            *pLoopCount = pSampler->loops[0].dwPlayCount;
+                            #endif
+                        }
+                    }
+                }
+            }
+            XDisposePtr(pSampler);
+        }
+        
+    }
+    return theErr;
+}
+
+
+// return NO_ERR if successfull
+static OPErr PV_ReadWAVEAndDecompressIMA(XFILE fileReference, uint32_t sourceLength,
+                                            char *pDestSample, uint32_t destLength,
+                                            char outputBitSize, char channels,
+                                            XPTR pBlockBuffer, uint32_t blockSize,
+                                            uint32_t *pBufferLength)
+{
+    uint32_t           writeBufferLength, size, offset;
+    OPErr                   error;
+    XBOOL                   customBlockBuffer;
+    
+    error = MEMORY_ERR;
+    writeBufferLength = 0;
+    customBlockBuffer = FALSE;
+    if (pBlockBuffer == NULL)
+    {
+        pBlockBuffer = XNewPtr(blockSize);
+        customBlockBuffer = TRUE;
+    }
+    if (pBlockBuffer)
+    {
+        error = NO_ERR;
+        while (sourceLength > 0)
+        {
+            if (sourceLength >= blockSize)
+            {
+                size = XFileGetPosition(fileReference);  /* get current pos */
+                if (XFileRead(fileReference, pBlockBuffer, blockSize) == -1)
+                {
+                    error = BAD_FILE;
+                }
+                size = XFileGetPosition(fileReference) - size;
+            }
+            else
+            {
+                // last block, just stop
+                size = 0;
+            }
+            offset = 0;
+            if (size)
+            {
+                offset = XExpandWavIma((XBYTE const*)pBlockBuffer, blockSize,
+                                        pDestSample, outputBitSize,
+                                        size, channels);
+            }
+            if (offset == 0)
+            {
+                // we're done
+                break;
+            }
+            if (destLength < offset)    // done filling?
+            {
+                break;
+            }
+            sourceLength -= blockSize;
+            destLength -= offset;
+            pDestSample += offset;
+            writeBufferLength += offset;
+        }
+    }
+    if (customBlockBuffer)
+    {
+        XDisposePtr(pBlockBuffer);
+    }
+    if (pBufferLength)
+    {
+        *pBufferLength = writeBufferLength;
+    }
+    return error;
+}
+
+
+// This will read into memory the entire wave file and return a GM_Waveform structure.
+// When disposing make sure and dispose of both the GM_Waveform structure and the
+// theWaveform inside of that structure with XDisposePtr
+static GM_Waveform* PV_ReadIntoMemoryWaveFile(XFILE file, XBOOL decodeData,
+                                                int32_t *pFormat, uint32_t *pBlockSize,
+                                                OPErr *pError)
+{
+    GM_Waveform         *wave;
+    X_IFF               *pIFF;
+
+    BAE_ASSERT(file);
+    BAE_ASSERT(pError);
+    wave = NULL;
+
+    pIFF = (X_IFF*)XNewPtr(sizeof(X_IFF));
+    if (pIFF)
+    {
+        IFF_SetFormType(pIFF, X_RIFF);
+        pIFF->fileReference = file;
+
+        wave = (GM_Waveform*)XNewPtr(sizeof(GM_Waveform));
+        if (wave)
+        {
+        XWaveHeaderIMA      waveHeader;
+        uint32_t       size, sourceLength = 0;
+
+            if ((IFF_FileType(pIFF) == X_WAVE) &&
+                (IFF_GetWAVIMAHeader(pIFF, &waveHeader) == 0))
+            {
+                wave->channels = (UBYTE)waveHeader.wfx.nChannels;
+                wave->bitSize = (UBYTE)waveHeader.wfx.wBitsPerSample;
+                wave->sampledRate = waveHeader.wfx.nSamplesPerSec << 16L;
+                wave->baseMidiPitch = 60;
+                wave->compressionType = C_NONE;
+
+                IFF_GetWAVLoopPoints(pIFF, &wave->startLoop, &wave->endLoop, &wave->numLoops);
+
+                // we want the byte size
+                size = 0;
+                if (IFF_GetWAVSampleSize(pIFF, &size, &sourceLength) != 0)
+                {
+                    BAE_ASSERT(FALSE);
+                    pIFF->lastError = BAD_FILE_TYPE;
+                }
+                else
+                {
+                    switch (waveHeader.wfx.wFormatTag)
+                    {
+                    case X_WAVE_FORMAT_IMA_ADPCM:
+                        wave->bitSize = 16;
+                        break;
+                    case X_WAVE_FORMAT_ALAW:
+                    case X_WAVE_FORMAT_MULAW:
+                        wave->bitSize = 16;
+                        break;
+		    default:
+			break;
+                    }
+
+                    // file is positioned at the sample data
+
+                    wave->waveSize = size;
+                    wave->waveFrames = size / (wave->channels * (wave->bitSize / 8));
+
+                    if (pBlockSize)
+                    {
+                        wave->currentFilePosition = XFileGetPosition(pIFF->fileReference);
+                        BAE_ASSERT(pFormat);
+                        *pFormat = waveHeader.wfx.wFormatTag;
+                        *pBlockSize = waveHeader.wfx.nBlockAlign;
+                        // don't read/decode any data, streaming code will do it later
+                    }
+                    else    // if (decodeData) // for now
+                    {
+                        wave->theWaveform = (SBYTE *)XNewPtr(size);
+                        if (wave->theWaveform)
+                        {
+                            switch(waveHeader.wfx.wFormatTag)
+                            {
+                            case X_WAVE_FORMAT_ALAW:
+                                pIFF->lastError =
+                                    PV_ReadSunAUFile(SUN_AUDIO_FILE_ENCODING_ALAW_8,
+                                                        pIFF->fileReference, 
+                                                        wave->theWaveform,
+                                                        wave->waveSize,
+                                                        &size,
+                                                        NULL);
+                                break;
+                            case X_WAVE_FORMAT_MULAW:
+                                pIFF->lastError =
+                                    PV_ReadSunAUFile(SUN_AUDIO_FILE_ENCODING_MULAW_8,
+                                                        pIFF->fileReference, 
+                                                        wave->theWaveform,
+                                                        wave->waveSize,
+                                                        &size, 
+                                                        NULL);
+                                break;
+                            case X_WAVE_FORMAT_PCM:
+                                pIFF->lastError = NO_ERR;
+                                if (XFileRead(pIFF->fileReference, 
+                                                wave->theWaveform,
+                                                wave->waveSize) != -1)
+                                {
+// now, if the file is 16 bit sample on a motorola ordered system, swap the bytes
+#if X_WORD_ORDER == FALSE
+                                    if (wave->bitSize == 16)
+                                    {
+                                        XSwapShorts((int16_t*)wave->theWaveform,
+                                                    wave->waveFrames * wave->channels);
+                                    }
+#endif
+                                }
+                                else
+                                {
+                                    BAE_ASSERT(FALSE);
+                                    pIFF->lastError = BAD_FILE;
+                                }
+                                break;
+                            case X_WAVE_FORMAT_IMA_ADPCM:
+                                pIFF->lastError =
+                                    PV_ReadWAVEAndDecompressIMA(pIFF->fileReference, 
+                                                                sourceLength,
+                                                                (char *)wave->theWaveform,
+                                                                wave->waveSize,
+                                                                wave->bitSize,
+                                                                wave->channels,
+                                                                NULL,   // allocate block buffer
+                                                                waveHeader.wfx.nBlockAlign,
+                                                                NULL);
+                                break;
+                            default:
+                                BAE_ASSERT(FALSE);
+                                pIFF->lastError = BAD_FILE_TYPE;
+                                break;
+                            }
+                        }
+                        else
+                        {
+                            pIFF->lastError = MEMORY_ERR;
+                        }
+                    }
+                }
+            }
+            else
+            {
+                pIFF->lastError = BAD_FILE_TYPE;
+            }
+            
+            if (pIFF->lastError)
+            {
+                if (wave) XDisposePtr(wave->theWaveform);
+                XDisposePtr(wave);
+                wave = NULL;
+            }
+        }
+        else
+        {
+            pIFF->lastError = MEMORY_ERR;
+        }
+
+        *pError = pIFF->lastError;
+        XDisposePtr((XPTR)pIFF);
+    }
+    else
+    {
+        *pError = MEMORY_ERR;
+    }
+    
+    return wave;
+}
+
+#if USE_CREATION_API == TRUE
+static OPErr PV_WriteFromMemoryWaveFile(XFILENAME *file, GM_Waveform const* pAudioData, XWORD formatTag)
+{
+    X_IFF           *pIFF;
+    XWaveHeader     waveHeader;
+    OPErr           err;
+
+    err = NO_ERR;
+    if (file && pAudioData && (formatTag == X_WAVE_FORMAT_PCM))
+    {
+        if (pAudioData->compressionType != C_NONE)
+        {
+            BAE_ASSERT(FALSE);  // for now
+            //MOE: should decompress here and use below
+            return PARAM_ERR;
+        }
+
+        pIFF = (X_IFF *)XNewPtr((int32_t)sizeof(X_IFF));
+        if (pIFF)
+        {
+            IFF_SetFormType(pIFF, X_RIFF);
+            pIFF->fileReference = XFileOpenForWrite(file, TRUE);
+            if (pIFF->fileReference)
+            {
+                // write form type
+                pIFF->formPosition = XFileGetPosition(pIFF->fileReference);  // get current pos
+                IFF_WriteType(pIFF, X_RIFF);
+                IFF_WriteSize(pIFF, 0);    // we come back to this and rewrite it after completely done
+                pIFF->formLength = -1;
+
+                IFF_WriteType(pIFF, X_WAVE);
+                // setup header. values need to be stored in intel order.
+                #if X_WORD_ORDER != FALSE   // intel
+                    waveHeader.wFormatTag = formatTag;
+                    waveHeader.nChannels = pAudioData->channels;
+                    waveHeader.wBitsPerSample = pAudioData->bitSize;
+                    waveHeader.nSamplesPerSec = XFIXED_TO_UNSIGNED_LONG(pAudioData->sampledRate);
+                    waveHeader.nBlockAlign = pAudioData->bitSize / 8 * pAudioData->channels;
+                    waveHeader.nAvgBytesPerSec = waveHeader.nSamplesPerSec * waveHeader.nBlockAlign;
+                    waveHeader.cbSize = 0;
+                #else
+                    // wave files require data to be intel ordered
+                    waveHeader.wFormatTag = XSwapShort(formatTag);
+                    waveHeader.nChannels = XSwapShort(pAudioData->channels);
+                    waveHeader.wBitsPerSample = XSwapShort(pAudioData->bitSize);
+                    waveHeader.nSamplesPerSec = XSwapLong(XFIXED_TO_UNSIGNED_LONG(pAudioData->sampledRate));
+                    waveHeader.nBlockAlign = pAudioData->bitSize / 8 * pAudioData->channels;
+                    waveHeader.nAvgBytesPerSec = XSwapLong(XFIXED_TO_UNSIGNED_LONG(pAudioData->sampledRate) * waveHeader.nBlockAlign);
+                    waveHeader.nBlockAlign = XSwapShort(waveHeader.nBlockAlign);
+                    waveHeader.cbSize = XSwapShort(0);
+                #endif
+
+                // write wave header block
+                if (IFF_PutChunk(pIFF, X_FMT, (int32_t)sizeof(XWaveHeader), (XPTR)&waveHeader) == NO_ERR)
+                {
+                    #if X_WORD_ORDER == FALSE   // motorola?
+                    if (pAudioData->bitSize == 16)
+                    {
+                        // swap to intel format
+                        XSwapShorts((int16_t*)pAudioData->theWaveform, pAudioData->waveFrames * pAudioData->channels);
+                    }
+                    #endif
+                    // write out loop points
+                    err = IFF_WriteWAVLoopPoints(pIFF, pAudioData);
+                    if (err == NO_ERR)
+                    {
+                        // write out sample data
+                        if (IFF_PutChunk(pIFF, X_DATA, pAudioData->waveSize, pAudioData->theWaveform) == NO_ERR)
+                        {
+                            uint32_t   end;
+                            uint32_t   size;
+                            
+                            // write end
+                            end = XFileGetPosition(pIFF->fileReference);     // get current pos
+                            XFileSetPosition(pIFF->fileReference, pIFF->formPosition + 4);
+                            size = end - pIFF->formPosition - 8;
+                            IFF_WriteSize(pIFF, size);
+                        }
+                        else
+                        {
+                            err = pIFF->lastError;
+                        }
+                    }
+
+                    #if X_WORD_ORDER == FALSE   // motorola?
+                    if (pAudioData->bitSize == 16)
+                    {
+                        // put back the way we found it
+                        XSwapShorts((int16_t*)pAudioData->theWaveform, pAudioData->waveFrames * pAudioData->channels);
+                    }
+                    #endif
+                }
+                else
+                {
+                    err = pIFF->lastError;
+                }
+                XFileClose(pIFF->fileReference);
+            }
+            else
+            {
+                err = FILE_NOT_FOUND;
+            }
+            XDisposePtr((XPTR)pIFF);
+        }
+        else
+        {
+            err = MEMORY_ERR;
+        }
+    }
+    else
+    {
+        BAE_ASSERT(FALSE);
+        err = PARAM_ERR;
+    }
+    return err;
+}
+
+static OPErr PV_WriteFromMemorySunAUFile(XFILENAME *file, GM_Waveform const* pAudioData, XWORD formatTag)
+{
+    SunAudioFileHeader  auHeader;
+    OPErr               err = NO_ERR;
+    XFILE               theFile;
+
+    if (file && pAudioData && (formatTag == X_WAVE_FORMAT_PCM))
+    {
+        if (pAudioData->compressionType != C_NONE)
+        {
+            return PARAM_ERR;
+        }
+
+        auHeader.magic = SUN_AUDIO_FILE_MAGIC_NUMBER;
+        auHeader.hdr_size = sizeof(SunAudioFileHeader);
+        auHeader.data_size = pAudioData->waveSize;
+        switch (pAudioData->bitSize)
+        {
+            case 8:
+                auHeader.encoding = SUN_AUDIO_FILE_ENCODING_LINEAR_8;
+                break;
+            case 16:
+                auHeader.encoding = SUN_AUDIO_FILE_ENCODING_LINEAR_16;
+                break;
+            default:
+                return PARAM_ERR;
+        }
+        auHeader.sample_rate = XFIXED_TO_UNSIGNED_LONG(pAudioData->sampledRate);
+        auHeader.channels = pAudioData->channels;
+
+        #if X_WORD_ORDER != FALSE // intel?
+            auHeader.magic = XSwapLong(auHeader.magic);
+            auHeader.hdr_size = XSwapLong(auHeader.hdr_size);
+            auHeader.data_size = XSwapLong(auHeader.data_size);
+            auHeader.encoding = XSwapLong(auHeader.encoding);
+            auHeader.sample_rate = XSwapLong(auHeader.sample_rate);
+            auHeader.channels = XSwapLong(auHeader.channels);
+        #endif
+
+
+        theFile = XFileOpenForWrite(file, TRUE);
+        if (theFile)
+        {
+            if (XFileWrite(theFile, &auHeader, sizeof(SunAudioFileHeader)) == -1)
+                return PARAM_ERR;
+
+            
+            if (pAudioData->bitSize == 8)
+            {
+                // 8 bit .AU data is signed, but internal engine 8 bit data is unsigned.
+                XPhase8BitWaveform((XBYTE*)pAudioData->theWaveform, pAudioData->waveSize);
+            }
+
+            #if X_WORD_ORDER != FALSE   // intel?
+            if (pAudioData->bitSize == 16)
+            {
+                XSwapShorts((int16_t*)pAudioData->theWaveform, pAudioData->waveFrames * pAudioData->channels);
+            }
+            #endif
+
+            if (XFileWrite(theFile, pAudioData->theWaveform, pAudioData->waveSize) == -1)
+                return PARAM_ERR;
+
+            if (pAudioData->bitSize == 8)
+            {
+                // undo the switch
+                XPhase8BitWaveform((XBYTE*)pAudioData->theWaveform, pAudioData->waveSize);
+            }
+
+            #if X_WORD_ORDER != FALSE   // intel?
+            if (pAudioData->bitSize == 16)
+            {
+                XSwapShorts((int16_t*)pAudioData->theWaveform, pAudioData->waveFrames * pAudioData->channels);
+            }
+            #endif
+
+            XFileClose(theFile);
+        }
+        else
+        {
+            err = PARAM_ERR;
+        }
+    }
+    else
+    {
+        err = PARAM_ERR;
+    }
+    return err;
+}
+
+#endif  // USE_CREATION_API == TRUE
+
+static float pv_pow(float x, int n)
+{
+    float   answer;
+    int     count;
+    int     sign;
+
+    sign = (n > 0) ? 1 : -1;
+    n = ABS(n);
+    answer = 1.0;
+    if (sign > 0)
+    {
+        for (count = 0; count < n; count++)
+        {
+            answer *= x;
+        }
+    }
+    else
+    {
+        for (count = 0; count < n; count++)
+        {
+            answer /= x;
+        }
+    }
+    return answer;
+}
+
+// implement ldexp. This is the brute force way of doing this, but its not used very often.
+static float pv_ldexp(float x, int y)
+{
+    return x * pv_pow(2, y);
+}
+
+/*
+ * C O N V E R T   F R O M   I E E E   E X T E N D E D  
+ */
+
+/* 
+ * Copyright (C) 1988-1991 Apple Computer, Inc.
+ * All rights reserved.
+ *
+ * Machine-independent I/O routines for IEEE floating-point numbers.
+ *
+ * NaN's and infinities are converted to HUGE_VAL or HUGE, which
+ * happens to be infinity on IEEE machines.  Unfortunately, it is
+ * impossible to preserve NaN's in a machine-independent way.
+ * Infinities are, however, preserved on IEEE machines.
+ *
+ * These routines have been tested on the following machines:
+ *    Apple Macintosh, MPW 3.1 C compiler
+ *    Apple Macintosh, THINK C compiler
+ *    Silicon Graphics IRIS, MIPS compiler
+ *    Cray X/MP and Y/MP
+ *    Digital Equipment VAX
+ *
+ *
+ * Implemented by Malcolm Slaney and Ken Turkowski.
+ *
+ * Malcolm Slaney contributions during 1988-1990 include big- and little-
+ * endian file I/O, conversion to and from Motorola's extended 80-bit
+ * floating-point format, and conversions to and from IEEE single-
+ * precision floating-point format.
+ *
+ * In 1991, Ken Turkowski implemented the conversions to and from
+ * IEEE double-precision format, added more precision to the extended
+ * conversions, and accommodated conversions involving +/- infinity,
+ * NaN's, and denormalized numbers.
+ */
+#define UNSIGNED_TO_FLOAT(u)         (((float)((int32_t)(u - 2147483647L - 1))) + 2147483648.0)
+
+/****************************************************************
+ * Extended precision IEEE floating-point conversion routine.
+ ****************************************************************/
+XFIXED XConvertFromIeeeExtended(unsigned char *bytes)
+{
+    float           f;
+    int             expon;
+    uint32_t   hiMant, loMant;
+    XFIXED          ieeeRate;
+
+    expon = ((bytes[0] & 0x7F) << 8L) | (bytes[1] & 0xFF);
+    hiMant  =    ((uint32_t)(bytes[2] & 0xFF) << 24L)
+            |    ((uint32_t)(bytes[3] & 0xFF) << 16L)
+            |    ((uint32_t)(bytes[4] & 0xFF) << 8L)
+            |    ((uint32_t)(bytes[5] & 0xFF));
+    loMant  =    ((uint32_t)(bytes[6] & 0xFF) << 24L)
+            |    ((uint32_t)(bytes[7] & 0xFF) << 16L)
+            |    ((uint32_t)(bytes[8] & 0xFF) << 8L)
+            |    ((uint32_t)(bytes[9] & 0xFF));
+
+    if (expon == 0 && hiMant == 0 && loMant == 0) 
+    {
+        f = 0;
+    }
+    else 
+    {
+        if (expon == 0x7FFF) 
+        {    /* Infinity or NaN */
+//#ifndef HUGE_VAL
+//  #define HUGE_VAL HUGE
+//#endif
+//          f = HUGE_VAL;
+            f = 0.0;
+        }
+        else 
+        {
+            expon -= 16383;
+            expon -= 31;
+            f  = pv_ldexp(UNSIGNED_TO_FLOAT(hiMant), expon);
+            expon -= 32;
+            f += pv_ldexp(UNSIGNED_TO_FLOAT(loMant), expon);
+        }
+    }
+
+    if (bytes[0] & 0x80)
+    {
+        f *= -1;
+    }
+    ieeeRate = FLOAT_TO_XFIXED(f);
+    return ieeeRate;
+}
+
+#if USE_CREATION_API == TRUE
+/*
+ * C O N V E R T   T O   I E E E   E X T E N D E D
+ */
+
+/* Copyright (C) 1988-1991 Apple Computer, Inc.
+ * All rights reserved.
+ *
+ * Machine-independent I/O routines for IEEE floating-point numbers.
+ *
+ * NaN's and infinities are converted to HUGE_VAL or HUGE, which
+ * happens to be infinity on IEEE machines.  Unfortunately, it is
+ * impossible to preserve NaN's in a machine-independent way.
+ * Infinities are, however, preserved on IEEE machines.
+ *
+ * These routines have been tested on the following machines:
+ *    Apple Macintosh, MPW 3.1 C compiler
+ *    Apple Macintosh, THINK C compiler
+ *    Silicon Graphics IRIS, MIPS compiler
+ *    Cray X/MP and Y/MP
+ *    Digital Equipment VAX
+ *
+ *
+ * Implemented by Malcolm Slaney and Ken Turkowski.
+ *
+ * Malcolm Slaney contributions during 1988-1990 include big- and little-
+ * endian file I/O, conversion to and from Motorola's extended 80-bit
+ * floating-point format, and conversions to and from IEEE single-
+ * precision floating-point format.
+ *
+ * In 1991, Ken Turkowski implemented the conversions to and from
+ * IEEE double-precision format, added more precision to the extended
+ * conversions, and accommodated conversions involving +/- infinity,
+ * NaN's, and denormalized numbers.
+ */
+
+#define FLOAT_TO_UNSIGNED(f)      ((uint32_t)(((int32_t)(f - 2147483648.0)) + 2147483647L + 1))
+
+void XConvertToIeeeExtended(XFIXED ieeeFixedRate, unsigned char *bytes)
+{
+    int             sign;
+    int             expon;
+    double          fMant, fsMant;
+    uint32_t   hiMant, loMant;
+    double          num;
+
+    num = XFIXED_TO_FLOAT(ieeeFixedRate);
+    if (num < 0) 
+    {
+        sign = 0x8000;
+        num *= -1;
+    } 
+    else 
+    {
+        sign = 0;
+    }
+
+    if (num == 0) 
+    {
+        expon = 0; hiMant = 0; loMant = 0;
+    }
+    else 
+    {
+        fMant = frexp(num, &expon);
+        if ((expon > 16384) || !(fMant < 1)) 
+        {    /* Infinity or NaN */
+            expon = sign|0x7FFF; 
+            hiMant = 0; 
+            loMant = 0; /* infinity */
+        }
+        else 
+        {    /* Finite */
+            expon += 16382;
+            if (expon < 0) 
+            {    /* denormalized */
+                fMant = ldexp(fMant, expon);
+                expon = 0;
+            }
+            expon |= sign;
+            fMant = ldexp(fMant, 32);          
+            fsMant = floor(fMant); 
+            hiMant = FLOAT_TO_UNSIGNED(fsMant);
+            fMant = ldexp(fMant - fsMant, 32); 
+            fsMant = floor(fMant); 
+            loMant = FLOAT_TO_UNSIGNED(fsMant);
+        }
+    }
+    
+    bytes[0] = expon >> 8;
+    bytes[1] = expon;
+    bytes[2] = (char)(hiMant >> 24);
+    bytes[3] = (char)(hiMant >> 16);
+    bytes[4] = (char)(hiMant >> 8);
+    bytes[5] = (char)hiMant;
+    bytes[6] = (char)(loMant >> 24);
+    bytes[7] = (char)(loMant >> 16);
+    bytes[8] = (char)(loMant >> 8);
+    bytes[9] = (char)loMant;
+}
+#endif
+
+#if 0
+    #pragma mark ## AIFF read functions ##
+#endif
+// get AIFF header. Returns 0 if ok, -1 if failed
+static int32_t IFF_GetAIFFHeader(X_IFF *pIFF, XAIFFHeader * pHeaderInfo)
+{
+    int32_t    theErr;
+
+    theErr = IFF_GetChunk(pIFF, X_Common, (int32_t)sizeof(XAIFFHeader), (void *)pHeaderInfo);
+
+    #if X_WORD_ORDER != FALSE   // intel?
+        pHeaderInfo->numChannels = XSwapShort(pHeaderInfo->numChannels);
+        pHeaderInfo->numSampleFrames = XSwapLong(pHeaderInfo->numSampleFrames);
+        pHeaderInfo->sampleSize = XSwapShort(pHeaderInfo->sampleSize);
+    #endif
+    return theErr;
+}
+
+// get AIFF extended header. Returns 0 if ok, -1 if failed
+static int32_t IFF_GetAIFFExtenedHeader(X_IFF *pIFF, XAIFFExtenedHeader * pHeaderInfo)
+{
+    int32_t    theErr;
+    char    size;
+
+    theErr = IFF_GetChunk(pIFF, X_Common, (int32_t)sizeof(XAIFFHeader) + sizeof(int32_t), (void *)pHeaderInfo);
+
+    #if X_WORD_ORDER != FALSE   // intel?
+        pHeaderInfo->numChannels = XSwapShort(pHeaderInfo->numChannels);
+        pHeaderInfo->numSampleFrames = XSwapLong(pHeaderInfo->numSampleFrames);
+        pHeaderInfo->sampleSize = XSwapShort(pHeaderInfo->sampleSize);
+        pHeaderInfo->compressionType = XSwapLong(pHeaderInfo->compressionType);
+    #endif
+    
+    theErr = XFileRead(pIFF->fileReference, &size, 1L);
+    pHeaderInfo->compressionName[0] = size;
+    theErr = XFileRead(pIFF->fileReference, &pHeaderInfo->compressionName[1], size);
+    return theErr;
+}
+
+static int32_t IFF_GetAIFFInstrument(X_IFF *pIFF, XInstrumentHeader * pInstrumentInfo)
+{
+    int32_t    theErr;
+
+    theErr = IFF_GetChunk(pIFF, X_Instrument, (int32_t)sizeof(XInstrumentHeader), (void *)pInstrumentInfo);
+
+    #if X_WORD_ORDER != FALSE   // intel?
+        pInstrumentInfo->gain = XSwapShort(pInstrumentInfo->gain);
+        pInstrumentInfo->sustainLoop_playMode = XSwapShort(pInstrumentInfo->sustainLoop_playMode);
+        pInstrumentInfo->sustainLoop_beginLoop = XSwapShort(pInstrumentInfo->sustainLoop_beginLoop);
+        pInstrumentInfo->sustainLoop_endLoop = XSwapShort(pInstrumentInfo->sustainLoop_endLoop);
+        pInstrumentInfo->releaseLoop_beginLoop = XSwapShort(pInstrumentInfo->releaseLoop_beginLoop);
+        pInstrumentInfo->releaseLoop_endLoop = XSwapShort(pInstrumentInfo->releaseLoop_endLoop);
+        pInstrumentInfo->extra = XSwapShort(pInstrumentInfo->extra);
+    #endif
+    return theErr;
+}
+
+/*
+    uint16_t                  numMarkers;         // 2 markers
+    int16_t                           id
+    uint32_t                   position;           // 1
+    pstring                         name;               // begloop
+    int16_t                           id
+    uint32_t                   position;           // 2
+    pstring                         name;               // endloop
+*/
+// searches for MARK and pulls the ID marker's value
+static XBOOL IFF_GetAIFFMarkerValue(X_IFF *pIFF, int16_t ID, uint32_t *pMarkerValue)
+{
+    unsigned char   loopMark[1024];
+    int32_t            theErr;
+    unsigned char   *pData, *pEnd;
+    uint16_t  len;
+    
+    *pMarkerValue = 0;
+    theErr = IFF_GetChunk(pIFF, X_Marker, 1023L, loopMark);
+    if (theErr == 0)
+    {
+        pData = loopMark;
+        pEnd = &loopMark[1024];
+        len = XGetShort(pData);
+        pData += 2;             // skip marker count
+        if (len > 1)
+        {
+            while (pData < pEnd)
+            {
+                if (XGetShort(pData) == ID)
+                {
+                    pData += 2;             // skip marker id
+                    *pMarkerValue = XGetLong(pData);
+                    return TRUE;
+                }
+                pData += 2;             // skip marker id
+                pData += 4;             // skip past value
+
+                len = *pData;
+                pData += len + 1;       // walk past first string
+                pData++;
+            }
+        }
+    }
+    return FALSE;
+}
+
+// Returns AIFF loop points, if there. Return 0 if successful, -1 if failure
+static int32_t IFF_GetAIFFLoopPoints(X_IFF *pIFF, uint32_t *pLoopStart, uint32_t *pLoopEnd)
+{
+    XInstrumentHeader   inst;
+    int32_t                err;
+
+    *pLoopStart = 0;
+    *pLoopEnd = 0;
+    err = IFF_GetAIFFInstrument(pIFF, &inst);
+    if (err == 0)
+    {
+        if (IFF_GetAIFFMarkerValue(pIFF, inst.sustainLoop_beginLoop, pLoopStart))
+        {
+            IFF_GetAIFFMarkerValue(pIFF, inst.sustainLoop_endLoop, pLoopEnd);
+        }
+    }
+    return err;
+}
+
+#if USE_CREATION_API == TRUE
+// Create and write out loop points if there's any in the waveform.
+static OPErr IFF_WriteAIFFLoopPoints(X_IFF *pIFF, GM_Waveform const* pWaveform)
+{
+    XSingleLoopMarker   loop;
+    XInstrumentHeader   inst;
+    static char         mBegLoop[] = {0x07, 0x62, 0x65, 0x67, 0x4C, 0x6F, 0x6F, 0x70};  //'begLoop'
+    static char         mEndLoop[] = {0x07, 0x65, 0x6E, 0x64, 0x4C, 0x6F, 0x6F, 0x70};  //'endLoop'
+    OPErr               err;
+
+    err = NO_ERR;
+    if (pWaveform)
+    {
+        if (pWaveform->startLoop && pWaveform->endLoop)
+        {
+            XSetMemory(&inst, (int32_t)sizeof(XInstrumentHeader), 0);
+            XSetMemory(&loop, (int32_t)sizeof(XSingleLoopMarker), 0);
+
+            XPutShort(&loop.numMarkers, 2);
+            XPutShort(&loop.id1, 0);        // ID 1
+            XPutShort(&loop.id2, 1);        // ID 2
+            XBlockMove(mBegLoop, &loop.name1, 8L);
+            XBlockMove(mEndLoop, &loop.name2, 8L);
+            XPutLong(&loop.position1, pWaveform->startLoop);
+            XPutLong(&loop.position2, pWaveform->endLoop);
+
+            inst.baseFrequency = (unsigned char)pWaveform->baseMidiPitch;
+            XPutShort(&inst.sustainLoop_playMode, 1);   // play forward
+            XPutShort(&inst.sustainLoop_beginLoop, 0);  // ID 1
+            XPutShort(&inst.sustainLoop_endLoop, 1);    // ID 2
+
+            err = IFF_PutChunk(pIFF, X_Instrument, (int32_t)sizeof(XInstrumentHeader), (XPTR)&inst);
+            if (err == NO_ERR)
+            {
+                err = IFF_PutChunk(pIFF, X_Marker, (int32_t)sizeof(XSingleLoopMarker), (XPTR)&loop);
+            }
+        }
+    }
+    return err;
+}
+#endif
+
+// Returns AIFF base pitch, if there. Return 0 if successful, -1 if failure
+static int32_t IFF_GetAIFFBasePitch(X_IFF *pIFF, XWORD *pBasePitch)
+{
+    XInstrumentHeader   inst;
+    int32_t                err;
+
+    err = IFF_GetAIFFInstrument(pIFF, &inst);
+    if (err == 0)
+    {
+        *pBasePitch = inst.baseFrequency;
+    }
+    return err;
+}
+
+// Get compressed and uncompressed size. Return 0 if successful, -1 if failure
+static int32_t IFF_GetAIFFSampleSize(X_IFF *pIFF, int32_t *pUncompressedSize, int32_t *pCompressedSize)
+{
+    int32_t                size, error;
+    XAIFFExtenedHeader  header;
+
+    size = 0L;
+    error = 0;
+    if (pUncompressedSize && pCompressedSize)
+    {
+        switch (pIFF->headerType)
+        {
+            case X_AIFF:
+                error = IFF_GetAIFFHeader(pIFF, (XAIFFHeader *)&header);
+                size = header.numSampleFrames * header.numChannels * (header.sampleSize / 8);
+                break;
+            case X_AIFC:
+                error = IFF_GetAIFFExtenedHeader(pIFF, &header);
+                switch (header.compressionType)
+                {
+                    default:
+                        BAE_ASSERT(FALSE);
+                        pIFF->lastError = BAD_FILE_TYPE;
+                        // fail because we don't know how to decompress
+                        break;
+                    case X_NONE:
+                        size = header.numSampleFrames * header.numChannels * (header.sampleSize / 8);
+                        break;
+                    case X_IMA4:
+                        // Sound Manager defines 64 samples per packet number of sample frames
+                        size = header.numSampleFrames * AIFF_IMA_BLOCK_FRAMES * header.numChannels * (header.sampleSize / 8);
+                        break;
+                }
+                break;
+        }
+    }
+
+    if (size)
+    {
+        // now position right to data block
+        if (IFF_ScanToBlock(pIFF, X_SoundData)) // skip to body
+        {
+            error = -1; // failed
+        }
+        else
+        {
+            XFileSetPositionRelative(pIFF->fileReference, -4L);     // back-up and get size
+            if (XFileRead(pIFF->fileReference, pCompressedSize, (int32_t)sizeof(int32_t)) == -1)
+            {
+                pIFF->lastError = BAD_FILE;
+                error = -1;
+            }
+            BAE_ASSERT(pCompressedSize);
+            *pCompressedSize = XGetLong(pCompressedSize);
+//          XFileSetPositionRelative(pIFF->fileReference, sizeof(int32_t) * 2L);
+        }
+    }
+
+    BAE_ASSERT(pUncompressedSize);
+    *pUncompressedSize = size;
+    return error;
+}
+
+#if USE_CREATION_API == TRUE
+static OPErr PV_WriteFromMemoryAiffFile(XFILENAME *file, GM_Waveform const* pAudioData, XWORD formatTag)
+{
+    X_IFF           *pIFF;
+    XAIFFHeader     aiffHeader;
+    OPErr           err;
+
+    err = NO_ERR;
+    if (file && pAudioData && (formatTag == X_WAVE_FORMAT_PCM))
+    {
+        if (pAudioData->compressionType != C_NONE)
+        {
+            return PARAM_ERR;
+        }
+
+        pIFF = (X_IFF *)XNewPtr((int32_t)sizeof(X_IFF));
+        if (pIFF)
+        {
+            IFF_SetFormType(pIFF, X_FORM);
+            pIFF->fileReference = XFileOpenForWrite(file, TRUE);
+            if (pIFF->fileReference)
+            {
+                // write form type
+                pIFF->formPosition = XFileGetPosition(pIFF->fileReference);  // get current pos
+                IFF_WriteType(pIFF, X_FORM);
+                IFF_WriteSize(pIFF, -1);    // we come back to this and rewrite it after completely done
+                pIFF->formLength = -1;
+
+                IFF_WriteType(pIFF, X_AIFF);
+                // setup header. values need to be stored in motorola order.
+                #if X_WORD_ORDER != FALSE   // intel
+                    // aiff files require data to be motorola ordered
+                    aiffHeader.numChannels = XSwapShort(pAudioData->channels);
+                    aiffHeader.numSampleFrames = XSwapLong(pAudioData->waveFrames);
+                    aiffHeader.sampleSize = XSwapShort(pAudioData->bitSize);
+                    XConvertToIeeeExtended(pAudioData->sampledRate, aiffHeader.sampleRate);
+                #else
+                    aiffHeader.numChannels = pAudioData->channels;
+                    aiffHeader.numSampleFrames = pAudioData->waveFrames;
+                    aiffHeader.sampleSize = pAudioData->bitSize;
+                    XConvertToIeeeExtended(pAudioData->sampledRate, aiffHeader.sampleRate);
+                #endif
+
+                // write aiff header block
+                if (IFF_PutChunk(pIFF, X_Common, (int32_t)sizeof(XAIFFHeader), (XPTR)&aiffHeader) == NO_ERR)
+                {
+                    #if X_WORD_ORDER != FALSE   // intel?
+                    if (pAudioData->bitSize == 16)
+                    {
+                        // swap to motorola format
+                        XSwapShorts((int16_t*)pAudioData->theWaveform, pAudioData->waveFrames * pAudioData->channels);
+                    }
+                    #endif
+
+                    if (pAudioData->bitSize == 8)
+                    {
+                        XPhase8BitWaveform((XBYTE*)pAudioData->theWaveform, pAudioData->waveSize);
+                    }
+
+                    // write out loop points                    
+                    err = IFF_WriteAIFFLoopPoints(pIFF, pAudioData);
+                    if (err == NO_ERR)
+                    {
+                        if (IFF_PutChunk(pIFF, X_SoundData, pAudioData->waveSize, pAudioData->theWaveform) == NO_ERR)
+                        {
+                            uint32_t   end;
+                            uint32_t   size;
+                            
+                            // write end
+                            end = XFileGetPosition(pIFF->fileReference);     // get current pos
+                            XFileSetPosition(pIFF->fileReference, pIFF->formPosition + 4);
+                            size = end - pIFF->formPosition;
+                            size -= 8;  // subtract format header and type from total length
+                            IFF_WriteSize(pIFF, size);
+                        }
+                        else
+                        {
+                            err = pIFF->lastError;
+                        }
+                    }
+                    // put back the way we found it
+                    if (pAudioData->bitSize == 8)
+                    {
+                        XPhase8BitWaveform((XBYTE*)pAudioData->theWaveform, pAudioData->waveSize);
+                    }
+
+                    #if X_WORD_ORDER != FALSE   // intel?
+                    if (pAudioData->bitSize == 16)
+                    {
+                        XSwapShorts((int16_t*)pAudioData->theWaveform, pAudioData->waveFrames * pAudioData->channels);
+                    }
+                    #endif
+                }
+                else
+                {
+                    err = pIFF->lastError;
+                }
+                XFileClose(pIFF->fileReference);
+            }
+            else
+            {
+                err = FILE_NOT_FOUND;
+            }
+            XDisposePtr((XPTR)pIFF);
+        }
+        else
+        {
+            err = MEMORY_ERR;
+        }
+    }
+    else
+    {
+        BAE_ASSERT(FALSE);
+        err = PARAM_ERR;
+    }
+    return err;
+}
+#endif  // #if USE_CREATION_API == TRUE
+
+#define AIFF_IMA_BUFFER_SIZE    AIFF_IMA_BLOCK_BYTES * 40
+
+static OPErr PV_ReadAIFFAndDecompressIMA(XFILE fileReference, int32_t sourceLength,
+                                            unsigned char *pDestSample, int32_t destLength,
+                                            char outputBitSize, char channels,
+                                            uint32_t *pBufferLength,
+                                            int16_t predictorCache[2])
+{
+    XBYTE       codeBlock[AIFF_IMA_BUFFER_SIZE];
+    int32_t        writeBufferLength, size, offset;
+    OPErr       err;
+
+    err = NO_ERR;
+    writeBufferLength = 0;
+    sourceLength -= sourceLength % AIFF_IMA_BUFFER_SIZE;    // round to block size
+
+    #if USE_DEBUG && 0
+    {
+        char text[256];
+        
+        sprintf(text, "sourceLength %ld, AIFF_IMA_BUFFER_SIZE %ld", sourceLength, AIFF_IMA_BUFFER_SIZE);
+        DEBUG_STR(XCtoPstr(text));
+    }
+    #endif
+
+    while (sourceLength > 0)
+    {
+        if (sourceLength > AIFF_IMA_BUFFER_SIZE)
+        {
+            size = XFileGetPosition(fileReference);  /* get current pos */
+            XFileRead(fileReference, codeBlock, AIFF_IMA_BUFFER_SIZE);
+            size = XFileGetPosition(fileReference) - size;
+        }
+        else
+        {
+            // last block so just stop
+            size = 0;
+        }
+        sourceLength -= AIFF_IMA_BUFFER_SIZE;
+        offset = 0;
+        if (size)
+        {
+            offset = XExpandAiffImaStream(codeBlock, AIFF_IMA_BLOCK_BYTES,
+                                            pDestSample, outputBitSize,
+                                            size, channels, predictorCache);
+            if (offset == 0)
+            {
+                // we're done
+                break;
+            }
+            destLength -= offset;
+            if (destLength < 0)
+            {
+                // time to quit, we've hit the end
+                break;
+            }
+            else
+            {
+                pDestSample += offset;
+                writeBufferLength += offset;
+            }
+        }
+    }
+    if (pBufferLength)
+    {
+        *pBufferLength = writeBufferLength;
+    }
+    return err;
+}
+
+// This will read into memory the entire AIFF file and return a GM_Waveform structure.
+// When disposing make sure and dispose of both the GM_Waveform structure and the
+// theWaveform inside of that structure with XDisposePtr
+static GM_Waveform * PV_ReadIntoMemoryAIFFFile(XFILE file, XBOOL decodeData,
+                                                int32_t *pFormat, uint32_t *pBlockSize,
+                                                OPErr *pError)
+{
+GM_Waveform         *wave;
+X_IFF               *pIFF;
+
+    BAE_ASSERT(file);
+    BAE_ASSERT(pError);
+
+    wave = NULL;
+    
+    pIFF = (X_IFF*)XNewPtr(sizeof(X_IFF));
+    if (pIFF)
+    {
+        IFF_SetFormType(pIFF, X_FORM);
+        pIFF->fileReference = file;
+
+        wave = (GM_Waveform*)XNewPtr(sizeof(GM_Waveform));
+        if (wave)
+        {
+        int32_t                type;
+
+            type = IFF_FileType(pIFF);
+            pIFF->headerType = type;
+
+            if ((type != X_AIFF) && (type != X_AIFC))
+            {
+                BAE_ASSERT(FALSE);
+                pIFF->lastError = BAD_FILE_TYPE;
+            }
+            else
+            {
+            XAIFFExtenedHeader  aiffHeader;
+            int32_t                size;
+            int32_t                sourceLength;
+
+                XSetMemory(&aiffHeader, sizeof(XAIFFExtenedHeader), 0);
+
+                if (type == X_AIFF)
+                {
+                    IFF_GetAIFFHeader(pIFF, (XAIFFHeader*)&aiffHeader);
+                    aiffHeader.compressionType = X_NONE;
+                }
+                else
+                {
+                    IFF_GetAIFFExtenedHeader(pIFF, &aiffHeader);
+                }
+
+
+                wave->channels = (UBYTE)aiffHeader.numChannels;
+                wave->bitSize = (UBYTE)aiffHeader.sampleSize;
+                wave->baseMidiPitch = 60;
+                wave->compressionType = C_NONE;
+
+                // get loop points, if any
+                IFF_GetAIFFLoopPoints(pIFF, &wave->startLoop, &wave->endLoop);
+                IFF_GetAIFFBasePitch(pIFF, &wave->baseMidiPitch);
+
+                // Convert the ieee number into a 16.16 fixed value
+                wave->sampledRate = XConvertFromIeeeExtended(aiffHeader.sampleRate);
+                if (wave->sampledRate == 0)
+                {
+                    BAE_ASSERT(FALSE);
+                    pIFF->lastError = BAD_SAMPLE;
+                }
+                else if (IFF_GetAIFFSampleSize(pIFF, &size, &sourceLength) == 0)
+                {
+                    BAE_ASSERT(size != 0);
+                    wave->waveSize = size;
+                    wave->waveFrames = wave->waveSize / (wave->channels * (wave->bitSize / 8));
+
+                    XFileSetPositionRelative(pIFF->fileReference, sizeof(int32_t) * 2L);
+                    // now the file is positioned right at the data block
+
+                    if (pBlockSize)
+                    {
+                        wave->currentFilePosition = XFileGetPosition(pIFF->fileReference);
+                        BAE_ASSERT(pFormat);
+                        *pFormat = aiffHeader.compressionType;
+                        *pBlockSize = sizeof(int32_t) * 2; //MOE: Isn't this too small for efficient streaming?
+                        // don't read/decode data, other streaming code will do it
+                    }
+                    else
+                    {
+                        switch (aiffHeader.compressionType)
+                        {
+                        case X_NONE:
+                            wave->theWaveform = (SBYTE*)XNewPtr(size);
+                            if (wave->theWaveform)
+                            {
+                                if (XFileRead(pIFF->fileReference, wave->theWaveform, size) != -1)
+                                {
+#if X_WORD_ORDER != FALSE   // intel?
+                                    if (wave->bitSize == 16)
+                                    {
+                                        XSwapShorts((int16_t*)wave->theWaveform,
+                                                    wave->waveFrames * wave->channels);
+                                    }
+#endif
+                                }
+                                else
+                                {
+                                    BAE_ASSERT(FALSE);
+                                    pIFF->lastError = BAD_FILE;
+                                }
+                            }
+                            else
+                            {
+                                pIFF->lastError = MEMORY_ERR;
+                            }
+                            break;
+                        case X_IMA4:
+                            if (decodeData)
+                            {
+                                wave->theWaveform = (SBYTE*)XNewPtr(size);
+                                if (wave->theWaveform)
+                                {
+                                int16_t       predictorCache[2];
+                                
+                                    predictorCache[0] = 0;
+                                    predictorCache[1] = 0;
+                                    pIFF->lastError =
+                                        PV_ReadAIFFAndDecompressIMA(pIFF->fileReference,
+                                                                    sourceLength,
+                                                                    (XBYTE*)wave->theWaveform,
+                                                                    wave->waveSize,
+                                                                    wave->bitSize,
+                                                                    wave->channels,
+                                                                    NULL,
+                                                                    predictorCache);
+                                }
+                                else
+                                {
+                                    pIFF->lastError = MEMORY_ERR;
+                                }
+                            }
+                            else
+                            {
+                            XDWORD      const imaBlocks =
+                                            (wave->waveFrames + AIFF_IMA_BLOCK_FRAMES - 1) /
+                                            AIFF_IMA_BLOCK_FRAMES;
+                                
+                                wave->waveSize = imaBlocks * wave->channels * AIFF_IMA_BLOCK_BYTES;
+                                BAE_ASSERT(wave->waveSize > 0);
+                                wave->theWaveform = (SBYTE*)XNewPtr(wave->waveSize);
+                                if (wave->theWaveform)
+                                {
+                                    if (XFileRead(file, wave->theWaveform, wave->waveSize))
+                                    {
+                                        BAE_ASSERT(FALSE);  // file probably wasn't long enough
+                                        pIFF->lastError = BAD_FILE;
+                                    }
+                                    wave->compressionType = C_IMA4;
+                                }
+                                else
+                                {
+                                    pIFF->lastError = MEMORY_ERR;
+                                }
+                            }
+                            break;
+                        default:
+                            BAE_ASSERT(FALSE);
+                            pIFF->lastError = BAD_FILE_TYPE;
+                            break;
+                        }
+
+                        if ((pIFF->lastError == NO_ERR) && ((int32_t)wave->waveSize == size))
+                        {
+                            // now, if the file is 8 bit sample, change the sample phase
+                            if (wave->bitSize == 8)
+                            {
+                                BAE_ASSERT(wave->theWaveform);
+                                XPhase8BitWaveform((XBYTE*)wave->theWaveform, wave->waveSize);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        else
+        {
+            pIFF->lastError = MEMORY_ERR;
+        }
+        
+        if (pIFF->lastError != NO_ERR)
+        {
+            if (wave) XDisposePtr(wave->theWaveform);
+            XDisposePtr(wave);
+            wave = NULL;
+        }
+        *pError = pIFF->lastError;
+        XDisposePtr(pIFF);
+    }
+    else
+    {
+        *pError = MEMORY_ERR;
+    }
+    return wave;
+}
+
+// This will read into memory the entire Sun AU file and return a GM_Waveform structure.
+// When disposing make sure and dispose of both the GM_Waveform structure and the
+// theWaveform inside of that structure with XDisposePtr
+static GM_Waveform * PV_ReadIntoMemorySunAUFile(XFILE file, XBOOL decodeData,
+                                                int32_t *pFormat, uint32_t *pBlockSize,
+                                                OPErr *pError)
+{
+GM_Waveform*        wave;
+OPErr               err;
+SunAudioFileHeader  sunHeader;
+
+    BAE_ASSERT(file);
+    BAE_ASSERT(pError);
+
+    wave = NULL;
+    err = NO_ERR;
+
+    if (XFileRead(file, &sunHeader, (int32_t)sizeof(SunAudioFileHeader)) == 0)
+    {
+    int32_t                size;
+    int32_t                filePos;
+    int32_t                originalLength;
+    
+        // now skip past any info string
+        size = XGetLong(&sunHeader.hdr_size) - (int32_t)sizeof(SunAudioFileHeader);
+        filePos = XFileGetPosition(file) + size;
+        originalLength = XFileGetLength(file) - size + sizeof(SunAudioFileHeader);
+
+        XFileSetPosition(file, filePos);    // go back to ending
+        // Make sure we've got a legitimate audio file
+        if (XGetLong(&sunHeader.magic) == SUN_AUDIO_FILE_MAGIC_NUMBER)
+        {
+        int32_t                const encoding = XGetLong(&sunHeader.encoding);
+        int32_t                waveLength = 0;
+        int16_t           bits = 0;
+        
+            switch (encoding)
+            {
+            case SUN_AUDIO_FILE_ENCODING_LINEAR_8:
+                waveLength = originalLength;
+                bits = 8;
+                break;
+            case SUN_AUDIO_FILE_ENCODING_MULAW_8:
+            case SUN_AUDIO_FILE_ENCODING_ALAW_8:
+                waveLength = originalLength * 2;
+                bits = 16;
+                break;
+            case SUN_AUDIO_FILE_ENCODING_LINEAR_16:
+                waveLength = originalLength;
+                bits = 16;
+                break;
+            case SUN_AUDIO_FILE_ENCODING_ADPCM_G721:
+                waveLength = originalLength * 4;
+                bits = 16;
+                break;
+            case SUN_AUDIO_FILE_ENCODING_ADPCM_G723_3:
+            case SUN_AUDIO_FILE_ENCODING_ADPCM_G723_5:
+                waveLength = originalLength * 4;
+                bits = 16;
+                break;
+            default :
+                BAE_ASSERT(FALSE);
+                err = BAD_FILE_TYPE;
+                break;
+            }
+
+            if (err == NO_ERR)
+            {
+                wave = (GM_Waveform*)XNewPtr(sizeof(GM_Waveform));
+                if (wave)
+                {
+                    wave->channels = (UBYTE)XGetLong(&sunHeader.channels);
+                    wave->baseMidiPitch = 60;
+                    wave->bitSize = (UBYTE)bits;
+                    wave->sampledRate = XGetLong(&sunHeader.sample_rate) << 16L;
+                    // we want the byte size
+                    wave->waveSize = waveLength;
+                    wave->waveFrames = wave->waveSize / wave->channels;
+                    if (wave->bitSize > 8)
+                    {
+                        wave->waveFrames /= 2;
+                    }
+                    wave->compressionType = C_NONE;
+                    
+                    // now the file is positioned right at the data block. So let's allocate it and read
+                    // it into memory
+                    if (pBlockSize)
+                    {
+                        // now the file is positioned right at the data block
+                        wave->currentFilePosition = XFileGetPosition(file);
+                        BAE_ASSERT(pFormat);
+                        *pFormat = encoding;
+                        *pBlockSize = 0;    //MOE: Won't this cause the streaming code to fail?
+                        // don't read/decode any data, streaming code will do it later
+                    }
+                    else    // if (decodeData) // for now
+                    {
+                        wave->theWaveform = (SBYTE*)XNewPtr(wave->waveSize);
+                        if (wave->theWaveform)
+                        {
+                            err = PV_ReadSunAUFile(encoding, file,
+                                                    wave->theWaveform, wave->waveSize, NULL, NULL);
+                            if (err == 0)
+                            {
+                                // we don't need to byte swap these based upon platform because
+                                // we generate samples from runtime code, so the results are in
+                                // native format already
+
+                                // now, if the file is 8 bit sample, change the sample phase
+                                if (wave->bitSize == 8)
+                                {
+                                    XPhase8BitWaveform((unsigned char *)wave->theWaveform, wave->waveSize);
+                                }
+                            }
+                        }
+                        else
+                        {
+                            err = MEMORY_ERR;
+                        }
+                    }
+
+                    if (err != NO_ERR)
+                    {
+                        XDisposePtr((XPTR)wave->theWaveform);
+                        XDisposePtr((XPTR)wave);
+                        wave = NULL;
+                    }
+                }
+                else
+                {
+                    BAE_ASSERT(FALSE);
+                    err = BAD_FILE_TYPE;
+                }
+            }
+        }
+        else
+        {
+            BAE_ASSERT(FALSE);
+            err = BAD_FILE_TYPE;
+        }
+    }
+    else
+    {
+        BAE_ASSERT(FALSE);
+        err = BAD_FILE;
+    }
+
+    *pError = err;
+    return wave;
+}
+
+
+#if USE_MPEG_DECODER != 0
+static
+GM_Waveform* PV_ReadIntoMemoryMPEGFile(XFILE file, XBOOL decodeData,
+                                        int32_t *pFormat, void **ppBlockPtr, uint32_t *pBlockSize,
+                                        OPErr *pError)
+{
+GM_Waveform*        wave;
+OPErr               err;
+XMPEGDecodedData*   stream;
+
+    BAE_ASSERT(file);
+    BAE_ASSERT(pError);
+
+    err = NO_ERR;
+    wave = NULL;
+
+    stream = XOpenMPEGStreamFromXFILE(file, &err);
+    if (stream && (err == NO_ERR))
+    {
+        wave = (GM_Waveform*)XNewPtr(sizeof(GM_Waveform));
+        if (wave)
+        {
+            wave->channels = (UBYTE)stream->channels;
+            wave->bitSize = (UBYTE)stream->bitSize;
+            wave->baseMidiPitch = 60;
+            wave->sampledRate = stream->sampleRate;
+            // we want the byte size
+            wave->waveSize = stream->lengthInBytes; // currently is usually too big
+            wave->waveFrames = stream->lengthInSamples;
+            wave->compressionType = C_NONE;
+
+            // now the file is positioned right at the data block.
+            if (pBlockSize)
+            {
+                // we're only interested in the bare info. We're about to
+                // start streaming this data now.
+                wave->compressionType = XGetMPEGBitrateType(stream->bitrate);
+                *pFormat = wave->compressionType;
+
+                *ppBlockPtr = (void *)-1L;
+                *pBlockSize = stream->frameBufferSize;
+                XCloseMPEGStream(stream);
+                *pError = err;
+                return wave;
+            }
+
+            // So let's allocate it and read it into memory
+            if (decodeData)
+            {
+            UINT32      const decodingBytes = stream->maxFrameBuffers * stream->frameBufferSize;
+            
+                BAE_ASSERT(wave->waveSize <= decodingBytes);
+                wave->theWaveform = (SBYTE*)XNewPtr(decodingBytes);
+                if (wave->theWaveform)
+                {
+                    // now decode the mpeg sample and store into the resulting buffer
+                    {
+                    SBYTE*          data;
+                    UINT32          count;
+                    UINT32          usefulBytes;
+                    
+                        data = (SBYTE *)wave->theWaveform;
+                        count = 0;
+                        while (count < stream->maxFrameBuffers)
+                        {
+                        XBOOL           done;
+
+                            done = FALSE;
+                            err = XFillMPEGStreamBuffer(stream, data, &done);
+                            if ((err != NO_ERR) || done)
+                            {
+                                break;
+                            }
+                            data += stream->frameBufferSize;
+                            count++;
+                        }
+                        
+                        usefulBytes = data - (SBYTE*)wave->theWaveform;
+                        if (usefulBytes < wave->waveSize)
+                        {
+                            wave->waveSize = usefulBytes;
+                            wave->waveFrames = usefulBytes / (wave->channels * (wave->bitSize / 8));
+                        }
+                        data = (SBYTE*)XResizePtr(wave->theWaveform, wave->waveSize);
+                        if (data) wave->theWaveform = data;
+                    }
+                }
+                else
+                {
+                    err = MEMORY_ERR;
+                }
+            }
+            else
+            {
+            UINT32      const encodedBytes = XFileGetLength(file);
+            
+                wave->waveSize = encodedBytes;
+                wave->theWaveform = (SBYTE*)XNewPtr(encodedBytes);
+                if (wave->theWaveform)
+                {
+                    if (XFileSetPosition(file, 0) ||
+                        XFileRead(file, wave->theWaveform, encodedBytes))
+                    {
+                        err = BAD_FILE;
+                    }
+                    wave->compressionType = XGetMPEGBitrateType(stream->bitrate);
+                }
+                else
+                {
+                    err = MEMORY_ERR;
+                }
+            }
+
+            if (err != NO_ERR)
+            {
+                XDisposePtr(wave->theWaveform);
+                XDisposePtr(wave);
+                wave = NULL;
+            }
+        }
+        else
+        {
+            err = MEMORY_ERR;
+        }
+
+        BAE_ASSERT(stream);
+        XCloseMPEGStream(stream);
+    }
+    else
+    {
+        err = BAD_FILE_TYPE;
+    }
+        
+    *pError = err;
+    return wave;
+}
+#endif  // USE_MPEG_DECODER != FALSE
+
+#if USE_FLAC_DECODER != FALSE
+
+typedef struct {
+    GM_Waveform*    wave;
+    SBYTE*          sampleData;
+    uint32_t        totalSamples;
+    uint32_t        currentSample;
+    OPErr           error;
+    XBOOL           metadataComplete;
+    
+    // Memory-based file data
+    const XBYTE*    fileData;
+    uint32_t        fileSize;
+    uint32_t        filePosition;
+    
+    /* PRNG state for dithering when downsampling >16-bit to 16-bit to avoid
+     * quantization-related static/noise. Initialized in the decoder init. */
+    uint32_t        dither_state;
+    /* Number of bits to right-shift for conservative attenuation after
+     * downsampling. 1 == -6dB, 2 == -12dB, 3 == -18dB. */
+    uint8_t         attenuation_shift;
+} FLACDecodeState;
+
+/* xorshift32 PRNG used for dithering. Kept simple and fast. */
+/*
+static uint32_t flac_prng(FLACDecodeState *s)
+{
+    uint32_t x = s->dither_state;
+    if (x == 0) x = 0x12345678u; // seed if not set
+    x ^= x << 13;
+    x ^= x >> 17;
+    x ^= x << 5;
+    s->dither_state = x;
+    return x;
+}
+*/
+
+/* Produce a small TPDF-like dither value centered at 0 using sum of two
+ * uniform integers in [0, 2^useBits-1], returned offset by -(2^useBits-1).
+ */
+/*
+static int32_t flac_tpdf_dither(FLACDecodeState *s, int useBits)
+{
+    if (useBits <= 0) return 0;
+    if (useBits > 24) useBits = 24; // cap to avoid shifts >32
+    uint32_t mask = (useBits >= 32) ? 0xFFFFFFFFu : ((1u << useBits) - 1u);
+    uint32_t a = flac_prng(s) & mask;
+    uint32_t b = flac_prng(s) & mask;
+    // center around zero: sum - mask
+    return (int32_t)a + (int32_t)b - (int32_t)mask;
+}
+*/
+// FLAC callback functions for memory-based reading
+static FLAC__StreamDecoderReadStatus flac_read_callback(const FLAC__StreamDecoder *decoder, FLAC__byte buffer[], size_t *bytes, void *client_data)
+{
+    FLACDecodeState *state = (FLACDecodeState*)client_data;
+    size_t bytesToRead = *bytes;
+    size_t remainingBytes;
+    
+    (void)decoder; // unused parameter
+    
+    // Calculate remaining bytes in the file
+    remainingBytes = state->fileSize - state->filePosition;
+    
+    if (remainingBytes == 0) {
+        *bytes = 0;
+        return FLAC__STREAM_DECODER_READ_STATUS_END_OF_STREAM;
+    }
+    
+    // Don't read more than what's available
+    if (bytesToRead > remainingBytes) {
+        bytesToRead = remainingBytes;
+    }
+    
+    // Copy data from memory buffer
+    XBlockMove((void*)(state->fileData + state->filePosition), buffer, bytesToRead);
+    state->filePosition += bytesToRead;
+    *bytes = bytesToRead;
+    
+    return FLAC__STREAM_DECODER_READ_STATUS_CONTINUE;
+}
+
+static FLAC__StreamDecoderSeekStatus flac_seek_callback(const FLAC__StreamDecoder *decoder, FLAC__uint64 absolute_byte_offset, void *client_data)
+{
+    FLACDecodeState *state = (FLACDecodeState*)client_data;
+    
+    (void)decoder; // unused parameter
+    
+    // Allow seeking to EOF (position == length)
+    if (absolute_byte_offset > state->fileSize) {
+        return FLAC__STREAM_DECODER_SEEK_STATUS_ERROR;
+    }
+    
+    state->filePosition = (uint32_t)absolute_byte_offset;
+    return FLAC__STREAM_DECODER_SEEK_STATUS_OK;
+}
+
+static FLAC__StreamDecoderTellStatus flac_tell_callback(const FLAC__StreamDecoder *decoder, FLAC__uint64 *absolute_byte_offset, void *client_data)
+{
+    FLACDecodeState *state = (FLACDecodeState*)client_data;
+    
+    (void)decoder; // unused parameter
+    
+    *absolute_byte_offset = state->filePosition;
+    return FLAC__STREAM_DECODER_TELL_STATUS_OK;
+}
+
+static FLAC__StreamDecoderLengthStatus flac_length_callback(const FLAC__StreamDecoder *decoder, FLAC__uint64 *stream_length, void *client_data)
+{
+    FLACDecodeState *state = (FLACDecodeState*)client_data;
+    
+    (void)decoder; // unused parameter
+    
+    *stream_length = state->fileSize;
+    return FLAC__STREAM_DECODER_LENGTH_STATUS_OK;
+}
+
+static FLAC__bool flac_eof_callback(const FLAC__StreamDecoder *decoder, void *client_data)
+{
+    FLACDecodeState *state = (FLACDecodeState*)client_data;
+    
+    (void)decoder; // unused parameter
+    
+    return (state->filePosition >= state->fileSize) ? 1 : 0;
+}
+
+// FLAC decoder callbacks
+static FLAC__StreamDecoderWriteStatus flac_write_callback(
+    const FLAC__StreamDecoder *decoder,
+    const FLAC__Frame *frame,
+    const FLAC__int32 * const buffer[],
+    void *client_data)
+{
+    FLACDecodeState *state = (FLACDecodeState*)client_data;
+    uint32_t i, sample;
+    int16_t *dest;
+    
+    if (state->wave == NULL || state->sampleData == NULL) {
+        return FLAC__STREAM_DECODER_WRITE_STATUS_ABORT;
+    }
+    
+    dest = (int16_t*)(state->sampleData + (state->currentSample * state->wave->channels * sizeof(int16_t)));
+    
+    // Get the actual bit depth from the frame (more reliable than metadata)
+    int actualBitDepth = frame->header.bits_per_sample;
+    
+    // Convert samples to 16-bit signed PCM
+    for (i = 0; i < frame->header.blocksize; i++) {
+        for (sample = 0; sample < state->wave->channels; sample++) {
+            if (state->currentSample >= state->totalSamples) {
+                return FLAC__STREAM_DECODER_WRITE_STATUS_ABORT;
+            }
+
+            // libFLAC provides samples as signed 32-bit integers. The original
+            // file bit depth is in actualBitDepth.
+            int32_t val = buffer[sample][i];
+
+            if (actualBitDepth == 16) {
+                // Already 16-bit: store directly (clamp to be safe)
+                if (val > INT16_MAX) val = INT16_MAX;
+                else if (val < INT16_MIN) val = INT16_MIN;
+                *dest++ = (int16_t)val;
+            } else if (actualBitDepth > 16) {
+                /* Convert from higher bit depths (e.g., 24-bit) to 16-bit.
+                 * For 24-bit to 16-bit: divide by 256 (shift right by 8 bits)
+                 */
+                int shift = actualBitDepth - 16;
+                
+                // Simple bit shifting to convert to 16-bit range
+                int32_t scaled = val >> shift;
+                
+                /* Clamp to 16-bit range */
+                if (scaled > INT16_MAX) scaled = INT16_MAX;
+                else if (scaled < INT16_MIN) scaled = INT16_MIN;
+                
+                *dest++ = (int16_t)scaled;
+            } else {
+                // Handle 8-bit or unusual smaller depths: scale up to 16-bit
+                int32_t scaled = val << (16 - actualBitDepth);
+                if (scaled > INT16_MAX) scaled = INT16_MAX;
+                else if (scaled < INT16_MIN) scaled = INT16_MIN;
+                *dest++ = (int16_t)scaled;
+            }
+        }
+        state->currentSample++;
+    }
+    
+    return FLAC__STREAM_DECODER_WRITE_STATUS_CONTINUE;
+}
+
+static void flac_metadata_callback(
+    const FLAC__StreamDecoder *decoder,
+    const FLAC__StreamMetadata *metadata,
+    void *client_data)
+{
+    FLACDecodeState *state = (FLACDecodeState*)client_data;
+    
+    
+    if (metadata->type == FLAC__METADATA_TYPE_STREAMINFO) {
+        if (state->wave) {
+            state->wave->channels = (UBYTE)metadata->data.stream_info.channels;
+            // Store original bit depth for conversion, but output will be 16-bit
+            UBYTE originalBitSize = (UBYTE)metadata->data.stream_info.bits_per_sample;
+            state->wave->bitSize = originalBitSize;
+            state->wave->sampledRate = metadata->data.stream_info.sample_rate << 16L;
+            state->wave->waveFrames = (uint32_t)metadata->data.stream_info.total_samples;
+            state->totalSamples = state->wave->waveFrames;
+            
+            // Calculate total size in bytes - always 16-bit output for miniBAE
+            state->wave->waveSize = state->wave->waveFrames * state->wave->channels * 2; // 2 bytes per 16-bit sample
+            state->wave->compressionType = C_NONE;
+            state->wave->baseMidiPitch = 60; // Default middle C
+            
+            // No loop points by default for FLAC (avoid treating full-file as a loop)
+            state->wave->startLoop = 0;
+            state->wave->endLoop = 0;
+        }
+        state->metadataComplete = TRUE;
+    }
+}
+
+static void flac_error_callback(
+    const FLAC__StreamDecoder *decoder,
+    FLAC__StreamDecoderErrorStatus status,
+    void *client_data)
+{
+    FLACDecodeState *state = (FLACDecodeState*)client_data;
+    state->error = BAD_FILE;
+}
+
+// Main FLAC decoder function
+static GM_Waveform* PV_ReadIntoMemoryFLACFile(XFILE file, XBOOL decodeData, 
+                                               int32_t *pFormat, void **ppBlockPtr, uint32_t *pBlockSize, 
+                                               OPErr *pError)
+{
+    GM_Waveform*            wave = NULL;
+    FLAC__StreamDecoder*    decoder = NULL;
+    FLACDecodeState         state;
+    OPErr                   err = NO_ERR;
+    
+    BAE_ASSERT(file);
+    BAE_ASSERT(pError);
+    
+    // Initialize state
+    XSetMemory(&state, sizeof(FLACDecodeState), 0);
+    state.error = NO_ERR;
+    state.metadataComplete = FALSE;
+    state.fileData = NULL;
+    state.fileSize = 0;
+    state.filePosition = 0;
+    
+    // Read file length
+    uint32_t fileSize = XFileGetLength(file);
+    
+    if (fileSize == 0) {
+        err = BAD_FILE;
+        goto cleanup;
+    }
+    
+    // Allocate memory for the entire file
+    XBYTE* fileBuffer = (XBYTE*)XNewPtr(fileSize);
+    if (!fileBuffer) {
+        err = MEMORY_ERR;
+        goto cleanup;
+    }
+    
+    // Reset file position and read entire file
+    if (XFileSetPosition(file, 0)) {
+        err = BAD_FILE;
+        XDisposePtr(fileBuffer);
+        goto cleanup;
+    }
+    
+    // Try reading the entire file in one operation (like MPEG does)
+    if (XFileRead(file, fileBuffer, fileSize)) {
+        err = BAD_FILE;
+        XDisposePtr(fileBuffer);
+        goto cleanup;
+    }
+    
+    // Set up file data for callbacks
+    state.fileData = fileBuffer;
+    state.fileSize = fileSize;
+    state.filePosition = 0;
+    
+    // Create FLAC decoder
+    decoder = FLAC__stream_decoder_new();
+    if (!decoder) {
+        err = MEMORY_ERR;
+        goto cleanup;
+    }
+    
+    
+    // Allocate waveform structure
+    wave = (GM_Waveform*)XNewPtr(sizeof(GM_Waveform));
+    if (!wave) {
+        err = MEMORY_ERR;
+        goto cleanup;
+    }
+    
+    state.wave = wave;
+    
+    // The metadata callback should have already set all the wave parameters
+    // Just set defaults for fields not set by metadata
+    wave->compressionType = C_NONE;
+    wave->baseMidiPitch = 60;
+    
+    if (decodeData) {
+        // For now, just allocate some space but don't decode
+        wave->theWaveform = (SBYTE*)XNewPtr(1024); // Small test allocation
+        if (!wave->theWaveform) {
+            err = MEMORY_ERR;
+            goto cleanup;
+        }
+        // Fill with zeros for now
+        XSetMemory(wave->theWaveform, 1024, 0);
+    } else {
+        wave->theWaveform = NULL;
+        if (pFormat) {
+            *pFormat = 1; // PCM format
+        }
+        if (pBlockSize) {
+            *pBlockSize = 0; // No block structure for FLAC
+        }
+    }
+    
+    
+    // Initialize decoder with callbacks
+    FLAC__StreamDecoderInitStatus init_status = FLAC__stream_decoder_init_stream(decoder, 
+                                          flac_read_callback,
+                                          flac_seek_callback,
+                                          flac_tell_callback,
+                                          flac_length_callback,
+                                          flac_eof_callback,
+                                          flac_write_callback,
+                                          flac_metadata_callback,
+                                          flac_error_callback,
+                                          &state);
+    if (init_status != FLAC__STREAM_DECODER_INIT_STATUS_OK) {
+        err = BAD_FILE;
+        goto cleanup;
+    }
+    
+    
+    // Process metadata to get stream info
+    if (!FLAC__stream_decoder_process_until_end_of_metadata(decoder)) {
+        err = BAD_FILE;
+        goto cleanup;
+    }
+    
+    if (!state.metadataComplete || state.error != NO_ERR) {
+        err = BAD_FILE;
+        goto cleanup;
+    }
+    
+    if (decodeData) {
+    // Allocate memory for decoded sample data as 16-bit PCM output.
+    // The FLAC input may be 24-bit (3 bytes/sample) or other depths, but
+    // we downsample to 16-bit in the write callback. Allocate buffer sized
+    // for 16-bit samples so the rest of the engine interprets the data
+    // correctly.
+    uint32_t outBytesPerSample = 2; // 16-bit output
+    uint32_t outSize = (uint32_t)wave->waveFrames * (uint32_t)wave->channels * outBytesPerSample;
+    state.sampleData = (SBYTE*)XNewPtr(outSize);
+        if (!state.sampleData) {
+            err = MEMORY_ERR;
+            goto cleanup;
+        }
+        
+    // Update waveform metadata to reflect 16-bit decoded output
+    wave->theWaveform = state.sampleData;
+    wave->bitSize = 16;
+    wave->waveSize = outSize;
+        
+    // Seed dither PRNG to non-zero value to avoid zero-seed static
+    state.dither_state = (uint32_t)(state.fileSize | 1u);
+        state.currentSample = 0;
+        
+        // Decode the entire stream
+        if (!FLAC__stream_decoder_process_until_end_of_stream(decoder)) {
+            err = BAD_FILE;
+            goto cleanup;
+        }
+        
+        if (state.error != NO_ERR) {
+            err = state.error;
+            goto cleanup;
+        }
+        
+        // Convert 8-bit samples if needed (phase conversion)
+        if (wave->bitSize == 8) {
+            XPhase8BitWaveform((XBYTE*)wave->theWaveform, wave->waveSize);
+        }
+    } else {
+        // Just getting info, no decoding
+        wave->theWaveform = NULL;
+        wave->currentFilePosition = XFileGetPosition(file);
+        
+        if (pFormat) {
+            *pFormat = 1; // PCM format
+        }
+        if (pBlockSize) {
+            *pBlockSize = 0; // No block structure for FLAC
+        }
+    }
+    
+cleanup:
+    if (decoder) {
+        FLAC__stream_decoder_finish(decoder);
+        FLAC__stream_decoder_delete(decoder);
+    }
+    
+    // Clean up file data buffer
+    if (state.fileData) {
+        XDisposePtr((void*)state.fileData);
+    }
+    
+    if (err != NO_ERR) {
+        if (wave) {
+            if (wave->theWaveform) {
+                XDisposePtr(wave->theWaveform);
+            }
+            XDisposePtr(wave);
+            wave = NULL;
+        }
+    }
+    
+    *pError = err;
+    return wave;
+}
+
+#endif // USE_FLAC_DECODER != FALSE
+
+#if USE_VORBIS_DECODER != FALSE
+
+// Expand/decode Vorbis compressed data from memory
+OPErr XExpandVorbis(GM_Waveform const* src, UINT32 startFrame, GM_Waveform* dst)
+{
+    OPErr err = NO_ERR;
+    GM_Waveform *decoded = NULL;
+
+    if (!src || !dst)
+        return PARAM_ERR;
+
+    // Create XFILE from memory and decode Vorbis data
+    XFILE file = XFileOpenForReadFromMemory((void*)src->theWaveform, src->waveSize);
+    if (!file)
+        return FILE_NOT_FOUND;
+
+    decoded = PV_ReadIntoMemoryVorbisFile(file, TRUE, NULL, NULL, NULL, &err);
+    XFileClose(file);
+
+    if (!decoded)
+    {
+        return err != NO_ERR ? err : BAD_FILE;
+    }
+
+    // Determine bytes per frame of decoded data
+    {
+        const uint32_t bytesPerFrame = decoded->channels * (decoded->bitSize / 8);
+        uint32_t availableFrames = 0;
+        if (decoded->waveFrames > startFrame)
+        {
+            availableFrames = decoded->waveFrames - startFrame;
+        }
+
+        if (availableFrames > 0)
+        {
+            // Copy metadata from decoded waveform
+            dst->sampledRate = decoded->sampledRate;
+            dst->bitSize = decoded->bitSize;
+            dst->channels = decoded->channels;
+            dst->baseMidiPitch = decoded->baseMidiPitch;
+            dst->compressionType = C_NONE; // Decoded is uncompressed
+            dst->startLoop = decoded->startLoop > startFrame ? decoded->startLoop - startFrame : 0;
+            dst->endLoop = decoded->endLoop > startFrame ? decoded->endLoop - startFrame : 0;
+            
+            // Calculate the size we need for the requested frames
+            const uint32_t requestedBytes = availableFrames * bytesPerFrame;
+            
+            // Allocate memory for decoded audio data
+            dst->theWaveform = (SBYTE*)XNewPtr(requestedBytes);
+            if (!dst->theWaveform)
+            {
+                GM_FreeWaveform(decoded);
+                return MEMORY_ERR;
+            }
+
+            // Copy the decoded audio data starting from the requested frame
+            XBlockMove(decoded->theWaveform + (startFrame * bytesPerFrame), 
+                      dst->theWaveform, requestedBytes);
+            
+            dst->waveSize = requestedBytes;
+            dst->waveFrames = availableFrames;
+        }
+        else
+        {
+            err = PARAM_ERR; // startFrame is beyond the end of the data
+        }
+    }
+
+    GM_FreeWaveform(decoded);
+    return err;
+}
+
+#endif // USE_VORBIS_DECODER != FALSE
+
+#if USE_VORBIS_DECODER != FALSE
+
+// Read a Vorbis file into memory and return a GM_Waveform structure
+static GM_Waveform* PV_ReadIntoMemoryVorbisFile(XFILE file, XBOOL decodeData, 
+                                               int32_t *pFormat, void **ppBlockPtr, uint32_t *pBlockSize, OPErr *pError)
+{
+    GM_Waveform *wave = NULL;
+    OggVorbis_File vf;
+    vorbis_info *vi;
+    UINT32 sample_rate;
+    UINT32 channels;
+    long bytes_read;
+    uint32_t total_read = 0;
+    uint32_t capacity = 0;
+    int bitstream;
+    int result;
+    long pos;
+    
+    // Setup callbacks for libvorbisfile
+    ov_callbacks callbacks = {
+        PV_VorbisReadFunc,
+        PV_VorbisSeekFunc,
+        PV_VorbisCloseFunc,
+        PV_VorbisTellFunc
+    };
+    
+    if (file == NULL || pError == NULL) {
+        if (pError) *pError = PARAM_ERR;
+        return NULL;
+    }
+    
+    // Initialize output parameters
+    if (pFormat) *pFormat = X_NONE;
+    if (ppBlockPtr) *ppBlockPtr = NULL;
+    if (pBlockSize) *pBlockSize = 0;
+    
+    // Save current file position
+    pos = XFileGetPosition(file);
+    
+    // Try to open as Vorbis file
+    result = ov_test_callbacks(file, &vf, NULL, 0, callbacks);
+    if (result != 0) {
+        XFileSetPosition(file, pos);
+        *pError = PARAM_ERR;
+        return NULL;
+    }
+    
+    // Complete opening the file for full decoding
+    ov_clear(&vf);
+    XFileSetPosition(file, pos);
+    
+    result = ov_open_callbacks(file, &vf, NULL, 0, callbacks);
+    if (result != 0) {
+        *pError = PARAM_ERR;
+        return NULL;
+    }
+    
+    // Get file information
+    vi = ov_info(&vf, -1);
+    if (vi == NULL) {
+        ov_clear(&vf);
+        *pError = BAD_FILE;
+        return NULL;
+    }
+
+    sample_rate = vi->rate;
+    channels = vi->channels;
+    
+    // Allocate waveform structure
+    wave = (GM_Waveform*)XNewPtr(sizeof(GM_Waveform));
+    if (wave == NULL) {
+        ov_clear(&vf);
+        *pError = MEMORY_ERR;
+        return NULL;
+    }
+
+    // For Ogg/Vorbis streaming, keep the underlying XFILE positioned at the start.
+    // The stream layer uses currentFilePosition to seek before starting playback.
+    wave->currentFilePosition = 0;
+    
+    // Fill in waveform info (Vorbis outputs 16-bit PCM)
+    wave->waveSize = 0;
+    wave->waveFrames = 0;
+    wave->sampledRate = sample_rate << 16L; // Convert to fixed point format
+    wave->bitSize = 16;
+    wave->channels = (unsigned char)channels;
+    wave->baseMidiPitch = 60; // middle C
+    wave->compressionType = decodeData ? C_NONE : C_VORBIS;
+    wave->startLoop = 0;
+    wave->endLoop = 0;
+    
+    if (decodeData) {
+        // Decode incrementally (streaming-style) to avoid depending on ov_pcm_total.
+        // This is also more robust for memory-backed files where EOF seeking matters.
+        const uint32_t minChunk = 64 * 1024;
+        const uint32_t readChunk = 16 * 1024;
+
+        capacity = minChunk;
+        wave->theWaveform = (SBYTE*)XNewPtr(capacity);
+        if (wave->theWaveform == NULL) {
+            ov_clear(&vf);
+            XDisposePtr(wave);
+            *pError = MEMORY_ERR;
+            return NULL;
+        }
+
+        for (;;)
+        {
+            if (capacity - total_read < readChunk)
+            {
+                uint32_t newCapacity = capacity ? (capacity * 2) : minChunk;
+                while (newCapacity - total_read < readChunk)
+                {
+                    newCapacity *= 2;
+                }
+                {
+                    SBYTE *resized = (SBYTE*)XResizePtr(wave->theWaveform, (int32_t)newCapacity);
+                    if (resized == NULL)
+                    {
+                        ov_clear(&vf);
+                        XDisposePtr(wave->theWaveform);
+                        XDisposePtr(wave);
+                        *pError = MEMORY_ERR;
+                        return NULL;
+                    }
+                    wave->theWaveform = resized;
+                    capacity = newCapacity;
+                }
+            }
+
+            bytes_read = ov_read(&vf,
+                                 (char*)wave->theWaveform + total_read,
+                                 (int)(capacity - total_read),
+                                 0, // little endian
+                                 2, // 16-bit samples
+                                 1, // signed
+                                 &bitstream);
+
+            if (bytes_read == 0)
+            {
+                break; // EOF
+            }
+            if (bytes_read < 0)
+            {
+                ov_clear(&vf);
+                XDisposePtr(wave->theWaveform);
+                XDisposePtr(wave);
+                *pError = BAD_FILE;
+                return NULL;
+            }
+            total_read += (uint32_t)bytes_read;
+        }
+
+        if (total_read == 0) {
+            ov_clear(&vf);
+            XDisposePtr(wave->theWaveform);
+            XDisposePtr(wave);
+            *pError = BAD_FILE;
+            return NULL;
+        }
+
+        // Shrink to the actual decoded size
+        {
+            SBYTE *shrunk = (SBYTE*)XResizePtr(wave->theWaveform, (int32_t)total_read);
+            if (shrunk)
+            {
+                wave->theWaveform = shrunk;
+            }
+        }
+
+        wave->waveSize = total_read;
+        wave->waveFrames = total_read / (channels * 2);
+    } else {
+        // Don't decode, just get metadata
+        wave->theWaveform = NULL;
+
+        {
+            ogg_int64_t pcm_total = ov_pcm_total(&vf, -1);
+            if (pcm_total > 0 && pcm_total <= (ogg_int64_t)0xFFFFFFFF)
+            {
+                wave->waveFrames = (UINT32)pcm_total;
+                wave->waveSize = wave->waveFrames * channels * 2;
+            }
+        }
+    }
+    
+    ov_clear(&vf);
+    *pError = NO_ERR;
+    return wave;
+}
+
+#endif // USE_VORBIS_DECODER != FALSE
+
+// -----------------------------------------------------------------------------
+// Streaming decode support for Vorbis + FLAC (BAEStream)
+// -----------------------------------------------------------------------------
+
+#if USE_VORBIS_DECODER != FALSE
+typedef struct
+{
+    XBOOL initialized;
+    OggVorbis_File vf;
+} VorbisStreamState;
+
+static OPErr PV_VorbisStreamEnsureInit(VorbisStreamState *st, XFILE file)
+{
+    if (!st)
+        return PARAM_ERR;
+    if (st->initialized)
+        return NO_ERR;
+
+    ov_callbacks callbacks = {
+        PV_VorbisReadFunc,
+        PV_VorbisSeekFunc,
+        PV_VorbisCloseFunc,
+        PV_VorbisTellFunc};
+
+    // Ensure we're at the start of the file before opening.
+    (void)XFileSetPosition(file, 0);
+
+    if (ov_open_callbacks(file, &st->vf, NULL, 0, callbacks) != 0)
+    {
+        return BAD_FILE;
+    }
+
+    st->initialized = TRUE;
+    return NO_ERR;
+}
+#endif
+
+#if USE_FLAC_DECODER != FALSE
+typedef struct
+{
+    FLAC__StreamDecoder *decoder;
+    XFILE file;
+    XBOOL initialized;
+    XBOOL metadataComplete;
+    XBOOL eof;
+
+    uint8_t channels;
+    uint32_t sampleRate;
+    uint64_t totalSamples;
+    uint8_t sourceBits;
+
+    // Output staging (leftovers across calls)
+    XBYTE *stash;
+    uint32_t stashCap;
+    uint32_t stashLen;
+    uint32_t stashPos;
+
+    // Per-call output target (owned by caller)
+    XBYTE *out;
+    uint32_t outNeed;
+    uint32_t outWritten;
+
+    OPErr err;
+} FLACStreamState;
+
+static uint32_t PV_FlacStashAvailable(const FLACStreamState *st)
+{
+    return (st && st->stashLen > st->stashPos) ? (st->stashLen - st->stashPos) : 0;
+}
+
+static XBOOL PV_FlacStashEnsure(FLACStreamState *st, uint32_t extraBytes)
+{
+    if (!st)
+        return FALSE;
+    if (st->stashCap - st->stashLen >= extraBytes)
+        return TRUE;
+    uint32_t newCap = st->stashCap ? st->stashCap : (64 * 1024);
+    while (newCap - st->stashLen < extraBytes)
+    {
+        newCap *= 2;
+    }
+    {
+        XBYTE *resized = (XBYTE *)XResizePtr(st->stash, (int32_t)newCap);
+        if (!resized)
+            return FALSE;
+        st->stash = resized;
+        st->stashCap = newCap;
+    }
+    return TRUE;
+}
+
+static void PV_FlacStashClear(FLACStreamState *st)
+{
+    if (!st)
+        return;
+    st->stashLen = 0;
+    st->stashPos = 0;
+}
+
+static int16_t PV_FlacConvertSampleToS16(int32_t val, int bitDepth)
+{
+    if (bitDepth <= 0)
+        bitDepth = 16;
+
+    if (bitDepth == 16)
+    {
+        if (val > INT16_MAX)
+            val = INT16_MAX;
+        else if (val < INT16_MIN)
+            val = INT16_MIN;
+        return (int16_t)val;
+    }
+    if (bitDepth > 16)
+    {
+        int shift = bitDepth - 16;
+        int32_t scaled = val >> shift;
+        if (scaled > INT16_MAX)
+            scaled = INT16_MAX;
+        else if (scaled < INT16_MIN)
+            scaled = INT16_MIN;
+        return (int16_t)scaled;
+    }
+
+    // bitDepth < 16
+    int32_t scaled = val << (16 - bitDepth);
+    if (scaled > INT16_MAX)
+        scaled = INT16_MAX;
+    else if (scaled < INT16_MIN)
+        scaled = INT16_MIN;
+    return (int16_t)scaled;
+}
+
+static FLAC__StreamDecoderReadStatus flac_xfile_read_callback(const FLAC__StreamDecoder *decoder, FLAC__byte buffer[], size_t *bytes, void *client_data)
+{
+    FLACStreamState *st = (FLACStreamState *)client_data;
+    (void)decoder;
+
+    if (!st || !st->file || !bytes)
+        return FLAC__STREAM_DECODER_READ_STATUS_ABORT;
+
+    if (*bytes == 0)
+        return FLAC__STREAM_DECODER_READ_STATUS_CONTINUE;
+
+    // Cap reads so XFileRead doesn't signal EOF as an error.
+    {
+        int32_t len = XFileGetLength(st->file);
+        int32_t pos = XFileGetPosition(st->file);
+        if (len >= 0 && pos >= 0)
+        {
+            int32_t remaining = len - pos;
+            if (remaining <= 0)
+            {
+                *bytes = 0;
+                return FLAC__STREAM_DECODER_READ_STATUS_END_OF_STREAM;
+            }
+            if ((uint64_t)*bytes > (uint64_t)remaining)
+            {
+                *bytes = (size_t)remaining;
+            }
+        }
+    }
+
+    if (XFileRead(st->file, buffer, (int32_t)*bytes) != 0)
+    {
+        *bytes = 0;
+        return FLAC__STREAM_DECODER_READ_STATUS_ABORT;
+    }
+
+    return FLAC__STREAM_DECODER_READ_STATUS_CONTINUE;
+}
+
+static FLAC__StreamDecoderSeekStatus flac_xfile_seek_callback(const FLAC__StreamDecoder *decoder, FLAC__uint64 absolute_byte_offset, void *client_data)
+{
+    FLACStreamState *st = (FLACStreamState *)client_data;
+    (void)decoder;
+    if (!st || !st->file)
+        return FLAC__STREAM_DECODER_SEEK_STATUS_ERROR;
+
+    if (absolute_byte_offset > (FLAC__uint64)0x7FFFFFFF)
+        return FLAC__STREAM_DECODER_SEEK_STATUS_ERROR;
+
+    // Allow seeking to EOF.
+    return (XFileSetPosition(st->file, (int32_t)absolute_byte_offset) == 0)
+               ? FLAC__STREAM_DECODER_SEEK_STATUS_OK
+               : FLAC__STREAM_DECODER_SEEK_STATUS_ERROR;
+}
+
+static FLAC__StreamDecoderTellStatus flac_xfile_tell_callback(const FLAC__StreamDecoder *decoder, FLAC__uint64 *absolute_byte_offset, void *client_data)
+{
+    FLACStreamState *st = (FLACStreamState *)client_data;
+    (void)decoder;
+    if (!st || !st->file || !absolute_byte_offset)
+        return FLAC__STREAM_DECODER_TELL_STATUS_ERROR;
+    {
+        int32_t pos = XFileGetPosition(st->file);
+        if (pos < 0)
+            return FLAC__STREAM_DECODER_TELL_STATUS_ERROR;
+        *absolute_byte_offset = (FLAC__uint64)pos;
+    }
+    return FLAC__STREAM_DECODER_TELL_STATUS_OK;
+}
+
+static FLAC__StreamDecoderLengthStatus flac_xfile_length_callback(const FLAC__StreamDecoder *decoder, FLAC__uint64 *stream_length, void *client_data)
+{
+    FLACStreamState *st = (FLACStreamState *)client_data;
+    (void)decoder;
+    if (!st || !st->file || !stream_length)
+        return FLAC__STREAM_DECODER_LENGTH_STATUS_ERROR;
+    {
+        int32_t len = XFileGetLength(st->file);
+        if (len < 0)
+            return FLAC__STREAM_DECODER_LENGTH_STATUS_ERROR;
+        *stream_length = (FLAC__uint64)len;
+    }
+    return FLAC__STREAM_DECODER_LENGTH_STATUS_OK;
+}
+
+static FLAC__bool flac_xfile_eof_callback(const FLAC__StreamDecoder *decoder, void *client_data)
+{
+    FLACStreamState *st = (FLACStreamState *)client_data;
+    (void)decoder;
+    if (!st || !st->file)
+        return 1;
+    {
+        int32_t len = XFileGetLength(st->file);
+        int32_t pos = XFileGetPosition(st->file);
+        if (len >= 0 && pos >= 0)
+        {
+            return (pos >= len) ? 1 : 0;
+        }
+    }
+    return 0;
+}
+
+static FLAC__StreamDecoderWriteStatus flac_stream_write_callback(
+    const FLAC__StreamDecoder *decoder,
+    const FLAC__Frame *frame,
+    const FLAC__int32 *const buffer[],
+    void *client_data)
+{
+    FLACStreamState *st = (FLACStreamState *)client_data;
+    (void)decoder;
+
+    if (!st || !frame || !buffer)
+        return FLAC__STREAM_DECODER_WRITE_STATUS_ABORT;
+
+    const int bitDepth = (int)frame->header.bits_per_sample;
+    const uint32_t blocksize = (uint32_t)frame->header.blocksize;
+    const uint32_t channels = (uint32_t)frame->header.channels;
+
+    for (uint32_t i = 0; i < blocksize; i++)
+    {
+        for (uint32_t ch = 0; ch < channels; ch++)
+        {
+            int16_t s16 = PV_FlacConvertSampleToS16(buffer[ch][i], bitDepth);
+            XBYTE outBytes[2];
+            outBytes[0] = (XBYTE)(s16 & 0xFF);
+            outBytes[1] = (XBYTE)((s16 >> 8) & 0xFF);
+
+            // Prefer writing into the current request buffer
+            if (st->out && st->outWritten + 2 <= st->outNeed)
+            {
+                st->out[st->outWritten++] = outBytes[0];
+                st->out[st->outWritten++] = outBytes[1];
+            }
+            else
+            {
+                if (!PV_FlacStashEnsure(st, 2))
+                {
+                    st->err = MEMORY_ERR;
+                    return FLAC__STREAM_DECODER_WRITE_STATUS_ABORT;
+                }
+                st->stash[st->stashLen++] = outBytes[0];
+                st->stash[st->stashLen++] = outBytes[1];
+            }
+        }
+    }
+
+    return FLAC__STREAM_DECODER_WRITE_STATUS_CONTINUE;
+}
+
+static void flac_stream_metadata_callback(
+    const FLAC__StreamDecoder *decoder,
+    const FLAC__StreamMetadata *metadata,
+    void *client_data)
+{
+    FLACStreamState *st = (FLACStreamState *)client_data;
+    (void)decoder;
+    if (!st || !metadata)
+        return;
+    if (metadata->type == FLAC__METADATA_TYPE_STREAMINFO)
+    {
+        st->channels = (uint8_t)metadata->data.stream_info.channels;
+        st->sourceBits = (uint8_t)metadata->data.stream_info.bits_per_sample;
+        st->sampleRate = (uint32_t)metadata->data.stream_info.sample_rate;
+        st->totalSamples = (uint64_t)metadata->data.stream_info.total_samples;
+        st->metadataComplete = TRUE;
+    }
+}
+
+static void flac_stream_error_callback(
+    const FLAC__StreamDecoder *decoder,
+    FLAC__StreamDecoderErrorStatus status,
+    void *client_data)
+{
+    FLACStreamState *st = (FLACStreamState *)client_data;
+    (void)decoder;
+    (void)status;
+    if (st)
+    {
+        st->err = BAD_FILE;
+    }
+}
+
+static OPErr PV_FlacStreamEnsureInit(FLACStreamState *st, XFILE file)
+{
+    if (!st)
+        return PARAM_ERR;
+    if (st->initialized)
+        return NO_ERR;
+
+    st->file = file;
+    st->err = NO_ERR;
+    st->metadataComplete = FALSE;
+    st->eof = FALSE;
+    PV_FlacStashClear(st);
+
+    st->decoder = FLAC__stream_decoder_new();
+    if (!st->decoder)
+        return MEMORY_ERR;
+
+    (void)XFileSetPosition(file, 0);
+
+    FLAC__StreamDecoderInitStatus init_status = FLAC__stream_decoder_init_stream(
+        st->decoder,
+        flac_xfile_read_callback,
+        flac_xfile_seek_callback,
+        flac_xfile_tell_callback,
+        flac_xfile_length_callback,
+        flac_xfile_eof_callback,
+        flac_stream_write_callback,
+        flac_stream_metadata_callback,
+        flac_stream_error_callback,
+        st);
+
+    if (init_status != FLAC__STREAM_DECODER_INIT_STATUS_OK)
+    {
+        FLAC__stream_decoder_delete(st->decoder);
+        st->decoder = NULL;
+        return BAD_FILE;
+    }
+
+    if (!FLAC__stream_decoder_process_until_end_of_metadata(st->decoder) || !st->metadataComplete)
+    {
+        FLAC__stream_decoder_finish(st->decoder);
+        FLAC__stream_decoder_delete(st->decoder);
+        st->decoder = NULL;
+        return BAD_FILE;
+    }
+
+    st->initialized = TRUE;
+    return NO_ERR;
+}
+
+// Read FLAC metadata from an XFILE without reading the entire file into memory.
+// This is intended for stream setup (GM_ReadFileInformation), not full decode.
+static GM_Waveform *PV_ReadFileInformationFLACFile(XFILE file,
+                                                   int32_t *pFormat,
+                                                   void **ppBlockPtr,
+                                                   uint32_t *pBlockSize,
+                                                   OPErr *pError)
+{
+    GM_Waveform *wave = NULL;
+    FLACStreamState st;
+
+    if (!file || !pError)
+    {
+        if (pError)
+            *pError = PARAM_ERR;
+        return NULL;
+    }
+
+    if (pFormat)
+        *pFormat = X_NONE;
+    if (ppBlockPtr)
+        *ppBlockPtr = NULL;
+    if (pBlockSize)
+        *pBlockSize = 0;
+
+    XSetMemory(&st, (int32_t)sizeof(FLACStreamState), 0);
+
+    // Initialize decoder and parse STREAMINFO.
+    {
+        OPErr initErr = PV_FlacStreamEnsureInit(&st, file);
+        if (initErr != NO_ERR)
+        {
+            *pError = initErr;
+            if (st.decoder)
+            {
+                FLAC__stream_decoder_finish(st.decoder);
+                FLAC__stream_decoder_delete(st.decoder);
+                st.decoder = NULL;
+            }
+            if (st.stash)
+            {
+                XDisposePtr((XPTR)st.stash);
+                st.stash = NULL;
+            }
+            return NULL;
+        }
+    }
+
+    wave = (GM_Waveform *)XNewPtr((int32_t)sizeof(GM_Waveform));
+    if (!wave)
+    {
+        *pError = MEMORY_ERR;
+        goto cleanup;
+    }
+    XSetMemory(wave, (int32_t)sizeof(GM_Waveform), 0);
+
+    // miniBAE streams decode to 16-bit PCM.
+    wave->currentFilePosition = 0;
+    wave->compressionType = C_NONE;
+    wave->baseMidiPitch = 60;
+    wave->bitSize = 16;
+    wave->channels = st.channels ? st.channels : 2;
+    wave->sampledRate = (st.sampleRate ? st.sampleRate : 44100) << 16L;
+    wave->waveFrames = (st.totalSamples <= (uint64_t)0xFFFFFFFFu) ? (uint32_t)st.totalSamples : 0;
+    wave->waveSize = wave->waveFrames * (uint32_t)wave->channels * 2;
+    wave->startLoop = 0;
+    wave->endLoop = 0;
+    wave->numLoops = 0;
+    wave->theWaveform = NULL;
+
+    if (pFormat)
+        *pFormat = X_NONE;
+    if (pBlockSize)
+        *pBlockSize = 0;
+    if (ppBlockPtr)
+        *ppBlockPtr = NULL;
+
+    *pError = NO_ERR;
+
+cleanup:
+    if (st.decoder)
+    {
+        FLAC__stream_decoder_finish(st.decoder);
+        FLAC__stream_decoder_delete(st.decoder);
+        st.decoder = NULL;
+    }
+    if (st.stash)
+    {
+        XDisposePtr((XPTR)st.stash);
+        st.stash = NULL;
+    }
+    return wave;
+}
+
+#endif
+
+// functions used with GM_ReadAndDecodeFileStream to preserve state between decode calls.
+void * GM_CreateFileState(AudioFileType fileType)
+{
+    void    *state;
+
+    state = NULL;
+    switch (fileType)
+    {
+        case FILE_AU_TYPE:
+            state = (void *)XNewPtr(sizeof(SunDecodeState));
+            if (state)
+            {
+                g72x_init_state(&((SunDecodeState *)state)->state);
+                ((SunDecodeState *)state)->buffer = 0;
+                ((SunDecodeState *)state)->bits = 0;
+            }
+            break;
+
+#if USE_VORBIS_DECODER != FALSE
+        case FILE_VORBIS_TYPE:
+            state = (void *)XNewPtr(sizeof(VorbisStreamState));
+            if (state)
+            {
+                XSetMemory(state, (int32_t)sizeof(VorbisStreamState), 0);
+            }
+            break;
+#endif
+
+#if USE_FLAC_DECODER != FALSE
+        case FILE_FLAC_TYPE:
+            state = (void *)XNewPtr(sizeof(FLACStreamState));
+            if (state)
+            {
+                XSetMemory(state, (int32_t)sizeof(FLACStreamState), 0);
+            }
+            break;
+#endif
+	default:
+	    break;
+    }
+    return state;
+}
+
+#if USE_FLAC_DECODER != 0
+// Wrapper to expand FLAC compressed GM_Waveform into decoded PCM waveform
+OPErr XExpandFLAC(GM_Waveform const* src, UINT32 startFrame, GM_Waveform* dst)
+{
+    OPErr err = NO_ERR;
+    GM_Waveform *decoded = NULL;
+
+    if (!src || !dst)
+        return PARAM_ERR;
+
+    // PV_ReadIntoMemoryFLACFile expects an XFILE; create one from memory
+    // The helper GM_ReadFileIntoMemoryFromMemory is already available, but
+    // PV_ReadIntoMemoryFLACFile is internal and used above. We'll emulate
+    // how MPEG wrapper handles memory-based expansion: call PV_ReadIntoMemoryFLACFile
+    // by opening a memory XFILE.
+
+    XFILE file = XFileOpenForReadFromMemory((void*)src->theWaveform, src->waveSize);
+    if (!file)
+        return FILE_NOT_FOUND;
+
+    decoded = PV_ReadIntoMemoryFLACFile(file, TRUE, NULL, NULL, NULL, &err);
+    XFileClose(file);
+
+    if (!decoded)
+    {
+        return err != NO_ERR ? err : BAD_FILE;
+    }
+
+    // Determine bytes per frame of decoded data
+    {
+        const uint32_t bytesPerFrame = decoded->channels * (decoded->bitSize / 8);
+        uint32_t availableFrames = 0;
+        if (decoded->waveFrames > startFrame)
+            availableFrames = decoded->waveFrames - startFrame;
+
+        // Number of frames requested in dst originally mirrors src->waveFrames
+        uint32_t requestedFrames = dst->waveFrames;
+        uint32_t framesToCopy = availableFrames < requestedFrames ? availableFrames : requestedFrames;
+
+        uint32_t copyBytes = framesToCopy * bytesPerFrame;
+
+        // Allocate buffer for dst waveform
+        dst->theWaveform = (XPTR)XNewPtr(copyBytes);
+        if (!dst->theWaveform)
+        {
+            // cleanup
+            if (decoded->theWaveform)
+                XDisposePtr(decoded->theWaveform);
+            XDisposePtr(decoded);
+            return MEMORY_ERR;
+        }
+
+        // Copy requested range from decoded buffer
+        if (copyBytes > 0)
+        {
+            XBlockMove(((XBYTE*)decoded->theWaveform) + (startFrame * bytesPerFrame), dst->theWaveform, copyBytes);
+        }
+
+        // Set dst metadata
+        dst->waveFrames = framesToCopy;
+        dst->waveSize = copyBytes;
+        dst->bitSize = decoded->bitSize;
+        dst->channels = decoded->channels;
+        dst->sampledRate = decoded->sampledRate;
+        dst->baseMidiPitch = decoded->baseMidiPitch;
+        dst->compressionType = C_NONE;
+
+        // Free temporary decoded buffer and struct
+        if (decoded->theWaveform)
+            XDisposePtr(decoded->theWaveform);
+        XDisposePtr(decoded);
+    }
+
+    return NO_ERR;
+}
+#endif
+
+void GM_DisposeFileState(AudioFileType fileType, void *state)
+{
+    if (!state)
+        return;
+    if (fileType == FILE_AU_TYPE) {
+	XDisposePtr((XPTR)state);
+	return;
+    }
+
+#if USE_VORBIS_DECODER != FALSE
+    if (fileType == FILE_VORBIS_TYPE)
+    {
+        VorbisStreamState *st = (VorbisStreamState *)state;
+        if (st->initialized)
+        {
+            ov_clear(&st->vf);
+            st->initialized = FALSE;
+        }
+        XDisposePtr((XPTR)state);
+        return;
+    }
+#endif
+
+#if USE_FLAC_DECODER != FALSE
+    if (fileType == FILE_FLAC_TYPE)
+    {
+        FLACStreamState *st = (FLACStreamState *)state;
+        if (st->decoder)
+        {
+            FLAC__stream_decoder_finish(st->decoder);
+            FLAC__stream_decoder_delete(st->decoder);
+            st->decoder = NULL;
+        }
+        if (st->stash)
+        {
+            XDisposePtr((XPTR)st->stash);
+            st->stash = NULL;
+        }
+        XDisposePtr((XPTR)state);
+        return;
+    }
+#endif
+
+    XDisposePtr((XPTR)state);
+/*
+    switch (fileType)
+    {
+        case FILE_AU_TYPE:
+            XDisposePtr((XPTR)state);
+            break;
+        default:
+            break;
+    }
+*/
+}
+
+// Read into memory a file
+GM_Waveform* GM_ReadFileIntoMemory(XFILENAME *filename, AudioFileType fileType,
+                                    XBOOL decodeData, OPErr *pErr)
+{
+XFILE           file;
+OPErr           err;
+GM_Waveform     *waveform;
+
+    waveform = NULL;
+    file = XFileOpenForRead(filename);
+    if (file)
+    {
+        switch (fileType)
+        {
+        case FILE_WAVE_TYPE:
+            waveform = PV_ReadIntoMemoryWaveFile(file, decodeData, NULL, NULL, &err);
+            break;
+        case FILE_AIFF_TYPE:
+            waveform = PV_ReadIntoMemoryAIFFFile(file, decodeData, NULL, NULL, &err);
+            break;
+        case FILE_AU_TYPE:
+            waveform = PV_ReadIntoMemorySunAUFile(file, decodeData, NULL, NULL, &err);
+            break;
+    #if USE_MPEG_DECODER != FALSE
+        case FILE_MPEG_TYPE:
+            waveform = PV_ReadIntoMemoryMPEGFile(file, decodeData, NULL, NULL, NULL, &err);
+            break;
+    #endif
+    #if USE_FLAC_DECODER != FALSE
+        case FILE_FLAC_TYPE:
+            waveform = PV_ReadIntoMemoryFLACFile(file, decodeData, NULL, NULL, NULL, &err);
+            break;
+    #endif
+    #if USE_VORBIS_DECODER != FALSE
+        case FILE_VORBIS_TYPE:
+            waveform = PV_ReadIntoMemoryVorbisFile(file, decodeData, NULL, NULL, NULL, &err);
+            break;
+    #endif
+        default :
+            #ifdef _DEBUG
+            printf("DEBUG: Unknown file type: %d\n", fileType);
+            #endif
+            err = PARAM_ERR;
+            break;
+        }
+
+        XFileClose(file);
+    }
+    else
+    {
+        err = FILE_NOT_FOUND;
+    }
+
+    if (pErr)
+    {
+        *pErr = err;
+    }
+    return waveform;
+}
+
+// Read into memory a file
+GM_Waveform* GM_ReadFileIntoMemoryFromMemory(void *pFileBlock, uint32_t fileBlockSize,
+                                                AudioFileType fileType, XBOOL decodeData,
+                                                OPErr *pErr)
+{
+XFILE           file;
+OPErr           err;
+GM_Waveform     *waveform;
+
+    waveform = NULL;
+    file = XFileOpenForReadFromMemory(pFileBlock, fileBlockSize);
+    if (file)
+    {
+        switch (fileType)
+        {
+        case FILE_WAVE_TYPE:
+            waveform = PV_ReadIntoMemoryWaveFile(file, decodeData, NULL, NULL, &err);
+            break;
+        case FILE_AIFF_TYPE:
+            waveform = PV_ReadIntoMemoryAIFFFile(file, decodeData, NULL, NULL, &err);
+            break;
+        case FILE_AU_TYPE:
+            waveform = PV_ReadIntoMemorySunAUFile(file, decodeData, NULL, NULL, &err);
+            break;
+    #if USE_MPEG_DECODER != FALSE
+        case FILE_MPEG_TYPE:
+            waveform = PV_ReadIntoMemoryMPEGFile(file, decodeData, NULL, NULL, NULL, &err);
+            break;
+    #endif
+    #if USE_FLAC_DECODER != FALSE
+        case FILE_FLAC_TYPE:
+            waveform = PV_ReadIntoMemoryFLACFile(file, decodeData, NULL, NULL, NULL, &err);
+            break;
+    #endif
+    #if USE_VORBIS_DECODER != FALSE
+        case FILE_VORBIS_TYPE:
+            waveform = PV_ReadIntoMemoryVorbisFile(file, decodeData, NULL, NULL, NULL, &err);
+            break;
+    #endif
+        default :
+            err = PARAM_ERR;
+            break;
+        }
+
+        XFileClose(file);
+    }
+    else
+    {
+        err = FILE_NOT_FOUND;
+    }
+    
+    if (pErr)
+    {
+        *pErr = err;
+    }
+    return waveform;
+}
+
+// Read file information from file, which is a fileType file. If pFormat is not NULL, then
+// store format specific format type
+GM_Waveform * GM_ReadFileInformationFromOpenFile(XFILE file, AudioFileType fileType,
+                                            int32_t *pFormat,
+                                            void **ppBlockPtr, uint32_t *pBlockSize,
+                                            OPErr *pErr)
+{
+OPErr           err;
+GM_Waveform*    pWave = NULL;
+
+    err = NO_ERR;
+    if (!file)
+    {
+        if (pErr)
+            *pErr = FILE_NOT_FOUND;
+        return NULL;
+    }
+    if (pBlockSize)
+    {
+        *pBlockSize = 0;
+    }
+
+    switch (fileType)
+    {
+        case FILE_WAVE_TYPE:
+            pWave = PV_ReadIntoMemoryWaveFile(file, TRUE, pFormat, pBlockSize, &err);
+            break;
+        case FILE_AIFF_TYPE:
+            pWave = PV_ReadIntoMemoryAIFFFile(file, TRUE, pFormat, pBlockSize, &err);
+            break;
+        case FILE_AU_TYPE:
+            pWave = PV_ReadIntoMemorySunAUFile(file, TRUE, pFormat, pBlockSize, &err);
+            break;
+#if USE_MPEG_DECODER != FALSE
+        case FILE_MPEG_TYPE:
+            pWave = PV_ReadIntoMemoryMPEGFile(file, FALSE, pFormat, ppBlockPtr, pBlockSize, &err);
+            break;
+#endif
+#if USE_FLAC_DECODER != FALSE
+        case FILE_FLAC_TYPE:
+            pWave = PV_ReadFileInformationFLACFile(file, pFormat, ppBlockPtr, pBlockSize, &err);
+            break;
+#endif
+#if USE_VORBIS_DECODER != FALSE
+        case FILE_VORBIS_TYPE:
+            pWave = PV_ReadIntoMemoryVorbisFile(file, FALSE, pFormat, ppBlockPtr, pBlockSize, &err);
+            break;
+#endif
+        default :
+            BAE_ASSERT(FALSE);
+            err = PARAM_ERR;
+            pWave = NULL;
+            break;
+    }
+
+    if (pErr)
+    {
+        *pErr = err;
+    }
+    return pWave;
+}
+
+GM_Waveform * GM_ReadFileInformation(XFILENAME *filename, AudioFileType fileType, 
+                                            int32_t *pFormat, 
+                                            void **ppBlockPtr, uint32_t *pBlockSize, 
+                                            OPErr *pErr)
+{
+XFILE           file;
+OPErr           err;
+GM_Waveform*    pWave = NULL;
+
+    if (pBlockSize)
+    {
+        *pBlockSize = 0;
+    }
+    file = XFileOpenForRead(filename);
+    if (file)
+    {
+        pWave = GM_ReadFileInformationFromOpenFile(file, fileType, pFormat, ppBlockPtr, pBlockSize, &err);
+        XFileClose(file);
+    }
+    else
+    {
+        err = FILE_NOT_FOUND;
+    }
+
+    if (pErr)
+    {
+        *pErr = err;
+    }
+    return pWave;
+}
+
+// given an open file, format types, and a sample position in frames, reseek the file
+OPErr GM_RepositionFileStream(XFILE fileReference,
+                                        AudioFileType fileType, int32_t format,
+                                        XPTR pBlockBuffer, uint32_t blockSize,
+                                        int16_t channels, int16_t bitSize,
+                                        uint32_t newSampleFramePosition,
+                                        uint32_t firstSampleInFileOffsetInBytes,
+                                        uint32_t *pOuputNewPlaybackPositionInBytes)
+{
+    OPErr           fileError;
+    XBOOL           reSeek;
+    int16_t       frameBlockSize, decodeBlockSize;
+    uint32_t   filePos;
+
+    reSeek = FALSE;
+    fileError = NO_ERR;
+    filePos = 0;
+    frameBlockSize = channels * (bitSize / 8);
+    decodeBlockSize = 0;
+    switch (fileType)
+    {
+        default:
+            fileError = BAD_FILE_TYPE;
+            break;
+        case FILE_AU_TYPE:
+            switch(format)
+            {
+                default:
+                    fileError = BAD_FILE_TYPE;
+                    break;
+
+                case SUN_AUDIO_FILE_ENCODING_LINEAR_16:
+                case SUN_AUDIO_FILE_ENCODING_LINEAR_8:
+                case SUN_AUDIO_FILE_ENCODING_MULAW_8:
+                case SUN_AUDIO_FILE_ENCODING_ALAW_8:
+                    decodeBlockSize = 2;
+                    reSeek = TRUE;
+                    break;
+
+                case SUN_AUDIO_FILE_ENCODING_ADPCM_G721:
+                case SUN_AUDIO_FILE_ENCODING_ADPCM_G723_3:
+                case SUN_AUDIO_FILE_ENCODING_ADPCM_G723_5:
+                    decodeBlockSize = 4;
+                    reSeek = TRUE;
+                    break;
+            }
+            break;
+
+#if USE_MPEG_DECODER != 0
+        case FILE_MPEG_TYPE:
+            if (pBlockBuffer && blockSize)
+            {
+                XMPEGDecodedData    *pMPG;
+                int                 bufferSize;
+
+                pMPG = (XMPEGDecodedData *)pBlockBuffer;
+                decodeBlockSize = MPG_GetFrameBufferSizeInBytes(pMPG->stream);
+
+                filePos = firstSampleInFileOffsetInBytes + 
+                                (newSampleFramePosition * frameBlockSize);
+                bufferSize = MPG_GetBufferSize(pMPG->stream);
+
+                filePos = (filePos / bufferSize) * decodeBlockSize;
+                MPG_SeekStream(pMPG->stream, filePos);
+                if (pOuputNewPlaybackPositionInBytes)
+                {
+                    *pOuputNewPlaybackPositionInBytes = firstSampleInFileOffsetInBytes + 
+                                                        (newSampleFramePosition * frameBlockSize);
+                }
+                reSeek = FALSE;
+            }
+            break;
+#endif
+#if USE_FLAC_DECODER != FALSE
+        case FILE_FLAC_TYPE:
+            // Seek by sample position using the per-stream decoder.
+            if (pBlockBuffer)
+            {
+                FLACStreamState *st = (FLACStreamState *)pBlockBuffer;
+                if (PV_FlacStreamEnsureInit(st, fileReference) == NO_ERR)
+                {
+                    PV_FlacStashClear(st);
+                    if (!FLAC__stream_decoder_seek_absolute(st->decoder, (FLAC__uint64)newSampleFramePosition))
+                    {
+                        fileError = BAD_FILE;
+                    }
+                    if (pOuputNewPlaybackPositionInBytes)
+                    {
+                        *pOuputNewPlaybackPositionInBytes = firstSampleInFileOffsetInBytes + (newSampleFramePosition * frameBlockSize);
+                    }
+                }
+            }
+            reSeek = FALSE;
+            break;
+#endif
+#if USE_VORBIS_DECODER != FALSE
+        case FILE_VORBIS_TYPE:
+            // Seek by PCM frame position using libvorbisfile.
+            if (pBlockBuffer)
+            {
+                VorbisStreamState *st = (VorbisStreamState *)pBlockBuffer;
+                if (PV_VorbisStreamEnsureInit(st, fileReference) == NO_ERR)
+                {
+                    if (ov_pcm_seek(&st->vf, (ogg_int64_t)newSampleFramePosition) != 0)
+                    {
+                        fileError = BAD_FILE;
+                    }
+                    if (pOuputNewPlaybackPositionInBytes)
+                    {
+                        *pOuputNewPlaybackPositionInBytes = firstSampleInFileOffsetInBytes + (newSampleFramePosition * frameBlockSize);
+                    }
+                }
+            }
+            reSeek = FALSE;
+            break;
+#endif
+        case FILE_AIFF_TYPE:
+            switch(format)
+            {
+                default:
+                    fileError = BAD_FILE_TYPE;
+                    break;
+                case X_NONE:
+                    decodeBlockSize = 1;
+                    reSeek = TRUE;
+                    break;
+                case X_IMA4:
+                    decodeBlockSize = 4;
+                    reSeek = TRUE;
+                    break;
+            }
+            break;
+        case FILE_WAVE_TYPE:                
+            switch(format)
+            {
+                default:
+                    fileError = BAD_FILE_TYPE;
+                    break;
+                case X_WAVE_FORMAT_PCM:         // normal PCM data
+                    decodeBlockSize = 1;
+                    reSeek = TRUE;
+                    break;
+                case X_WAVE_FORMAT_ALAW:
+                    decodeBlockSize = 2;
+                    reSeek = TRUE;
+                    break;
+                case X_WAVE_FORMAT_MULAW:
+                    decodeBlockSize = 2;
+                    reSeek = TRUE;
+                    break;
+                case X_WAVE_FORMAT_IMA_ADPCM:   // IMA 4 to 1 compressed data
+                    decodeBlockSize = 4;
+                    reSeek = TRUE;
+                    break;
+            }
+            break;
+    }
+    if (reSeek)
+    {
+        uint32_t   pos;
+
+        pos = newSampleFramePosition * frameBlockSize;
+        filePos = firstSampleInFileOffsetInBytes + (pos / decodeBlockSize);
+
+        XFileSetPosition(fileReference, filePos);
+        if (pOuputNewPlaybackPositionInBytes)
+        {
+            *pOuputNewPlaybackPositionInBytes = firstSampleInFileOffsetInBytes + pos;
+        }
+    }
+    return fileError;
+}
+
+// Read a block of data, based apon file type and format, decode and store into a buffer.
+// Return length of buffer stored or 0 if error.
+OPErr GM_ReadAndDecodeFileStream(XFILE fileReference, 
+                                        AudioFileType fileType, int32_t format, 
+                                        XPTR pBlockBuffer, uint32_t blockSize,
+                                        XPTR pBuffer, uint32_t bufferFrames,
+                                        int16_t channels, int16_t bitSize,
+                                        uint32_t *pStoredBufferLength,
+                                        uint32_t *pReadBufferLength)
+{
+    uint32_t           returnedLength, writeLength, bufferSize;
+    OPErr                   fileError;
+    int32_t                    filePosition;
+#if USE_MPEG_DECODER != 0
+    int32_t                    count, frames;
+#endif
+    XBOOL                   calculateFileSize;
+
+    returnedLength = 0;
+    writeLength = 0;
+    calculateFileSize = TRUE;
+    filePosition = 0;
+    fileError = NO_ERR;
+    if (pBuffer)
+    {
+        if (fileReference)
+        {
+            filePosition = XFileGetPosition(fileReference);
+        }
+        bufferSize = bufferFrames * channels * (bitSize / 8);
+        switch (fileType)
+        {
+            case FILE_AU_TYPE:
+                if (pBlockBuffer)
+                {
+                    fileError = PV_ReadSunAUFile(format, fileReference,
+                                            pBuffer, bufferSize, &writeLength, (SunDecodeState *)pBlockBuffer);
+                
+                    calculateFileSize = FALSE;
+                    returnedLength = writeLength;
+                    // adjust for size actually read into the buffer
+//                  returnedLength = XFileGetPosition(fileReference) - filePosition;    // length of data read from the file
+                }
+                break;
+#if USE_MPEG_DECODER != 0
+            case FILE_MPEG_TYPE:
+                if (pBlockBuffer)
+                {
+                    XMPEGDecodedData    *pMPG;
+                    XBOOL               mpegDone;
+                    char                *pcmAudio;                  
+
+                    pMPG = (XMPEGDecodedData *)pBlockBuffer;
+                    frames = bufferSize / pMPG->frameBufferSize;
+                    pcmAudio = (char *)pBuffer;
+                    for (count = 0; count < frames; count++)
+                    {
+                        fileError = XFillMPEGStreamBuffer(pMPG, pcmAudio, &mpegDone);
+                        if (mpegDone == FALSE)
+                        {
+                            pcmAudio += pMPG->frameBufferSize;
+                        }
+                        else
+                        {   // done
+                            fileError = BAD_FILE;
+                            break;
+                        }
+                    }
+                    calculateFileSize = FALSE;
+                    writeLength = pMPG->frameBufferSize * frames;
+                    returnedLength = writeLength;
+                }
+                break;
+#endif
+#if USE_FLAC_DECODER != FALSE
+            case FILE_FLAC_TYPE:
+                if (pBlockBuffer)
+                {
+                    FLACStreamState *st = (FLACStreamState *)pBlockBuffer;
+                    fileError = PV_FlacStreamEnsureInit(st, fileReference);
+                    if (fileError != NO_ERR)
+                    {
+                        calculateFileSize = FALSE;
+                        returnedLength = 0;
+                        writeLength = 0;
+                        break;
+                    }
+
+                    // Drain stash first
+                    {
+                        uint32_t avail = PV_FlacStashAvailable(st);
+                        uint32_t want = bufferSize;
+                        uint32_t take = (avail < want) ? avail : want;
+                        if (take)
+                        {
+                            XBlockMove(st->stash + st->stashPos, pBuffer, take);
+                            st->stashPos += take;
+                            writeLength += take;
+                            if (st->stashPos >= st->stashLen)
+                            {
+                                st->stashPos = 0;
+                                st->stashLen = 0;
+                            }
+                        }
+                    }
+
+                    // Decode until the request buffer is full or EOF
+                    st->out = (XBYTE *)pBuffer + writeLength;
+                    st->outNeed = bufferSize - writeLength;
+                    st->outWritten = 0;
+                    while (st->outNeed > 0)
+                    {
+                        if (!FLAC__stream_decoder_process_single(st->decoder))
+                        {
+                            fileError = BAD_FILE;
+                            break;
+                        }
+                        if (st->err != NO_ERR)
+                        {
+                            fileError = st->err;
+                            break;
+                        }
+                        // If no progress and decoder hit EOF, stop
+                        if (st->outWritten == 0 &&
+                            FLAC__stream_decoder_get_state(st->decoder) == FLAC__STREAM_DECODER_END_OF_STREAM)
+                        {
+                            break;
+                        }
+
+                        st->out += st->outWritten;
+                        st->outNeed -= st->outWritten;
+                        writeLength += st->outWritten;
+                        st->outWritten = 0;
+                    }
+                    st->out = NULL;
+                    st->outNeed = 0;
+                    st->outWritten = 0;
+
+                    calculateFileSize = FALSE;
+                    returnedLength = writeLength;
+                }
+                else
+                {
+                    fileError = PARAM_ERR;
+                }
+                break;
+#endif
+#if USE_VORBIS_DECODER != FALSE
+            case FILE_VORBIS_TYPE:
+                if (pBlockBuffer)
+                {
+                    VorbisStreamState *st = (VorbisStreamState *)pBlockBuffer;
+                    fileError = PV_VorbisStreamEnsureInit(st, fileReference);
+                    if (fileError != NO_ERR)
+                    {
+                        calculateFileSize = FALSE;
+                        returnedLength = 0;
+                        writeLength = 0;
+                        break;
+                    }
+
+                    // Decode directly into caller buffer.
+                    {
+                        long wantBytes = (long)bufferSize;
+                        long gotBytes = 0;
+                        int bitstream = 0;
+                        while (gotBytes < wantBytes)
+                        {
+                            long r = ov_read(&st->vf,
+                                             (char *)pBuffer + gotBytes,
+                                             (int)(wantBytes - gotBytes),
+                                             0,
+                                             2,
+                                             1,
+                                             &bitstream);
+                            if (r == 0)
+                                break; // EOF
+                            if (r < 0)
+                            {
+                                fileError = BAD_FILE;
+                                break;
+                            }
+                            gotBytes += r;
+                        }
+                        writeLength = (uint32_t)gotBytes;
+                        returnedLength = writeLength;
+                        calculateFileSize = FALSE;
+                    }
+                }
+                else
+                {
+                    fileError = PARAM_ERR;
+                }
+                break;
+#endif
+            case FILE_AIFF_TYPE:
+                switch(format)
+                {
+                    default:
+                        calculateFileSize = FALSE;
+                        break;
+                    case X_NONE:
+                        // go ahead and read, this call fails when hitting the end,
+                        // but we don't care because we'll get as much as possible
+                        // and then calculate the data read by reading the last known
+                        // position.
+                        XFileRead(fileReference, 
+                                            pBuffer,
+                                            bufferSize);
+                        // now, if the file is 8 bit sample, change the sample phase
+                        if (bitSize == 8)
+                        {
+                            XPhase8BitWaveform((unsigned char *)pBuffer, bufferSize);
+                        }
+                        #if X_WORD_ORDER != FALSE   // intel?
+                        // now, if the file is 16 bit sample on a intel ordered system, swap the bytes
+                        else if (bitSize == 16)
+                        {
+                            XSwapShorts((int16_t*)pBuffer, bufferFrames * channels);
+                        }
+                        #endif
+                        break;
+                    case X_IMA4:
+                        if (pBlockBuffer)
+                        {
+                            fileError = PV_ReadAIFFAndDecompressIMA(fileReference,
+                                                        bufferSize / 4,
+                                                        (unsigned char *)pBuffer,
+                                                        bufferSize,
+                                                        (char)bitSize,
+                                                        (char)channels,
+                                                        (uint32_t *)&writeLength,
+                                                        (int16_t*)pBlockBuffer);
+
+                            returnedLength = bufferSize / 4;
+                        }
+                        else
+                        {
+                            writeLength = 0;
+                            returnedLength = 0;
+                        }
+                        calculateFileSize = FALSE;
+                        break;
+                }
+                break;
+            case FILE_WAVE_TYPE:                
+                switch(format)
+                {
+                    default:
+                        calculateFileSize = FALSE;
+                        fileError = BAD_FILE_TYPE;
+                        break;
+                    case X_WAVE_FORMAT_PCM:         // normal PCM data
+                        // go ahead and read, this call fails when hitting the end,
+                        // but we don't care because we'll get as much as possible
+                        // and then calculate the data read by reading the last known
+                        // position.
+                        XFileRead(fileReference, 
+                                                pBuffer,
+                                                bufferSize);
+                        #if X_WORD_ORDER == FALSE   // motorola?
+                        // now, if the file is 16 bit sample on a intel ordered system, swap the bytes
+                        if (bitSize == 16)
+                        {
+                            XSwapShorts((int16_t *)pBuffer, bufferFrames * channels);
+                        }
+                        #endif
+                        break;
+
+                    case X_WAVE_FORMAT_ALAW:
+                        fileError = PV_ReadSunAUFile(SUN_AUDIO_FILE_ENCODING_ALAW_8,
+                                            fileReference, 
+                                            (char *)pBuffer,
+                                            bufferSize,
+                                            &writeLength,
+                                            NULL);
+                        break;
+                    case X_WAVE_FORMAT_MULAW:
+                        fileError = PV_ReadSunAUFile(SUN_AUDIO_FILE_ENCODING_MULAW_8,
+                                            fileReference, 
+                                            (char *)pBuffer,
+                                            bufferSize,
+                                            &writeLength,
+                                            NULL);
+                        break;
+                    case X_WAVE_FORMAT_IMA_ADPCM:   // IMA 4 to 1 compressed data
+                        if (pBlockBuffer)
+                        {
+                            fileError = PV_ReadWAVEAndDecompressIMA(fileReference, 
+                                                    bufferSize / 4,
+                                                    (char *)pBuffer,
+                                                    bufferSize,
+                                                    (char)bitSize,
+                                                    (char)channels,
+                                                    pBlockBuffer,
+                                                    blockSize,
+                                                    (uint32_t *)&writeLength);
+                            returnedLength = bufferSize / 4;
+                            // since we decode the samples at runtime, we don't have
+                            // to byte swap the words.
+                        }
+                        else
+                        {
+                            writeLength = 0;
+                            returnedLength = 0;
+                        }
+                        calculateFileSize = FALSE;
+                        break;
+                }
+                break;
+
+	    default:
+		break;
+        }
+        if (calculateFileSize && fileReference)
+        {
+            // adjust for size actually read into the buffer
+            returnedLength = XFileGetPosition(fileReference) - filePosition;    // length of data read from the file
+            writeLength = returnedLength;                                       // length of data created for audio buffer
+
+            #if USE_DEBUG && 0
+            {
+                char text[256];
+                
+                sprintf(text, "%ld %ld", returnedLength, bufferLength);
+                DEBUG_STR(XCtoPstr(text));
+            }
+            #endif
+        }
+        *pReadBufferLength = returnedLength;
+        *pStoredBufferLength = writeLength;
+    }
+    else
+    {
+        fileError = PARAM_ERR;
+    }
+    return fileError;
+}
+
+#if USE_FLAC_ENCODER != FALSE
+OPErr PV_WriteFromMemoryFLACFile(XFILENAME *file, GM_Waveform const* pAudioData, XWORD formatTag)
+{
+    FLAC__StreamEncoder *encoder = NULL;
+    OPErr err = NO_ERR;
+    XBOOL ok = TRUE;
+    
+    if (!file || !pAudioData || formatTag != X_WAVE_FORMAT_PCM)
+    {
+        return PARAM_ERR;
+    }
+    
+    if (pAudioData->compressionType != C_NONE)
+    {
+        return PARAM_ERR;
+    }
+    
+    // Create FLAC encoder
+    encoder = FLAC__stream_encoder_new();
+    if (!encoder)
+    {
+        return MEMORY_ERR;
+    }
+    
+    // Configure encoder settings
+    ok &= FLAC__stream_encoder_set_verify(encoder, true);
+    ok &= FLAC__stream_encoder_set_compression_level(encoder, 5);
+    ok &= FLAC__stream_encoder_set_channels(encoder, pAudioData->channels);
+    ok &= FLAC__stream_encoder_set_bits_per_sample(encoder, pAudioData->bitSize);
+    ok &= FLAC__stream_encoder_set_sample_rate(encoder, XFIXED_TO_UNSIGNED_LONG(pAudioData->sampledRate));
+    ok &= FLAC__stream_encoder_set_total_samples_estimate(encoder, pAudioData->waveFrames);
+    
+    if (!ok)
+    {
+        FLAC__stream_encoder_delete(encoder);
+        return PARAM_ERR;
+    }
+    
+    // Initialize encoder to write to file
+    FLAC__StreamEncoderInitStatus init_status = FLAC__stream_encoder_init_file(encoder, file->theFile, NULL, NULL);
+    if (init_status != FLAC__STREAM_ENCODER_INIT_STATUS_OK)
+    {
+        FLAC__stream_encoder_delete(encoder);
+        return BAD_FILE;
+    }
+    
+    // Convert audio data to FLAC format and encode
+    if (pAudioData->theWaveform)
+    {
+        uint32_t frames = pAudioData->waveFrames;
+        uint32_t channels = pAudioData->channels;
+        uint32_t bitSize = pAudioData->bitSize;
+        
+        // Allocate buffer for converting to 32-bit samples
+        FLAC__int32 *buffer = (FLAC__int32*)XNewPtr(frames * channels * sizeof(FLAC__int32));
+        if (!buffer)
+        {
+            FLAC__stream_encoder_finish(encoder);
+            FLAC__stream_encoder_delete(encoder);
+            return MEMORY_ERR;
+        }
+        
+        // Convert samples to 32-bit for FLAC encoder
+        if (bitSize == 8)
+        {
+            unsigned char *src = (unsigned char*)pAudioData->theWaveform;
+            for (uint32_t i = 0; i < frames * channels; i++)
+            {
+                buffer[i] = (FLAC__int32)(src[i] - 128); // Convert unsigned 8-bit to signed
+            }
+        }
+        else if (bitSize == 16)
+        {
+            int16_t *src = (int16_t*)pAudioData->theWaveform;
+            for (uint32_t i = 0; i < frames * channels; i++)
+            {
+                buffer[i] = (FLAC__int32)src[i];
+            }
+        }
+        else
+        {
+            XDisposePtr((XPTR)buffer);
+            FLAC__stream_encoder_finish(encoder);
+            FLAC__stream_encoder_delete(encoder);
+            return PARAM_ERR;
+        }
+        
+        // Feed data to encoder
+        ok = FLAC__stream_encoder_process_interleaved(encoder, buffer, frames);
+        
+        XDisposePtr((XPTR)buffer);
+        
+        if (!ok)
+        {
+            err = BAD_FILE;
+        }
+    }
+    
+    // Finish encoding
+    FLAC__stream_encoder_finish(encoder);
+    FLAC__stream_encoder_delete(encoder);
+    
+    return err;
+}
+#endif // USE_FLAC_ENCODER != FALSE
+
+
+// write memory to a file
+OPErr GM_WriteFileFromMemory(XFILENAME *file, GM_Waveform const* pAudioData, AudioFileType fileType)
+{
+#if USE_CREATION_API == TRUE
+    OPErr   err;
+
+    err = NO_ERR;
+    switch (fileType)
+    {
+        case FILE_WAVE_TYPE:
+            err = PV_WriteFromMemoryWaveFile(file, pAudioData, X_WAVE_FORMAT_PCM);
+            break;
+        case FILE_AIFF_TYPE:
+            err = PV_WriteFromMemoryAiffFile(file, pAudioData, X_WAVE_FORMAT_PCM);
+            break;
+        case FILE_AU_TYPE:
+            err = PV_WriteFromMemorySunAUFile(file, pAudioData, X_WAVE_FORMAT_PCM);
+            break;
+#if USE_FLAC_ENCODER != FALSE
+        case FILE_FLAC_TYPE:
+            err = PV_WriteFromMemoryFLACFile(file, pAudioData, X_WAVE_FORMAT_PCM);
+            break;
+#endif
+#if USE_MPEG_DECODER != FALSE
+        case FILE_MPEG_TYPE:
+#endif
+        default:
+            err = NOT_SETUP;
+            break;
+    }
+    return err;
+#else
+    return NOT_SETUP;
+#endif
+}
+
+
+
+// GM_FinalizeFileHeader()
+// ------------------------
+// Given an open XFILE and its file type, this will fill in header
+// information.  Used when writing output to file and you don't know
+// the file size until you're done writing.  This function will fill in
+// size fields in the header.
+//
+OPErr GM_FinalizeFileHeader(XFILE file, AudioFileType fileType)
+{
+    OPErr err;
+    uint32_t chunk;
+    uint32_t fileSize;
+    uint32_t tmp;
+    XERR xerr;
+
+    err = NO_ERR;
+    chunk = 0;
+    
+    if (file)
+    {
+        switch (fileType)
+        {
+            case FILE_WAVE_TYPE:
+            {
+                XWaveHeader waveHeader;
+                uint32_t fmtChunkPos = 0;
+                uint32_t fmtChunkSize = 0;
+                uint32_t dataSize = 0;
+                
+                fileSize = XFileGetLength(file);
+                
+                XFileSetPosition(file, 0);
+                XFileRead(file, &chunk, sizeof(chunk));
+                if (XGetLong(&chunk) == X_RIFF)
+                {
+                    XFileSetPosition(file, 8);
+                    XFileRead(file, &chunk, sizeof(chunk));
+                    if (XGetLong(&chunk) == X_WAVE)
+                    {
+                        // Update main RIFF chunk size
+                        XFileSetPosition(file, 4);
+                        tmp = fileSize-8;
+#if X_WORD_ORDER == FALSE // motorola
+                        tmp = XSwapLong(tmp);
+#endif
+                        XFileWrite(file, &tmp, sizeof(tmp));
+
+                        // Find and read the fmt chunk to get format information
+                        XFileSetPosition(file, 12);  // Start after "RIFF????WAVE"
+                        while (XFileGetPosition(file) < fileSize - 8)
+                        {
+                            xerr = XFileRead(file, &chunk, sizeof(chunk));
+                            if (xerr != 0)
+                            {
+                                err = BAD_FILE;
+                                break;
+                            }
+                            
+                            xerr = XFileRead(file, &fmtChunkSize, sizeof(fmtChunkSize));
+                            if (xerr != 0)
+                            {
+                                err = BAD_FILE;
+                                break;
+                            }
+                            
+#if X_WORD_ORDER == FALSE // motorola
+                            fmtChunkSize = XSwapLong(fmtChunkSize);
+#endif
+                            
+                            if (XGetLong(&chunk) == X_FMT)
+                            {
+                                // Found fmt chunk, read the header
+                                fmtChunkPos = XFileGetPosition(file);
+                                if (fmtChunkSize >= sizeof(XWaveHeader))
+                                {
+                                    xerr = XFileRead(file, &waveHeader, sizeof(XWaveHeader));
+                                    if (xerr != 0)
+                                    {
+                                        err = BAD_FILE;
+                                        break;
+                                    }
+                                }
+                                break;
+                            }
+                            else
+                            {
+                                // Skip this chunk
+                                XFileSetPositionRelative(file, fmtChunkSize);
+                            }
+                        }
+
+                        // Find DATA chunk and update its size
+                        XFileSetPosition(file, 12);  // Start after "RIFF????WAVE"
+                        while (XFileGetPosition(file) < fileSize - 8)
+                        {
+                            uint32_t chunkSize;
+                            xerr = XFileRead(file, &chunk, sizeof(chunk));
+                            if (xerr != 0)
+                            {
+                                err = BAD_FILE;
+                                break;
+                            }
+                            
+                            xerr = XFileRead(file, &chunkSize, sizeof(chunkSize));
+                            if (xerr != 0)
+                            {
+                                err = BAD_FILE;
+                                break;
+                            }
+                            
+                            if (XGetLong(&chunk) == X_DATA)
+                            {
+                                // Found data chunk, calculate and update its size
+                                dataSize = fileSize - XFileGetPosition(file);
+                                
+                                // Go back and write the correct data size
+                                XFileSetPositionRelative(file, (int32_t)-sizeof(chunkSize));
+                                tmp = dataSize;
+#if X_WORD_ORDER == FALSE // motorola
+                                tmp = XSwapLong(tmp);
+#endif
+                                xerr = XFileWrite(file, &tmp, sizeof(tmp));
+                                if (xerr != 0)
+                                {
+                                    err = BAD_FILE;
+                                }
+                                break;
+                            }
+                            else
+                            {
+                                // Skip this chunk
+#if X_WORD_ORDER == FALSE // motorola
+                                chunkSize = XSwapLong(chunkSize);
+#endif
+                                XFileSetPositionRelative(file, chunkSize);
+                            }
+                        }
+
+                        // Update fmt chunk if we found it and have valid data
+                        if (fmtChunkPos > 0 && dataSize > 0 && err == NO_ERR)
+                        {
+                            uint32_t samplesPerSec, blockAlign;
+                            
+                            // Extract format info (convert from file byte order)
+#if X_WORD_ORDER == FALSE // motorola
+                            samplesPerSec = XSwapLong(waveHeader.nSamplesPerSec);
+                            blockAlign = XSwapShort(waveHeader.nBlockAlign);
+#else
+                            samplesPerSec = waveHeader.nSamplesPerSec;
+                            blockAlign = waveHeader.nBlockAlign;
+#endif
+                            
+                            if (blockAlign > 0 && samplesPerSec > 0)
+                            {
+                                // Calculate and update nAvgBytesPerSec to ensure correct duration calculation
+                                uint32_t avgBytesPerSec = samplesPerSec * blockAlign;
+                                
+                                // Write back the corrected nAvgBytesPerSec
+                                XFileSetPosition(file, fmtChunkPos + 8);  // Offset to nAvgBytesPerSec field
+                                tmp = avgBytesPerSec;
+#if X_WORD_ORDER == FALSE // motorola
+                                tmp = XSwapLong(tmp);
+#endif
+                                xerr = XFileWrite(file, &tmp, sizeof(tmp));
+                                if (xerr != 0)
+                                {
+                                    err = BAD_FILE;
+                                }
+                            }
+                        }
+                    }
+                }
+            } break;
+
+            case FILE_AIFF_TYPE:
+            {
+                uint32_t size;
+                uint16_t channels;
+                uint32_t pos;
+                uint16_t bits;
+                uint32_t frames;
+
+                fileSize = XFileGetLength(file);
+                
+                XFileSetPosition(file, 0);
+                XFileRead(file, &chunk, sizeof(chunk));
+                if (XGetLong(&chunk) == X_FORM)
+                {
+                    XFileSetPosition(file, 8);
+                    XFileRead(file, &chunk, sizeof(chunk));
+                    if (XGetLong(&chunk) == X_AIFF)
+                    {
+                        XFileSetPosition(file, 4);
+                        tmp = fileSize;
+#if X_WORD_ORDER == TRUE // intel
+                        tmp = XSwapLong(tmp);
+#endif
+                        XFileWrite(file, &tmp, sizeof(tmp));
+
+                        while (XGetLong(&chunk) != X_Common)
+                        {
+                            XFileSetPositionRelative(file, -3);
+                            XFileRead(file, &chunk, sizeof(chunk));
+                        }
+                        XFileRead(file, &size, sizeof(size));
+                        XFileRead(file, &channels, sizeof(channels));
+                        pos = XFileGetPosition(file); // go back here later to fill in...
+                        XFileSetPositionRelative(file, 4);
+                        XFileRead(file, &bits, sizeof(bits));
+#if X_WORD_ORDER == TRUE // intel
+                        size = XSwapLong(size);
+                        channels = XSwapShort(channels);
+                        bits = XSwapShort(bits);
+#endif
+
+                        while (XGetLong(&chunk) != X_SoundData)
+                        {
+                            xerr = XFileSetPositionRelative(file, -3);
+                            if (xerr != 0)
+                            {
+                                err = BAD_FILE;
+                            }
+
+                            xerr = XFileRead(file, &chunk, sizeof(chunk));
+                            if (xerr != 0)
+                            {
+                                err = BAD_FILE;
+                            }
+                        }
+                        tmp = fileSize - XFileGetPosition(file) - sizeof(chunk);
+                        tmp -= 8;   // subtract format header and type from total length
+                        frames = tmp /*bytes*/ / (bits/8) / channels;
+#if X_WORD_ORDER == TRUE // intel
+                        tmp = XSwapLong(tmp);
+#endif
+                        xerr = XFileWrite(file, &tmp, sizeof(tmp));
+                        if (xerr != 0)
+                        {
+                            err = BAD_FILE;
+                        }
+
+                        XFileSetPosition(file, pos);
+#if X_WORD_ORDER == TRUE // intel
+                        frames = XSwapLong(frames);
+#endif
+                        xerr = XFileWrite(file, &frames, sizeof(frames));
+                        if (xerr != 0)
+                        {
+                            err = BAD_FILE;
+                        }
+                    }
+                }
+            } break;
+
+            case FILE_AU_TYPE:
+            {
+                uint32_t headerSize;
+
+                fileSize = XFileGetLength(file);
+                
+                XFileSetPosition(file, 0);
+                XFileRead(file, &chunk, sizeof(chunk));
+                if (XGetLong(&chunk) == SUN_AUDIO_FILE_MAGIC_NUMBER)
+                {
+                    headerSize = XFileRead(file, &headerSize, sizeof(headerSize));
+#if X_WORD_ORDER == TRUE // intel
+                    headerSize = XSwapLong(headerSize);
+#endif
+                    tmp = fileSize - headerSize;
+#if X_WORD_ORDER
+                    tmp = XSwapLong(tmp);
+#endif
+                    xerr = XFileWrite(file, &tmp, sizeof(tmp));
+                    if (xerr != 0)
+                    {
+                        err = BAD_FILE;
+                    }
+                }
+                else
+                {
+                    err = BAD_FILE;
+                }
+            } break;
+
+            default:
+                err = BAD_FILE_TYPE;
+                break;
+        }
+    }
+    else
+    {
+        err = PARAM_ERR;
+    }
+
+    return err;
+}
+#endif  // #if USE_HIGHLEVEL_FILE_API == TRUE
+
+// for 16 bit data. samples are from -32767 to 32768 and 0 is silent
+// for 8 bit data. samples are from -127 to 128 and 0 is silent. This is oppsite for BAE
+GM_Waveform * GM_ReadRawAudioIntoMemoryFromMemory(void * sampleData,                // pointer to audio data
+                                        uint32_t frames,           // number of frames of audio
+                                        uint16_t bitSize,     // bits per sample 8 or 16
+                                        uint16_t channels,    // mono or stereo 1 or 2
+                                        XFIXED rate,                    // 16.16 fixed sample rate
+                                        uint32_t loopStart,        // loop start in frames
+                                        uint32_t loopEnd,          // loop end in frames
+                                        OPErr *pErr)
+{
+    GM_Waveform     *pWave = NULL;
+    int32_t            size;
+    OPErr           err;
+    void            *copySampleData;
+
+    err = NO_ERR;
+    if (sampleData)
+    {
+        pWave = GM_NewWaveform();
+        if (pWave)
+        {
+            size = frames * (bitSize / 8) * channels;
+            copySampleData = XNewPtr(size);
+            if (copySampleData != NULL)
+            {
+                XBlockMove(sampleData, copySampleData, size);
+                pWave->waveSize = size;
+                pWave->waveFrames = frames;
+                pWave->startLoop = loopStart;
+                pWave->endLoop = loopEnd;
+                pWave->baseMidiPitch = 60;
+                pWave->bitSize = (unsigned char)bitSize;
+                pWave->channels = (unsigned char)channels;
+                pWave->sampledRate = rate;
+                pWave->theWaveform = copySampleData;
+
+                if (bitSize == 8)
+                {
+                    // 8 bit passed in is signed, but internal engine 8 bit data is unsigned.
+                    XPhase8BitWaveform((XBYTE*)pWave->theWaveform, pWave->waveSize);
+                }
+            }
+            else
+            {
+                err = MEMORY_ERR;
+                XDisposePtr(pWave);
+                pWave = NULL;
+            }
+        }
+        else
+        {
+            err = MEMORY_ERR;
+        }
+    }
+    else
+    {
+        err = NOT_SETUP;
+    }
+    if (pErr) *pErr = err;
+    return pWave;
+}
+
+#if USE_HIGHLEVEL_FILE_API == TRUE
+#if USE_CREATION_API == TRUE
+OPErr GM_WriteAudioBufferToFile(XFILE file, AudioFileType type, void *buffer, int32_t size, int32_t channels, int32_t sampleSize)
+{
+    OPErr theErr;
+
+    theErr = NO_ERR;
+    if (file)
+    {
+        switch (type)
+        {
+            case FILE_WAVE_TYPE:
+#if X_WORD_ORDER == FALSE // motorola
+                if (sampleSize == 2) // if 16-bit data, we need to flip to little endian
+                {
+                    XSwapShorts((int16_t *)buffer, (int32_t)(size / sampleSize));
+                }
+#endif
+                if (XFileWrite(file, buffer, size) == -1)
+                {
+                    theErr = BAD_FILE;
+                }
+                break;
+                        
+            case FILE_AIFF_TYPE:
+            case FILE_AU_TYPE:
+#if X_WORD_ORDER == TRUE // intel?
+                if (sampleSize == 2) // if 16-bit data, we need to flip to big endian
+                {
+                    // swap to motorola format
+                    XSwapShorts((int16_t *)buffer, (int32_t)(size / sampleSize));
+                }
+#endif
+                if (sampleSize == 1) // 8-bit data
+                {
+                    XPhase8BitWaveform((unsigned char*)buffer, size);
+                }
+
+                if (XFileWrite(file, buffer, size) == -1)
+                {
+                    theErr = BAD_FILE;
+                }
+                break;
+
+            default:
+                theErr = PARAM_ERR;
+                break;
+        }
+    }
+    else
+    {
+        theErr = PARAM_ERR;
+    }
+    return theErr;
+}
+#endif
+#endif  // USE_HIGHLEVEL_FILE_API
+
+// EOF of GenSoundFiles.c

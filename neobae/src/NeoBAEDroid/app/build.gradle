@@ -1,0 +1,93 @@
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+    id 'org.jetbrains.kotlin.plugin.compose' // Added
+}
+
+android {
+    namespace "com.zefie.NeoBAEDroid"
+    compileSdk 36
+
+    defaultConfig {
+        applicationId "com.zefie.NeoBAEDroid"
+        minSdk 23
+        targetSdk 36
+        versionCode 1
+        versionName "1.0"
+        ndk {
+            abiFilters 'armeabi-v7a','arm64-v8a','x86','x86_64'
+        }
+        ndkVersion "27.0.12077973"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    externalNativeBuild {
+        ndkBuild {
+            path file('../jni/Android.mk')
+        }
+    }
+
+    sourceSets {
+        main {
+            jniLibs.srcDirs = ['../../../deps/android/jniLibs']
+        }
+    }
+
+    buildFeatures {
+        compose true
+        buildConfig true
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+
+    // It's also common to define the compiler version directly in the plugin block if needed,
+    // or rely on the versions brought in by your Compose BOM.
+}
+
+dependencies {
+    implementation 'androidx.appcompat:appcompat:1.7.1'
+    implementation 'org.jetbrains.kotlin:kotlin-stdlib:2.3.0'
+    implementation 'com.google.android.material:material:1.13.0'
+    implementation 'androidx.media:media:1.7.1'
+
+    // Jetpack Compose core dependencies via BOM (removes explicit versions to avoid resolution mismatch)
+    def composeBom = platform('androidx.compose:compose-bom:2025.12.00') // Keep updated with latest stable
+    implementation composeBom
+    androidTestImplementation composeBom
+
+    implementation 'androidx.activity:activity-compose:1.12.1' // Activity Compose (not in BOM group)
+    implementation 'androidx.lifecycle:lifecycle-viewmodel-compose:2.10.0' // ViewModel for Compose
+    implementation 'androidx.compose.ui:ui'
+    implementation 'androidx.compose.material:material'
+    implementation 'androidx.compose.material:material-icons-extended'
+    implementation 'androidx.compose.ui:ui-tooling-preview'
+    // DocumentFile (SAF) support
+    implementation 'androidx.documentfile:documentfile:1.1.0'
+    
+    // Coroutines for background indexing
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2'
+
+    debugImplementation 'androidx.compose.ui:ui-tooling'
+
+    // Add the Compose compiler dependency (often not needed if using the plugin and BOM correctly)
+    // implementation "androidx.compose.compiler:compiler:LATEST_COMPATIBLE_VERSION"
+}
+
+// Ensure Kotlin compiler produces Java 11 bytecode to match Java compile task
+tasks.withType(KotlinCompile).configureEach {
+    kotlinOptions {
+        jvmTarget = "11"
+    }
+}
