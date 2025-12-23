@@ -1492,7 +1492,7 @@ typedef int32_t UNIT_TYPE;
     // return pitch bend for channel
     void GM_GetPitchBend(GM_Song *pSong, XSWORD channel, unsigned char *pLSB, unsigned char *pMSB);
 
-    OPErr GM_GetProgramBank(GM_Song *pSong, XSWORD channel, XSWORD *outProgram, XSWORD *outBank);
+    OPErr GM_GetProgramBank(GM_Song *pSong, XSWORD channel, XSWORD *outProgram, XSWORD *outBank, XBOOL useRawBank);
 
     /**************************************************/
     /*

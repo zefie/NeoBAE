@@ -122,7 +122,7 @@ void update_bank_program_for_channel(void)
     {
         unsigned char program = 0;
         unsigned char bank = 0;
-        BAEResult result = BAESong_GetProgramBank(target, (unsigned char)g_keyboard_channel, &program, &bank);
+        BAEResult result = BAESong_GetProgramBank(target, (unsigned char)g_keyboard_channel, &program, &bank, TRUE);
         if (result == BAE_NO_ERROR)
         {
             // For General MIDI compatibility, bank 0 typically maps to Bank=0, Program=0

@@ -8320,7 +8320,8 @@ BAEResult BAESong_GetControlValue(BAESong song, unsigned char channel, unsigned 
 BAEResult BAESong_GetProgramBank(BAESong song,
                                  unsigned char channel,
                                  unsigned char *outProgram,
-                                 unsigned char *outBank)
+                                 unsigned char *outBank,
+                                 XBOOL useRawBank)
 {
     OPErr err;
     XSWORD bank, program;
@@ -8333,7 +8334,7 @@ BAEResult BAESong_GetProgramBank(BAESong song,
         {
             if (song->pSong)
             {
-                GM_GetProgramBank(song->pSong, channel, &program, &bank);
+                GM_GetProgramBank(song->pSong, channel, &program, &bank, useRawBank);
                 *outProgram = (unsigned char)program;
                 *outBank = (unsigned char)bank;
 
@@ -8449,7 +8450,7 @@ BAEResult BAESong_NoteOnWithLoad(BAESong song,
         XWaitMicroseconds(latency / 1000);
 
         // pull the current program, bank from the current state. Should be valid by this time.
-        BAESong_GetProgramBank(song, channel, &program, &bank);
+        BAESong_GetProgramBank(song, channel, &program, &bank, FALSE);
         inst = TranslateBankProgramToInstrument(bank, program, channel, note);
         if (BAESong_IsInstrumentLoaded(song, inst, &isLoaded) == BAE_NO_ERROR)
         {

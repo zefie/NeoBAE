@@ -13,6 +13,10 @@
 #include "gui_settings.h"
 #include "gui_dialogs.h"
 #include "gui_export.h"
+
+const int16_t g_max_bank = 128;
+const int16_t g_max_program = 127;
+
 // send_bank_select_for_current_channel is defined in gui_main.c
 extern void send_bank_select_for_current_channel(void);
 

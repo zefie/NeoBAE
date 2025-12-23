@@ -10,9 +10,6 @@
 #define NEW_BASELINE_PCT 100
 #define NEW_MAX_VOLUME_PCT 100
 
-const int16_t g_max_bank = 128;
-const int16_t g_max_program = 127;
-
 // BAE GUI state structure (shared between gui_main.c and gui_bae.c)
 typedef struct
 {

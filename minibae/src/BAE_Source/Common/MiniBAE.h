@@ -1984,7 +1984,8 @@ extern "C"
     BAEResult BAESong_GetProgramBank(BAESong song,
                                      unsigned char channel,
                                      unsigned char *outProgram,
-                                     unsigned char *outBank);
+                                     unsigned char *outBank,
+                                     XBOOL useRawBank);
 
     // BAESong_GetPitchBend()
     // --------------------------------------

@@ -1884,7 +1884,7 @@ OPErr GM_ChangeSongVoices(GM_Song *pSong, INT16 maxSongVoices, INT16 mixLevel, I
     return theErr;
 }
 
-OPErr GM_GetProgramBank(GM_Song *pSong, XSWORD channel, XSWORD *outProgram, XSWORD *outBank)
+OPErr GM_GetProgramBank(GM_Song *pSong, XSWORD channel, XSWORD *outProgram, XSWORD *outBank, XBOOL useRawBank)
 {
     OPErr err;
 
@@ -1894,7 +1894,7 @@ OPErr GM_GetProgramBank(GM_Song *pSong, XSWORD channel, XSWORD *outProgram, XSWO
         if (outProgram && outBank)
         {
             *outProgram = pSong->channelProgram[channel];
-            *outBank = pSong->channelBank[channel];
+            *outBank = useRawBank ? pSong->channelRawBank[channel] : pSong->channelBank[channel];
         }
         else
         {

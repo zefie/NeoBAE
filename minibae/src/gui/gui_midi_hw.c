@@ -224,7 +224,7 @@ bool midi_record_start(const char *out_path)
             for (unsigned char ch = 0; ch < 16; ++ch)
             {
                 unsigned char program = 0, bank = 0;
-                if (BAESong_GetProgramBank(target, ch, &program, &bank) == BAE_NO_ERROR)
+                if (BAESong_GetProgramBank(target, ch, &program, &bank, TRUE) == BAE_NO_ERROR)
                 {
                     unsigned char evt[4];
                     // Bank Select MSB (CC 0): delta 0 + 0xB0|ch, controller 0, value

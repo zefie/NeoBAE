@@ -1308,21 +1308,6 @@ void GM_SF2_ProcessProgramChange(GM_Song* pSong, int16_t channel, int32_t progra
         return;
     }
 
-    // If this soundfont has no canonical drum kit preset, don't load any bank for channel 10.
-    // (Avoid incorrectly falling back to melodic bank 0 on the percussion channel.)
-    if (channel == BAE_PERCUSSION_CHANNEL)
-    {
-        const int drumBank = g_fluidsynth_soundfont_is_dls ? 120 : 128;
-        if (!PV_SF2_PresetExists(drumBank, 0))
-        {
-            BAE_PRINTF("[FluidProgChange] No drum kit preset %d:0 found; unsetting program on percussion channel %d\n", drumBank, channel);
-            fluid_synth_all_sounds_off(g_fluidsynth_synth, channel);
-            fluid_synth_all_notes_off(g_fluidsynth_synth, channel);
-            fluid_synth_unset_program(g_fluidsynth_synth, channel);
-            return;
-        }
-    }
-
     // Validate bank/program exist in current font; apply fallback if not
     int useBank = midiBank;
     int useProg = midiProgram;
@@ -1389,6 +1374,23 @@ void GM_SF2_ProcessProgramChange(GM_Song* pSong, int16_t channel, int32_t progra
                 BAE_PRINTF("[FluidProgChange] Fallback: no presets in bank %d; selecting %d:%d\n", useBank, fbBank, fbProg);
                 useBank = fbBank; useProg = fbProg;
             }
+        }
+    }
+
+    pSong->channelRawBank[channel] = useBank;
+
+    // If this soundfont has no canonical drum kit preset, don't load any bank for channel 10.
+    // (Avoid incorrectly falling back to melodic bank 0 on the percussion channel.)
+    if (channel == BAE_PERCUSSION_CHANNEL)
+    {
+        const int drumBank = g_fluidsynth_soundfont_is_dls ? 120 : 128;
+        if (!PV_SF2_PresetExists(drumBank, 0))
+        {
+            BAE_PRINTF("[FluidProgChange] No drum kit preset %d:0 found; unsetting program on percussion channel %d\n", drumBank, channel);
+            fluid_synth_all_sounds_off(g_fluidsynth_synth, channel);
+            fluid_synth_all_notes_off(g_fluidsynth_synth, channel);
+            fluid_synth_unset_program(g_fluidsynth_synth, channel);
+            return;
         }
     }
 

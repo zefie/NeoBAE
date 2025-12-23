@@ -851,7 +851,7 @@ void render_settings_dialog(SDL_Renderer *R, int mx, int my, bool mclick, bool m
                     for (unsigned char ch = 0; ch < 16; ++ch)
                     {
                         unsigned char program = 0, bank = 0;
-                        if (BAESong_GetProgramBank(g_bae.song, ch, &program, &bank) == BAE_NO_ERROR)
+                        if (BAESong_GetProgramBank(g_bae.song, ch, &program, &bank, TRUE) == BAE_NO_ERROR)
                         {
                             unsigned char buf[3];
                             // Send Bank Select MSB (controller 0) if bank fits into MSB
@@ -1203,7 +1203,7 @@ void render_settings_dialog(SDL_Renderer *R, int mx, int my, bool mclick, bool m
                         for (unsigned char ch = 0; ch < 16; ++ch)
                         {
                             unsigned char program = 0, bank = 0;
-                            if (BAESong_GetProgramBank(g_bae.song, ch, &program, &bank) == BAE_NO_ERROR)
+                            if (BAESong_GetProgramBank(g_bae.song, ch, &program, &bank, TRUE) == BAE_NO_ERROR)
                             {
                                 unsigned char buf[3];
                                 buf[0] = (unsigned char)(0xB0 | (ch & 0x0F));
