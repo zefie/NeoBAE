@@ -8,27 +8,27 @@ When using the `-j` flag with `make`, do not run `clean` and `all` in the same c
 By default, all builds will build with SF2 support via FluidSynth. FluidSynth provides SF2/SF3/SFO support, as well as limited DLS support.
 
 ## Get the source (git, easier)
-- `git clone https://github.com/zefie/miniBAE`
-- `cd miniBAE && git submodule init --update`
+- `git clone https://github.com/zefie/NeoBAE`
+- `cd NeoBAE && git submodule init --update`
 
 ## Get the source (tarball or zip, more work)
 - Download tarball, extract it
 - Get the [minimp3 source](https://github.com/lieff/minimp3)
-   - Place it in the `minibae/src/thirdparty/minimp3` folder
+   - Place it in the `neobae/src/thirdparty/minimp3` folder
 - Get the [FLAC source](https://xiph.org/flac/)
-   - Place it in the `minibae/src/thirdparty/flac` folder
+   - Place it in the `neobae/src/thirdparty/flac` folder
 - Get the [OGG source](https://xiph.org/ogg/)
-   - Place it in the `minibae/src/thirdparty/libogg` folder
+   - Place it in the `neobae/src/thirdparty/libogg` folder
 - Get the [Vorbis source](https://xiph.org/vorbis/)
-   - Place it in the `minibae/src/thirdparty/libvorbis` folder
+   - Place it in the `neobae/src/thirdparty/libvorbis` folder
 - Get the [RtMidi source](https://github.com/thestk/rtmidi)
-   - Place it in the `minibae/src/thirdparty/rtmidi` folder
+   - Place it in the `neobae/src/thirdparty/rtmidi` folder
 
 # Linux only
 - Get the [FluidSynth source](https://github.com/fluidsynth/fluidsynth)
-   - Place it in the `minibae/src/thirdparty/fluidsynth` folder
+   - Place it in the `neobae/src/thirdparty/fluidsynth` folder
 - Get then [zefie libinstpatch source](https://github.com/zefie/libinstpatch)
-   - Place it in the `minibae/src/thirdparty/libinstpatch` folder
+   - Place it in the `neobae/src/thirdparty/libinstpatch` folder
 
 - A slimmed down copy of Lame v3.100 is included in the main source tree, for mp3 encoding.
 - You only need to grab what you want to support, [see below](#modular-build-system).
@@ -40,7 +40,7 @@ By default, all builds will build with SF2 support via FluidSynth. FluidSynth pr
     - `apt-get update`
     - `apt-get install libc6-dev libsdl3-dev libfluidsynth-dev`
 - Build playbae
-    - `cd minibae`
+    - `cd neobae`
     - `make clean`
     - `make -j$(nproc)`
 - Using Build:
@@ -51,7 +51,7 @@ By default, all builds will build with SF2 support via FluidSynth. FluidSynth pr
     - `apt-get update`
     - `apt-get install libc6-dev clang libsdl3-dev libfluidsynth-dev`
 - Build playbae
-    - `cd minibae`
+    - `cd neobae`
     - `make clean`
     - `make -f Makefile.clang -j$(nproc)`
 - Using Build:
@@ -67,7 +67,7 @@ By default, all builds will build with SF2 support via FluidSynth. FluidSynth pr
        - ALSA: `make clean && make -f Makefile.gui ENABLE_MIDI_HW=1 ENABLE_ALSA=1 -j$(nproc)`
        - Jack: `make clean && make -f Makefile.gui ENABLE_MIDI_HW=1 ENABLE_JACK=1 -j$(nproc)`
        - Both: `make clean && make -f Makefile.gui ENABLE_MIDI_HW=1 ENABLE_ALSA=1 ENABLE_JACK=1 -j$(nproc)`
-       - Note: If `/dev/snd/seq` does not exist on your system (eg, WSL), ALSA will cause the miniBAE GUI to segfault when accessing the MIDI Devices dropdowns.
+       - Note: If `/dev/snd/seq` does not exist on your system (eg, WSL), ALSA will cause the neobae GUI to segfault when accessing the MIDI Devices dropdowns.
     - It is up to you to install the development dependencies for Jack and/or ALSA.
 - Using Build:
     - Copy the file to `/usr/local/bin` or your prefered path.
@@ -81,7 +81,7 @@ By default, all builds will build with SF2 support via FluidSynth. FluidSynth pr
     - `apt-get update`
     - `apt-get install binutils-mingw-w64-x86_64 g++-mingw-w64-x86_64 g++-mingw-w64-x86_64-posix g++-mingw-w64-x86_64-win32 gcc-mingw-w64-base gcc-mingw-w64-x86_64 gcc-mingw-w64-x86_64-posix gcc-mingw-w64-x86_64-posix-runtime gcc-mingw-w64-x86_64-win32 gcc-mingw-w64-x86_64-win32-runtime mingw-w64-common mingw-w64-x86_64-dev libz-mingw-w64-dev`
 - Build playbae
-    - `cd minibae`
+    - `cd neobae`
     - For DirectSound support:
        - `make clean`
        - `make -f Makefile.mingw -j$(nproc)`
@@ -98,7 +98,7 @@ By default, all builds will build with SF2 support via FluidSynth. FluidSynth pr
     - `apt-get install binutils-mingw-w64-x86_64 g++-mingw-w64-x86_64 g++-mingw-w64-x86_64-posix g++-mingw-w64-x86_64-win32 gcc-mingw-w64-base gcc-mingw-w64-x86_64 gcc-mingw-w64-x86_64-posix gcc-mingw-w64-x86_64-posix-runtime gcc-mingw-w64-x86_64-win32 gcc-mingw-w64-x86_64-win32-runtime mingw-w64-common mingw-w64-x86_64-dev libz-mingw-w64-dev`
     - SDL dependency for mingw is provided in the repo
 - Build GUI
-    - `cd minibae`
+    - `cd neobae`
     - `make clean`
     - `make -f Makefile.gui-mingw -j$(nproc)`
     - Hardware MIDI support is already enabled for mingw builds
@@ -124,7 +124,7 @@ By default, all builds will build with SF2 support via FluidSynth. FluidSynth pr
           - ALSA: `make clean && make -f Makefile.gui ENABLE_MIDI_HW=1 ENABLE_ALSA=1 -j$(nproc)`
           - Jack: `make clean && make -f Makefile.gui ENABLE_MIDI_HW=1 ENABLE_JACK=1 -j$(nproc)`
           - Both: `make clean && make -f Makefile.gui ENABLE_MIDI_HW=1 ENABLE_ALSA=1 ENABLE_JACK=1 -j$(nproc)`
-          - Note: If `/dev/snd/seq` does not exist on your system (eg, WSL), ALSA will cause the miniBAE GUI to segfault when accessing the MIDI Devices dropdowns.
+          - Note: If `/dev/snd/seq` does not exist on your system (eg, WSL), ALSA will cause the neobae GUI to segfault when accessing the MIDI Devices dropdowns.
        - It is up to you to install the development dependencies for Jack and/or ALSA.
     - MingW: `make clean && make -f Makefile.gui-mingw -j$(nproc)`
        - Hardware MIDI support is already enabled for mingw builds
@@ -142,7 +142,7 @@ By default, all builds will build with SF2 support via FluidSynth. FluidSynth pr
     - `apt-get update`
     - `apt-get install emscripten`
 - Build playbae
-    - `cd minibae`
+    - `cd neobae`
     - `make clean`
     - `make -f Makefile.emcc -j$(nproc)`
 - Using Build:
@@ -155,7 +155,7 @@ By default, all builds will build with SF2 support via FluidSynth. FluidSynth pr
     - MPEG Support is enabled by default in the WebAssembly build, so RMFs with MPEG samples should work just fine
 
 ## Modular Build System
-zefie's modifications (aside from the core 64-bit port) are designed to be completely modular in the build system. If you don't like the idea of miniBAE having FLAC or Vorbis, you can easily build without them!
+zefie's modifications (aside from the core 64-bit port) are designed to be completely modular in the build system. If you don't like the idea of neobae having FLAC or Vorbis, you can easily build without them!
 
 To get full control of what is built, pass `NOAUTO=1` to make, eg `make NOAUTO=1`.
 
