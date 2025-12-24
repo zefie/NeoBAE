@@ -2027,13 +2027,13 @@ static void PV_SF2_ConvertFloatToInt32(float* input, int32_t* output, int32_t* r
             // Use the scaled samples directly (reverb/chorus are percentages of the dry signal)
             if (reverbOutput && reverbScale > 0.0f)
             {
-                reverbOutput[frame * 2] += (int32_t)(leftInt * reverbScale);
-                reverbOutput[frame * 2 + 1] += (int32_t)(rightInt * reverbScale);
+                int32_t monoSend = (leftInt / 2) + (rightInt / 2);
+                reverbOutput[frame] += (int32_t)(monoSend * reverbScale);
             }
             if (chorusOutput && chorusScale > 0.0f)
             {
-                chorusOutput[frame * 2] += (int32_t)(leftInt * chorusScale);
-                chorusOutput[frame * 2 + 1] += (int32_t)(rightInt * chorusScale);
+                int32_t monoSend = (leftInt / 2) + (rightInt / 2);
+                chorusOutput[frame] += (int32_t)(monoSend * chorusScale);
             }
         }
     }
