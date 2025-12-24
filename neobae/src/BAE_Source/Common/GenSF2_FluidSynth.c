@@ -348,8 +348,6 @@ BAEResult GM_SoftResetSF2(void) {
         // Reset RPN parameters
         fluid_synth_cc(g_fluidsynth_synth, ch, 100, 127); // RPN LSB
         fluid_synth_cc(g_fluidsynth_synth, ch, 101, 127); // RPN MSB
-        
-        fluid_synth_program_reset(g_fluidsynth_synth);
     }
     
     return NO_ERR;

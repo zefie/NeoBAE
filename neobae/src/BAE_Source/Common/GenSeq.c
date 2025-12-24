@@ -492,7 +492,7 @@ void PV_ResetControlers(GM_Song *pSong, INT16 channel2Reset, XBOOL completeReset
         pSong->channelNonRegisteredParameterMSB[count] = -1;
         pSong->channelSustain[count] = FALSE;
         pSong->channelBankMode[count] = USE_GM_DEFAULT;
-        pSong->channelBank[0] = 0;
+        pSong->channelBank[count] = 0;
         pSong->channelPitchBendRange[count] = DEFAULT_PITCH_RANGE; // pitch bend controler
         pSong->channelBend[count] = 0;
         pSong->channelModWheel[count] = 0;
