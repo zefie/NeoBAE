@@ -23,3 +23,5 @@ neobae/src/thirdparty/bassmidi/
 neobae/src/NeoBAEDroid/NeoBAEDroid.iws
 neobae/src/NeoBAEDroid/NeoBAEDroid.ipr
 neobae/src/NeoBAEDroid/app/release/
+neobae/src/NeoBAEDroid/app/NeoBAEDroid.app.iml
+neobae/src/NeoBAEDroid/app/NeoBAEDroid.app.main.iml

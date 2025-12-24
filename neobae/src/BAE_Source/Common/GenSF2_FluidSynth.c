@@ -1426,6 +1426,16 @@ void GM_SF2_ProcessController(GM_Song* pSong, int16_t channel, int16_t controlle
         return;
     }
     
+    if (pSong->AnalyzeMode != SCAN_NORMAL) {
+        return;
+    }
+
+    if (controller == 91 || controller == 93)
+    {
+        // Reverb and chorus depth are handled by the NeoBAE engine
+        return;
+    }
+
     // Check if channel is muted for non-critical controllers
     if (PV_SF2_CheckChannelMuted(pSong, channel))
     {
@@ -1453,13 +1463,7 @@ void GM_SF2_ProcessController(GM_Song* pSong, int16_t channel, int16_t controlle
         }
     }
     
-    // Only send controller changes to FluidSynth during normal playback
-    // This prevents preroll/scanning phases from applying controller changes
-    // that should only take effect during actual playback
-    if (pSong->AnalyzeMode == SCAN_NORMAL)
-    {
-        fluid_synth_cc(g_fluidsynth_synth, channel, controller, value);
-    }
+    fluid_synth_cc(g_fluidsynth_synth, channel, controller, value);
 }
 
 void GM_SF2_ProcessPitchBend(GM_Song* pSong, int16_t channel, int16_t bendMSB, int16_t bendLSB)
