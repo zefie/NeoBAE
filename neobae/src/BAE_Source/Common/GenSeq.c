@@ -498,6 +498,11 @@ void PV_ResetControlers(GM_Song *pSong, INT16 channel2Reset, XBOOL completeReset
         pSong->channelModWheel[count] = 0;
         pSong->isNokiaVibrationChannel[count] = FALSE;
     }
+#if USE_SF2_SUPPORT == TRUE
+    if (GM_IsSF2Song(pSong)) {
+        GM_SoftResetSF2();
+    }
+#endif
 }
 
 // resets the tempo to the inital default state

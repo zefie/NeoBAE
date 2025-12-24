@@ -102,7 +102,9 @@ static int32_t g_fluidsynth_mix_buffer_frames = 0;
 
 // Private function prototypes
 static XBOOL PV_SF2_CheckChannelMuted(GM_Song* pSong, int16_t channel);
-static void PV_SF2_ConvertFloatToInt32(float* input, int32_t* output, int32_t frameCount, float songVolumeScale, const float *channelScales);
+static void PV_SF2_ConvertFloatToInt32(float* input, int32_t* output, int32_t* reverbOutput, int32_t* chorusOutput, 
+                                        int32_t frameCount, float songVolumeScale, const float *channelScales,
+                                        const uint8_t *reverbLevels, const uint8_t *chorusLevels);
 static void PV_SF2_AllocateMixBuffer(int32_t frameCount);
 static void PV_SF2_FreeMixBuffer(void);
 static void PV_SF2_InitializeChannelActivity(void);
@@ -295,17 +297,62 @@ void GM_CleanupSF2(void)
 }
 
 
-void GM_ResetSF2(void) 
+BAEResult GM_ResetSF2(void) 
 {
     if (!g_fluidsynth_synth)
-        return;
+        return NOT_SETUP;
 
+    int err = 0;
     // Kill all notes currently playing
     GM_SF2_KillAllNotes();
     // Reset all channels and voices
-    fluid_synth_system_reset(g_fluidsynth_synth);
+    err = fluid_synth_system_reset(g_fluidsynth_synth);
     // Pick valid defaults again after reset
     PV_SF2_SetValidDefaultProgramsForAllChannels();
+    return err == FLUID_OK ? NO_ERR : GENERAL_BAD;
+}
+
+BAEResult GM_SoftResetSF2(void) {
+    if (!g_fluidsynth_synth)
+        return NOT_SETUP;
+
+    // Soft reset: Reset controllers without resetting programs
+    // This resets pitch bend, modulation, expression, sustain, etc.
+    // but preserves the currently selected instrument on each channel
+    
+    for (int ch = 0; ch < BAE_MAX_MIDI_CHANNELS; ch++) {
+        // Reset pitch bend to center (8192 = 0x2000)
+        fluid_synth_pitch_bend(g_fluidsynth_synth, ch, 8192);
+        
+        // Reset modulation wheel (CC 1)
+        fluid_synth_cc(g_fluidsynth_synth, ch, 1, 0);
+        
+        // Reset volume (CC 7) to default
+        fluid_synth_cc(g_fluidsynth_synth, ch, 7, MAX_NOTE_VOLUME);
+        
+        // Reset pan (CC 10) to center
+        fluid_synth_cc(g_fluidsynth_synth, ch, 10, 64);
+        
+        // Reset expression (CC 11) to maximum
+        fluid_synth_cc(g_fluidsynth_synth, ch, 11, MAX_NOTE_VOLUME);
+        
+        // Reset sustain pedal (CC 64) to off
+        fluid_synth_cc(g_fluidsynth_synth, ch, 64, 0);
+        
+        // Disable reverb (CC 91)
+        fluid_synth_cc(g_fluidsynth_synth, ch, 91, 0);
+        
+        // Disable chorus (CC 93)
+        fluid_synth_cc(g_fluidsynth_synth, ch, 93, 0);
+        
+        // Reset RPN parameters
+        fluid_synth_cc(g_fluidsynth_synth, ch, 100, 127); // RPN LSB
+        fluid_synth_cc(g_fluidsynth_synth, ch, 101, 127); // RPN MSB
+        
+        fluid_synth_program_reset(g_fluidsynth_synth);
+    }
+    
+    return NO_ERR;
 }
 
 
@@ -1107,6 +1154,8 @@ OPErr GM_EnableSF2ForSong(GM_Song* pSong, XBOOL enable)
         { 
             sf2Info->channelVolume[i] = 127;
             sf2Info->channelExpression[i] = 127;
+            sf2Info->channelReverb[i] = 40;  // Default reverb level
+            sf2Info->channelChorus[i] = 0;   // Default chorus level (off)
             sf2Info->channelMuted[i] = FALSE;
         }
         
@@ -1430,9 +1479,22 @@ void GM_SF2_ProcessController(GM_Song* pSong, int16_t channel, int16_t controlle
         return;
     }
 
+    // Intercept reverb (91) and chorus (93) to track levels for NeoBAE effects engine
     if (controller == 91 || controller == 93)
     {
-        // Reverb and chorus depth are handled by the NeoBAE engine
+        GM_SF2Info* info = (GM_SF2Info*)pSong->sf2Info;
+        if (info)
+        {
+            if (controller == 91)
+            {
+                info->channelReverb[channel] = value;
+            }
+            else if (controller == 93)
+            {
+                info->channelChorus[channel] = value;
+            }
+        }
+        // Don't send to FluidSynth - reverb and chorus are handled by NeoBAE engine
         return;
     }
 
@@ -1524,7 +1586,7 @@ void GM_SF2_ProcessSysEx(GM_Song* pSong, const unsigned char* message, int32_t l
 }
 
 // FluidSynth audio rendering - this gets called during mixer slice processing
-void GM_SF2_RenderAudioSlice(GM_Song* pSong, int32_t* mixBuffer, int32_t frameCount)
+void GM_SF2_RenderAudioSlice(GM_Song* pSong, int32_t* mixBuffer, int32_t* reverbBuffer, int32_t* chorusBuffer, int32_t frameCount)
 {
     // Render if either SF2 mode is active OR there's an XMF overlay (for HSB mode with overlay channels)
     if ((!GM_IsSF2Song(pSong) && !GM_SF2_HasXmfEmbeddedBank()) || !g_fluidsynth_synth || !mixBuffer || frameCount <= 0)
@@ -1589,8 +1651,18 @@ void GM_SF2_RenderAudioSlice(GM_Song* pSong, int32_t* mixBuffer, int32_t frameCo
         channelScales[c] = vol;
     }
     
-    // Convert float to int32 and mix with existing buffer
-    PV_SF2_ConvertFloatToInt32(g_fluidsynth_mix_buffer, mixBuffer, frameCount, songScale, channelScales);
+    // Get reverb and chorus levels (default to 0 if no info)
+    uint8_t reverbLevels[BAE_MAX_MIDI_CHANNELS];
+    uint8_t chorusLevels[BAE_MAX_MIDI_CHANNELS];
+    for (int c = 0; c < BAE_MAX_MIDI_CHANNELS; c++)
+    {
+        reverbLevels[c] = info ? info->channelReverb[c] : 0;
+        chorusLevels[c] = info ? info->channelChorus[c] : 0;
+    }
+    
+    // Convert float to int32 and mix with existing buffer (including reverb/chorus sends)
+    PV_SF2_ConvertFloatToInt32(g_fluidsynth_mix_buffer, mixBuffer, reverbBuffer, chorusBuffer,
+                               frameCount, songScale, channelScales, reverbLevels, chorusLevels);
 }
 
 // FluidSynth channel management (respects NeoBAE mute/solo states)
@@ -1846,7 +1918,9 @@ static XBOOL PV_SF2_CheckChannelMuted(GM_Song* pSong, int16_t channel)
     return info->channelMuted[channel];
 }
 
-static void PV_SF2_ConvertFloatToInt32(float* input, int32_t* output, int32_t frameCount, float songVolumeScale, const float *channelScales)
+static void PV_SF2_ConvertFloatToInt32(float* input, int32_t* output, int32_t* reverbOutput, int32_t* chorusOutput, 
+                                        int32_t frameCount, float songVolumeScale, const float *channelScales,
+                                        const uint8_t *reverbLevels, const uint8_t *chorusLevels)
 {
     const float kScale = 2147483647.0f;
     
@@ -1862,6 +1936,34 @@ static void PV_SF2_ConvertFloatToInt32(float* input, int32_t* output, int32_t fr
     }
     avgChannelScale /= 16.0f;
     globalScale *= avgChannelScale;
+    
+    // Average reverb/chorus levels only across channels with non-zero volume
+    // This prevents inactive channels from affecting the reverb mix
+    // Apply additional scaling to match the perceived reverb level of built-in instruments
+    float totalWeight = 0.0f;
+    float weightedReverb = 0.0f;
+    float weightedChorus = 0.0f;
+    
+    for (int c = 0; c < BAE_MAX_MIDI_CHANNELS; c++)
+    {
+        float weight = channelScales[c];
+        if (weight > 0.01f)  // Only count channels with audible volume
+        {
+            totalWeight += weight;
+            weightedReverb += reverbLevels[c] * weight;
+            weightedChorus += chorusLevels[c] * weight;
+        }
+    }
+    
+    float reverbScale = 0.0f;
+    float chorusScale = 0.0f;
+    if (totalWeight > 0.0f)
+    {
+        // Average by active channel weight, then normalize by 128 (>> 7)
+        // Apply 0.5x factor to reduce intensity for SF2's richer sound
+        reverbScale = (weightedReverb / totalWeight) / 128.0f * 0.15f;
+        chorusScale = (weightedChorus / totalWeight) / 128.0f * 0.15f;
+    }
 
     if (g_fluidsynth_mono_mode)
     {
@@ -1885,6 +1987,19 @@ static void PV_SF2_ConvertFloatToInt32(float* input, int32_t* output, int32_t fr
             
             // Write single-channel PCM (one sample per frame, true mono layout)
             output[frame] += intSample;
+            
+            // Mix into reverb and chorus buffers if they exist
+            // Use the scaled sample directly (reverb is a percentage of the dry signal)
+            if (reverbOutput && reverbScale > 0.0f)
+            {
+                int32_t reverbSample = (int32_t)(intSample * reverbScale);
+                reverbOutput[frame] += reverbSample;
+            }
+            if (chorusOutput && chorusScale > 0.0f)
+            {
+                int32_t chorusSample = (int32_t)(intSample * chorusScale);
+                chorusOutput[frame] += chorusSample;
+            }
         }
     }
     else
@@ -1903,8 +2018,23 @@ static void PV_SF2_ConvertFloatToInt32(float* input, int32_t* output, int32_t fr
             else if (rightSample < -1.0f) rightSample = -1.0f;
             
             // Convert to 32-bit fixed point and add to existing buffer
-            output[frame * 2] += (int32_t)(leftSample * kScale);     // Left
-            output[frame * 2 + 1] += (int32_t)(rightSample * kScale); // Right
+            int32_t leftInt = (int32_t)(leftSample * kScale);
+            int32_t rightInt = (int32_t)(rightSample * kScale);
+            output[frame * 2] += leftInt;     // Left
+            output[frame * 2 + 1] += rightInt; // Right
+            
+            // Mix into reverb and chorus buffers if they exist (stereo interleaved)
+            // Use the scaled samples directly (reverb/chorus are percentages of the dry signal)
+            if (reverbOutput && reverbScale > 0.0f)
+            {
+                reverbOutput[frame * 2] += (int32_t)(leftInt * reverbScale);
+                reverbOutput[frame * 2 + 1] += (int32_t)(rightInt * reverbScale);
+            }
+            if (chorusOutput && chorusScale > 0.0f)
+            {
+                chorusOutput[frame * 2] += (int32_t)(leftInt * chorusScale);
+                chorusOutput[frame * 2 + 1] += (int32_t)(rightInt * chorusScale);
+            }
         }
     }
 }

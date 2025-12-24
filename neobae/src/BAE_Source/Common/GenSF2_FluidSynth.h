@@ -37,6 +37,9 @@ typedef struct GM_SF2Info
     // Per-channel volume & expression (0..127); initialized to default GM values
     uint8_t             channelVolume[16];
     uint8_t             channelExpression[16];
+    // Per-channel reverb & chorus send levels (0..127); CC 91 and CC 93
+    uint8_t             channelReverb[16];
+    uint8_t             channelChorus[16];
     // Channel mute states
     XBOOL               channelMuted[16];
 } GM_SF2Info;
@@ -78,7 +81,7 @@ void GM_SF2_ProcessPitchBend(GM_Song* pSong, int16_t channel, int16_t bendMSB, i
 void GM_SF2_ProcessSysEx(GM_Song* pSong, const unsigned char* message, int32_t length);
 
 // FluidSynth audio rendering (called during mixer slice processing)
-void GM_SF2_RenderAudioSlice(GM_Song* pSong, int32_t* mixBuffer, int32_t frameCount);
+void GM_SF2_RenderAudioSlice(GM_Song* pSong, int32_t* mixBuffer, int32_t* reverbBuffer, int32_t* chorusBuffer, int32_t frameCount);
 
 // FluidSynth channel management (respects NeoBAE mute/solo states)
 void GM_SF2_MuteChannel(GM_Song* pSong, int16_t channel);
@@ -101,7 +104,8 @@ uint16_t GM_SF2_GetActiveVoiceCount(void);
 XBOOL GM_SF2_IsActive(void);
 
 // FluidSynth reset
-void GM_ResetSF2(void);
+BAEResult GM_ResetSF2(void);
+BAEResult GM_SoftResetSF2(void);
 
 // FluidSynth channel amplitude monitoring
 void sf2_get_channel_amplitudes(float channelAmplitudes[16][2]);
