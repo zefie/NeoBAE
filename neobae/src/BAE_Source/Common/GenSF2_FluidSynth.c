@@ -297,7 +297,7 @@ void GM_CleanupSF2(void)
 }
 
 
-BAEResult GM_ResetSF2(void) 
+OPErr GM_ResetSF2(void)
 {
     if (!g_fluidsynth_synth)
         return NOT_SETUP;
@@ -312,7 +312,7 @@ BAEResult GM_ResetSF2(void)
     return err == FLUID_OK ? NO_ERR : GENERAL_BAD;
 }
 
-BAEResult GM_SoftResetSF2(void) {
+OPErr GM_SoftResetSF2(void) {
     if (!g_fluidsynth_synth)
         return NOT_SETUP;
 
