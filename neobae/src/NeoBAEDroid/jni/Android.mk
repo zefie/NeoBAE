@@ -72,6 +72,7 @@ LOCAL_SRC_FILES	:= \
 			Common/GenPatch.c \
 			Common/GenReverb.c \
 			Common/GenReverbNew.c \
+			Common/GenReverbNeo.c \
 			Common/GenSample.c \
 			Common/GenSeq.c \
 			Common/GenSeqTools.c \

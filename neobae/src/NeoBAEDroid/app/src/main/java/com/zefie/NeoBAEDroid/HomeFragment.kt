@@ -5503,7 +5503,8 @@ fun SettingsScreenContent(
     val reverbOptions = listOf(
         "None", "Igor's Closet", "Igor's Garage", "Igor's Acoustic Lab",
         "Igor's Cavern", "Igor's Dungeon", "Small Reflections",
-        "Early Reflections", "Basement", "Banquet Hall", "Catacombs"
+        "Early Reflections", "Basement", "Banquet Hall", "Catacombs",
+        "Neo Room", "Neo Hall", "Neo Tap Delay"
     )
     
     val curveOptions = listOf("Beatnik Default", "Peaky S Curve", "WebTV Curve", "2x Exponential", "2x Linear")
