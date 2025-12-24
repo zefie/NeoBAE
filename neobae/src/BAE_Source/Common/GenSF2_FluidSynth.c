@@ -1961,8 +1961,8 @@ static void PV_SF2_ConvertFloatToInt32(float* input, int32_t* output, int32_t* r
     {
         // Average by active channel weight, then normalize by 128 (>> 7)
         // Apply 0.5x factor to reduce intensity for SF2's richer sound
-        reverbScale = (weightedReverb / totalWeight) / 128.0f * 0.15f;
-        chorusScale = (weightedChorus / totalWeight) / 128.0f * 0.15f;
+        reverbScale = (weightedReverb / totalWeight) / 128.0f * 1.0f;
+        chorusScale = (weightedChorus / totalWeight) / 128.0f * 1.0f;
     }
 
     if (g_fluidsynth_mono_mode)

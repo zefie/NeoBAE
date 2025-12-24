@@ -494,10 +494,13 @@ extern "C"
         REVERB_TYPE_8,        // Early reflections (variable verb)
         REVERB_TYPE_9,        // Basement (variable verb)
         REVERB_TYPE_10,       // Banquet hall (variable verb)
-        REVERB_TYPE_11        // Catacombs (variable verb)
+        REVERB_TYPE_11,       // Catacombs (variable verb)
+        REVERB_TYPE_12,       // MT-32 Room (Neo reverb)
+        REVERB_TYPE_13,       // MT-32 Hall (Neo reverb)
+        REVERB_TYPE_14        // MT-32 Tap Delay (Neo reverb)
     };
     typedef char ReverbMode;
-#define MAX_REVERB_TYPES 12
+#define MAX_REVERB_TYPES 15
 
     typedef void (*GM_ReverbProc)(ReverbMode which);
 

@@ -2060,8 +2060,28 @@ static void PV_ServeThisInstrument(GM_Voice *pVoice)
 #ifdef BAE_COMPLETE
 static void PV_ClearReverbBuffer()
 {
+#if REVERB_USED != REVERB_DISABLED
+    // songBufferReverb is a per-slice send buffer. It MUST be cleared, otherwise
+    // old content keeps re-feeding the reverb every slice and notes "stack" forever.
+    // Historically only the variable reverb path cleared it; Neo reverb modes also
+    // consume songBufferReverb even though they're configured as "fixed".
+    XBOOL shouldClear = FALSE;
+
 #if REVERB_USED == VARIABLE_REVERB
     if (GM_IsReverbFixed() == FALSE)
+    {
+        shouldClear = TRUE;
+    }
+#endif
+
+#if USE_NEO_EFFECTS == TRUE
+    if (MusicGlobals->reverbUnitType >= REVERB_TYPE_12)
+    {
+        shouldClear = TRUE;
+    }
+#endif
+
+    if (shouldClear)
     {
         register INT32 *destL = &MusicGlobals->songBufferReverb[0];
         register LOOPCOUNT count, four_loop = MusicGlobals->Four_Loop;

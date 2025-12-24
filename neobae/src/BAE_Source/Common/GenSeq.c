@@ -2409,7 +2409,6 @@ void PV_ProcessController(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTrack,
             //}
         }    
 #endif
-        BAE_PRINTF("Controller %d on Channel %d to %d\n", controler, MIDIChannel, value);
         switch (controler)
         {
             
@@ -2428,7 +2427,6 @@ void PV_ProcessController(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTrack,
                 pSong->channelLSB[MIDIChannel] = (SBYTE)value;
             }
 #endif          
-            BAE_PRINTF("Bank LSB Change on Channel %d to %d\n", MIDIChannel, value);
             break;
         case B_BANK_MSB: // bank select MSB.
             pSong->channelRawBank[MIDIChannel] = (SBYTE)value;
@@ -2442,7 +2440,6 @@ void PV_ProcessController(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTrack,
 #if USE_SF2_SUPPORT == TRUE
             }
 #endif
-            BAE_PRINTF("Bank MSB Change on Channel %d (raw: %d) to %d\n", MIDIChannel, pSong->channelRawBank[MIDIChannel], value);
             pSong->channelBank[MIDIChannel] = (SBYTE)value;
             break;
 

@@ -872,6 +872,16 @@ XDWORD GetSamplingRate();
 XDWORD GetSR_44100Ratio();
 XDWORD Get44100_SRRatio();
 
+#if USE_NEO_EFFECTS == TRUE
+// Neo reverb (MT-32 style)
+XBOOL       InitNeoReverb(void);
+void        ShutdownNeoReverb(void);
+XBOOL       CheckNeoReverbType(void);
+void        RunNeoReverb(INT32 *sourceP, INT32 *destP, int numFrames);
+void        SetNeoReverbMix(int wetLevel);
+void        SetNeoReverbTime(int reverbTime);
+#endif
+
 /******************************* new chorus stuff *****************************/
 #define kChorusBufferFrameSize      4410L
 

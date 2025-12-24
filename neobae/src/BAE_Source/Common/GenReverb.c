@@ -109,6 +109,7 @@
 #include "GenSnd.h"
 #include "GenPriv.h"
 #include <stdint.h>
+#include "X_Assert.h"
 
 #if REVERB_USED != REVERB_DISABLED
 
@@ -725,6 +726,14 @@ static void PV_RunStereoNewReverb(ReverbMode which)
 #endif
 
 
+#if USE_NEO_EFFECTS == TRUE
+static void PV_RunStereoNeoReverb(ReverbMode which)
+{
+    CheckNeoReverbType();
+    RunNeoReverb(MusicGlobals->songBufferReverb, MusicGlobals->songBufferDry, MusicGlobals->One_Loop);
+}
+#endif
+
 
 // This table must not be in ROM, because the function pointers are set at runtime.
 // This table matches the ReverbMode index but the first two ReverbMode's
@@ -836,7 +845,11 @@ static GM_ReverbConfigure verbTypes[MAX_REVERB_TYPES] =
             ((kCombBufferFrameSize*kNumberOfCombFilters + kEarlyReflectionBufferFrameSize) * sizeof(INT32)),
         NULL,
         PV_RunStereoNewReverb
+#if USE_NEO_EFFECTS == TRUE        
+    },
+#else
     }
+#endif
 #else
 // else we match them to our exisiting verbs
     {   // Igor's Closet
@@ -871,6 +884,32 @@ static GM_ReverbConfigure verbTypes[MAX_REVERB_TYPES] =
         PV_RunMonoFixedReverb,
         PV_RunStereoFixedReverb
     },
+#endif
+#if USE_NEO_EFFECTS == TRUE
+    {   // MT-32 Room (Neo reverb)
+        REVERB_TYPE_12,
+        0,                              // No threshold - always enabled when selected
+        TRUE,                           // fixed (uses separate buffer system)
+        0,                              // Uses own buffer allocation
+        NULL,
+        PV_RunStereoNeoReverb
+    },
+    {   // MT-32 Hall (Neo reverb)
+        REVERB_TYPE_13,
+        0,                              // No threshold - always enabled when selected
+        TRUE,                           // fixed (uses separate buffer system)
+        0,                              // Uses own buffer allocation
+        NULL,
+        PV_RunStereoNeoReverb
+    },
+    {   // MT-32 Tap Delay (Neo reverb)
+        REVERB_TYPE_14,
+        0,                              // No threshold - always enabled when selected
+        TRUE,                           // fixed (uses separate buffer system)
+        0,                              // Uses own buffer allocation
+        NULL,
+        PV_RunStereoNeoReverb
+    }
 #endif
 };
 
@@ -935,6 +974,8 @@ void GM_ProcessReverb(void)
     {
         pVerbProc = NULL;
         type = MusicGlobals->reverbUnitType;
+        
+        
         switch (type)
         {
             default:
@@ -952,6 +993,9 @@ void GM_ProcessReverb(void)
             case REVERB_TYPE_9:         // Basement (variable verb)
             case REVERB_TYPE_10:        // Banquet hall (variable verb)
             case REVERB_TYPE_11:        // Catacombs (variable verb)
+            case REVERB_TYPE_12:        // MT-32 Room (Neo reverb)
+            case REVERB_TYPE_13:        // MT-32 Hall (Neo reverb)
+            case REVERB_TYPE_14:        // MT-32 Tap Delay (Neo reverb)
                 break;
         }
         if (type != REVERB_TYPE_1)
@@ -997,7 +1041,10 @@ void GM_SetupReverb(void)
 #if USE_NEW_EFFECTS == TRUE
             if (InitNewReverb())
             {
-                InitChorus();       
+                InitChorus();
+#if USE_NEO_EFFECTS == TRUE
+                InitNeoReverb();
+#endif       
             }
 #endif
         }
@@ -1013,6 +1060,9 @@ void GM_CleanupReverb(void)
 #if USE_NEW_EFFECTS
         ShutdownNewReverb();
         ShutdownChorus();
+#if USE_NEO_EFFECTS == TRUE
+        ShutdownNeoReverb();
+#endif
 
         // these effects will be fully integrated later...
         //ShutdownDelay();
@@ -1065,6 +1115,7 @@ void GM_SetReverbType(ReverbMode reverbMode)
     {
         if (MusicGlobals->reverbBuffer)
         {
+            BAE_PRINTF("Reverb Type: %d\n", reverbMode);
             switch (reverbMode)
             {
                 case REVERB_NO_CHANGE:  // no change
@@ -1088,6 +1139,15 @@ void GM_SetReverbType(ReverbMode reverbMode)
 #endif
                     changed = TRUE;
                     break;
+#if USE_NEO_EFFECTS == TRUE
+                case REVERB_TYPE_12:
+                case REVERB_TYPE_13:
+                case REVERB_TYPE_14:
+                    MusicGlobals->reverbUnitType = reverbMode;
+                    CheckNeoReverbType();
+                    changed = TRUE;
+                    break;
+#endif
             }
         }
 

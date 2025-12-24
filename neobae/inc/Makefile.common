@@ -226,6 +226,7 @@ SRC		+=	src/BAE_Source/Common/DriverTools.c \
 			src/BAE_Source/Common/GenPatch.c \
 			src/BAE_Source/Common/GenReverb.c \
 			src/BAE_Source/Common/GenReverbNew.c \
+			src/BAE_Source/Common/GenReverbNeo.c \
 			src/BAE_Source/Common/GenRMI.c \
 			src/BAE_Source/Common/GenSample.c \
 			src/BAE_Source/Common/GenSeq.c \
