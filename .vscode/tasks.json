@@ -6,7 +6,7 @@
       "type": "shell",
       "command": "make",
       "options": {
-        "cwd": "${workspaceFolder}/minibae"
+        "cwd": "${workspaceFolder}/neobae"
       },
       "args": ["-f", "Makefile.gui-mingw", "clean"],
       "problemMatcher": []
@@ -14,9 +14,9 @@
     {
         "label": "Run GUI",
         "type": "shell",
-        "command": "${workspaceFolder}/minibae/bin/zefidi.exe",
+        "command": "${workspaceFolder}/neobae/bin/zefidi.exe",
         "options": {
-            "cwd": "${workspaceFolder}/minibae/bin"
+            "cwd": "${workspaceFolder}/neobae/bin"
         },
         "dependsOn": ["Build GUI"]
     },
@@ -25,7 +25,7 @@
       "type": "shell",
       "command": "make",
       "options": {
-        "cwd": "${workspaceFolder}/minibae"
+        "cwd": "${workspaceFolder}/neobae"
       },
       "args": ["-f", "Makefile.gui-mingw", "-j20"],
       "group": {
@@ -40,7 +40,7 @@
       "type": "shell",
       "command": "make",
       "options": {
-        "cwd": "${workspaceFolder}/minibae"
+        "cwd": "${workspaceFolder}/neobae"
       },
       "args": ["-f", "Makefile.gui-mingw", "DEBUG=1", "-j20"],
       "group": {
@@ -55,7 +55,7 @@
       "type": "shell",
       "command": "make",
       "options": {
-        "cwd": "${workspaceFolder}/minibae"
+        "cwd": "${workspaceFolder}/neobae"
       },
       "args": ["-f", "Makefile.gui-mingw", "DEBUG=1", "LDEBUG=1","-j20"],
       "group": {

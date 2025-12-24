@@ -5,9 +5,9 @@
         "name": "Build & Debug GUI",
         "type": "cppdbg",
         "request": "launch",
-        "program": "${workspaceFolder}/minibae/bin/zefidi.exe",
+        "program": "${workspaceFolder}/neobae/bin/zefidi.exe",
         "args": [],
-        "cwd": "${workspaceFolder}/minibae/bin",
+        "cwd": "${workspaceFolder}/neobae/bin",
         "MIMode": "gdb",
         "miDebuggerPath": "/mnt/d/w64devkit/bin/gdb.exe",
         "setupCommands": [
