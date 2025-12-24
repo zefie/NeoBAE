@@ -1341,7 +1341,7 @@ bool bae_play(bool *playing)
                 {
                     BAE_PRINTF("BAESong_Start ok for '%s'\n", g_bae.loaded_path);
                 }
-
+                
                 // Verify resume position if applicable
                 if (startPosUs)
                 {
@@ -1363,16 +1363,6 @@ bool bae_play(bool *playing)
             }
 
             bae_set_reverb(g_bae.current_reverb_type);
-
-            // Give mixer a few idle cycles to prime buffers (helps avoid initial stall)
-            if (g_bae.mixer)
-            {
-                for (int i = 0; i < 3; i++)
-                {
-                    BAEMixer_Idle(g_bae.mixer);
-                    BAEMixer_ServiceStreams(g_bae.mixer);
-                }
-            }
 
             *playing = true;
             // Clear preservation now that we've successfully (re)started

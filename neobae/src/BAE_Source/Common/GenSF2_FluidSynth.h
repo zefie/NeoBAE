@@ -104,8 +104,9 @@ uint16_t GM_SF2_GetActiveVoiceCount(void);
 XBOOL GM_SF2_IsActive(void);
 
 // FluidSynth reset
-OPErr GM_ResetSF2(void);
-OPErr GM_SoftResetSF2(void);
+void GM_ResetSF2(void);
+void GM_SoftResetSF2(void);
+void GM_SF2_CheckAndDisableSF2ForRMFEmbedded(GM_Song* pSong);
 
 // FluidSynth channel amplitude monitoring
 void sf2_get_channel_amplitudes(float channelAmplitudes[16][2]);

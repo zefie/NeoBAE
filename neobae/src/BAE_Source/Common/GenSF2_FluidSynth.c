@@ -297,24 +297,157 @@ void GM_CleanupSF2(void)
 }
 
 
-OPErr GM_ResetSF2(void)
+// Check if all loaded instruments in a song are RMF-embedded (not from SF2)
+// If so, disable SF2 mode for this song to avoid double-playback
+static XBOOL PV_SF2_AllInstrumentsAreRMFEmbedded(GM_Song* pSong)
 {
-    if (!g_fluidsynth_synth)
-        return NOT_SETUP;
-
-    int err = 0;
-    // Kill all notes currently playing
-    GM_SF2_KillAllNotes();
-    // Reset all channels and voices
-    err = fluid_synth_system_reset(g_fluidsynth_synth);
-    // Pick valid defaults again after reset
-    PV_SF2_SetValidDefaultProgramsForAllChannels();
-    return err == FLUID_OK ? NO_ERR : GENERAL_BAD;
+    if (!pSong || !(pSong->songFlags & SONG_FLAG_IS_RMF))
+        return FALSE;
+    
+    // Get count of RMF instruments from index 0
+    uint32_t rmfInstCount = pSong->RMFInstrumentIDs[0];
+    if (rmfInstCount == 0)
+        return FALSE; // No RMF instruments, can't be all-embedded
+    
+    // Count how many instruments are actually loaded in the song
+    int loadedCount = 0;
+    for (int i = 0; i < (MAX_INSTRUMENTS * MAX_BANKS); i++)
+    {
+        if (pSong->instrumentData[i] != NULL)
+        {
+            loadedCount++;
+        }
+    }
+    
+    if (loadedCount == 0)
+        return FALSE; // No instruments loaded yet
+    
+    // Check if all loaded instruments match RMF embedded IDs
+    int matchedCount = 0;
+    for (int i = 0; i < (MAX_INSTRUMENTS * MAX_BANKS); i++)
+    {
+        if (pSong->instrumentData[i] != NULL)
+        {
+            // Check if this instrument ID exists in the RMF embedded list
+            XBOOL found = FALSE;
+            for (uint32_t j = 1; j <= rmfInstCount; j++)
+            {
+                if (pSong->RMFInstrumentIDs[j] == (uint32_t)i)
+                {
+                    found = TRUE;
+                    break;
+                }
+            }
+            if (found)
+                matchedCount++;
+        }
+    }
+    
+    // Check if all loaded wavetable instruments are RMF-embedded
+    XBOOL allLoadedEmbedded = (matchedCount == loadedCount && loadedCount > 0);
+    
+    if (!allLoadedEmbedded)
+        return FALSE;
+    
+    // Check if there are any USED instruments that aren't loaded (would need SF2)
+    // Strategy: Check all channels that have been programmed
+    BAE_PRINTF("[SF2] Checking programmed channels for non-embedded instruments...\n");
+    for (int channel = 0; channel < MAX_CHANNELS; channel++)
+    {
+        // Skip channels that have never been programmed
+        if (pSong->firstChannelProgram[channel] == -1)
+            continue;
+        
+        int16_t program = pSong->channelProgram[channel];
+        
+        // Skip invalid program values
+        if (program < 0 || program >= (MAX_INSTRUMENTS * MAX_BANKS))
+            continue;
+        
+        // Skip bank 0 program 0 (default/fallback) only if all loaded instruments are embedded
+        // This is often a default value on channels that may not actually play notes
+        if (program == 0 && allLoadedEmbedded)
+        {
+            BAE_PRINTF("[SF2] Channel %d uses program 0 (bank 0 program 0) - skipping (default value, all loaded are embedded)\n", channel);
+            continue;
+        }
+        
+        BAE_PRINTF("[SF2] Channel %d uses program %d\n", channel, program);
+        
+        // Check if this instrument is loaded
+        if (pSong->instrumentData[program] == NULL)
+        {
+            // Not loaded - check if it's in the RMF embedded list
+            XBOOL isEmbedded = FALSE;
+            for (uint32_t j = 1; j <= rmfInstCount; j++)
+            {
+                if (pSong->RMFInstrumentIDs[j] == (uint32_t)program)
+                {
+                    isEmbedded = TRUE;
+                    break;
+                }
+            }
+            
+            // If programmed but not loaded and not embedded, SF2 must provide it
+            if (!isEmbedded)
+            {
+                BAE_PRINTF("[SF2] Channel %d program %d is not loaded and NOT RMF-embedded - SF2 needed\n", 
+                           channel, program);
+                return FALSE;
+            }
+            else
+            {
+                BAE_PRINTF("[SF2] Channel %d program %d is not loaded but IS RMF-embedded (will load on demand)\n",
+                           channel, program);
+            }
+        }
+        else
+        {
+            BAE_PRINTF("[SF2] Channel %d program %d is loaded\n", channel, program);
+        }
+    }
+    
+    if (allLoadedEmbedded)
+    {
+        BAE_PRINTF("[SF2] All %d loaded instruments are RMF-embedded (out of %u declared in RMF)\n",
+                   loadedCount, rmfInstCount);
+    }
+    
+    return allLoadedEmbedded;
 }
 
-OPErr GM_SoftResetSF2(void) {
+void GM_ResetSF2(void)
+{
     if (!g_fluidsynth_synth)
-        return NOT_SETUP;
+        return;
+
+    // Kill all notes currently playing
+    GM_SF2_KillAllNotes();
+    // Pick valid defaults again after reset
+    PV_SF2_SetValidDefaultProgramsForAllChannels();
+    return;
+}
+
+// Check if all instruments are RMF-embedded and disable SF2 mode if so
+// This prevents double-playback when RMF has all instruments embedded
+void GM_SF2_CheckAndDisableSF2ForRMFEmbedded(GM_Song* pSong)
+{
+    if (!pSong || !GM_SF2_IsActive())
+        return;
+    
+    // Check if this song has all instruments embedded in RMF
+    if (PV_SF2_AllInstrumentsAreRMFEmbedded(pSong))
+    {
+        BAE_PRINTF("[SF2] RMF has all instruments embedded - disabling SF2 mode for this song\n");
+        // Disable SF2 for this specific song
+        pSong->songFlags &= ~SONG_FLAG_USE_SF2;
+        GM_EnableSF2ForSong(pSong, FALSE);
+    }
+}
+
+void GM_SoftResetSF2(void) {
+    if (!g_fluidsynth_synth)
+        return;
 
     // Soft reset: Reset controllers without resetting programs
     // This resets pitch bend, modulation, expression, sustain, etc.
@@ -349,10 +482,17 @@ OPErr GM_SoftResetSF2(void) {
         fluid_synth_cc(g_fluidsynth_synth, ch, 100, 127); // RPN LSB
         fluid_synth_cc(g_fluidsynth_synth, ch, 101, 127); // RPN MSB
     }
-    
-    return NO_ERR;
 }
 
+// FluidSynth default controller setup
+void GM_SF2_SetDefaultControllers(int16_t channel)
+{
+    if (!g_fluidsynth_synth)
+        return;
+    
+    fluid_synth_system_reset(g_fluidsynth_synth);
+    GM_SoftResetSF2();
+}
 
 // In-memory SF2/DLS loading via FluidSynth defsfloader + custom file callbacks
 typedef struct {
@@ -1476,7 +1616,6 @@ void GM_SF2_ProcessController(GM_Song* pSong, int16_t channel, int16_t controlle
     if (pSong->AnalyzeMode != SCAN_NORMAL) {
         return;
     }
-
     // Intercept reverb (91) and chorus (93) to track levels for NeoBAE effects engine
     if (controller == 91 || controller == 93)
     {
@@ -1830,25 +1969,6 @@ XBOOL GM_SF2_CurrentFontHasAnyPreset(int *outPresetCount)
     return (count > 0) ? TRUE : FALSE;
 }
 
-// FluidSynth default controller setup
-void GM_SF2_SetDefaultControllers(int16_t channel)
-{
-    if (!g_fluidsynth_synth)
-        return;
-        
-    // Set default GM controller values with reduced volumes for better balance
-    fluid_synth_cc(g_fluidsynth_synth, channel, 7, 80);   // Volume (reduced from 100)
-    fluid_synth_cc(g_fluidsynth_synth, channel, 10, 64);  // Pan (center)
-    fluid_synth_cc(g_fluidsynth_synth, channel, 11, 100); // Expression (reduced from 127)
-    fluid_synth_cc(g_fluidsynth_synth, channel, 64, 0);   // Sustain pedal off
-    fluid_synth_cc(g_fluidsynth_synth, channel, 91, 0);   // Reverb depth
-    fluid_synth_cc(g_fluidsynth_synth, channel, 93, 0);   // Chorus depth
-
-    fluid_synth_system_reset(g_fluidsynth_synth);
-    
-    // Program selection handled globally in PV_SF2_SetValidDefaultProgramsForAllChannels()
-}
-
 void PV_SF2_SetBankPreset(GM_Song* pSong, int16_t channel, int16_t bank, int16_t preset) 
 {
     if ((!GM_IsSF2Song(pSong) && !GM_SF2_HasXmfEmbeddedBank()) || !g_fluidsynth_synth)
@@ -2151,17 +2271,9 @@ static void PV_SF2_SetValidDefaultProgramsForAllChannels(void)
     if (!g_fluidsynth_synth)
         return;
 
-    // Controller defaults first
-    for (int ch = 0; ch < BAE_MAX_MIDI_CHANNELS; ch++) {
-        fluid_synth_cc(g_fluidsynth_synth, ch, 7, 80);
-        fluid_synth_cc(g_fluidsynth_synth, ch, 10, 64);
-        fluid_synth_cc(g_fluidsynth_synth, ch, 11, 100);
-        fluid_synth_cc(g_fluidsynth_synth, ch, 64, 0);
-        fluid_synth_cc(g_fluidsynth_synth, ch, 91, 0);
-        fluid_synth_cc(g_fluidsynth_synth, ch, 93, 0);
+    for (int i = 0; i < MAX_CHANNELS; i++) {
+        GM_SF2_SetDefaultControllers(i);
     }
-
-    fluid_synth_system_reset(g_fluidsynth_synth);
 
     // If no font loaded, nothing else to do
     if (g_fluidsynth_soundfont_id < 0)

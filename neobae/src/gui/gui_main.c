@@ -2146,15 +2146,12 @@ int main(int argc, char *argv[])
                                 // Start playback
                                 duration = bae_get_len_ms();
                                 progress = 0;
-
+                                playing = false;
                                 // Robust auto-start sequence: ensure at position 0, preroll again (defensive), then start
                                 if (!g_bae.is_audio_file && g_bae.song)
-                                {
-                                    BAESong_SetMicrosecondPosition(g_bae.song, 0);
-                                    BAESong_Preroll(g_bae.song);
-                                    if (BAESong_Start(g_bae.song, 0) == BAE_NO_ERROR)
+                                {                                    
+                                    if (bae_play(&playing))
                                     {
-                                        playing = true;
                                         g_bae.is_playing = true;
                                         g_bae.song_finished = false;
                                         BAE_PRINTF("Playlist: next song started successfully\n");
@@ -2166,9 +2163,8 @@ int main(int argc, char *argv[])
                                 }
                                 else if (g_bae.is_audio_file && g_bae.sound)
                                 {
-                                    if (BAESound_Start(g_bae.sound, 0, FLOAT_TO_UNSIGNED_FIXED(g_last_applied_sound_volume), 0) == BAE_NO_ERROR)
+                                    if (bae_play(&playing))
                                     {
-                                        playing = true;
                                         g_bae.is_playing = true;
                                         g_bae.song_finished = false;
                                         BAE_PRINTF("Playlist: next audio file started successfully\n");
@@ -2213,23 +2209,10 @@ int main(int argc, char *argv[])
                 duration = bae_get_len_ms();
                 progress = 0;
 
-                // Robust auto-start sequence: ensure at position 0, preroll again (defensive), then start
-                if (!g_bae.is_audio_file && g_bae.song)
-                {
-                    BAESong_SetMicrosecondPosition(g_bae.song, 0);
-                    BAESong_Preroll(g_bae.song);
-                }
                 playing = false; // force toggle logic
                 if (!bae_play(&playing))
                 {
                     BAE_PRINTF("Autoplay after playlist double-click failed for '%s'\n", pending_file);
-                }
-                if (playing && g_bae.mixer)
-                {
-                    for (int i = 0; i < 3; i++)
-                    {
-                        BAEMixer_Idle(g_bae.mixer);
-                    }
                 }
             }
             playlist_clear_pending_load();
@@ -4040,12 +4023,6 @@ int main(int argc, char *argv[])
 #endif
                         duration = bae_get_len_ms();
                         progress = 0;
-                        // Robust auto-start sequence: ensure at position 0, preroll again (defensive), then start
-                        if (!g_bae.is_audio_file && g_bae.song)
-                        {
-                            BAESong_SetMicrosecondPosition(g_bae.song, 0);
-                            BAESong_Preroll(g_bae.song);
-                        }
                         playing = false; // force toggle logic
                         if (!bae_play(&playing))
                         {

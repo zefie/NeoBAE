@@ -600,6 +600,12 @@ OPErr GM_PrerollSong(GM_Song *pSong, GM_SongCallbackProcPtr theCallbackProc,
             // allocate song song, but don't play sequencer
             pSong->songPaused = TRUE;
             pSong->songPrerolled = TRUE;
+            
+#if USE_SF2_SUPPORT == TRUE
+            // Check if all instruments are RMF-embedded and disable SF2 if so
+            // This prevents double-playback issue on initial load
+            GM_SF2_CheckAndDisableSF2ForRMFEmbedded(pSong);
+#endif
         }
     }
     return theErr;

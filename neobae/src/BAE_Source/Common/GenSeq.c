@@ -2003,21 +2003,6 @@ static INT16 PV_DetermineInstrumentToUse(GM_Song *pSong, INT16 midiNote, INT16 M
     return thePatch;
 }
 
-#if USE_SF2_SUPPORT == TRUE
-static XBOOL GM_IsRMFChannel(GM_Song *pSong, INT16 MIDIChannel)
-{
-    if (pSong && MIDIChannel >= 0 && MIDIChannel < MAX_CHANNELS)
-    {
-        // Check if the channel is using RMF
-        if (pSong->channelType[MIDIChannel] == CHANNEL_TYPE_RMF)
-        {
-            return TRUE;
-        }
-    }
-    return FALSE;
-}
-#endif
-
 // Process note off
 static void PV_ProcessNoteOff(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTrack, INT16 note, INT16 volume)
 {
@@ -2038,7 +2023,7 @@ static void PV_ProcessNoteOff(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTr
             
 #if USE_SF2_SUPPORT == TRUE
             // If SF2 is active for this song OR channel is routed to SF2, route to SF2 instead
-            if ((GM_IsSF2Song(pSong) || pSong->channelType[MIDIChannel] == CHANNEL_TYPE_SF2) && !GM_IsRMFChannel(pSong, MIDIChannel))
+            if ((GM_IsSF2Song(pSong) || pSong->channelType[MIDIChannel] == CHANNEL_TYPE_SF2) && pSong->channelType[MIDIChannel] != CHANNEL_TYPE_RMF)
             {
                 GM_SF2_ProcessNoteOff(pSong, MIDIChannel, note, volume);
             }
@@ -2112,16 +2097,11 @@ static void PV_ProcessNoteOn(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTra
                         {
                             if (pSong->RMFInstrumentIDs[i] == thePatch || pSong->RMFInstrumentIDs[i] == progId)
                             {
-                                BAE_PRINTF("NoteOn Debug: Found Embedded RMF Instrument ID %d: %d (progId: %d, thePatch: %d)\n", i, pSong->RMFInstrumentIDs[i], progId, thePatch);
-                                // if the patch is found in the previously stored
-                                // RMF Instrument IDs, we can instantly return TRUE here
                                 foundPatch = TRUE;
                                 break;
                             }
                             for (uint32_t j = 0; j < MAX_CHANNELS; j++) {
                                 if (pSong->channelProgram[MIDIChannel] == pSong->RMFInstrumentIDs[i]) {
-                                    // The currently defined program on this channel matches an embedded RMF instrument
-                                    BAE_PRINTF("NoteOn Debug: Found Embedded RMF Instrument: %d\n", pSong->RMFInstrumentIDs[i]);
                                     foundPatch = TRUE;
                                     break;
                                 }
@@ -2135,17 +2115,19 @@ static void PV_ProcessNoteOn(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTra
                         }
 
                         if (foundPatch || bankId == 1 || bankId == 2) {
-                            BAE_PRINTF("NoteOn Debug: Found RMF Instrument ID (progId: %d, thePatch: %i)\n", progId, thePatch);
                             pSong->channelType[MIDIChannel] = CHANNEL_TYPE_RMF;
                         } else {
                             pSong->channelType[MIDIChannel] = CHANNEL_TYPE_GM;
                         }
-
-                        BAE_PRINTF("NoteOn Debug: Translated instrument %d to bank %d, program %d, note %d, channel %d, RMF Mode: %s\n", thePatch, bankId, progId, noteId, MIDIChannel, (pSong->channelType[MIDIChannel] == CHANNEL_TYPE_RMF) ? "Yes" : "No");
                     }
                     
-                    if (!GM_IsRMFChannel(pSong, MIDIChannel))
+                    if (pSong->channelType[MIDIChannel] == CHANNEL_TYPE_RMF)
                     {
+                        // RMF
+                        //volume = (INT16)((float)volume * 0.45f); // RMF seems to be louder, so turn it down a bit
+                        thePatch = PV_DetermineInstrumentToUse(pSong, note, MIDIChannel);
+                        PV_StartMIDINote(pSong, thePatch, MIDIChannel, currentTrack, note, volume);
+                    } else {
                         // Standard MIDI
                         if (GM_SF2_isDLS() && bankId == 128) {
                             bankId = 120;
@@ -2156,11 +2138,6 @@ static void PV_ProcessNoteOn(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTra
                                 PV_SF2_SetBankPreset(pSong, MIDIChannel, bankId, progId);
                             }
                         }
-                    } else {
-                        // RMF
-                        //volume = (INT16)((float)volume * 0.45f); // RMF seems to be louder, so turn it down a bit
-                        thePatch = PV_DetermineInstrumentToUse(pSong, note, MIDIChannel);
-                        PV_StartMIDINote(pSong, thePatch, MIDIChannel, currentTrack, note, volume);
                     }
                 }
                 else
