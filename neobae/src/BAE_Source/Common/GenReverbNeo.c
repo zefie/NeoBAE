@@ -85,7 +85,18 @@
 // magnitude, snap to zero so the tail actually dies out.
 // (This avoids the classic "infinite sustain / buzzing" artifact in IIR delay
 // networks implemented with truncating fixed-point math.)
+// Keep this very low to avoid audible quantization artifacts
 #define NEO_SILENCE_THRESHOLD   8
+
+// Output-side idle shutoff:
+// When the input send is silent and the computed wet output is very small
+// for a short hold period, clear filter state and delay buffers.
+// This prevents "never finishes" low-level limit-cycle noise without putting
+// a harsh gate in the feedback path.
+#define NEO_IDLE_INPUT_THRESHOLD        2
+#define NEO_IDLE_WET_THRESHOLD          4
+#define NEO_IDLE_HOLD_FRAMES_MIN        256
+#define NEO_IDLE_HOLD_FRAMES_MAX        20480
 
 // Default reverb time used when the host doesn't provide one.
 // This must be < 1.0 feedback (via SetNeoReverbTime) to avoid non-decaying tails.
@@ -150,6 +161,10 @@ typedef struct NeoReverbParams
     INT32       mCustomGain[NEO_CUSTOM_MAX_COMBS];
     int         mCustomCombCount;
     XBOOL       mCustomParamsDirty;  // Need to rebuild delays/indices
+
+    // Tail shutoff state (shared by Custom + Tap)
+    int         mIdleFrames;
+    XBOOL       mWasActive;
     
 } NeoReverbParams;
 
@@ -167,6 +182,26 @@ static INLINE INT32 PV_ScaleReverbSend(INT32 sendSample)
     // Match RunNewReverb(): convert engine mix domain to a smaller internal domain.
     // The +1 keeps headroom (mirrors the historical implementation).
     return sendSample >> (NEO_INPUTSHIFT + 1);
+}
+
+static INLINE INT32 PV_Abs32(INT32 v)
+{
+    if (v == INT32_MIN) return INT32_MAX;
+    return (v < 0) ? -v : v;
+}
+
+static INLINE int PV_ClampInt(int v, int lo, int hi)
+{
+    if (v < lo) return lo;
+    if (v > hi) return hi;
+    return v;
+}
+
+static INLINE INT32 PV_MulQ16_Round(INT32 a, INT32 b)
+{
+    int64_t p = (int64_t)a * (int64_t)b;
+    p += (p >= 0) ? (1LL << (NEO_COEFF_SHIFT - 1)) : -(1LL << (NEO_COEFF_SHIFT - 1));
+    return PV_Clamp32From64(p >> NEO_COEFF_SHIFT);
 }
 
 static INLINE INT32 PV_ZapSmall(INT32 v)
@@ -391,6 +426,8 @@ XBOOL InitNeoReverb(void)
     params->mDryGain = 52428;   // ~0.8
     
     params->mReverbMode = -1;  // Will be set by CheckNeoReverbType
+    params->mIdleFrames = 0;
+    params->mWasActive = FALSE;
     params->mIsInitialized = TRUE;
     
     return TRUE;
@@ -469,6 +506,9 @@ XBOOL CheckNeoReverbType(void)
         params->mFilterMemoryL = 0;
         params->mFilterMemoryR = 0;
 
+        params->mIdleFrames = 0;
+        params->mWasActive = FALSE;
+
         // Apply MT-32-ish defaults per mode.
         PV_ApplyNeoMt32Defaults(params);
     }
@@ -488,6 +528,8 @@ static void PV_ProcessNeoTapReverb(INT32 *sourceP, INT32 *destP, int numFrames)
     INT32 inputL, inputR, outputL, outputR;
     INT32 tapL, tapR;
     int i, frame, readPos;
+
+    const int idleHoldFrames = PV_ClampInt(params->mSampleRate / 50, NEO_IDLE_HOLD_FRAMES_MIN, NEO_IDLE_HOLD_FRAMES_MAX);
     
     for (frame = 0; frame < numFrames; frame++)
     {
@@ -520,13 +562,44 @@ static void PV_ProcessNeoTapReverb(INT32 *sourceP, INT32 *destP, int numFrames)
         params->mTapWriteIdx = (params->mTapWriteIdx + 2) & NEO_TAP_BUFFER_MASK;
         
         // Apply light filtering to taps
-        params->mFilterMemoryL = PV_Clamp32From64((int64_t)params->mFilterMemoryL + ((((int64_t)(outputL - params->mFilterMemoryL)) * (int64_t)params->mLopassK) >> NEO_COEFF_SHIFT));
-        params->mFilterMemoryR = PV_Clamp32From64((int64_t)params->mFilterMemoryR + ((((int64_t)(outputR - params->mFilterMemoryR)) * (int64_t)params->mLopassK) >> NEO_COEFF_SHIFT));
+        {
+            INT32 dL = (INT32)(outputL - params->mFilterMemoryL);
+            INT32 dR = (INT32)(outputR - params->mFilterMemoryR);
+            params->mFilterMemoryL = PV_Clamp32From64((int64_t)params->mFilterMemoryL + (int64_t)PV_MulQ16_Round(dL, params->mLopassK));
+            params->mFilterMemoryR = PV_Clamp32From64((int64_t)params->mFilterMemoryR + (int64_t)PV_MulQ16_Round(dR, params->mLopassK));
+        }
+
+        // If we're effectively silent for long enough, hard reset state/buffers.
+        // This stops low-level limit-cycle noise from keeping the VU alive.
+        {
+            INT32 wetTestL = PV_MulQ16_Round(params->mFilterMemoryL, params->mWetGain);
+            INT32 wetTestR = PV_MulQ16_Round(params->mFilterMemoryR, params->mWetGain);
+            const XBOOL isIdle = (PV_Abs32(input) < NEO_IDLE_INPUT_THRESHOLD) &&
+                                (PV_Abs32(wetTestL) < NEO_IDLE_WET_THRESHOLD) &&
+                                (PV_Abs32(wetTestR) < NEO_IDLE_WET_THRESHOLD);
+            if (isIdle)
+            {
+                params->mIdleFrames++;
+                if (params->mWasActive && params->mIdleFrames >= idleHoldFrames)
+                {
+                    XSetMemory(params->mTapBuffer, sizeof(INT32) * NEO_TAP_BUFFER_SIZE, 0);
+                    params->mTapWriteIdx = 0;
+                    params->mFilterMemoryL = 0;
+                    params->mFilterMemoryR = 0;
+                    params->mWasActive = FALSE;
+                }
+            }
+            else
+            {
+                params->mIdleFrames = 0;
+                params->mWasActive = TRUE;
+            }
+        }
         
         // Mix wet reverb signal into destination (dry) buffer
         {
-            INT32 wetL = PV_Clamp32From64(((int64_t)params->mFilterMemoryL * (int64_t)params->mWetGain) >> NEO_COEFF_SHIFT);
-            INT32 wetR = PV_Clamp32From64(((int64_t)params->mFilterMemoryR * (int64_t)params->mWetGain) >> NEO_COEFF_SHIFT);
+            INT32 wetL = PV_MulQ16_Round(params->mFilterMemoryL, params->mWetGain);
+            INT32 wetR = PV_MulQ16_Round(params->mFilterMemoryR, params->mWetGain);
             destP[frame * 2] += (XSDWORD)(((int64_t)wetL) << NEO_WETSHIFT);
             destP[frame * 2 + 1] += (XSDWORD)(((int64_t)wetR) << NEO_WETSHIFT);
         }
@@ -563,6 +636,8 @@ static void PV_ProcessNeoCustomReverb(INT32 *sourceP, INT32 *destP, int numFrame
     int64_t outputL, outputR;
     INT32 delayedL, delayedR, feedback, gain;
     int i, frame, readPos;
+
+    const int idleHoldFrames = PV_ClampInt(params->mSampleRate / 50, NEO_IDLE_HOLD_FRAMES_MIN, NEO_IDLE_HOLD_FRAMES_MAX);
     
 #if _DEBUG == TRUE
     static int debugCounter = 0;
@@ -603,10 +678,16 @@ static void PV_ProcessNeoCustomReverb(INT32 *sourceP, INT32 *destP, int numFrame
             delayedR = params->mCustomBuffer[i][(readPos + 1) & NEO_CUSTOM_BUFFER_MASK];
             
             // Compute comb filter output: input + delayed * feedback
+            // Use rounding instead of truncation to prevent error accumulation
             feedback = params->mCustomFeedback[i];
-            combOutL = PV_Clamp32From64((int64_t)inputL + (((int64_t)delayedL * (int64_t)feedback) >> NEO_COEFF_SHIFT));
-            combOutR = PV_Clamp32From64((int64_t)inputR + (((int64_t)delayedR * (int64_t)feedback) >> NEO_COEFF_SHIFT));
+            INT32 feedbackL = PV_MulQ16_Round(delayedL, feedback);
+            INT32 feedbackR = PV_MulQ16_Round(delayedR, feedback);
+            
+            combOutL = PV_Clamp32From64((int64_t)inputL + (int64_t)feedbackL);
+            combOutR = PV_Clamp32From64((int64_t)inputR + (int64_t)feedbackR);
 
+            // Only apply noise gate to output to kill tail, not to feedback path
+            // This preserves smooth low-level signals and prevents quantization artifacts
             combOutL = PV_ZapSmall(combOutL);
             combOutR = PV_ZapSmall(combOutR);
             
@@ -615,9 +696,10 @@ static void PV_ProcessNeoCustomReverb(INT32 *sourceP, INT32 *destP, int numFrame
             params->mCustomBuffer[i][(params->mCustomWriteIdx[i] + 1) & NEO_CUSTOM_BUFFER_MASK] = combOutR;
             
             // Accumulate output with per-comb gain (use delayed values for output)
+            // Also use rounding here
             gain = params->mCustomGain[i];
-            outputL += (((int64_t)delayedL * (int64_t)gain) >> NEO_COEFF_SHIFT);
-            outputR += (((int64_t)delayedR * (int64_t)gain) >> NEO_COEFF_SHIFT);
+            outputL += (int64_t)PV_MulQ16_Round(delayedL, gain);
+            outputR += (int64_t)PV_MulQ16_Round(delayedR, gain);
             
             // Advance write index
             params->mCustomWriteIdx[i] = (params->mCustomWriteIdx[i] + 2) & NEO_CUSTOM_BUFFER_MASK;
@@ -631,13 +713,49 @@ static void PV_ProcessNeoCustomReverb(INT32 *sourceP, INT32 *destP, int numFrame
         }
         
         // Apply low-pass filtering for smoothing
-        params->mFilterMemoryL = PV_Clamp32From64((int64_t)params->mFilterMemoryL + ((((int64_t)(outputL - params->mFilterMemoryL)) * (int64_t)params->mLopassK) >> NEO_COEFF_SHIFT));
-        params->mFilterMemoryR = PV_Clamp32From64((int64_t)params->mFilterMemoryR + ((((int64_t)(outputR - params->mFilterMemoryR)) * (int64_t)params->mLopassK) >> NEO_COEFF_SHIFT));
+        {
+            INT32 out32L = PV_Clamp32From64(outputL);
+            INT32 out32R = PV_Clamp32From64(outputR);
+            INT32 dL = (INT32)(out32L - params->mFilterMemoryL);
+            INT32 dR = (INT32)(out32R - params->mFilterMemoryR);
+            params->mFilterMemoryL = PV_Clamp32From64((int64_t)params->mFilterMemoryL + (int64_t)PV_MulQ16_Round(dL, params->mLopassK));
+            params->mFilterMemoryR = PV_Clamp32From64((int64_t)params->mFilterMemoryR + (int64_t)PV_MulQ16_Round(dR, params->mLopassK));
+        }
+
+        // Output-side idle shutoff: once wet is very small for long enough (and no input),
+        // clear filter state and delay lines to fully stop the tail.
+        {
+            INT32 wetTestL = PV_MulQ16_Round(params->mFilterMemoryL, params->mWetGain);
+            INT32 wetTestR = PV_MulQ16_Round(params->mFilterMemoryR, params->mWetGain);
+            const XBOOL isIdle = (PV_Abs32(input) < NEO_IDLE_INPUT_THRESHOLD) &&
+                                (PV_Abs32(wetTestL) < NEO_IDLE_WET_THRESHOLD) &&
+                                (PV_Abs32(wetTestR) < NEO_IDLE_WET_THRESHOLD);
+            if (isIdle)
+            {
+                params->mIdleFrames++;
+                if (params->mWasActive && params->mIdleFrames >= idleHoldFrames)
+                {
+                    for (i = 0; i < params->mCustomCombCount; i++)
+                    {
+                        XSetMemory(params->mCustomBuffer[i], sizeof(INT32) * NEO_CUSTOM_BUFFER_SIZE, 0);
+                        params->mCustomWriteIdx[i] = 0;
+                    }
+                    params->mFilterMemoryL = 0;
+                    params->mFilterMemoryR = 0;
+                    params->mWasActive = FALSE;
+                }
+            }
+            else
+            {
+                params->mIdleFrames = 0;
+                params->mWasActive = TRUE;
+            }
+        }
         
         // Mix wet reverb signal into destination (dry) buffer
         {
-            INT32 wetL = PV_Clamp32From64(((int64_t)params->mFilterMemoryL * (int64_t)params->mWetGain) >> NEO_COEFF_SHIFT);
-            INT32 wetR = PV_Clamp32From64(((int64_t)params->mFilterMemoryR * (int64_t)params->mWetGain) >> NEO_COEFF_SHIFT);
+            INT32 wetL = PV_MulQ16_Round(params->mFilterMemoryL, params->mWetGain);
+            INT32 wetR = PV_MulQ16_Round(params->mFilterMemoryR, params->mWetGain);
             destP[frame * 2] += (XSDWORD)(((int64_t)wetL) << NEO_WETSHIFT);
             destP[frame * 2 + 1] += (XSDWORD)(((int64_t)wetR) << NEO_WETSHIFT);
         }
