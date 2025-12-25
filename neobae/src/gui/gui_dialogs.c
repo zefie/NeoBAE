@@ -435,6 +435,7 @@ char *save_playlist_dialog(void)
     return ret;
 #endif
 }
+#endif // SUPPORT_PLAYLIST
 
 char *open_neoreverb_dialog(void)
 {
@@ -588,6 +589,7 @@ char *save_neoreverb_dialog(const char *default_name)
 #endif
 }
 
+#if SUPPORT_PLAYLIST == TRUE
 char *open_folder_dialog(void)
 {
 #ifdef _WIN32
