@@ -495,13 +495,16 @@ extern "C"
         REVERB_TYPE_9,        // Basement (variable verb)
         REVERB_TYPE_10,       // Banquet hall (variable verb)
         REVERB_TYPE_11,       // Catacombs (variable verb)
-        REVERB_TYPE_12,       // MT-32 Room (Neo reverb)
-        REVERB_TYPE_13,       // MT-32 Hall (Neo reverb)
-        REVERB_TYPE_14,       // MT-32 Tap Delay (Neo reverb)
-        REVERB_TYPE_15        // Neo Custom
+        REVERB_TYPE_12,       // Neo Room (Neo reverb)
+        REVERB_TYPE_13,       // Neo Hall (Neo reverb)
+        REVERB_TYPE_14,       // Neo Cavern (Neo reverb)
+        REVERB_TYPE_15,       // Neo Dungeon (Neo reverb)
+        REVERB_TYPE_16,       // Neo Reserved (Neo reverb)
+        REVERB_TYPE_17,       // Neo Tap Delay (Neo reverb)
+        REVERB_TYPE_18        // Neo Custom
     };
     typedef char ReverbMode;
-#define MAX_REVERB_TYPES 16
+#define MAX_REVERB_TYPES 19
 
     typedef void (*GM_ReverbProc)(ReverbMode which);
 

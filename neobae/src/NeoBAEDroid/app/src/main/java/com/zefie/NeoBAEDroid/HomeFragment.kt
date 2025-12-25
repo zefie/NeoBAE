@@ -880,7 +880,7 @@ class HomeFragment : Fragment() {
                             if (Mixer.getMixer() != null) {
                                 Mixer.setDefaultReverb(value)
 
-                                if (value == 15) {
+                                if (value == 18) {
                                     val active = getActiveCustomReverbPresetName(requireContext())
                                     if (!active.isNullOrEmpty()) {
                                         loadCustomReverbPreset(requireContext(), active)?.let { preset ->
@@ -1630,7 +1630,7 @@ class HomeFragment : Fragment() {
                 val velocityCurvePref = prefs.getInt("velocity_curve", 1)
                 Mixer.setDefaultReverb(reverbType)
 
-                if (reverbType == 15) {
+                if (reverbType == 18) {
                     val active = getActiveCustomReverbPresetName(requireContext())
                     if (!active.isNullOrEmpty()) {
                         loadCustomReverbPreset(requireContext(), active)?.let { preset ->
@@ -5547,7 +5547,7 @@ fun SettingsScreenContent(
         "None", "Igor's Closet", "Igor's Garage", "Igor's Acoustic Lab",
         "Igor's Cavern", "Igor's Dungeon", "Small Reflections",
         "Early Reflections", "Basement", "Banquet Hall", "Catacombs",
-        "Neo Room", "Neo Hall", "Neo Tap Delay"
+        "Neo Room", "Neo Hall", "Neo Cavern", "Neo Dungeon", "Neo Reserved", "Neo Tap Delay"
     )
 
     var presetNames by remember { mutableStateOf(loadCustomReverbPresetNames(context)) }
@@ -5568,7 +5568,7 @@ fun SettingsScreenContent(
                 presetNames = loadCustomReverbPresetNames(context)
                 activePresetName = preset.name
                 setActiveCustomReverbPresetName(context, preset.name)
-                onReverbChange(15)
+                onReverbChange(18)
                 applyCustomReverbPresetToEngine(context, preset)
                 onCustomReverbSync()
                 Toast.makeText(context, "Imported preset: ${preset.name}", Toast.LENGTH_SHORT).show()
@@ -5603,7 +5603,7 @@ fun SettingsScreenContent(
     val reverbOptions = remember(presetNames) { builtInReverbOptions + listOf("Custom") + presetNames }
 
     val selectedReverbLabel = when {
-        reverbType == 15 -> {
+        reverbType == 18 -> {
             val ap = activePresetName
             if (ap != null && presetNames.contains(ap)) ap else "Custom"
         }
@@ -5614,7 +5614,7 @@ fun SettingsScreenContent(
         val preset = loadCustomReverbPreset(context, name) ?: return
         setActiveCustomReverbPresetName(context, name)
         activePresetName = name
-        onReverbChange(15)
+        onReverbChange(18)
         applyCustomReverbPresetToEngine(context, preset)
         onCustomReverbSync()
     }
@@ -5814,7 +5814,7 @@ fun SettingsScreenContent(
                                     }
                                     index == customEntryIndex -> {
                                         clearActivePreset()
-                                        onReverbChange(15)
+                                        onReverbChange(18)
                                         applyDefaultCustomReverbToEngine(context)
                                         onCustomReverbSync()
                                     }
@@ -5833,7 +5833,7 @@ fun SettingsScreenContent(
                     }
                 }
 
-                if (reverbType == 15) {
+                if (reverbType == 18) {
                     Spacer(modifier = Modifier.height(8.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                         OutlinedButton(onClick = onOpenCustomReverb, modifier = Modifier.weight(1f)) {
@@ -6289,7 +6289,7 @@ fun SettingsScreenContent(
                                         }
                                         index == customEntryIndex -> {
                                             clearActivePreset()
-                                            onReverbChange(15)
+                                            onReverbChange(18)
                                             applyDefaultCustomReverbToEngine(context)
                                             onCustomReverbSync()
                                         }
@@ -6308,7 +6308,7 @@ fun SettingsScreenContent(
                         }
                     }
 
-                    if (reverbType == 15) {
+                    if (reverbType == 18) {
                         Spacer(modifier = Modifier.height(8.dp))
                         Column(modifier = Modifier.fillMaxWidth()) {
                             // Keep the small action buttons in one row for portrait.
@@ -6750,7 +6750,7 @@ fun SettingsScreenContent(
                         saveCustomReverbPreset(context, preset)
                         presetNames = loadCustomReverbPresetNames(context)
                         activePresetName = name
-                        onReverbChange(15)
+                        onReverbChange(18)
                         onCustomReverbSync()
                     }
                     showSavePresetDialog = false
@@ -6774,7 +6774,7 @@ fun SettingsScreenContent(
                         deleteCustomReverbPreset(context, name)
                         presetNames = loadCustomReverbPresetNames(context)
                         clearActivePreset()
-                        onReverbChange(15)
+                        onReverbChange(18)
                         onCustomReverbSync()
                     }
                     showDeletePresetDialog = false

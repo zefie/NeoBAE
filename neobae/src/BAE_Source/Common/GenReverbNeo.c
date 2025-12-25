@@ -99,8 +99,6 @@
 // a wider image, but consumes mono input.
 
 // Buffer sizes for MT-32 style delays (must be power of 2)
-#define NEO_ROOM_BUFFER_SIZE    8192
-#define NEO_HALL_BUFFER_SIZE    16384
 // Tap delay needs to hold up to ~400ms @ 44.1kHz in *stereo-interleaved* samples:
 // 400ms is 17640 frames => 35280 interleaved samples, so 32768 would wrap.
 #define NEO_TAP_BUFFER_SIZE     65536
@@ -109,22 +107,8 @@
 // At 48kHz, 500ms is 24000 frames -> 48000 interleaved samples, so use 65536.
 #define NEO_CUSTOM_BUFFER_SIZE  65536
 
-#define NEO_ROOM_BUFFER_MASK    (NEO_ROOM_BUFFER_SIZE - 1)
-#define NEO_HALL_BUFFER_MASK    (NEO_HALL_BUFFER_SIZE - 1)
 #define NEO_TAP_BUFFER_MASK     (NEO_TAP_BUFFER_SIZE - 1)
 #define NEO_CUSTOM_BUFFER_MASK  (NEO_CUSTOM_BUFFER_SIZE - 1)
-
-// MT-32 Room mode: 3 parallel comb filters
-// Delays scaled for ~30-60ms at 44.1kHz
-#define NEO_ROOM_COMB_COUNT     3
-static const int32_t neo_room_delays[] = {1543, 1879, 2311};
-static const INT32 neo_room_feedback = (XFIXED_1 * 0.75); // ~0.75
-
-// MT-32 Hall mode: 4 parallel comb filters with longer delays
-// Delays scaled for ~50-100ms at 44.1kHz
-#define NEO_HALL_COMB_COUNT     4
-static const int32_t neo_hall_delays[] = {2309, 2879, 3467, 4099};
-static const INT32 neo_hall_feedback = (XFIXED_1 * 0.75); // ~0.75
 
 // MT-32 Tap Delay mode: Multiple discrete echoes
 // Delays for rhythmic echoes at ~100ms, 200ms, 300ms, 400ms at 44.1kHz
@@ -141,20 +125,6 @@ typedef struct NeoReverbParams
     XBOOL       mIsInitialized;
     Rate        mSampleRate;
     XSDWORD     mReverbMode;  // Which MT-32 mode (Room/Hall/Tap)
-    
-    // Room mode buffers
-    INT32       *mRoomBuffer[NEO_ROOM_COMB_COUNT];
-    int         mRoomWriteIdx[NEO_ROOM_COMB_COUNT];
-    int         mRoomReadIdx[NEO_ROOM_COMB_COUNT];
-    int         mRoomDelayFrames[NEO_ROOM_COMB_COUNT];
-    INT32       mRoomFeedback[NEO_ROOM_COMB_COUNT];
-    
-    // Hall mode buffers
-    INT32       *mHallBuffer[NEO_HALL_COMB_COUNT];
-    int         mHallWriteIdx[NEO_HALL_COMB_COUNT];
-    int         mHallReadIdx[NEO_HALL_COMB_COUNT];
-    int         mHallDelayFrames[NEO_HALL_COMB_COUNT];
-    INT32       mHallFeedback[NEO_HALL_COMB_COUNT];
     
     // Tap delay buffer
     INT32       *mTapBuffer;
@@ -225,18 +195,6 @@ static void PV_UpdateNeoDelayTables(NeoReverbParams *params)
     if (!params || params->mSampleRate <= 0)
         return;
 
-    for (i = 0; i < NEO_ROOM_COMB_COUNT; i++)
-    {
-        int64_t scaled = ((int64_t)neo_room_delays[i] * (int64_t)params->mSampleRate + (refRate / 2)) / refRate;
-        params->mRoomDelayFrames[i] = PV_ClampDelayFramesForBuffer((int)scaled, NEO_ROOM_BUFFER_SIZE);
-    }
-
-    for (i = 0; i < NEO_HALL_COMB_COUNT; i++)
-    {
-        int64_t scaled = ((int64_t)neo_hall_delays[i] * (int64_t)params->mSampleRate + (refRate / 2)) / refRate;
-        params->mHallDelayFrames[i] = PV_ClampDelayFramesForBuffer((int)scaled, NEO_HALL_BUFFER_SIZE);
-    }
-
     for (i = 0; i < NEO_TAP_COUNT; i++)
     {
         int64_t scaled = ((int64_t)neo_tap_delays[i] * (int64_t)params->mSampleRate + (refRate / 2)) / refRate;
@@ -253,29 +211,106 @@ static void PV_ApplyNeoMt32Defaults(NeoReverbParams *params)
 
     switch (params->mReverbMode)
     {
-        case REVERB_TYPE_12: // Room
-            params->mLopassK = 9830; // ~0.15
+        case REVERB_TYPE_12: // Room - Use Custom reverb preset
+            SetNeoCustomReverbCombCount(3);
+            // Short delays for room: ~35ms, 43ms, 52ms
+            SetNeoCustomReverbCombDelay(0, 35);
+            SetNeoCustomReverbCombDelay(1, 43);
+            SetNeoCustomReverbCombDelay(2, 52);
+            // Moderate feedback for all combs
+            SetNeoCustomReverbCombFeedback(0, 70);
+            SetNeoCustomReverbCombFeedback(1, 70);
+            SetNeoCustomReverbCombFeedback(2, 70);
+            // Equal gain for all combs
+            SetNeoCustomReverbCombGain(0, 127);
+            SetNeoCustomReverbCombGain(1, 127);
+            SetNeoCustomReverbCombGain(2, 127);
+            SetNeoCustomReverbLowpass(50);
             SetNeoReverbMix(96);
-            SetNeoReverbTime(70);
             break;
-        case REVERB_TYPE_13: // Hall
-            params->mLopassK = 6553; // ~0.10
+        case REVERB_TYPE_13: // Hall - Use Custom reverb preset
+            SetNeoCustomReverbCombCount(4);
+            // Longer delays for hall: ~52ms, 65ms, 79ms, 93ms
+            SetNeoCustomReverbCombDelay(0, 52);
+            SetNeoCustomReverbCombDelay(1, 65);
+            SetNeoCustomReverbCombDelay(2, 79);
+            SetNeoCustomReverbCombDelay(3, 93);
+            // Longer feedback for hall
+            SetNeoCustomReverbCombFeedback(0, 85);
+            SetNeoCustomReverbCombFeedback(1, 85);
+            SetNeoCustomReverbCombFeedback(2, 85);
+            SetNeoCustomReverbCombFeedback(3, 85);
+            // Equal gain for all combs
+            SetNeoCustomReverbCombGain(0, 127);
+            SetNeoCustomReverbCombGain(1, 127);
+            SetNeoCustomReverbCombGain(2, 127);
+            SetNeoCustomReverbCombGain(3, 127);
+            SetNeoCustomReverbLowpass(40);
             SetNeoReverbMix(88);
-            SetNeoReverbTime(100);
             break;
-        case REVERB_TYPE_14: // Tap delay
+        case REVERB_TYPE_14: // Cavern - Use Custom reverb preset
+            SetNeoCustomReverbCombCount(4);
+            SetNeoCustomReverbCombDelay(0, 75);
+            SetNeoCustomReverbCombDelay(1, 125);
+            SetNeoCustomReverbCombDelay(2, 175);
+            SetNeoCustomReverbCombDelay(3, 200);
+            SetNeoCustomReverbCombFeedback(0, 107);
+            SetNeoCustomReverbCombFeedback(1, 107);
+            SetNeoCustomReverbCombFeedback(2, 107);
+            SetNeoCustomReverbCombFeedback(3, 107);
+            SetNeoCustomReverbCombGain(0, 127);
+            SetNeoCustomReverbCombGain(1, 127);
+            SetNeoCustomReverbCombGain(2, 127);
+            SetNeoCustomReverbCombGain(3, 127);
+            SetNeoCustomReverbLowpass(64);
+            SetNeoReverbMix(110);
+            break;
+        case REVERB_TYPE_15: // Dungeon - Use Custom reverb preset
+            SetNeoCustomReverbCombCount(4);
+            SetNeoCustomReverbCombDelay(0, 175);
+            SetNeoCustomReverbCombDelay(1, 250);
+            SetNeoCustomReverbCombDelay(2, 325);
+            SetNeoCustomReverbCombDelay(3, 450);
+            SetNeoCustomReverbCombFeedback(0, 107);
+            SetNeoCustomReverbCombFeedback(1, 107);
+            SetNeoCustomReverbCombFeedback(2, 107);
+            SetNeoCustomReverbCombFeedback(3, 107);
+            SetNeoCustomReverbCombGain(0, 127);
+            SetNeoCustomReverbCombGain(1, 127);
+            SetNeoCustomReverbCombGain(2, 127);
+            SetNeoCustomReverbCombGain(3, 127);
+            SetNeoCustomReverbLowpass(64);
+            SetNeoReverbMix(110);
+            break;
+        case REVERB_TYPE_16: // Reserved
+            SetNeoCustomReverbCombCount(4);
+            SetNeoCustomReverbCombDelay(0, 22);
+            SetNeoCustomReverbCombDelay(1, 29);
+            SetNeoCustomReverbCombDelay(2, 36);
+            SetNeoCustomReverbCombDelay(3, 43);
+            SetNeoCustomReverbCombFeedback(0, 112);
+            SetNeoCustomReverbCombFeedback(1, 112);
+            SetNeoCustomReverbCombFeedback(2, 112);
+            SetNeoCustomReverbCombFeedback(3, 112);
+            SetNeoCustomReverbCombGain(0, 127);
+            SetNeoCustomReverbCombGain(1, 127);
+            SetNeoCustomReverbCombGain(2, 127);
+            SetNeoCustomReverbCombGain(3, 127);
+            SetNeoCustomReverbLowpass(64);
+            SetNeoReverbMix(110);
+            break;
+        case REVERB_TYPE_17: // Tap delay
             params->mLopassK = 13107; // ~0.20
             SetNeoReverbMix(104);
             // Tap mode doesn't use feedback; leave time as-is.
             break;
         default:
-            if (params->mReverbMode >= REVERB_TYPE_15)
+            if (params->mReverbMode >= REVERB_TYPE_18)
             {
                 // Custom mode: user controls all parameters via API
                 // Apply reasonable defaults that user can override
-                params->mLopassK = 9830; // ~0.15
+                SetNeoCustomReverbLowpass(50);
                 SetNeoReverbMix(110);  // More aggressive wet mix
-                SetNeoReverbTime(90);  // Longer decay
             }
             break;
     }
@@ -302,34 +337,6 @@ XBOOL InitNeoReverb(void)
     NeoReverbParams* params = GetNeoReverbParams();
     
     params->mIsInitialized = FALSE;
-    
-    // Allocate room mode buffers
-    for (i = 0; i < NEO_ROOM_COMB_COUNT; i++)
-    {
-        params->mRoomBuffer[i] = (INT32*)XNewPtr(sizeof(INT32) * NEO_ROOM_BUFFER_SIZE);
-        if (params->mRoomBuffer[i] == NULL)
-        {
-            ShutdownNeoReverb();
-            return FALSE;
-        }
-        XSetMemory(params->mRoomBuffer[i], sizeof(INT32) * NEO_ROOM_BUFFER_SIZE, 0);
-        params->mRoomWriteIdx[i] = 0;
-        params->mRoomFeedback[i] = neo_room_feedback;
-    }
-    
-    // Allocate hall mode buffers
-    for (i = 0; i < NEO_HALL_COMB_COUNT; i++)
-    {
-        params->mHallBuffer[i] = (INT32*)XNewPtr(sizeof(INT32) * NEO_HALL_BUFFER_SIZE);
-        if (params->mHallBuffer[i] == NULL)
-        {
-            ShutdownNeoReverb();
-            return FALSE;
-        }
-        XSetMemory(params->mHallBuffer[i], sizeof(INT32) * NEO_HALL_BUFFER_SIZE, 0);
-        params->mHallWriteIdx[i] = 0;
-        params->mHallFeedback[i] = neo_hall_feedback;
-    }
     
     // Allocate tap delay buffer
     params->mTapBuffer = (INT32*)XNewPtr(sizeof(INT32) * NEO_TAP_BUFFER_SIZE);
@@ -364,16 +371,6 @@ XBOOL InitNeoReverb(void)
     // Multiply delays by 2 for stereo interleaving (L,R,L,R...)
     params->mSampleRate = MusicGlobals->outputRate;
     PV_UpdateNeoDelayTables(params);
-    for (i = 0; i < NEO_ROOM_COMB_COUNT; i++)
-    {
-        params->mRoomReadIdx[i] = (NEO_ROOM_BUFFER_SIZE - (params->mRoomDelayFrames[i] * 2)) & NEO_ROOM_BUFFER_MASK;
-    }
-
-    for (i = 0; i < NEO_HALL_COMB_COUNT; i++)
-    {
-        params->mHallReadIdx[i] = (NEO_HALL_BUFFER_SIZE - (params->mHallDelayFrames[i] * 2)) & NEO_HALL_BUFFER_MASK;
-    }
-
     for (i = 0; i < NEO_TAP_COUNT; i++)
     {
         params->mTapReadIdx[i] = (NEO_TAP_BUFFER_SIZE - (params->mTapDelayFrames[i] * 2)) & NEO_TAP_BUFFER_MASK;
@@ -395,11 +392,6 @@ XBOOL InitNeoReverb(void)
     
     params->mReverbMode = -1;  // Will be set by CheckNeoReverbType
     params->mIsInitialized = TRUE;
-
-    // Ensure we never run with unity feedback by default.
-    // Without an explicit host-controlled time, unity feedback causes
-    // non-decaying / "stacking" reverb tails.
-    SetNeoReverbTime(NEO_DEFAULT_REVERB_TIME);
     
     return TRUE;
 }
@@ -415,26 +407,6 @@ void ShutdownNeoReverb(void)
     NeoReverbParams* params = GetNeoReverbParams();
     
     params->mIsInitialized = FALSE;
-    
-    // Deallocate room buffers
-    for (i = 0; i < NEO_ROOM_COMB_COUNT; i++)
-    {
-        if (params->mRoomBuffer[i])
-        {
-            XDisposePtr(params->mRoomBuffer[i]);
-            params->mRoomBuffer[i] = NULL;
-        }
-    }
-    
-    // Deallocate hall buffers
-    for (i = 0; i < NEO_HALL_COMB_COUNT; i++)
-    {
-        if (params->mHallBuffer[i])
-        {
-            XDisposePtr(params->mHallBuffer[i]);
-            params->mHallBuffer[i] = NULL;
-        }
-    }
     
     // Deallocate tap buffer
     if (params->mTapBuffer)
@@ -481,20 +453,6 @@ XBOOL CheckNeoReverbType(void)
         }
         
         // Clear all buffers when changing modes
-        for (i = 0; i < NEO_ROOM_COMB_COUNT; i++)
-        {
-            if (params->mRoomBuffer[i])
-                XSetMemory(params->mRoomBuffer[i], sizeof(INT32) * NEO_ROOM_BUFFER_SIZE, 0);
-            params->mRoomWriteIdx[i] = 0;
-        }
-        
-        for (i = 0; i < NEO_HALL_COMB_COUNT; i++)
-        {
-            if (params->mHallBuffer[i])
-                XSetMemory(params->mHallBuffer[i], sizeof(INT32) * NEO_HALL_BUFFER_SIZE, 0);
-            params->mHallWriteIdx[i] = 0;
-        }
-        
         if (params->mTapBuffer)
             XSetMemory(params->mTapBuffer, sizeof(INT32) * NEO_TAP_BUFFER_SIZE, 0);
         params->mTapWriteIdx = 0;
@@ -516,169 +474,6 @@ XBOOL CheckNeoReverbType(void)
     }
     
     return changed;
-}
-
-//++------------------------------------------------------------------------------
-//  PV_ProcessNeoRoomReverb()
-//
-//  MT-32 Room mode: Short early reflections with moderate decay
-//  Uses parallel comb filters mixed together
-//++------------------------------------------------------------------------------
-static void PV_ProcessNeoRoomReverb(INT32 *sourceP, INT32 *destP, int numFrames)
-{
-    NeoReverbParams* params = GetNeoReverbParams();
-    INT32 inputL, inputR, combOutL, combOutR;
-    int64_t outputL, outputR;
-    INT32 delayedL, delayedR, feedback;
-    int i, frame, readPos;
-    
-    for (frame = 0; frame < numFrames; frame++)
-    {
-        // Get mono input from reverb send buffer and feed both channels
-        // (internal buffers are stereo-interleaved for width).
-        INT32 input = PV_ScaleReverbSend(sourceP[frame]);
-        inputL = input;
-        inputR = input;
-        
-        outputL = 0;
-        outputR = 0;
-        
-        // Process parallel comb filters
-        for (i = 0; i < NEO_ROOM_COMB_COUNT; i++)
-        {
-            // Calculate read position: delay samples back from write position
-            readPos = (params->mRoomWriteIdx[i] - (params->mRoomDelayFrames[i] * 2)) & NEO_ROOM_BUFFER_MASK;
-            
-            // Read delayed samples
-            delayedL = params->mRoomBuffer[i][readPos];
-            delayedR = params->mRoomBuffer[i][(readPos + 1) & NEO_ROOM_BUFFER_MASK];
-            
-            // Compute comb filter output: input + delayed * feedback
-            feedback = params->mRoomFeedback[i];
-            combOutL = PV_Clamp32From64((int64_t)inputL + (((int64_t)delayedL * (int64_t)feedback) >> NEO_COEFF_SHIFT));
-            combOutR = PV_Clamp32From64((int64_t)inputR + (((int64_t)delayedR * (int64_t)feedback) >> NEO_COEFF_SHIFT));
-
-            combOutL = PV_ZapSmall(combOutL);
-            combOutR = PV_ZapSmall(combOutR);
-            
-            // Write to current position
-            params->mRoomBuffer[i][params->mRoomWriteIdx[i]] = combOutL;
-            params->mRoomBuffer[i][(params->mRoomWriteIdx[i] + 1) & NEO_ROOM_BUFFER_MASK] = combOutR;
-            
-            // Accumulate output (use delayed values for output)
-            outputL += (int64_t)delayedL;
-            outputR += (int64_t)delayedR;
-            
-            // Advance write index
-            params->mRoomWriteIdx[i] = (params->mRoomWriteIdx[i] + 2) & NEO_ROOM_BUFFER_MASK;
-        }
-        
-        // The classic MT-32-ish comb network is fairly loud; averaging by the
-        // comb count makes it too quiet compared to the Tap preset.
-        // Use a lighter attenuation for better audibility.
-        outputL >>= 1;
-        outputR >>= 1;
-
-        {
-            INT32 outL32 = PV_ZapSmall(PV_Clamp32From64(outputL));
-            INT32 outR32 = PV_ZapSmall(PV_Clamp32From64(outputR));
-
-            // Apply low-pass filter for smoothing
-            params->mFilterMemoryL = PV_Clamp32From64((int64_t)params->mFilterMemoryL + ((((int64_t)(outL32 - params->mFilterMemoryL)) * (int64_t)params->mLopassK) >> NEO_COEFF_SHIFT));
-            params->mFilterMemoryR = PV_Clamp32From64((int64_t)params->mFilterMemoryR + ((((int64_t)(outR32 - params->mFilterMemoryR)) * (int64_t)params->mLopassK) >> NEO_COEFF_SHIFT));
-        }
-
-        params->mFilterMemoryL = PV_ZapSmall(params->mFilterMemoryL);
-        params->mFilterMemoryR = PV_ZapSmall(params->mFilterMemoryR);
-        
-        // Mix wet reverb signal into destination (dry) buffer
-        {
-            INT32 wetL = PV_Clamp32From64(((int64_t)params->mFilterMemoryL * (int64_t)params->mWetGain) >> NEO_COEFF_SHIFT);
-            INT32 wetR = PV_Clamp32From64(((int64_t)params->mFilterMemoryR * (int64_t)params->mWetGain) >> NEO_COEFF_SHIFT);
-            destP[frame * 2] += (XSDWORD)(((int64_t)wetL) << NEO_WETSHIFT);
-            destP[frame * 2 + 1] += (XSDWORD)(((int64_t)wetR) << NEO_WETSHIFT);
-        }
-    }
-}
-
-//++------------------------------------------------------------------------------
-//  PV_ProcessNeoHallReverb()
-//
-//  MT-32 Hall mode: Longer reverb with smoother decay
-//  Uses more parallel comb filters with longer delays
-//++------------------------------------------------------------------------------
-static void PV_ProcessNeoHallReverb(INT32 *sourceP, INT32 *destP, int numFrames)
-{
-    NeoReverbParams* params = GetNeoReverbParams();
-    INT32 inputL, inputR, combOutL, combOutR;
-    int64_t outputL, outputR;
-    INT32 delayedL, delayedR, feedback;
-    int i, frame, readPos;
-    
-    for (frame = 0; frame < numFrames; frame++)
-    {
-        // Get mono input from reverb send buffer
-        INT32 input = PV_ScaleReverbSend(sourceP[frame]);
-        inputL = input;
-        inputR = input;
-        
-        outputL = 0;
-        outputR = 0;
-        
-        // Process parallel comb filters
-        for (i = 0; i < NEO_HALL_COMB_COUNT; i++)
-        {
-            // Calculate read position: delay samples back from write position
-            readPos = (params->mHallWriteIdx[i] - (params->mHallDelayFrames[i] * 2)) & NEO_HALL_BUFFER_MASK;
-            
-            // Read delayed samples
-            delayedL = params->mHallBuffer[i][readPos];
-            delayedR = params->mHallBuffer[i][(readPos + 1) & NEO_HALL_BUFFER_MASK];
-            
-            // Compute comb filter output: input + delayed * feedback
-            feedback = params->mHallFeedback[i];
-            combOutL = PV_Clamp32From64((int64_t)inputL + (((int64_t)delayedL * (int64_t)feedback) >> NEO_COEFF_SHIFT));
-            combOutR = PV_Clamp32From64((int64_t)inputR + (((int64_t)delayedR * (int64_t)feedback) >> NEO_COEFF_SHIFT));
-
-            combOutL = PV_ZapSmall(combOutL);
-            combOutR = PV_ZapSmall(combOutR);
-            
-            // Write to current position
-            params->mHallBuffer[i][params->mHallWriteIdx[i]] = combOutL;
-            params->mHallBuffer[i][(params->mHallWriteIdx[i] + 1) & NEO_HALL_BUFFER_MASK] = combOutR;
-            
-            // Accumulate output (use delayed values for output)
-            outputL += (int64_t)delayedL;
-            outputR += (int64_t)delayedR;
-            
-            // Advance write index
-            params->mHallWriteIdx[i] = (params->mHallWriteIdx[i] + 2) & NEO_HALL_BUFFER_MASK;
-        }
-        
-        // Same rationale as Room: avoid heavy averaging (Hall uses 4 combs).
-        outputL >>= 1;
-        outputR >>= 1;
-
-        {
-            INT32 outL32 = PV_ZapSmall(PV_Clamp32From64(outputL));
-            INT32 outR32 = PV_ZapSmall(PV_Clamp32From64(outputR));
-
-            // Apply low-pass filter for smoothing
-            params->mFilterMemoryL = PV_Clamp32From64((int64_t)params->mFilterMemoryL + ((((int64_t)(outL32 - params->mFilterMemoryL)) * (int64_t)params->mLopassK) >> NEO_COEFF_SHIFT));
-            params->mFilterMemoryR = PV_Clamp32From64((int64_t)params->mFilterMemoryR + ((((int64_t)(outR32 - params->mFilterMemoryR)) * (int64_t)params->mLopassK) >> NEO_COEFF_SHIFT));
-        }
-
-        params->mFilterMemoryL = PV_ZapSmall(params->mFilterMemoryL);
-        params->mFilterMemoryR = PV_ZapSmall(params->mFilterMemoryR);
-        
-        // Mix wet reverb signal into destination (dry) buffer
-        {
-            INT32 wetL = PV_Clamp32From64(((int64_t)params->mFilterMemoryL * (int64_t)params->mWetGain) >> NEO_COEFF_SHIFT);
-            INT32 wetR = PV_Clamp32From64(((int64_t)params->mFilterMemoryR * (int64_t)params->mWetGain) >> NEO_COEFF_SHIFT);
-            destP[frame * 2] += (XSDWORD)(((int64_t)wetL) << NEO_WETSHIFT);
-            destP[frame * 2 + 1] += (XSDWORD)(((int64_t)wetR) << NEO_WETSHIFT);
-        }
-    }
 }
 
 //++------------------------------------------------------------------------------
@@ -870,20 +665,20 @@ void RunNeoReverb(INT32 *sourceP, INT32 *destP, int numFrames)
     // Dispatch to appropriate reverb mode
     switch (params->mReverbMode)
     {
-        case REVERB_TYPE_12:  // MT-32 Room
-            PV_ProcessNeoRoomReverb(sourceP, destP, numFrames);
+        case REVERB_TYPE_12:  // Neo Room (uses Custom preset)
+        case REVERB_TYPE_13:  // Neo Hall (uses Custom preset)
+        case REVERB_TYPE_14:  // Neo Cavern (uses Custom preset)
+        case REVERB_TYPE_15:  // Neo Dungeon (uses Custom preset)
+        case REVERB_TYPE_16:  // Neo Reserved (uses Custom preset)
+            PV_ProcessNeoCustomReverb(sourceP, destP, numFrames);
             break;
             
-        case REVERB_TYPE_13:  // MT-32 Hall
-            PV_ProcessNeoHallReverb(sourceP, destP, numFrames);
-            break;
-            
-        case REVERB_TYPE_14:  // MT-32 Tap Delay
+        case REVERB_TYPE_17:  // Neo Tap Delay
             PV_ProcessNeoTapReverb(sourceP, destP, numFrames);
             break;
             
         default:
-            if (params->mReverbMode >= REVERB_TYPE_15)
+            if (params->mReverbMode >= REVERB_TYPE_18)
             {
                 // Treat unknown custom modes as Custom reverb
                 PV_ProcessNeoCustomReverb(sourceP, destP, numFrames);
@@ -909,41 +704,6 @@ void SetNeoReverbMix(int wetLevel)
     // Convert MIDI level (0-127) to fixed-point gain
     params->mWetGain = (wetLevel * NEO_COEFF_MULTIPLY) / 127;
     params->mDryGain = ((127 - (wetLevel / 2)) * NEO_COEFF_MULTIPLY) / 127;  // Reduce dry less aggressively
-}
-
-//++------------------------------------------------------------------------------
-//  SetNeoReverbTime()
-//
-//  Set the reverb decay time
-//  reverbTime: 0-127 (MIDI style)
-//++------------------------------------------------------------------------------
-void SetNeoReverbTime(int reverbTime)
-{
-    NeoReverbParams* params = GetNeoReverbParams();
-    int i;
-    
-    if (reverbTime < 0) reverbTime = 0;
-    if (reverbTime > 127) reverbTime = 127;
-    
-    // Adjust feedback coefficients based on reverb time.
-    // Use separate caps for Room and Hall so Hall can't drift too close to 1.0.
-    {
-        const INT32 roomSpan = (NEO_ROOM_FEEDBACK_MAX_Q16 - NEO_FEEDBACK_MIN_Q16);
-        const INT32 hallSpan = (NEO_HALL_FEEDBACK_MAX_Q16 - NEO_FEEDBACK_MIN_Q16);
-
-        INT32 roomFeedback = NEO_FEEDBACK_MIN_Q16 + (INT32)(((int64_t)reverbTime * roomSpan) / 127);
-        INT32 hallFeedback = NEO_FEEDBACK_MIN_Q16 + (INT32)(((int64_t)reverbTime * hallSpan) / 127);
-
-        for (i = 0; i < NEO_ROOM_COMB_COUNT; i++)
-        {
-            params->mRoomFeedback[i] = roomFeedback;
-        }
-
-        for (i = 0; i < NEO_HALL_COMB_COUNT; i++)
-        {
-            params->mHallFeedback[i] = hallFeedback;
-        }
-    }
 }
 
 //++------------------------------------------------------------------------------

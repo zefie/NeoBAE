@@ -2999,7 +2999,7 @@ int main(int argc, char *argv[])
         // Show "Customize", "+" and "-" buttons when Custom reverb or user preset is selected (below the dropdown)
 #if USE_NEO_EFFECTS
         int base_count = 15; // Default reverb types including "Custom"
-        g_custom_reverb_button_visible = (reverbType >= BAE_REVERB_TYPE_15);
+        g_custom_reverb_button_visible = (reverbType >= BAE_REVERB_TYPE_18);
         if (g_custom_reverb_button_visible && reverb_enabled)
         {
             // When the dropdown list is open, don't allow clicks on the buttons underneath it.
@@ -3077,8 +3077,8 @@ int main(int argc, char *argv[])
             Rect deleteBtn = {saveBtn.x + saveBtn.w + spacing, btnY, 20, 20};
             bool overDelete = custom_controls_enabled && point_in(ui_mx, ui_my, deleteBtn);
             // Only allow delete when a saved custom preset (after "Custom") is selected.
-            // "Custom" itself is BAE_REVERB_TYPE_15.
-            bool can_delete_preset = (reverbType > BAE_REVERB_TYPE_15);
+            // "Custom" itself is BAE_REVERB_TYPE_18.
+            bool can_delete_preset = (reverbType > BAE_REVERB_TYPE_18);
             SDL_Color delete_bg = (overDelete && can_delete_preset) ? g_button_hover : g_button_base;
             if (!custom_controls_enabled || !can_delete_preset)
             {
@@ -6286,7 +6286,7 @@ int main(int argc, char *argv[])
                 }
 
                 // Reset to "Custom" default
-                reverbType = BAE_REVERB_TYPE_15;
+                reverbType = BAE_REVERB_TYPE_18;
                 bae_set_reverb(reverbType);
                 if (g_current_bank_path[0] != '\0')
                 {

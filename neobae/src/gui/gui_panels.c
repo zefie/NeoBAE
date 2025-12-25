@@ -118,7 +118,7 @@ void ui_draw_tooltip(SDL_Renderer *R, Rect tipRect, const char *text, bool cente
 
 // Reverb names shared across the UI. Centralize to avoid duplicates.
 #if USE_NEO_EFFECTS
-static const char *kReverbNames[] = {"None", "Igor's Closet", "Igor's Garage", "Igor's Acoustic Lab", "Igor's Cavern", "Igor's Dungeon", "Small Reflections", "Early Reflections", "Basement", "Banquet Hall", "Catacombs", "Neo Room", "Neo Hall", "Neo Tap Delay", "Custom"};
+static const char *kReverbNames[] = {"None", "Igor's Closet", "Igor's Garage", "Igor's Acoustic Lab", "Igor's Cavern", "Igor's Dungeon", "Small Reflections", "Early Reflections", "Basement", "Banquet Hall", "Catacombs", "Neo Room", "Neo Hall", "Neo Cavern", "Neo Dungeon", "Neo Reserved", "Neo Tap Delay", "Custom"};
 #else
 static const char *kReverbNames[] = {"None", "Igor's Closet", "Igor's Garage", "Igor's Acoustic Lab", "Igor's Cavern", "Igor's Dungeon", "Small Reflections", "Early Reflections", "Basement", "Banquet Hall", "Catacombs"};
 #endif

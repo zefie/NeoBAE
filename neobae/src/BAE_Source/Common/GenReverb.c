@@ -917,6 +917,30 @@ static GM_ReverbConfigure verbTypes[MAX_REVERB_TYPES] =
         0,                              // Uses own buffer allocation
         NULL,
         PV_RunStereoNeoReverb
+    },
+    {   // MT-32 Tap Delay (Neo reverb)
+        REVERB_TYPE_16,
+        0,                              // No threshold - always enabled when selected
+        TRUE,                           // fixed (uses separate buffer system)
+        0,                              // Uses own buffer allocation
+        NULL,
+        PV_RunStereoNeoReverb
+    },
+    {   // MT-32 Tap Delay (Neo reverb)
+        REVERB_TYPE_17,
+        0,                              // No threshold - always enabled when selected
+        TRUE,                           // fixed (uses separate buffer system)
+        0,                              // Uses own buffer allocation
+        NULL,
+        PV_RunStereoNeoReverb
+    },
+    {   // MT-32 Tap Delay (Neo reverb)
+        REVERB_TYPE_18,
+        0,                              // No threshold - always enabled when selected
+        TRUE,                           // fixed (uses separate buffer system)
+        0,                              // Uses own buffer allocation
+        NULL,
+        PV_RunStereoNeoReverb
     }   
 #endif
 };
@@ -989,7 +1013,7 @@ void GM_ProcessReverb(void)
             default:
                 if (type >= MAX_REVERB_TYPES)
                 {                    
-                    type = REVERB_TYPE_15;  // out of range, map to neo reverb custom types
+                    type = REVERB_TYPE_18;  // out of range, map to neo reverb custom types
                 } else {
                     type = REVERB_TYPE_1;   // none;
                 }
@@ -1006,10 +1030,13 @@ void GM_ProcessReverb(void)
             case REVERB_TYPE_9:         // Basement (variable verb)
             case REVERB_TYPE_10:        // Banquet hall (variable verb)
             case REVERB_TYPE_11:        // Catacombs (variable verb)
-            case REVERB_TYPE_12:        // MT-32 Room (Neo reverb)
-            case REVERB_TYPE_13:        // MT-32 Hall (Neo reverb)
-            case REVERB_TYPE_14:        // MT-32 Tap Delay (Neo reverb)
-            case REVERB_TYPE_15:        // Custom (Neo reverb)
+            case REVERB_TYPE_12:        // Neo Room (Neo reverb)
+            case REVERB_TYPE_13:        // Neo Hall (Neo reverb)                        
+            case REVERB_TYPE_14:        // Neo Cavern (Neo reverb)
+            case REVERB_TYPE_15:        // Neo Dungeon (Neo reverb)
+            case REVERB_TYPE_16:        // Neo Reserved (Neo reverb)
+            case REVERB_TYPE_17:        // Neo Tap Delay (Neo reverb)
+            case REVERB_TYPE_18:        // Custom (Neo reverb)
                 break;
         }
         if (type != REVERB_TYPE_1)
@@ -1134,8 +1161,8 @@ void GM_SetReverbType(ReverbMode reverbMode)
             {
                 case REVERB_NO_CHANGE:  // no change
                 default:
-                    if (reverbMode >= REVERB_TYPE_15) {
-                        reverbMode = REVERB_TYPE_15;
+                    if (reverbMode >= REVERB_TYPE_18) {
+                        reverbMode = REVERB_TYPE_18;
                         MusicGlobals->reverbUnitType = reverbMode;
                         CheckNeoReverbType();
                         changed = TRUE;
@@ -1163,6 +1190,9 @@ void GM_SetReverbType(ReverbMode reverbMode)
                 case REVERB_TYPE_12:
                 case REVERB_TYPE_13:
                 case REVERB_TYPE_14:
+                case REVERB_TYPE_15:
+                case REVERB_TYPE_16:
+                case REVERB_TYPE_17:                
                     MusicGlobals->reverbUnitType = reverbMode;
                     CheckNeoReverbType();
                     changed = TRUE;
