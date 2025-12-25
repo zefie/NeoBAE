@@ -7495,8 +7495,10 @@ BAEResult BAESong_LoadRmfFromMemory(BAESong song, void const *pRMFData, uint32_t
             if (fileRef)
             {
                 {
+#if _DEBUG
                     int32_t songCount = XCountFileResourcesOfType(fileRef, ID_SONG);
                     BAE_PRINTF("[RMF] RMF contains %ld SONG resource(s); requested songIndex=%d\n", (long)songCount, (int)songIndex);
+#endif
                 }
                 pXSong = (SongResource *)XGetIndexedFileResource(fileRef, ID_SONG, &theID, songIndex, NULL, &size);
                 if (pXSong)
@@ -7719,8 +7721,10 @@ BAEResult BAESong_LoadRmfFromFile(BAESong song, BAEPathName filePath, int16_t so
             if (pXSong)
             {
                 {
+#if _DEBUG
                     int32_t songCount = XCountFileResourcesOfType(fileRef, ID_SONG);
                     BAE_PRINTF("[RMF] RMF contains %ld SONG resource(s); requested songIndex=%d\n", (long)songCount, (int)songIndex);
+#endif
                 }
                 if (song->pSong)
                 {
