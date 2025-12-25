@@ -1494,10 +1494,6 @@ void GM_SF2_ProcessProgramChange(GM_Song* pSong, int16_t channel, int32_t progra
 
     }
 
-    if (g_fluidsynth_soundfont_is_dls && midiBank == 128) {
-        midiBank = 120;  // Route to bank 120 for DLS percussion
-    }
-
     BAE_PRINTF("final intepretation: midiBank: %i, midiProgram: %i, channel: %i\n", midiBank, midiProgram, channel);
 
     // mobileBAE MIDI quirk: bank 121 program 124:125 are used for motor vibration.
@@ -1589,14 +1585,18 @@ void GM_SF2_ProcessProgramChange(GM_Song* pSong, int16_t channel, int32_t progra
     // (Avoid incorrectly falling back to melodic bank 0 on the percussion channel.)
     if (channel == BAE_PERCUSSION_CHANNEL)
     {
-        const int drumBank = g_fluidsynth_soundfont_is_dls ? 120 : 128;
+        int drumBank = 128;
         if (!PV_SF2_PresetExists(drumBank, 0))
         {
-            BAE_PRINTF("[FluidProgChange] No drum kit preset %d:0 found; unsetting program on percussion channel %d\n", drumBank, channel);
-            fluid_synth_all_sounds_off(g_fluidsynth_synth, channel);
-            fluid_synth_all_notes_off(g_fluidsynth_synth, channel);
-            fluid_synth_unset_program(g_fluidsynth_synth, channel);
-            return;
+            // try DLS percussion bank
+            drumBank = 120;
+            if (!PV_SF2_PresetExists(drumBank, 0)) {        
+                BAE_PRINTF("[FluidProgChange] No drum kit preset 128:0 or 120:0 found; unsetting program on percussion channel %d\n", channel);
+                fluid_synth_all_sounds_off(g_fluidsynth_synth, channel);
+                fluid_synth_all_notes_off(g_fluidsynth_synth, channel);
+                fluid_synth_unset_program(g_fluidsynth_synth, channel);
+                return;
+            }
         }
     }
 
