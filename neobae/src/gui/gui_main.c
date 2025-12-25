@@ -1317,7 +1317,9 @@ int main(int argc, char *argv[])
                         int sdelta = (wy > 0) ? 1 : -1;
 
                         // First handle dropdowns (existing behavior)
-                        if (point_in(mx, my, ddRect))
+                        // Disable reverb dropdown when playing audio files
+                        bool reverb_enabled_wheel = !(g_bae.is_audio_file && g_bae.sound);
+                        if (point_in(mx, my, ddRect) && reverb_enabled_wheel)
                         {
                             int nt = reverbType + delta;
                             if (nt < 1)
@@ -1372,9 +1374,9 @@ int main(int argc, char *argv[])
                             // Slider handling: respect the same modal/enable rules used elsewhere
                             bool playback_controls_enabled_local =
 #ifdef SUPPORT_MIDI_HW
-                                !g_midi_input_enabled;
+                                !g_midi_input_enabled && !(g_bae.is_audio_file && g_bae.sound);
 #else
-                                true;
+                                !(g_bae.is_audio_file && g_bae.sound);
 #endif
                             // While the reverb dropdown is expanded, disable transpose/tempo interactions.
                             bool pitch_tempo_enabled_local = playback_controls_enabled_local && !g_reverbDropdownOpen;

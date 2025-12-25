@@ -237,10 +237,8 @@ static void PV_UpdateNeoDelayTables(NeoReverbParams *params)
     }
 }
 
-static void PV_ApplyNeoMt32Defaults(NeoReverbParams *params)
+static void PV_ApplyNeoReverbDefaults(NeoReverbParams *params)
 {
-    // Keep this conservative: MT-32 reverb is audible but not a huge wash.
-    // Values are MIDI-ish (0..127) for the public setters.
     if (!params)
         return;
 
@@ -510,7 +508,7 @@ XBOOL CheckNeoReverbType(void)
         params->mWasActive = FALSE;
 
         // Apply MT-32-ish defaults per mode.
-        PV_ApplyNeoMt32Defaults(params);
+        PV_ApplyNeoReverbDefaults(params);
     }
     
     return changed;
