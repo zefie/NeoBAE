@@ -18,6 +18,7 @@ private const val KEY_CURRENT_LOWPASS = "custom_reverb_lowpass"
 
 // Match the engine/desktop limit (GenPriv.h: MAX_NEO_COMBS)
 private const val MAX_COMBS = 4
+private const val MAX_DELAY_MS = 500
 
 // Defaults that match the engine's initialization (GenReverbNeo.c) reasonably closely.
 // (The engine stores custom delays internally as frames; these are approximate ms defaults.)
@@ -100,7 +101,7 @@ private fun getMaxPresetIndex(p: SharedPreferences): Int {
 fun snapshotCustomReverbFromEngine(ctx: Context, name: String): CustomReverbPreset {
     val p = prefs(ctx)
     val combCount = Mixer.getNeoCustomReverbCombCount().coerceIn(1, MAX_COMBS)
-    val delays = IntArray(MAX_COMBS) { i -> Mixer.getNeoCustomReverbCombDelay(i).coerceIn(1, 300) }
+    val delays = IntArray(MAX_COMBS) { i -> Mixer.getNeoCustomReverbCombDelay(i).coerceIn(1, MAX_DELAY_MS) }
     val feedback = IntArray(MAX_COMBS) { i -> Mixer.getNeoCustomReverbCombFeedback(i).coerceIn(0, 127) }
     val gain = IntArray(MAX_COMBS) { i -> Mixer.getNeoCustomReverbCombGain(i).coerceIn(0, 127) }
     val lowpass = p.getInt(KEY_CURRENT_LOWPASS, DEFAULT_LOWPASS).coerceIn(0, 127)
@@ -114,7 +115,7 @@ fun loadCustomReverbPreset(ctx: Context, name: String): CustomReverbPreset? {
     val presetName = p.getString("custom_reverb_${idx}_name", null)?.trim() ?: return null
     val combCount = p.getInt("custom_reverb_${idx}_comb_count", DEFAULT_COMB_COUNT).coerceIn(1, MAX_COMBS)
 
-    val delays = IntArray(MAX_COMBS) { i -> p.getInt("custom_reverb_${idx}_delay_${i}", DEFAULT_DELAYS_MS[i]).coerceIn(1, 300) }
+    val delays = IntArray(MAX_COMBS) { i -> p.getInt("custom_reverb_${idx}_delay_${i}", DEFAULT_DELAYS_MS[i]).coerceIn(1, MAX_DELAY_MS) }
     val feedback = IntArray(MAX_COMBS) { i -> p.getInt("custom_reverb_${idx}_feedback_${i}", DEFAULT_FEEDBACK).coerceIn(0, 127) }
     val gain = IntArray(MAX_COMBS) { i -> p.getInt("custom_reverb_${idx}_gain_${i}", DEFAULT_GAIN).coerceIn(0, 127) }
     val lowpass = p.getInt("custom_reverb_${idx}_lowpass", DEFAULT_LOWPASS).coerceIn(0, 127)
@@ -200,7 +201,7 @@ fun CustomReverbScreenContent(
 
     fun reloadFromEngine() {
         combCount = Mixer.getNeoCustomReverbCombCount().coerceIn(1, MAX_COMBS)
-        delays = IntArray(MAX_COMBS) { i -> Mixer.getNeoCustomReverbCombDelay(i).coerceIn(1, 300) }
+        delays = IntArray(MAX_COMBS) { i -> Mixer.getNeoCustomReverbCombDelay(i).coerceIn(1, MAX_DELAY_MS) }
         feedback = IntArray(MAX_COMBS) { i -> Mixer.getNeoCustomReverbCombFeedback(i).coerceIn(0, 127) }
         gain = IntArray(MAX_COMBS) { i -> Mixer.getNeoCustomReverbCombGain(i).coerceIn(0, 127) }
         lowpass = prefs(ctx).getInt(KEY_CURRENT_LOWPASS, DEFAULT_LOWPASS).coerceIn(0, 127)
@@ -246,7 +247,7 @@ fun CustomReverbScreenContent(
                     Slider(
                         value = delays[i].toFloat(),
                         onValueChange = { v ->
-                            val newVal = v.toInt().coerceIn(1, 300)
+                            val newVal = v.toInt().coerceIn(1, MAX_DELAY_MS)
                             if (newVal != delays[i]) {
                                 val arr = delays.clone()
                                 arr[i] = newVal
@@ -254,7 +255,7 @@ fun CustomReverbScreenContent(
                                 Mixer.setNeoCustomReverbCombDelay(i, newVal)
                             }
                         },
-                        valueRange = 1f..300f
+                        valueRange = 1f..MAX_DELAY_MS.toFloat()
                     )
 
                     Text("Feedback: ${feedback[i]}")

@@ -25,6 +25,9 @@ bool g_custom_reverb_button_visible = false;
 // Bump this to force the custom reverb dialog to refresh its cached slider values
 int g_custom_reverb_dialog_sync_serial = 0;
 
+// Mouse wheel ticks captured while the custom reverb dialog is open.
+int g_custom_reverb_wheel_delta = 0;
+
 // send_bank_select_for_current_channel is defined in gui_main.c
 extern void send_bank_select_for_current_channel(void);
 
@@ -303,6 +306,11 @@ void render_custom_reverb_dialog(SDL_Renderer *R, int mx, int my, bool mclick, b
     static int cached_feedback[8] = {90, 90, 90, 90, 90, 90, 90, 90};
     static int cached_gain[8] = {127, 127, 127, 127, 127, 127, 127, 127};
     static int cached_lowpass = 64;
+
+    // Consume pending wheel ticks for this frame (so they can't apply later after the mouse moves).
+    int wheel = g_custom_reverb_wheel_delta;
+    g_custom_reverb_wheel_delta = 0;
+    bool wheel_used = false;
     
     if (!g_show_custom_reverb_dialog)
     {
@@ -372,6 +380,15 @@ void render_custom_reverb_dialog(SDL_Renderer *R, int mx, int my, bool mclick, b
     Rect combCountSlider = {sliderX, y, sliderW, sliderH};
     int old_count = cached_comb_count;
     ui_slider(R, combCountSlider, &cached_comb_count, 1, MAX_NEO_COMBS, mx, my, mdown, false);
+    if (!wheel_used && wheel != 0 && point_in(mx, my, combCountSlider))
+    {
+        cached_comb_count += wheel;
+        if (cached_comb_count < 1)
+            cached_comb_count = 1;
+        if (cached_comb_count > MAX_NEO_COMBS)
+            cached_comb_count = MAX_NEO_COMBS;
+        wheel_used = true;
+    }
     if (cached_comb_count != old_count)
     {
         SetNeoCustomReverbCombCount(cached_comb_count);
@@ -399,7 +416,16 @@ void render_custom_reverb_dialog(SDL_Renderer *R, int mx, int my, bool mclick, b
         draw_text(R, labelX + 10, y + 4, label, g_text_color);
         Rect delaySlider = {sliderX, y, sliderW - 50, sliderH};
         int old_delay = cached_delays[i];
-        ui_slider(R, delaySlider, &cached_delays[i], 1, 300, mx, my, mdown, false);
+        ui_slider(R, delaySlider, &cached_delays[i], 1, MAX_NEO_DELAY_MS, mx, my, mdown, false);
+        if (!wheel_used && wheel != 0 && point_in(mx, my, delaySlider))
+        {
+            cached_delays[i] += wheel;
+            if (cached_delays[i] < 1)
+                cached_delays[i] = 1;
+            if (cached_delays[i] > MAX_NEO_DELAY_MS)
+                cached_delays[i] = MAX_NEO_DELAY_MS;
+            wheel_used = true;
+        }
         if (cached_delays[i] != old_delay)
         {
             SetNeoCustomReverbCombDelay(i, cached_delays[i]);
@@ -414,6 +440,15 @@ void render_custom_reverb_dialog(SDL_Renderer *R, int mx, int my, bool mclick, b
         Rect feedbackSlider = {sliderX, y, sliderW - 50, sliderH};
         int old_feedback = cached_feedback[i];
         ui_slider(R, feedbackSlider, &cached_feedback[i], 0, 127, mx, my, mdown, false);
+        if (!wheel_used && wheel != 0 && point_in(mx, my, feedbackSlider))
+        {
+            cached_feedback[i] += wheel;
+            if (cached_feedback[i] < 0)
+                cached_feedback[i] = 0;
+            if (cached_feedback[i] > 127)
+                cached_feedback[i] = 127;
+            wheel_used = true;
+        }
         if (cached_feedback[i] != old_feedback)
         {
             SetNeoCustomReverbCombFeedback(i, cached_feedback[i]);
@@ -428,6 +463,15 @@ void render_custom_reverb_dialog(SDL_Renderer *R, int mx, int my, bool mclick, b
         Rect gainSlider = {sliderX, y, sliderW - 50, sliderH};
         int old_gain = cached_gain[i];
         ui_slider(R, gainSlider, &cached_gain[i], 0, 127, mx, my, mdown, false);
+        if (!wheel_used && wheel != 0 && point_in(mx, my, gainSlider))
+        {
+            cached_gain[i] += wheel;
+            if (cached_gain[i] < 0)
+                cached_gain[i] = 0;
+            if (cached_gain[i] > 127)
+                cached_gain[i] = 127;
+            wheel_used = true;
+        }
         if (cached_gain[i] != old_gain)
         {
             SetNeoCustomReverbCombGain(i, cached_gain[i]);
@@ -443,6 +487,15 @@ void render_custom_reverb_dialog(SDL_Renderer *R, int mx, int my, bool mclick, b
     Rect lowpassSlider = {sliderX, y, sliderW - 50, sliderH};
     int old_lowpass = cached_lowpass;
     ui_slider(R, lowpassSlider, &cached_lowpass, 0, 127, mx, my, mdown, false);
+    if (!wheel_used && wheel != 0 && point_in(mx, my, lowpassSlider))
+    {
+        cached_lowpass += wheel;
+        if (cached_lowpass < 0)
+            cached_lowpass = 0;
+        if (cached_lowpass > 127)
+            cached_lowpass = 127;
+        wheel_used = true;
+    }
     if (cached_lowpass != old_lowpass)
     {
         SetNeoCustomReverbLowpass(cached_lowpass);

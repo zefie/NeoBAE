@@ -1258,6 +1258,17 @@ int main(int argc, char *argv[])
                 int wy = e.wheel.y; // positive = scroll up, negative = scroll down
                 if (wy != 0)
                 {
+                    // Custom reverb modal: allow wheel to adjust sliders by 1 even while modal is open.
+                    // (Do not let the wheel leak to the underlying UI.)
+                    extern int g_custom_reverb_wheel_delta;
+                    extern bool g_show_preset_name_dialog;
+                    extern bool g_show_preset_delete_confirm_dialog;
+                    if (g_show_custom_reverb_dialog && !g_show_preset_name_dialog && !g_show_preset_delete_confirm_dialog)
+                    {
+                        g_custom_reverb_wheel_delta += (wy > 0) ? 1 : -1;
+                        break;
+                    }
+
                     if (!ui_modal_blocking())
                     {
                         // Recompute rects/layout used by UI so hit tests match rendering

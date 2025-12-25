@@ -26,6 +26,10 @@ const char *get_reverb_name(int idx);
 extern bool g_show_custom_reverb_dialog;
 extern bool g_custom_reverb_button_visible;
 
+// Accumulates mouse wheel ticks while the custom reverb dialog is open.
+// Positive = wheel up, negative = wheel down. Consumed by render_custom_reverb_dialog().
+extern int g_custom_reverb_wheel_delta;
+
 // Increment this to force the custom reverb dialog to re-sync its cached slider values
 // from the backend (e.g. when a preset is loaded).
 extern int g_custom_reverb_dialog_sync_serial;
