@@ -2919,7 +2919,21 @@ int main(int argc, char *argv[])
         char tbuf[64];
         snprintf(tbuf, sizeof(tbuf), "%+d", transpose);
         draw_text(R, 577, 61, tbuf, labelCol);
-        if (pitch_tempo_enabled && ui_button(R, (Rect){620, 59, 50, 20}, "Reset", ui_mx, ui_my, ui_mdown) && ui_mclick && !modal_block)
+        Rect transposeResetBtn = (Rect){620, 59, 50, 20};
+        if (!pitch_tempo_enabled)
+        {
+            SDL_Color disabled_bg = {g_button_base.r / 2, g_button_base.g / 2, g_button_base.b / 2, g_button_base.a};
+            SDL_Color disabled_txt = {g_button_text.r / 2, g_button_text.g / 2, g_button_text.b / 2, g_button_text.a};
+            SDL_Color disabled_border = {g_button_border.r / 2, g_button_border.g / 2, g_button_border.b / 2, g_button_border.a};
+            draw_rect(R, transposeResetBtn, disabled_bg);
+            draw_frame(R, transposeResetBtn, disabled_border);
+            int text_w = 0, text_h = 0;
+            measure_text("Reset", &text_w, &text_h);
+            int text_x = transposeResetBtn.x + (transposeResetBtn.w - text_w) / 2;
+            int text_y = transposeResetBtn.y + (transposeResetBtn.h - text_h) / 2;
+            draw_text(R, text_x, text_y, "Reset", disabled_txt);
+        }
+        else if (ui_button(R, transposeResetBtn, "Reset", ui_mx, ui_my, ui_mdown) && ui_mclick && !modal_block)
         {
             transpose = 0;
             bae_set_transpose(transpose);
@@ -2930,7 +2944,21 @@ int main(int argc, char *argv[])
         ui_slider(R, (Rect){410, 103, 160, 14}, &tempo, 25, 200, pitch_tempo_enabled ? ui_mx : -1, pitch_tempo_enabled ? ui_my : -1, pitch_tempo_enabled ? ui_mdown : false, pitch_tempo_enabled ? ui_mclick : false);
         snprintf(tbuf, sizeof(tbuf), "%d%%", tempo);
         draw_text(R, 577, 101, tbuf, labelCol);
-        if (pitch_tempo_enabled && ui_button(R, (Rect){620, 99, 50, 20}, "Reset", ui_mx, ui_my, ui_mdown) && ui_mclick && !modal_block)
+        Rect tempoResetBtn = (Rect){620, 99, 50, 20};
+        if (!pitch_tempo_enabled)
+        {
+            SDL_Color disabled_bg = {g_button_base.r / 2, g_button_base.g / 2, g_button_base.b / 2, g_button_base.a};
+            SDL_Color disabled_txt = {g_button_text.r / 2, g_button_text.g / 2, g_button_text.b / 2, g_button_text.a};
+            SDL_Color disabled_border = {g_button_border.r / 2, g_button_border.g / 2, g_button_border.b / 2, g_button_border.a};
+            draw_rect(R, tempoResetBtn, disabled_bg);
+            draw_frame(R, tempoResetBtn, disabled_border);
+            int text_w = 0, text_h = 0;
+            measure_text("Reset", &text_w, &text_h);
+            int text_x = tempoResetBtn.x + (tempoResetBtn.w - text_w) / 2;
+            int text_y = tempoResetBtn.y + (tempoResetBtn.h - text_h) / 2;
+            draw_text(R, text_x, text_y, "Reset", disabled_txt);
+        }
+        else if (ui_button(R, tempoResetBtn, "Reset", ui_mx, ui_my, ui_mdown) && ui_mclick && !modal_block)
         {
             int oldTempo = tempo;
             int newTempo = 100;
