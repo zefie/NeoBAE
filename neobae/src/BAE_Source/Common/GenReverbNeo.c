@@ -865,16 +865,6 @@ void RunNeoReverb(INT32 *sourceP, INT32 *destP, int numFrames)
     
     CheckNeoReverbType();
     
-#if _DEBUG == TRUE
-    static int debugCounter2 = 0;
-    static int lastMode = -1;
-    if (params->mReverbMode != lastMode)
-    {
-        BAE_PRINTF("Neo reverb mode changed to: %d\n", params->mReverbMode);
-        lastMode = params->mReverbMode;
-    }
-#endif
-    
     // Dispatch to appropriate reverb mode
     switch (params->mReverbMode)
     {

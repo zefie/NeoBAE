@@ -91,6 +91,17 @@ public class Mixer
 
 	// Settings & utility JNI methods
 	private static native int _setDefaultReverb(long reference, int reverbType);
+	private static native int _getActiveVoiceCount(long reference);
+	// Custom Neo reverb parameter JNI methods
+	private static native void _setNeoCustomReverbCombCount(long reference, int combCount);
+	private static native int _getNeoCustomReverbCombCount(long reference);
+	private static native void _setNeoCustomReverbCombDelay(long reference, int combIndex, int delayMs);
+	private static native int _getNeoCustomReverbCombDelay(long reference, int combIndex);
+	private static native void _setNeoCustomReverbCombFeedback(long reference, int combIndex, int feedback);
+	private static native int _getNeoCustomReverbCombFeedback(long reference, int combIndex);
+	private static native void _setNeoCustomReverbCombGain(long reference, int combIndex, int gain);
+	private static native int _getNeoCustomReverbCombGain(long reference, int combIndex);
+	private static native void _setNeoCustomReverbLowpass(long reference, int lowpass);
 	private static native int _addBankFromFile(long reference, String path);
 	private static native int _addBankFromAsset(long reference, android.content.res.AssetManager assetManager, String assetName);
 	private static native int _addBankFromMemory(long reference, byte[] data);
@@ -112,6 +123,18 @@ public class Mixer
 	private static native int _stopOutputToFile(long reference);
 
 	public static int setDefaultReverb(int reverbType){ if(mMixer==null) return -1; return _setDefaultReverb(mMixer.mReference, reverbType); }
+	public static int getActiveVoiceCount(){ if(mMixer==null) return 0; return _getActiveVoiceCount(mMixer.mReference); }
+
+	// Custom Neo reverb parameter helpers
+	public static void setNeoCustomReverbCombCount(int combCount){ if(mMixer==null) return; _setNeoCustomReverbCombCount(mMixer.mReference, combCount); }
+	public static int getNeoCustomReverbCombCount(){ if(mMixer==null) return 0; return _getNeoCustomReverbCombCount(mMixer.mReference); }
+	public static void setNeoCustomReverbCombDelay(int combIndex, int delayMs){ if(mMixer==null) return; _setNeoCustomReverbCombDelay(mMixer.mReference, combIndex, delayMs); }
+	public static int getNeoCustomReverbCombDelay(int combIndex){ if(mMixer==null) return 0; return _getNeoCustomReverbCombDelay(mMixer.mReference, combIndex); }
+	public static void setNeoCustomReverbCombFeedback(int combIndex, int feedback){ if(mMixer==null) return; _setNeoCustomReverbCombFeedback(mMixer.mReference, combIndex, feedback); }
+	public static int getNeoCustomReverbCombFeedback(int combIndex){ if(mMixer==null) return 0; return _getNeoCustomReverbCombFeedback(mMixer.mReference, combIndex); }
+	public static void setNeoCustomReverbCombGain(int combIndex, int gain){ if(mMixer==null) return; _setNeoCustomReverbCombGain(mMixer.mReference, combIndex, gain); }
+	public static int getNeoCustomReverbCombGain(int combIndex){ if(mMixer==null) return 0; return _getNeoCustomReverbCombGain(mMixer.mReference, combIndex); }
+	public static void setNeoCustomReverbLowpass(int lowpass){ if(mMixer==null) return; _setNeoCustomReverbLowpass(mMixer.mReference, lowpass); }
 	public static int addBankFromFile(String path){ if(mMixer==null) return -1; return _addBankFromFile(mMixer.mReference, path); }
 	public static int addBankFromAsset(String assetName){ if(mMixer==null) return -1; return _addBankFromAsset(mMixer.mReference, mMixer.mAssetManager, assetName); }
 	public static int addBankFromMemory(byte[] data){ if(mMixer==null) return -1; return _addBankFromMemory(mMixer.mReference, data); }

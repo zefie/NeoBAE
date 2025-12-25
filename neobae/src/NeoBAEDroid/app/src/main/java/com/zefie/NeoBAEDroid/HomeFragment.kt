@@ -875,10 +875,24 @@ class HomeFragment : Fragment() {
                         },
                         onReverbChange = { value ->
                             reverbType.value = value
+                            val prefs = requireContext().getSharedPreferences("NeoBAE_prefs", Context.MODE_PRIVATE)
                             if (Mixer.getMixer() != null) {
                                 Mixer.setDefaultReverb(value)
+
+                                if (value == 15) {
+                                    val active = getActiveCustomReverbPresetName(requireContext())
+                                    if (!active.isNullOrEmpty()) {
+                                        loadCustomReverbPreset(requireContext(), active)?.let { preset ->
+                                            applyCustomReverbPresetToEngine(requireContext(), preset)
+                                            viewModel.bumpCustomReverbSync()
+                                        }
+                                    } else {
+                                        // Keep lowpass consistent even when not using a named preset.
+                                        val lp = prefs.getInt("custom_reverb_lowpass", 64).coerceIn(0, 127)
+                                        Mixer.setNeoCustomReverbLowpass(lp)
+                                    }
+                                }
                             }
-                            val prefs = requireContext().getSharedPreferences("NeoBAE_prefs", Context.MODE_PRIVATE)
                             prefs.edit().putInt("default_reverb", value).apply()
                         },
                         onCurveChange = { value ->
@@ -1331,12 +1345,12 @@ class HomeFragment : Fragment() {
     private fun scheduleMixerCleanup() {
         mixerIdleJob?.cancel()
 
-        // Suspend audio output without destroying the mixer.
-        // This keeps the loaded bank(s) resident (fast track-to-track loads)
-        // while stopping the hardware audio thread (low idle CPU).
-        if (Mixer.getMixer() != null) {
+        // Only disengage the audio thread once the engine reports no active voices.
+        // This avoids cutting off release/reverb tails during rapid play/pause/stop.
+        mixerIdleJob = lifecycleScope.launch {
             val r = Mixer.disengageAudio()
             android.util.Log.d("HomeFragment", "Mixer audio disengaged (r=$r)")
+            return@launch            
         }
     }
 
@@ -1357,9 +1371,6 @@ class HomeFragment : Fragment() {
         }
         currentSong?.pause()
         currentSound?.pause()
-
-        // Paused playback should not keep the audio thread running.
-        scheduleMixerCleanup()
     }
     
     private fun resumePlayback() {
@@ -1617,6 +1628,19 @@ class HomeFragment : Fragment() {
                 val reverbType = prefs.getInt("default_reverb", 1)
                 val velocityCurvePref = prefs.getInt("velocity_curve", 1)
                 Mixer.setDefaultReverb(reverbType)
+
+                if (reverbType == 15) {
+                    val active = getActiveCustomReverbPresetName(requireContext())
+                    if (!active.isNullOrEmpty()) {
+                        loadCustomReverbPreset(requireContext(), active)?.let { preset ->
+                            applyCustomReverbPresetToEngine(requireContext(), preset)
+                        }
+                    } else {
+                        val lp = prefs.getInt("custom_reverb_lowpass", 64).coerceIn(0, 127)
+                        Mixer.setNeoCustomReverbLowpass(lp)
+                    }
+                }
+
                 HomeFragment.velocityCurve.value = velocityCurvePref
                 // If we have an active song, apply the curve immediately.
                 try {
@@ -2877,6 +2901,13 @@ fun NewMusicPlayerScreen(
             topBar = {
             // Header with folder navigation
             TopAppBar(
+                navigationIcon = {
+                    if (!showBankBrowser && !viewModel.showFullPlayer && viewModel.currentScreen == NavigationScreen.CUSTOM_REVERB) {
+                        IconButton(onClick = { onNavigate(NavigationScreen.SETTINGS) }) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        }
+                    }
+                },
                 title = {
                     Column {
                         // Dynamic title based on current screen or bank browser
@@ -2891,6 +2922,7 @@ fun NewMusicPlayerScreen(
                                 NavigationScreen.FAVORITES -> "Favorites"
                                 NavigationScreen.SETTINGS -> "Settings"
                                 NavigationScreen.FILE_TYPES -> "Settings"
+                                NavigationScreen.CUSTOM_REVERB -> "Custom Reverb"
                             }
                         }
                         Text(
@@ -2926,6 +2958,7 @@ fun NewMusicPlayerScreen(
                                 }
                                 NavigationScreen.SETTINGS -> "Configure NeoBAE"
                                 NavigationScreen.FILE_TYPES -> "Choose file types to enable"
+                                NavigationScreen.CUSTOM_REVERB -> "Adjust parameters in real-time"
                             }
                         }
                         Text(
@@ -3309,11 +3342,18 @@ fun NewMusicPlayerScreen(
                     onExportCodecChange = onExportCodecChange,
                     onSearchLimitChange = onSearchLimitChange,
                     onOpenFileTypes = { onNavigate(NavigationScreen.FILE_TYPES) },
-                    onBrowseBanks = onBrowseBanks
+                    onBrowseBanks = onBrowseBanks,
+                    onOpenCustomReverb = { onNavigate(NavigationScreen.CUSTOM_REVERB) },
+                    onCustomReverbSync = { viewModel.bumpCustomReverbSync() }
                 )
                 NavigationScreen.FILE_TYPES -> FileTypesScreenContent(
                     enabledExtensions = enabledExtensions,
                     onExtensionEnabledChange = onExtensionEnabledChange
+                )
+                NavigationScreen.CUSTOM_REVERB -> CustomReverbScreenContent(
+                    ctx = context,
+                    syncSerial = viewModel.customReverbSyncSerial,
+                    onLowpassChanged = { /* no-op */ }
                 )
             }
         }
@@ -5497,15 +5537,48 @@ fun SettingsScreenContent(
     onExportCodecChange: (Int) -> Unit,
     onSearchLimitChange: (Int) -> Unit,
     onOpenFileTypes: () -> Unit,
-    onBrowseBanks: () -> Unit
+    onBrowseBanks: () -> Unit,
+    onOpenCustomReverb: () -> Unit,
+    onCustomReverbSync: () -> Unit
 ) {
     val context = LocalContext.current
-    val reverbOptions = listOf(
+    val builtInReverbOptions = listOf(
         "None", "Igor's Closet", "Igor's Garage", "Igor's Acoustic Lab",
         "Igor's Cavern", "Igor's Dungeon", "Small Reflections",
         "Early Reflections", "Basement", "Banquet Hall", "Catacombs",
         "Neo Room", "Neo Hall", "Neo Tap Delay"
     )
+
+    var presetNames by remember { mutableStateOf(loadCustomReverbPresetNames(context)) }
+    var activePresetName by remember { mutableStateOf(getActiveCustomReverbPresetName(context)) }
+    var showSavePresetDialog by remember { mutableStateOf(false) }
+    var savePresetName by remember { mutableStateOf(activePresetName ?: "") }
+    var showDeletePresetDialog by remember { mutableStateOf(false) }
+
+    val customEntryIndex = builtInReverbOptions.size
+    val reverbOptions = remember(presetNames) { builtInReverbOptions + listOf("Custom") + presetNames }
+
+    val selectedReverbLabel = when {
+        reverbType == 15 -> {
+            val ap = activePresetName
+            if (ap != null && presetNames.contains(ap)) ap else "Custom"
+        }
+        else -> builtInReverbOptions.getOrNull(reverbType - 1) ?: "None"
+    }
+
+    fun applyPresetByName(name: String) {
+        val preset = loadCustomReverbPreset(context, name) ?: return
+        setActiveCustomReverbPresetName(context, name)
+        activePresetName = name
+        onReverbChange(15)
+        applyCustomReverbPresetToEngine(context, preset)
+        onCustomReverbSync()
+    }
+
+    fun clearActivePreset() {
+        setActiveCustomReverbPresetName(context, null)
+        activePresetName = null
+    }
     
     val curveOptions = listOf("Beatnik Default", "Peaky S Curve", "WebTV Curve", "2x Exponential", "2x Linear")
     val exportCodecOptions = listOf("WAV", "OGG", "FLAC")
@@ -5679,7 +5752,7 @@ fun SettingsScreenContent(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(
-                            text = reverbOptions.getOrNull(reverbType - 1) ?: "None",
+                            text = selectedReverbLabel,
                             modifier = Modifier.weight(1f)
                         )
                         Icon(Icons.Filled.ArrowDropDown, contentDescription = null)
@@ -5690,11 +5763,50 @@ fun SettingsScreenContent(
                     ) {
                         reverbOptions.forEachIndexed { index, option ->
                             DropdownMenuItem(onClick = {
-                                onReverbChange(index + 1)
+                                when {
+                                    index < customEntryIndex -> {
+                                        clearActivePreset()
+                                        onReverbChange(index + 1)
+                                    }
+                                    index == customEntryIndex -> {
+                                        clearActivePreset()
+                                        onReverbChange(15)
+                                        applyDefaultCustomReverbToEngine(context)
+                                        onCustomReverbSync()
+                                    }
+                                    else -> {
+                                        val presetName = presetNames.getOrNull(index - customEntryIndex - 1)
+                                        if (presetName != null) {
+                                            applyPresetByName(presetName)
+                                        }
+                                    }
+                                }
                                 reverbExpanded = false
                             }) {
                                 Text(option)
                             }
+                        }
+                    }
+                }
+
+                if (reverbType == 15) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                        OutlinedButton(onClick = onOpenCustomReverb, modifier = Modifier.weight(1f)) {
+                            Text("Custom")
+                        }
+                        OutlinedButton(onClick = {
+                            savePresetName = activePresetName ?: ""
+                            showSavePresetDialog = true
+                        }) {
+                            Text("+")
+                        }
+                        val canDelete = activePresetName != null && presetNames.contains(activePresetName)
+                        OutlinedButton(
+                            onClick = { if (canDelete) showDeletePresetDialog = true },
+                            enabled = canDelete
+                        ) {
+                            Text("-")
                         }
                     }
                 }
@@ -6098,7 +6210,7 @@ fun SettingsScreenContent(
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Text(
-                                text = reverbOptions.getOrNull(reverbType - 1) ?: "None",
+                                text = selectedReverbLabel,
                                 modifier = Modifier.weight(1f)
                             )
                             Icon(Icons.Filled.ArrowDropDown, contentDescription = null)
@@ -6109,11 +6221,50 @@ fun SettingsScreenContent(
                         ) {
                             reverbOptions.forEachIndexed { index, option ->
                                 DropdownMenuItem(onClick = {
-                                    onReverbChange(index + 1)
+                                    when {
+                                        index < customEntryIndex -> {
+                                            clearActivePreset()
+                                            onReverbChange(index + 1)
+                                        }
+                                        index == customEntryIndex -> {
+                                            clearActivePreset()
+                                            onReverbChange(15)
+                                            applyDefaultCustomReverbToEngine(context)
+                                            onCustomReverbSync()
+                                        }
+                                        else -> {
+                                            val presetName = presetNames.getOrNull(index - customEntryIndex - 1)
+                                            if (presetName != null) {
+                                                applyPresetByName(presetName)
+                                            }
+                                        }
+                                    }
                                     reverbExpanded = false
                                 }) {
                                     Text(option)
                                 }
+                            }
+                        }
+                    }
+
+                    if (reverbType == 15) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                            OutlinedButton(onClick = onOpenCustomReverb, modifier = Modifier.weight(1f)) {
+                                Text("Custom")
+                            }
+                            OutlinedButton(onClick = {
+                                savePresetName = activePresetName ?: ""
+                                showSavePresetDialog = true
+                            }) {
+                                Text("+")
+                            }
+                            val canDelete = activePresetName != null && presetNames.contains(activePresetName)
+                            OutlinedButton(
+                                onClick = { if (canDelete) showDeletePresetDialog = true },
+                                enabled = canDelete
+                            ) {
+                                Text("-")
                             }
                         }
                     }
@@ -6479,6 +6630,62 @@ fun SettingsScreenContent(
                 }
             }
         }
+    }
+
+    if (showSavePresetDialog) {
+        AlertDialog(
+            onDismissRequest = { showSavePresetDialog = false },
+            title = { Text("Save Custom Reverb Preset") },
+            text = {
+                OutlinedTextField(
+                    value = savePresetName,
+                    onValueChange = { savePresetName = it },
+                    label = { Text("Preset name") },
+                    singleLine = true
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val name = savePresetName.trim()
+                    if (name.isNotEmpty()) {
+                        val preset = snapshotCustomReverbFromEngine(context, name)
+                        saveCustomReverbPreset(context, preset)
+                        presetNames = loadCustomReverbPresetNames(context)
+                        activePresetName = name
+                        onReverbChange(15)
+                        onCustomReverbSync()
+                    }
+                    showSavePresetDialog = false
+                }) { Text("Save") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSavePresetDialog = false }) { Text("Cancel") }
+            }
+        )
+    }
+
+    if (showDeletePresetDialog) {
+        val name = activePresetName
+        AlertDialog(
+            onDismissRequest = { showDeletePresetDialog = false },
+            title = { Text("Delete Preset") },
+            text = { Text(if (name.isNullOrEmpty()) "Delete preset?" else "Delete preset \"$name\"?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    if (!name.isNullOrEmpty()) {
+                        deleteCustomReverbPreset(context, name)
+                        presetNames = loadCustomReverbPresetNames(context)
+                        clearActivePreset()
+                        onReverbChange(15)
+                        onCustomReverbSync()
+                    }
+                    showDeletePresetDialog = false
+                }) { Text("Delete") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeletePresetDialog = false }) { Text("Cancel") }
+            }
+        )
     }
 }
 

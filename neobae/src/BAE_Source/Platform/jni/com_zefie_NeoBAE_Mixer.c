@@ -13,6 +13,8 @@
 
 #include "com_zefie_NeoBAE_Mixer.h"
 #include "NeoBAE.h"
+#include "GenPriv.h"
+#include "GenSnd.h"
 
 #if USE_SF2_SUPPORT == TRUE && _USING_FLUIDSYNTH == TRUE
 #include "GenSF2_FluidSynth.h"
@@ -155,6 +157,100 @@ JNIEXPORT jint JNICALL Java_com_zefie_NeoBAE_Mixer__1setDefaultReverb
 		if(!mixer) return -1;
 		BAEResult r = BAEMixer_SetDefaultReverb(mixer, (BAEReverbType)reverbType);
 		return (jint)r;
+}
+
+JNIEXPORT jint JNICALL Java_com_zefie_NeoBAE_Mixer__1getActiveVoiceCount
+	(JNIEnv* env, jclass clazz, jlong reference)
+{
+	(void)env;
+	(void)clazz;
+	(void)reference;
+	GM_AudioInfo status;
+	XSetMemory(&status, (int32_t)sizeof(status), 0);
+	GM_GetRealtimeAudioInformation(&status);
+	return (jint)status.voicesActive;
+}
+
+// Custom Neo reverb parameter JNI wrappers (global reverb params)
+JNIEXPORT void JNICALL Java_com_zefie_NeoBAE_Mixer__1setNeoCustomReverbCombCount
+	(JNIEnv* env, jclass clazz, jlong reference, jint combCount)
+{
+	(void)env;
+	(void)clazz;
+	(void)reference;
+	SetNeoCustomReverbCombCount((int)combCount);
+}
+
+JNIEXPORT jint JNICALL Java_com_zefie_NeoBAE_Mixer__1getNeoCustomReverbCombCount
+	(JNIEnv* env, jclass clazz, jlong reference)
+{
+	(void)env;
+	(void)clazz;
+	(void)reference;
+	return (jint)GetNeoCustomReverbCombCount();
+}
+
+JNIEXPORT void JNICALL Java_com_zefie_NeoBAE_Mixer__1setNeoCustomReverbCombDelay
+	(JNIEnv* env, jclass clazz, jlong reference, jint combIndex, jint delayMs)
+{
+	(void)env;
+	(void)clazz;
+	(void)reference;
+	SetNeoCustomReverbCombDelay((int)combIndex, (int)delayMs);
+}
+
+JNIEXPORT jint JNICALL Java_com_zefie_NeoBAE_Mixer__1getNeoCustomReverbCombDelay
+	(JNIEnv* env, jclass clazz, jlong reference, jint combIndex)
+{
+	(void)env;
+	(void)clazz;
+	(void)reference;
+	return (jint)GetNeoCustomReverbCombDelay((int)combIndex);
+}
+
+JNIEXPORT void JNICALL Java_com_zefie_NeoBAE_Mixer__1setNeoCustomReverbCombFeedback
+	(JNIEnv* env, jclass clazz, jlong reference, jint combIndex, jint feedback)
+{
+	(void)env;
+	(void)clazz;
+	(void)reference;
+	SetNeoCustomReverbCombFeedback((int)combIndex, (int)feedback);
+}
+
+JNIEXPORT jint JNICALL Java_com_zefie_NeoBAE_Mixer__1getNeoCustomReverbCombFeedback
+	(JNIEnv* env, jclass clazz, jlong reference, jint combIndex)
+{
+	(void)env;
+	(void)clazz;
+	(void)reference;
+	return (jint)GetNeoCustomReverbCombFeedback((int)combIndex);
+}
+
+JNIEXPORT void JNICALL Java_com_zefie_NeoBAE_Mixer__1setNeoCustomReverbCombGain
+	(JNIEnv* env, jclass clazz, jlong reference, jint combIndex, jint gain)
+{
+	(void)env;
+	(void)clazz;
+	(void)reference;
+	SetNeoCustomReverbCombGain((int)combIndex, (int)gain);
+}
+
+JNIEXPORT jint JNICALL Java_com_zefie_NeoBAE_Mixer__1getNeoCustomReverbCombGain
+	(JNIEnv* env, jclass clazz, jlong reference, jint combIndex)
+{
+	(void)env;
+	(void)clazz;
+	(void)reference;
+	return (jint)GetNeoCustomReverbCombGain((int)combIndex);
+}
+
+JNIEXPORT void JNICALL Java_com_zefie_NeoBAE_Mixer__1setNeoCustomReverbLowpass
+	(JNIEnv* env, jclass clazz, jlong reference, jint lowpass)
+{
+	(void)env;
+	(void)clazz;
+	(void)reference;
+	SetNeoCustomReverbLowpass((int)lowpass);
 }
 
 JNIEXPORT jint JNICALL Java_com_zefie_NeoBAE_Mixer__1addBankFromFile

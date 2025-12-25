@@ -24,6 +24,15 @@ enum class SortMode {
     SIZE_DESC
 }
 
+enum class NavigationScreen {
+    HOME,
+    SEARCH,
+    FAVORITES,
+    SETTINGS,
+    FILE_TYPES,
+    CUSTOM_REVERB
+}
+
 private fun nextSortMode(current: SortMode): SortMode {
     return when (current) {
         SortMode.NAME_ASC -> SortMode.NAME_DESC
@@ -113,6 +122,10 @@ class MusicPlayerViewModel : ViewModel() {
     // Navigation state
     var currentScreen by mutableStateOf(NavigationScreen.HOME)
     var searchQuery by mutableStateOf("")
+
+    // Custom reverb UI sync (bumped whenever a preset is loaded/saved/deleted)
+    var customReverbSyncSerial by mutableStateOf(0)
+    fun bumpCustomReverbSync() { customReverbSyncSerial++ }
 
     // Tracks which list the current playlist came from (shown in the full player top bar)
     // Expected values: "Folder", "Search", "Favorites".
@@ -671,11 +684,6 @@ class MusicPlayerViewModel : ViewModel() {
         cachedSearchPath = null
     }
 }
-
-enum class NavigationScreen {
-    HOME, SEARCH, FAVORITES, SETTINGS, FILE_TYPES
-}
-
 enum class RepeatMode {
     NONE,      // No repeat
     SONG,      // Repeat current song
