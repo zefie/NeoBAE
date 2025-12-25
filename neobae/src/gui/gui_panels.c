@@ -360,19 +360,39 @@ void render_custom_reverb_dialog(SDL_Renderer *R, int mx, int my, bool mclick, b
     int rowH = 50;
     int startY = dlg.y + 60;
     
-    // Initialize cached values from backend once, or when presets change
+    // Initialize cached values from tracked state once, or when presets change
     if (!initialized || last_sync_serial != g_custom_reverb_dialog_sync_serial)
     {
-        cached_comb_count = GetNeoCustomReverbCombCount();
+        extern int g_current_custom_reverb_comb_count;
+        extern int g_current_custom_reverb_delays[MAX_NEO_COMBS];
+        extern int g_current_custom_reverb_feedback[MAX_NEO_COMBS];
+        extern int g_current_custom_reverb_gain[MAX_NEO_COMBS];
+        extern int g_current_custom_reverb_lowpass;
+
+        // If state hasn't been initialized yet (startup edge), fall back to current engine values.
+        if (g_current_custom_reverb_comb_count < 1)
+        {
+            g_current_custom_reverb_comb_count = GetNeoCustomReverbCombCount();
+            if (g_current_custom_reverb_comb_count < 1)
+                g_current_custom_reverb_comb_count = 1;
+            if (g_current_custom_reverb_comb_count > MAX_NEO_COMBS)
+                g_current_custom_reverb_comb_count = MAX_NEO_COMBS;
+            for (int i = 0; i < MAX_NEO_COMBS; i++)
+            {
+                g_current_custom_reverb_delays[i] = GetNeoCustomReverbCombDelay(i);
+                g_current_custom_reverb_feedback[i] = GetNeoCustomReverbCombFeedback(i);
+                g_current_custom_reverb_gain[i] = GetNeoCustomReverbCombGain(i);
+            }
+        }
+
+        cached_comb_count = g_current_custom_reverb_comb_count;
         for (int i = 0; i < MAX_NEO_COMBS; i++)
         {
-            cached_delays[i] = GetNeoCustomReverbCombDelay(i);
-            cached_feedback[i] = GetNeoCustomReverbCombFeedback(i);
-            cached_gain[i] = GetNeoCustomReverbCombGain(i);
+            cached_delays[i] = g_current_custom_reverb_delays[i];
+            cached_feedback[i] = g_current_custom_reverb_feedback[i];
+            cached_gain[i] = g_current_custom_reverb_gain[i];
         }
-            // Lowpass has no engine getter; we track it in settings.
-            extern int g_current_custom_reverb_lowpass;
-            cached_lowpass = g_current_custom_reverb_lowpass;
+        cached_lowpass = g_current_custom_reverb_lowpass;
         initialized = true;
         last_sync_serial = g_custom_reverb_dialog_sync_serial;
     }
@@ -395,6 +415,8 @@ void render_custom_reverb_dialog(SDL_Renderer *R, int mx, int my, bool mclick, b
     if (cached_comb_count != old_count)
     {
         SetNeoCustomReverbCombCount(cached_comb_count);
+        extern int g_current_custom_reverb_comb_count;
+        g_current_custom_reverb_comb_count = cached_comb_count;
     }
     
     char countBuf[32];
@@ -419,19 +441,21 @@ void render_custom_reverb_dialog(SDL_Renderer *R, int mx, int my, bool mclick, b
         draw_text(R, labelX + 10, y + 4, label, g_text_color);
         Rect delaySlider = {sliderX, y, sliderW - 50, sliderH};
         int old_delay = cached_delays[i];
-        ui_slider(R, delaySlider, &cached_delays[i], 1, MAX_NEO_DELAY_MS, mx, my, mdown, false);
+        ui_slider(R, delaySlider, &cached_delays[i], 1, NEO_CUSTOM_MAX_DELAY_MS, mx, my, mdown, false);
         if (!wheel_used && wheel != 0 && point_in(mx, my, delaySlider))
         {
             cached_delays[i] += wheel;
             if (cached_delays[i] < 1)
                 cached_delays[i] = 1;
-            if (cached_delays[i] > MAX_NEO_DELAY_MS)
-                cached_delays[i] = MAX_NEO_DELAY_MS;
+            if (cached_delays[i] > NEO_CUSTOM_MAX_DELAY_MS)
+                cached_delays[i] = NEO_CUSTOM_MAX_DELAY_MS;
             wheel_used = true;
         }
         if (cached_delays[i] != old_delay)
         {
             SetNeoCustomReverbCombDelay(i, cached_delays[i]);
+            extern int g_current_custom_reverb_delays[MAX_NEO_COMBS];
+            g_current_custom_reverb_delays[i] = cached_delays[i];
         }
         snprintf(label, sizeof(label), "%d ms", cached_delays[i]);
         draw_text(R, sliderX + sliderW - 40, y + 2, label, g_text_color);
@@ -455,6 +479,8 @@ void render_custom_reverb_dialog(SDL_Renderer *R, int mx, int my, bool mclick, b
         if (cached_feedback[i] != old_feedback)
         {
             SetNeoCustomReverbCombFeedback(i, cached_feedback[i]);
+            extern int g_current_custom_reverb_feedback[MAX_NEO_COMBS];
+            g_current_custom_reverb_feedback[i] = cached_feedback[i];
         }
         snprintf(label, sizeof(label), "%d", cached_feedback[i]);
         draw_text(R, sliderX + sliderW - 40, y + 2, label, g_text_color);
@@ -478,6 +504,8 @@ void render_custom_reverb_dialog(SDL_Renderer *R, int mx, int my, bool mclick, b
         if (cached_gain[i] != old_gain)
         {
             SetNeoCustomReverbCombGain(i, cached_gain[i]);
+            extern int g_current_custom_reverb_gain[MAX_NEO_COMBS];
+            g_current_custom_reverb_gain[i] = cached_gain[i];
         }
         snprintf(label, sizeof(label), "%d", cached_gain[i]);
         draw_text(R, sliderX + sliderW - 40, y + 2, label, g_text_color);

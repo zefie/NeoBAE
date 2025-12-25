@@ -54,6 +54,10 @@ extern CustomReverbPreset *g_custom_reverb_presets;
 extern int g_custom_reverb_preset_count;
 extern char g_current_custom_reverb_preset[64];
 extern int g_current_custom_reverb_lowpass;
+extern int g_current_custom_reverb_comb_count;
+extern int g_current_custom_reverb_delays[MAX_NEO_COMBS];
+extern int g_current_custom_reverb_feedback[MAX_NEO_COMBS];
+extern int g_current_custom_reverb_gain[MAX_NEO_COMBS];
 
 // Settings dialog state
 extern bool g_show_settings_dialog;

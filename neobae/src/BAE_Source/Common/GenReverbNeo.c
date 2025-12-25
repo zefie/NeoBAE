@@ -104,8 +104,10 @@
 // Tap delay needs to hold up to ~400ms @ 44.1kHz in *stereo-interleaved* samples:
 // 400ms is 17640 frames => 35280 interleaved samples, so 32768 would wrap.
 #define NEO_TAP_BUFFER_SIZE     65536
-// Custom reverb supports up to 8 comb filters for maximum flexibility
-#define NEO_CUSTOM_BUFFER_SIZE  32768
+// Custom reverb needs to hold up to 500ms at common output rates.
+// Buffer size is in *stereo-interleaved* samples, so max frames is (size/2)-2.
+// At 48kHz, 500ms is 24000 frames -> 48000 interleaved samples, so use 65536.
+#define NEO_CUSTOM_BUFFER_SIZE  65536
 
 #define NEO_ROOM_BUFFER_MASK    (NEO_ROOM_BUFFER_SIZE - 1)
 #define NEO_HALL_BUFFER_MASK    (NEO_HALL_BUFFER_SIZE - 1)
@@ -968,8 +970,8 @@ void SetNeoCustomReverbCombCount(int combCount)
 //  SetNeoCustomReverbCombDelay()
 //
 //  Set the delay time in milliseconds for a specific comb filter
-//  combIndex: 0-7 (which comb filter to configure)
-//  delayMs: delay time in milliseconds (1-300ms)
+//  combIndex: 0-3 (which comb filter to configure) (max of 4 or value of NEO_CUSTOM_MAX_COMBS)
+//  delayMs: delay time in milliseconds (1-500ms) (or value of NEO_CUSTOM_MAX_DELAY_MS)
 //++------------------------------------------------------------------------------
 void SetNeoCustomReverbCombDelay(int combIndex, int delayMs)
 {
@@ -979,7 +981,7 @@ void SetNeoCustomReverbCombDelay(int combIndex, int delayMs)
         return;
     
     if (delayMs < 1) delayMs = 1;
-    if (delayMs > 300) delayMs = 300;
+    if (delayMs > NEO_CUSTOM_MAX_DELAY_MS) delayMs = NEO_CUSTOM_MAX_DELAY_MS;
     
     // Convert milliseconds to frames at current sample rate
     // delayMs * sampleRate / 1000

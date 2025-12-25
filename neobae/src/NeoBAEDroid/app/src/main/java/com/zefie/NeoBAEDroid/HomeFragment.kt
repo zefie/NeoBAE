@@ -17,6 +17,7 @@ import android.widget.Toast
 import android.net.Uri
 import android.app.Activity
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.documentfile.provider.DocumentFile
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -5555,6 +5556,49 @@ fun SettingsScreenContent(
     var savePresetName by remember { mutableStateOf(activePresetName ?: "") }
     var showDeletePresetDialog by remember { mutableStateOf(false) }
 
+    val importNeoReverbLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        try {
+            val xml = context.contentResolver.openInputStream(uri)?.use { it.readBytes().toString(Charsets.UTF_8) }
+            val preset = xml?.let { parseNeoReverbXml(it) }
+            if (preset != null) {
+                saveCustomReverbPreset(context, preset)
+                presetNames = loadCustomReverbPresetNames(context)
+                activePresetName = preset.name
+                setActiveCustomReverbPresetName(context, preset.name)
+                onReverbChange(15)
+                applyCustomReverbPresetToEngine(context, preset)
+                onCustomReverbSync()
+                Toast.makeText(context, "Imported preset: ${preset.name}", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(context, "Invalid .neoreverb file", Toast.LENGTH_SHORT).show()
+            }
+        } catch (_: Exception) {
+            Toast.makeText(context, "Failed to import .neoreverb", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    val exportNeoReverbLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/xml")
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        try {
+            val name = activePresetName
+            if (name.isNullOrBlank() || !presetNames.contains(name)) {
+                Toast.makeText(context, "Select a saved preset to export", Toast.LENGTH_SHORT).show()
+                return@rememberLauncherForActivityResult
+            }
+            val preset = loadCustomReverbPreset(context, name) ?: snapshotCustomReverbFromEngine(context, name)
+            val xml = presetToNeoReverbXml(preset)
+            context.contentResolver.openOutputStream(uri)?.use { it.write(xml.toByteArray(Charsets.UTF_8)) }
+            Toast.makeText(context, "Exported preset: ${preset.name}", Toast.LENGTH_SHORT).show()
+        } catch (_: Exception) {
+            Toast.makeText(context, "Failed to export .neoreverb", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     val customEntryIndex = builtInReverbOptions.size
     val reverbOptions = remember(presetNames) { builtInReverbOptions + listOf("Custom") + presetNames }
 
@@ -5807,6 +5851,23 @@ fun SettingsScreenContent(
                             enabled = canDelete
                         ) {
                             Text("-")
+                        }
+
+                        OutlinedButton(
+                            onClick = { importNeoReverbLauncher.launch(arrayOf("application/xml", "text/xml", "*/*")) }
+                        ) {
+                            Icon(Icons.Filled.GetApp, contentDescription = "Import Preset")
+                        }
+
+                        val canExport = activePresetName != null && presetNames.contains(activePresetName)
+                        OutlinedButton(
+                            onClick = {
+                                val safe = sanitizePresetNameForFilename(activePresetName ?: "preset")
+                                exportNeoReverbLauncher.launch("$safe.neoreverb")
+                            },
+                            enabled = canExport
+                        ) {
+                            Icon(Icons.Filled.Publish, contentDescription = "Export Preset")
                         }
                     }
                 }
@@ -6249,22 +6310,59 @@ fun SettingsScreenContent(
 
                     if (reverbType == 15) {
                         Spacer(modifier = Modifier.height(8.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                            OutlinedButton(onClick = onOpenCustomReverb, modifier = Modifier.weight(1f)) {
-                                Text("Custom")
-                            }
-                            OutlinedButton(onClick = {
-                                savePresetName = activePresetName ?: ""
-                                showSavePresetDialog = true
-                            }) {
-                                Text("+")
-                            }
-                            val canDelete = activePresetName != null && presetNames.contains(activePresetName)
-                            OutlinedButton(
-                                onClick = { if (canDelete) showDeletePresetDialog = true },
-                                enabled = canDelete
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            // Keep the small action buttons in one row for portrait.
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.fillMaxWidth()
                             ) {
-                                Text("-")
+                                OutlinedButton(
+                                    onClick = {
+                                        savePresetName = activePresetName ?: ""
+                                        showSavePresetDialog = true
+                                    },
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text("+")
+                                }
+
+                                val canDelete = activePresetName != null && presetNames.contains(activePresetName)
+                                OutlinedButton(
+                                    onClick = { if (canDelete) showDeletePresetDialog = true },
+                                    enabled = canDelete,
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text("-")
+                                }
+
+                                OutlinedButton(
+                                    onClick = { importNeoReverbLauncher.launch(arrayOf("application/xml", "text/xml", "*/*")) },
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Icon(Icons.Filled.GetApp, contentDescription = "Import Preset")
+                                }
+
+                                val canExport = activePresetName != null && presetNames.contains(activePresetName)
+                                OutlinedButton(
+                                    onClick = {
+                                        val safe = sanitizePresetNameForFilename(activePresetName ?: "preset")
+                                        exportNeoReverbLauncher.launch("$safe.neoreverb")
+                                    },
+                                    enabled = canExport,
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Icon(Icons.Filled.Publish, contentDescription = "Export Preset")
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            // Put Custom on its own line so it doesn't get squished.
+                            OutlinedButton(
+                                onClick = onOpenCustomReverb,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("Custom")
                             }
                         }
                     }

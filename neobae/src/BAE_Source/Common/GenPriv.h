@@ -892,7 +892,7 @@ int         GetNeoCustomReverbCombDelay(int combIndex);
 int         GetNeoCustomReverbCombFeedback(int combIndex);
 int         GetNeoCustomReverbCombGain(int combIndex);
 #define MAX_NEO_COMBS 4
-#define MAX_NEO_DELAY_MS 500
+#define NEO_CUSTOM_MAX_DELAY_MS 500
 #endif
 
 /******************************* new chorus stuff *****************************/

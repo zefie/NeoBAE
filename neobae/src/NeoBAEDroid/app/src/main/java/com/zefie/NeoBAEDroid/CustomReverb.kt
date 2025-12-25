@@ -32,10 +32,20 @@ private const val MAX_DELAY_MS = 500
 // Defaults that match the engine's initialization (GenReverbNeo.c) reasonably closely.
 // (The engine stores custom delays internally as frames; these are approximate ms defaults.)
 private const val DEFAULT_COMB_COUNT = 4
-private val DEFAULT_DELAYS_MS = intArrayOf(23, 29, 36, 43)
+private val DEFAULT_DELAYS_MS = intArrayOf(22, 29, 36, 43)
 private const val DEFAULT_FEEDBACK = 112 // ~0.75 feedback mapped to 0..127 (max is ~0.85)
 private const val DEFAULT_GAIN = 127
 private const val DEFAULT_LOWPASS = 64
+
+private fun looksLikeEngineNotStarted(rawCombCount: Int, delays: IntArray, feedback: IntArray, gain: IntArray): Boolean {
+    // Before a song/engine starts, the JNI getters typically return 0 for everything.
+    // If we treat that as real state, the UI collapses to minimums (1 comb, 1ms, 0 fb/gain).
+    if (rawCombCount > 0) return false
+    if (delays.any { it > 0 }) return false
+    if (feedback.any { it != 0 }) return false
+    if (gain.any { it != 0 }) return false
+    return true
+}
 
 data class CustomReverbPreset(
     val name: String,
@@ -46,7 +56,7 @@ data class CustomReverbPreset(
     val lowpass: Int
 )
 
-private fun sanitizePresetNameForFilename(name: String): String {
+fun sanitizePresetNameForFilename(name: String): String {
     val raw = name.trim()
     if (raw.isEmpty()) return "preset"
     val sb = StringBuilder(raw.length)
@@ -62,7 +72,7 @@ private fun sanitizePresetNameForFilename(name: String): String {
     return out.take(64)
 }
 
-private fun presetToNeoReverbXml(preset: CustomReverbPreset): String {
+fun presetToNeoReverbXml(preset: CustomReverbPreset): String {
     val serializer = Xml.newSerializer()
     val writer = StringWriter()
     serializer.setOutput(writer)
@@ -96,7 +106,7 @@ private fun presetToNeoReverbXml(preset: CustomReverbPreset): String {
     return writer.toString()
 }
 
-private fun parseNeoReverbXml(xml: String): CustomReverbPreset? {
+fun parseNeoReverbXml(xml: String): CustomReverbPreset? {
     val parser = Xml.newPullParser()
     parser.setInput(StringReader(xml))
 
@@ -204,10 +214,28 @@ private fun getMaxPresetIndex(p: SharedPreferences): Int {
 
 fun snapshotCustomReverbFromEngine(ctx: Context, name: String): CustomReverbPreset {
     val p = prefs(ctx)
-    val combCount = Mixer.getNeoCustomReverbCombCount().coerceIn(1, MAX_COMBS)
-    val delays = IntArray(MAX_COMBS) { i -> Mixer.getNeoCustomReverbCombDelay(i).coerceIn(1, MAX_DELAY_MS) }
-    val feedback = IntArray(MAX_COMBS) { i -> Mixer.getNeoCustomReverbCombFeedback(i).coerceIn(0, 127) }
-    val gain = IntArray(MAX_COMBS) { i -> Mixer.getNeoCustomReverbCombGain(i).coerceIn(0, 127) }
+    val rawCombCount = Mixer.getNeoCustomReverbCombCount()
+    val rawDelays = IntArray(MAX_COMBS) { i -> Mixer.getNeoCustomReverbCombDelay(i) }
+    val rawFeedback = IntArray(MAX_COMBS) { i -> Mixer.getNeoCustomReverbCombFeedback(i) }
+    val rawGain = IntArray(MAX_COMBS) { i -> Mixer.getNeoCustomReverbCombGain(i) }
+
+    val combCount: Int
+    val delays: IntArray
+    val feedback: IntArray
+    val gain: IntArray
+
+    if (looksLikeEngineNotStarted(rawCombCount, rawDelays, rawFeedback, rawGain)) {
+        combCount = DEFAULT_COMB_COUNT
+        delays = IntArray(MAX_COMBS) { DEFAULT_DELAYS_MS[it] }
+        feedback = IntArray(MAX_COMBS) { DEFAULT_FEEDBACK }
+        gain = IntArray(MAX_COMBS) { DEFAULT_GAIN }
+    } else {
+        combCount = rawCombCount.coerceIn(1, MAX_COMBS)
+        delays = IntArray(MAX_COMBS) { i -> rawDelays[i].coerceIn(1, MAX_DELAY_MS) }
+        feedback = IntArray(MAX_COMBS) { i -> rawFeedback[i].coerceIn(0, 127) }
+        gain = IntArray(MAX_COMBS) { i -> rawGain[i].coerceIn(0, 127) }
+    }
+
     val lowpass = p.getInt(KEY_CURRENT_LOWPASS, DEFAULT_LOWPASS).coerceIn(0, 127)
     return CustomReverbPreset(name.trim(), combCount, delays, feedback, gain, lowpass)
 }
@@ -304,10 +332,22 @@ fun CustomReverbScreenContent(
     var lowpass by remember { mutableStateOf(prefs(ctx).getInt(KEY_CURRENT_LOWPASS, DEFAULT_LOWPASS).coerceIn(0, 127)) }
 
     fun reloadFromEngine() {
-        combCount = Mixer.getNeoCustomReverbCombCount().coerceIn(1, MAX_COMBS)
-        delays = IntArray(MAX_COMBS) { i -> Mixer.getNeoCustomReverbCombDelay(i).coerceIn(1, MAX_DELAY_MS) }
-        feedback = IntArray(MAX_COMBS) { i -> Mixer.getNeoCustomReverbCombFeedback(i).coerceIn(0, 127) }
-        gain = IntArray(MAX_COMBS) { i -> Mixer.getNeoCustomReverbCombGain(i).coerceIn(0, 127) }
+        val rawCombCount = Mixer.getNeoCustomReverbCombCount()
+        val rawDelays = IntArray(MAX_COMBS) { i -> Mixer.getNeoCustomReverbCombDelay(i) }
+        val rawFeedback = IntArray(MAX_COMBS) { i -> Mixer.getNeoCustomReverbCombFeedback(i) }
+        val rawGain = IntArray(MAX_COMBS) { i -> Mixer.getNeoCustomReverbCombGain(i) }
+
+        if (looksLikeEngineNotStarted(rawCombCount, rawDelays, rawFeedback, rawGain)) {
+            combCount = DEFAULT_COMB_COUNT
+            delays = IntArray(MAX_COMBS) { DEFAULT_DELAYS_MS[it] }
+            feedback = IntArray(MAX_COMBS) { DEFAULT_FEEDBACK }
+            gain = IntArray(MAX_COMBS) { DEFAULT_GAIN }
+        } else {
+            combCount = rawCombCount.coerceIn(1, MAX_COMBS)
+            delays = IntArray(MAX_COMBS) { i -> rawDelays[i].coerceIn(1, MAX_DELAY_MS) }
+            feedback = IntArray(MAX_COMBS) { i -> rawFeedback[i].coerceIn(0, 127) }
+            gain = IntArray(MAX_COMBS) { i -> rawGain[i].coerceIn(0, 127) }
+        }
         lowpass = prefs(ctx).getInt(KEY_CURRENT_LOWPASS, DEFAULT_LOWPASS).coerceIn(0, 127)
     }
 
