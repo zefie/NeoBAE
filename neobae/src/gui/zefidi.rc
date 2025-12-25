@@ -1,7 +1,7 @@
 #include <windows.h>
 
 // Application icon - using ID 101 to match the code
-101 ICON "beatnik.ico"
+101 ICON "neobae.ico"
 
 // Version information
 VS_VERSION_INFO VERSIONINFO
@@ -22,7 +22,7 @@ BEGIN
         BLOCK "040904b0"
         BEGIN
             VALUE "CompanyName", "zefie Networks"
-            VALUE "FileDescription", "zefidi Media Player"
+            VALUE "FileDescription", "zefidi Media Player, Powered by NeoBAE"
             VALUE "FileVersion", "1.0.0.0"
             VALUE "InternalName", "zefidi"
             VALUE "LegalCopyright", "Copyright (C) 2025 Zefie Networks"

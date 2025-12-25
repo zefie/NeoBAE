@@ -19,7 +19,7 @@
         android:allowBackup="true"
         android:label="NeoBAE for Android"
         android:icon="@mipmap/ic_launcher"
-        android:roundIcon="@mipmap/ic_launcher_round"
+        android:roundIcon="@mipmap/ic_launcher"
         android:supportsRtl="true"
         android:theme="@style/Theme.NeoBAEDroid.NoActionBar">
         <activity android:name=".MainActivity"
