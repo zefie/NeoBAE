@@ -370,6 +370,9 @@ void render_custom_reverb_dialog(SDL_Renderer *R, int mx, int my, bool mclick, b
             cached_feedback[i] = GetNeoCustomReverbCombFeedback(i);
             cached_gain[i] = GetNeoCustomReverbCombGain(i);
         }
+            // Lowpass has no engine getter; we track it in settings.
+            extern int g_current_custom_reverb_lowpass;
+            cached_lowpass = g_current_custom_reverb_lowpass;
         initialized = true;
         last_sync_serial = g_custom_reverb_dialog_sync_serial;
     }
@@ -499,6 +502,8 @@ void render_custom_reverb_dialog(SDL_Renderer *R, int mx, int my, bool mclick, b
     if (cached_lowpass != old_lowpass)
     {
         SetNeoCustomReverbLowpass(cached_lowpass);
+            extern int g_current_custom_reverb_lowpass;
+            g_current_custom_reverb_lowpass = cached_lowpass;
     }
     
     char lowpassBuf[64];

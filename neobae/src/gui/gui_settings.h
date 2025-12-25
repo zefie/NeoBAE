@@ -46,12 +46,14 @@ typedef struct
     int delays[MAX_NEO_COMBS];
     int feedback[MAX_NEO_COMBS];
     int gain[MAX_NEO_COMBS];
+    int lowpass; // 0-127 (MIDI-style)
 } CustomReverbPreset;
 
 // Custom reverb preset list
 extern CustomReverbPreset *g_custom_reverb_presets;
 extern int g_custom_reverb_preset_count;
 extern char g_current_custom_reverb_preset[64];
+extern int g_current_custom_reverb_lowpass;
 
 // Settings dialog state
 extern bool g_show_settings_dialog;
@@ -85,6 +87,10 @@ void load_custom_reverb_preset(const char *name);
 void delete_custom_reverb_preset(const char *name);
 void load_custom_reverb_preset_list(void);
 int get_custom_reverb_preset_index(const char *name);
+
+// .neoreverb XML import/export helpers
+bool export_custom_reverb_neoreverb(const char *preset_name, const char *path);
+bool import_custom_reverb_neoreverb(const char *path, char *out_preset_name, size_t out_preset_name_size);
 void render_preset_name_dialog(SDL_Renderer *R, int mx, int my, bool mclick, bool mdown, int window_h);
 void render_preset_delete_confirm_dialog(SDL_Renderer *R, int mx, int my, bool mclick, bool mdown, int window_h);
 

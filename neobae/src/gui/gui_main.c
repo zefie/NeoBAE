@@ -79,6 +79,34 @@ void render_about_dialog(SDL_Renderer *R, int mx, int my, bool mclick);
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 #endif
 
+static void draw_io_arrow_icon(SDL_Renderer *R, Rect r, bool up, SDL_Color col)
+{
+    SDL_SetRenderDrawBlendMode(R, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(R, col.r, col.g, col.b, col.a);
+
+    int cx = r.x + r.w / 2;
+    int top = r.y + 4;
+    int bot = r.y + r.h - 4;
+    int w = (r.w < r.h ? r.w : r.h) / 3;
+    if (w < 3)
+        w = 3;
+
+    if (up)
+    {
+        SDL_RenderLine(R, cx, bot, cx, top + 2);
+        SDL_RenderLine(R, cx, top + 2, cx - w, top + 2 + w);
+        SDL_RenderLine(R, cx, top + 2, cx + w, top + 2 + w);
+        SDL_RenderLine(R, r.x + 5, bot, r.x + r.w - 6, bot);
+    }
+    else
+    {
+        SDL_RenderLine(R, cx, top, cx, bot - 2);
+        SDL_RenderLine(R, cx, bot - 2, cx - w, bot - 2 - w);
+        SDL_RenderLine(R, cx, bot - 2, cx + w, bot - 2 - w);
+        SDL_RenderLine(R, r.x + 5, top, r.x + r.w - 6, top);
+    }
+}
+
 // Forward declarations for internal types used in meta callback to avoid including heavy internal headers
 struct GM_Song;       // opaque
 typedef short XSWORD; // 16-bit signed used by engine for track index
@@ -393,6 +421,10 @@ extern char g_bank_tooltip_text[520];
 extern bool g_file_tooltip_visible;
 extern Rect g_file_tooltip_rect;
 extern char g_file_tooltip_text[520];
+
+extern bool g_reverb_tooltip_visible;
+extern Rect g_reverb_tooltip_rect;
+extern char g_reverb_tooltip_text[520];
 
 extern bool g_loop_tooltip_visible;
 extern Rect g_loop_tooltip_rect;
@@ -1602,6 +1634,34 @@ int main(int argc, char *argv[])
                 }
             }
             break;
+            case SDL_EVENT_TEXT_INPUT:
+            {
+#if USE_NEO_EFFECTS
+                extern bool g_show_preset_name_dialog;
+                extern char g_preset_name_input[64];
+                extern int g_preset_name_cursor;
+                if (g_show_preset_name_dialog)
+                {
+                    const char *txt = e.text.text;
+                    if (txt && txt[0])
+                    {
+                        int len = (int)strlen(g_preset_name_input);
+                        for (int i = 0; txt[i] && len < 63; i++)
+                        {
+                            unsigned char c = (unsigned char)txt[i];
+                            if (c >= 32 && c < 127)
+                            {
+                                g_preset_name_input[len++] = (char)c;
+                                g_preset_name_input[len] = '\0';
+                            }
+                        }
+                        g_preset_name_cursor = len;
+                    }
+                    break; // don't route text input to global shortcuts
+                }
+#endif
+            }
+            break;
             case SDL_EVENT_KEY_DOWN:
             case SDL_EVENT_KEY_UP:
             {
@@ -1654,13 +1714,6 @@ int main(int argc, char *argv[])
                         g_show_preset_name_dialog = false;
                         memset(g_preset_name_input, 0, sizeof(g_preset_name_input));
                         g_preset_name_cursor = 0;
-                    }
-                    else if (len < 63 && sym >= 32 && sym < 127)
-                    {
-                        // Only allow printable ASCII characters
-                        g_preset_name_input[len] = (char)sym;
-                        g_preset_name_input[len + 1] = '\0';
-                        g_preset_name_cursor = len + 1;
                     }
                     break; // Don't process other keyboard shortcuts when dialog is open
                 }
@@ -2337,9 +2390,29 @@ int main(int argc, char *argv[])
 #endif
         SDL_RenderClear(R);
 
+#if USE_NEO_EFFECTS
+        // Toggle SDL text input based on the preset name dialog state.
+        // (Use SDL_EVENT_TEXT_INPUT so uppercase works.)
+        {
+            extern bool g_show_preset_name_dialog;
+            static bool s_preset_name_text_input_active = false;
+            if (g_show_preset_name_dialog && !s_preset_name_text_input_active)
+            {
+                SDL_StartTextInput(win);
+                s_preset_name_text_input_active = true;
+            }
+            else if (!g_show_preset_name_dialog && s_preset_name_text_input_active)
+            {
+                SDL_StopTextInput(win);
+                s_preset_name_text_input_active = false;
+            }
+        }
+#endif
+
         // Clear tooltips each frame
         ui_clear_tooltip(&g_program_tooltip_visible);
         ui_clear_tooltip(&g_bank_tooltip_visible);
+        ui_clear_tooltip(&g_reverb_tooltip_visible);
 
         // Colors driven by theme globals
         SDL_Color labelCol = g_text_color;
@@ -2978,6 +3051,20 @@ int main(int argc, char *argv[])
                 save_txt.a = 180;
             }
             draw_text(R, saveBtn.x + 6, saveBtn.y + 2, "+", save_txt);
+
+            if (overSave)
+            {
+                const char *tip = "Save Preset";
+                int tw = 0, th = 0;
+                measure_text(tip, &tw, &th);
+                int tx = ui_mx + 10;
+                int ty = ui_my - 25;
+                int tipw = tw + 8;
+                int tiph = th + 8;
+                if (tx + tipw > WINDOW_W - 4) tx = WINDOW_W - tipw - 4;
+                if (ty < 4) ty = ui_my + 25;
+                ui_set_tooltip((Rect){tx, ty, tipw, tiph}, tip, &g_reverb_tooltip_visible, &g_reverb_tooltip_rect, g_reverb_tooltip_text, sizeof(g_reverb_tooltip_text));
+            }
             
             if (overSave && ui_mclick)
             {
@@ -3005,6 +3092,20 @@ int main(int argc, char *argv[])
                 delete_txt.a = 180;
             }
             draw_text(R, deleteBtn.x + 6, deleteBtn.y + 2, "-", delete_txt);
+
+            if (overDelete)
+            {
+                const char *tip = "Delete Preset";
+                int tw = 0, th = 0;
+                measure_text(tip, &tw, &th);
+                int tx = ui_mx + 10;
+                int ty = ui_my - 25;
+                int tipw = tw + 8;
+                int tiph = th + 8;
+                if (tx + tipw > WINDOW_W - 4) tx = WINDOW_W - tipw - 4;
+                if (ty < 4) ty = ui_my + 25;
+                ui_set_tooltip((Rect){tx, ty, tipw, tiph}, tip, &g_reverb_tooltip_visible, &g_reverb_tooltip_rect, g_reverb_tooltip_text, sizeof(g_reverb_tooltip_text));
+            }
             
             if (overDelete && ui_mclick && can_delete_preset)
             {
@@ -3015,6 +3116,119 @@ int main(int argc, char *argv[])
                 g_show_preset_delete_confirm_dialog = true;
                 strncpy(g_preset_delete_name, preset_name, sizeof(g_preset_delete_name) - 1);
                 g_preset_delete_name[sizeof(g_preset_delete_name) - 1] = '\0';
+            }
+
+            // Import/Export (.neoreverb)
+            Rect importBtn = {deleteBtn.x + deleteBtn.w + spacing, btnY, 20, 20};
+            Rect exportBtn = {importBtn.x + importBtn.w + spacing, btnY, 20, 20};
+
+            bool overImport = custom_controls_enabled && point_in(ui_mx, ui_my, importBtn);
+            SDL_Color import_bg = overImport ? g_button_hover : g_button_base;
+            if (!custom_controls_enabled)
+                import_bg.a = 180;
+            draw_rect(R, importBtn, import_bg);
+            draw_frame(R, importBtn, g_button_border);
+            SDL_Color import_fg = g_button_text;
+            if (!custom_controls_enabled)
+                import_fg.a = 180;
+            draw_io_arrow_icon(R, importBtn, false, import_fg);
+
+            if (overImport)
+            {
+                const char *tip = "Import Preset";
+                int tw = 0, th = 0;
+                measure_text(tip, &tw, &th);
+                int tx = ui_mx + 10;
+                int ty = ui_my - 25;
+                int tipw = tw + 8;
+                int tiph = th + 8;
+                if (tx + tipw > WINDOW_W - 4) tx = WINDOW_W - tipw - 4;
+                if (ty < 4) ty = ui_my + 25;
+                ui_set_tooltip((Rect){tx, ty, tipw, tiph}, tip, &g_reverb_tooltip_visible, &g_reverb_tooltip_rect, g_reverb_tooltip_text, sizeof(g_reverb_tooltip_text));
+            }
+
+            extern char g_current_custom_reverb_preset[64];
+            bool can_export_preset = (g_current_custom_reverb_preset[0] != '\0');
+            bool overExport = custom_controls_enabled && can_export_preset && point_in(ui_mx, ui_my, exportBtn);
+            SDL_Color export_bg = (overExport ? g_button_hover : g_button_base);
+            if (!custom_controls_enabled || !can_export_preset)
+                export_bg.a = 180;
+            draw_rect(R, exportBtn, export_bg);
+            draw_frame(R, exportBtn, g_button_border);
+            SDL_Color export_fg = g_button_text;
+            if (!custom_controls_enabled || !can_export_preset)
+                export_fg.a = 180;
+            draw_io_arrow_icon(R, exportBtn, true, export_fg);
+
+            if (overExport)
+            {
+                const char *tip = "Export Preset";
+                int tw = 0, th = 0;
+                measure_text(tip, &tw, &th);
+                int tx = ui_mx + 10;
+                int ty = ui_my - 25;
+                int tipw = tw + 8;
+                int tiph = th + 8;
+                if (tx + tipw > WINDOW_W - 4) tx = WINDOW_W - tipw - 4;
+                if (ty < 4) ty = ui_my + 25;
+                ui_set_tooltip((Rect){tx, ty, tipw, tiph}, tip, &g_reverb_tooltip_visible, &g_reverb_tooltip_rect, g_reverb_tooltip_text, sizeof(g_reverb_tooltip_text));
+            }
+
+            if (overImport && ui_mclick)
+            {
+                char *path = open_neoreverb_dialog();
+                if (path)
+                {
+                    char imported[64] = {0};
+                    if (import_custom_reverb_neoreverb(path, imported, sizeof(imported)))
+                    {
+                        // Select the imported preset in the dropdown
+                        int preset_list_idx = get_custom_reverb_preset_index(imported);
+                        if (preset_list_idx >= 0)
+                        {
+                            load_custom_reverb_preset(imported);
+                            extern int g_custom_reverb_preset_count;
+                            int base_count2 = get_reverb_count() - g_custom_reverb_preset_count;
+                            reverbType = base_count2 + preset_list_idx + 1;
+                        }
+                        set_status_message("Imported .neoreverb preset");
+                    }
+                    else
+                    {
+                        set_status_message("Failed to import .neoreverb");
+                    }
+                    free(path);
+                }
+                g_reverbDropdownOpen = false;
+            }
+
+            if (overExport && ui_mclick && can_export_preset)
+            {
+                // Suggest filename: <name>.neoreverb
+                char default_name[96];
+                default_name[0] = '\0';
+                {
+                    char safe[64];
+                    safe_strncpy(safe, g_current_custom_reverb_preset, sizeof(safe));
+                    for (size_t i = 0; safe[i]; i++)
+                    {
+                        char c = safe[i];
+                        if (c == '/' || c == '\\' || c == ':' || c == '*' || c == '?' || c == '"' || c == '<' || c == '>' || c == '|' || c == '\'')
+                            safe[i] = '_';
+                    }
+                    snprintf(default_name, sizeof(default_name), "%s.neoreverb", safe);
+                }
+
+                char *path = save_neoreverb_dialog(default_name);
+                if (path)
+                {
+                    if (export_custom_reverb_neoreverb(g_current_custom_reverb_preset, path))
+                        set_status_message("Exported .neoreverb preset");
+                    else
+                        set_status_message("Failed to export .neoreverb");
+                    free(path);
+                }
+                g_reverbDropdownOpen = false;
             }
         }
 #endif
@@ -5821,6 +6035,11 @@ int main(int argc, char *argv[])
         if (g_file_tooltip_visible)
         {
             ui_draw_tooltip(R, g_file_tooltip_rect, g_file_tooltip_text, true, true);
+        }
+
+        if (g_reverb_tooltip_visible)
+        {
+            ui_draw_tooltip(R, g_reverb_tooltip_rect, g_reverb_tooltip_text, true, true);
         }
 
         // Draw deferred bank tooltip last so it appears above status text and other UI

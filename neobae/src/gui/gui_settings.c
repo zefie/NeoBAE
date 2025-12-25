@@ -1468,6 +1468,7 @@ void settings_cleanup(void)
 CustomReverbPreset *g_custom_reverb_presets = NULL;
 int g_custom_reverb_preset_count = 0;
 char g_current_custom_reverb_preset[64] = {0}; // Track which preset is currently loaded
+int g_current_custom_reverb_lowpass = 64; // Track current lowpass (engine has no getter)
 
 // Text input dialog state
 bool g_show_preset_name_dialog = false;
@@ -1557,8 +1558,9 @@ void load_custom_reverb_preset_list(void)
         {
             tmp[i].delays[j] = 0;
             tmp[i].feedback[j] = 0;
-            tmp[i].gain[j] = 65536;
+            tmp[i].gain[j] = 127;
         }
+        tmp[i].lowpass = 64;
     }
 
     // Second pass: parse values
@@ -1627,6 +1629,10 @@ void load_custom_reverb_preset_list(void)
             int comb = atoi(key + 5);
             if (comb >= 0 && comb < MAX_NEO_COMBS)
                 tmp[idx].gain[comb] = atoi(value);
+        }
+        else if (strcmp(key, "lowpass") == 0)
+        {
+            tmp[idx].lowpass = atoi(value);
         }
     }
 
@@ -1835,6 +1841,7 @@ void save_custom_reverb_preset(const char *name)
         fprintf(f, "custom_reverb_%d_feedback_%d=%d\n", preset_idx, i, GetNeoCustomReverbCombFeedback(i));
         fprintf(f, "custom_reverb_%d_gain_%d=%d\n", preset_idx, i, GetNeoCustomReverbCombGain(i));
     }
+    fprintf(f, "custom_reverb_%d_lowpass=%d\n", preset_idx, g_current_custom_reverb_lowpass);
     
     fclose(f);
     
@@ -1864,6 +1871,9 @@ void load_custom_reverb_preset(const char *name)
         SetNeoCustomReverbCombFeedback(i, preset->feedback[i]);
         SetNeoCustomReverbCombGain(i, preset->gain[i]);
     }
+
+    g_current_custom_reverb_lowpass = preset->lowpass;
+    SetNeoCustomReverbLowpass(g_current_custom_reverb_lowpass);
     
     // Update current preset name
     strncpy(g_current_custom_reverb_preset, name, sizeof(g_current_custom_reverb_preset) - 1);
@@ -1872,6 +1882,222 @@ void load_custom_reverb_preset(const char *name)
     // Force the custom reverb dialog to refresh its cached slider values
     extern int g_custom_reverb_dialog_sync_serial;
     g_custom_reverb_dialog_sync_serial++;
+#endif
+}
+
+static void xml_escape(const char *in, char *out, size_t out_size)
+{
+    if (!out || out_size == 0) return;
+    out[0] = '\0';
+    if (!in) return;
+
+    size_t o = 0;
+    for (size_t i = 0; in[i] && o + 1 < out_size; i++)
+    {
+        const char *rep = NULL;
+        switch (in[i])
+        {
+            case '&': rep = "&amp;"; break;
+            case '<': rep = "&lt;"; break;
+            case '>': rep = "&gt;"; break;
+            case '"': rep = "&quot;"; break;
+            case '\'': rep = "&apos;"; break;
+            default: rep = NULL; break;
+        }
+        if (rep)
+        {
+            size_t rl = strlen(rep);
+            if (o + rl >= out_size) break;
+            memcpy(out + o, rep, rl);
+            o += rl;
+            out[o] = '\0';
+        }
+        else
+        {
+            out[o++] = in[i];
+            out[o] = '\0';
+        }
+    }
+}
+
+static void xml_unescape_inplace(char *s)
+{
+    if (!s) return;
+
+    char *w = s;
+    for (char *r = s; *r; )
+    {
+        if (*r == '&')
+        {
+            if (strncmp(r, "&amp;", 5) == 0) { *w++ = '&'; r += 5; continue; }
+            if (strncmp(r, "&lt;", 4) == 0) { *w++ = '<'; r += 4; continue; }
+            if (strncmp(r, "&gt;", 4) == 0) { *w++ = '>'; r += 4; continue; }
+            if (strncmp(r, "&quot;", 6) == 0) { *w++ = '"'; r += 6; continue; }
+            if (strncmp(r, "&apos;", 6) == 0) { *w++ = '\''; r += 6; continue; }
+        }
+        *w++ = *r++;
+    }
+    *w = '\0';
+}
+
+static bool xml_get_tag_text(const char *xml, const char *tag, char *out, size_t out_size)
+{
+    if (!xml || !tag || !out || out_size == 0) return false;
+    out[0] = '\0';
+
+    char open[64];
+    char close[64];
+    snprintf(open, sizeof(open), "<%s>", tag);
+    snprintf(close, sizeof(close), "</%s>", tag);
+
+    const char *s = strstr(xml, open);
+    if (!s) return false;
+    s += strlen(open);
+    const char *e = strstr(s, close);
+    if (!e || e <= s) return false;
+    size_t len = (size_t)(e - s);
+    if (len >= out_size) len = out_size - 1;
+    memcpy(out, s, len);
+    out[len] = '\0';
+    xml_unescape_inplace(out);
+    return true;
+}
+
+bool export_custom_reverb_neoreverb(const char *preset_name, const char *path)
+{
+#if USE_NEO_EFFECTS
+    if (!preset_name || !preset_name[0] || !path || !path[0]) return false;
+
+    FILE *f = fopen(path, "wb");
+    if (!f) return false;
+
+    char esc_name[256];
+    xml_escape(preset_name, esc_name, sizeof(esc_name));
+
+    fprintf(f, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
+    fprintf(f, "<neoreverb version=\"1\">\n");
+    fprintf(f, "  <name>%s</name>\n", esc_name);
+    fprintf(f, "  <combCount>%d</combCount>\n", GetNeoCustomReverbCombCount());
+    fprintf(f, "  <lowpass>%d</lowpass>\n", g_current_custom_reverb_lowpass);
+    for (int i = 0; i < MAX_NEO_COMBS; i++)
+    {
+        fprintf(f,
+                "  <comb index=\"%d\" delayMs=\"%d\" feedback=\"%d\" gain=\"%d\"/>\n",
+                i,
+                GetNeoCustomReverbCombDelay(i),
+                GetNeoCustomReverbCombFeedback(i),
+                GetNeoCustomReverbCombGain(i));
+    }
+    fprintf(f, "</neoreverb>\n");
+    fclose(f);
+    return true;
+#else
+    (void)preset_name;
+    (void)path;
+    return false;
+#endif
+}
+
+bool import_custom_reverb_neoreverb(const char *path, char *out_preset_name, size_t out_preset_name_size)
+{
+#if USE_NEO_EFFECTS
+    if (out_preset_name && out_preset_name_size)
+        out_preset_name[0] = '\0';
+    if (!path || !path[0]) return false;
+
+    FILE *f = fopen(path, "rb");
+    if (!f) return false;
+
+    fseek(f, 0, SEEK_END);
+    long sz = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    if (sz <= 0 || sz > (1024 * 1024))
+    {
+        fclose(f);
+        return false;
+    }
+
+    char *xml = (char *)malloc((size_t)sz + 1);
+    if (!xml)
+    {
+        fclose(f);
+        return false;
+    }
+    size_t rd = fread(xml, 1, (size_t)sz, f);
+    fclose(f);
+    xml[rd] = '\0';
+
+    CustomReverbPreset preset;
+    memset(&preset, 0, sizeof(preset));
+    preset.comb_count = 4;
+    for (int i = 0; i < MAX_NEO_COMBS; i++)
+    {
+        preset.delays[i] = 0;
+        preset.feedback[i] = 0;
+        preset.gain[i] = 127;
+    }
+    preset.lowpass = 64;
+
+    if (!xml_get_tag_text(xml, "name", preset.name, sizeof(preset.name)))
+    {
+        free(xml);
+        return false;
+    }
+
+    char buf[64];
+    if (xml_get_tag_text(xml, "combCount", buf, sizeof(buf)))
+        preset.comb_count = atoi(buf);
+    if (xml_get_tag_text(xml, "lowpass", buf, sizeof(buf)))
+        preset.lowpass = atoi(buf);
+
+    // Parse <comb .../> entries
+    const char *p = xml;
+    while ((p = strstr(p, "<comb")) != NULL)
+    {
+        int index = -1, delayMs = -1, feedback = -1, gain = -1;
+        if (sscanf(p, "<comb index=\"%d\" delayMs=\"%d\" feedback=\"%d\" gain=\"%d\"",
+                   &index, &delayMs, &feedback, &gain) == 4)
+        {
+            if (index >= 0 && index < MAX_NEO_COMBS)
+            {
+                preset.delays[index] = delayMs;
+                preset.feedback[index] = feedback;
+                preset.gain[index] = gain;
+            }
+        }
+        p += 5;
+    }
+
+    free(xml);
+
+    // Enforce max presets unless overwriting by name
+    int existing = get_custom_reverb_preset_index(preset.name);
+    if (existing < 0 && g_custom_reverb_preset_count >= MAX_CUSTOM_REVERB_PRESETS)
+    {
+        set_status_message("Too many custom reverb presets (max 65)");
+        return false;
+    }
+
+    // Apply to engine then save using existing persistence format
+    SetNeoCustomReverbCombCount(preset.comb_count);
+    for (int i = 0; i < MAX_NEO_COMBS; i++)
+    {
+        SetNeoCustomReverbCombDelay(i, preset.delays[i]);
+        SetNeoCustomReverbCombFeedback(i, preset.feedback[i]);
+        SetNeoCustomReverbCombGain(i, preset.gain[i]);
+    }
+    g_current_custom_reverb_lowpass = preset.lowpass;
+    SetNeoCustomReverbLowpass(g_current_custom_reverb_lowpass);
+    save_custom_reverb_preset(preset.name);
+
+    if (out_preset_name && out_preset_name_size)
+        safe_strncpy(out_preset_name, preset.name, out_preset_name_size);
+    return true;
+#else
+    (void)path;
+    if (out_preset_name && out_preset_name_size)
+        out_preset_name[0] = '\0';
+    return false;
 #endif
 }
 

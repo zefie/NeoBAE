@@ -2,15 +2,24 @@ package com.zefie.NeoBAEDroid
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.util.Xml
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.GetApp
+import androidx.compose.material.icons.filled.Publish
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.zefie.NeoBAE.Mixer
+import java.io.StringReader
+import java.io.StringWriter
 
 private const val PREF_NAME = "NeoBAE_prefs"
 private const val KEY_ACTIVE_PRESET = "custom_reverb_preset"
@@ -36,6 +45,101 @@ data class CustomReverbPreset(
     val gain: IntArray,
     val lowpass: Int
 )
+
+private fun sanitizePresetNameForFilename(name: String): String {
+    val raw = name.trim()
+    if (raw.isEmpty()) return "preset"
+    val sb = StringBuilder(raw.length)
+    for (ch in raw) {
+        sb.append(
+            when (ch) {
+                '/', '\\', ':', '*', '?', '"', '<', '>', '|', '\'' -> '_'
+                else -> ch
+            }
+        )
+    }
+    val out = sb.toString().trim().ifEmpty { "preset" }
+    return out.take(64)
+}
+
+private fun presetToNeoReverbXml(preset: CustomReverbPreset): String {
+    val serializer = Xml.newSerializer()
+    val writer = StringWriter()
+    serializer.setOutput(writer)
+    serializer.startDocument("UTF-8", true)
+    serializer.startTag(null, "neoreverb")
+    serializer.attribute(null, "version", "1")
+
+    serializer.startTag(null, "name")
+    serializer.text(preset.name)
+    serializer.endTag(null, "name")
+
+    serializer.startTag(null, "combCount")
+    serializer.text(preset.combCount.toString())
+    serializer.endTag(null, "combCount")
+
+    serializer.startTag(null, "lowpass")
+    serializer.text(preset.lowpass.toString())
+    serializer.endTag(null, "lowpass")
+
+    for (i in 0 until MAX_COMBS) {
+        serializer.startTag(null, "comb")
+        serializer.attribute(null, "index", i.toString())
+        serializer.attribute(null, "delayMs", preset.delaysMs[i].toString())
+        serializer.attribute(null, "feedback", preset.feedback[i].toString())
+        serializer.attribute(null, "gain", preset.gain[i].toString())
+        serializer.endTag(null, "comb")
+    }
+
+    serializer.endTag(null, "neoreverb")
+    serializer.endDocument()
+    return writer.toString()
+}
+
+private fun parseNeoReverbXml(xml: String): CustomReverbPreset? {
+    val parser = Xml.newPullParser()
+    parser.setInput(StringReader(xml))
+
+    var name: String? = null
+    var combCount = DEFAULT_COMB_COUNT
+    var lowpass = DEFAULT_LOWPASS
+    val delays = IntArray(MAX_COMBS) { DEFAULT_DELAYS_MS[it] }
+    val feedback = IntArray(MAX_COMBS) { DEFAULT_FEEDBACK }
+    val gain = IntArray(MAX_COMBS) { DEFAULT_GAIN }
+
+    var eventType = parser.eventType
+    while (eventType != org.xmlpull.v1.XmlPullParser.END_DOCUMENT) {
+        if (eventType == org.xmlpull.v1.XmlPullParser.START_TAG) {
+            when (parser.name) {
+                "name" -> name = parser.nextText().trim()
+                "combCount" -> combCount = parser.nextText().trim().toIntOrNull() ?: combCount
+                "lowpass" -> lowpass = parser.nextText().trim().toIntOrNull() ?: lowpass
+                "comb" -> {
+                    val idx = parser.getAttributeValue(null, "index")?.toIntOrNull() ?: -1
+                    if (idx in 0 until MAX_COMBS) {
+                        parser.getAttributeValue(null, "delayMs")?.toIntOrNull()?.let { delays[idx] = it }
+                        parser.getAttributeValue(null, "feedback")?.toIntOrNull()?.let { feedback[idx] = it }
+                        parser.getAttributeValue(null, "gain")?.toIntOrNull()?.let { gain[idx] = it }
+                    }
+                }
+            }
+        }
+        eventType = parser.next()
+    }
+
+    val finalName = name?.trim().orEmpty()
+    if (finalName.isEmpty()) return null
+
+    val clampedCombCount = combCount.coerceIn(1, MAX_COMBS)
+    val clampedLowpass = lowpass.coerceIn(0, 127)
+    for (i in 0 until MAX_COMBS) {
+        delays[i] = delays[i].coerceIn(1, MAX_DELAY_MS)
+        feedback[i] = feedback[i].coerceIn(0, 127)
+        gain[i] = gain[i].coerceIn(0, 127)
+    }
+
+    return CustomReverbPreset(finalName, clampedCombCount, delays, feedback, gain, clampedLowpass)
+}
 
 private fun prefs(ctx: Context): SharedPreferences =
     ctx.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
@@ -211,6 +315,47 @@ fun CustomReverbScreenContent(
         reloadFromEngine()
     }
 
+    val importLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        try {
+            val xml = ctx.contentResolver.openInputStream(uri)?.use { it.readBytes().toString(Charsets.UTF_8) }
+            val preset = xml?.let { parseNeoReverbXml(it) }
+            if (preset != null) {
+                saveCustomReverbPreset(ctx, preset)
+                setActiveCustomReverbPresetName(ctx, preset.name)
+                applyCustomReverbPresetToEngine(ctx, preset)
+                reloadFromEngine()
+                onLowpassChanged(preset.lowpass)
+                Toast.makeText(ctx, "Imported preset: ${preset.name}", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(ctx, "Invalid .neoreverb file", Toast.LENGTH_SHORT).show()
+            }
+        } catch (_: Exception) {
+            Toast.makeText(ctx, "Failed to import .neoreverb", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    val exportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/xml")
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        try {
+            val activeName = getActiveCustomReverbPresetName(ctx)
+            if (activeName.isNullOrBlank()) {
+                Toast.makeText(ctx, "No active preset to export", Toast.LENGTH_SHORT).show()
+                return@rememberLauncherForActivityResult
+            }
+            val preset = snapshotCustomReverbFromEngine(ctx, activeName)
+            val xml = presetToNeoReverbXml(preset)
+            ctx.contentResolver.openOutputStream(uri)?.use { it.write(xml.toByteArray(Charsets.UTF_8)) }
+            Toast.makeText(ctx, "Exported preset: ${preset.name}", Toast.LENGTH_SHORT).show()
+        } catch (_: Exception) {
+            Toast.makeText(ctx, "Failed to export .neoreverb", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     val scroll = rememberScrollState()
     Column(
         modifier = Modifier
@@ -218,7 +363,28 @@ fun CustomReverbScreenContent(
             .verticalScroll(scroll)
             .padding(16.dp)
     ) {
-        Text("Custom Reverb Settings", style = MaterialTheme.typography.h6)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Custom Reverb Settings", style = MaterialTheme.typography.h6)
+            Spacer(Modifier.weight(1f))
+
+            IconButton(onClick = {
+                importLauncher.launch(arrayOf("application/xml", "text/xml", "*/*"))
+            }) {
+                Icon(Icons.Filled.GetApp, contentDescription = "Import .neoreverb")
+            }
+
+            val activeName = getActiveCustomReverbPresetName(ctx)
+            val exportEnabled = !activeName.isNullOrBlank()
+            IconButton(
+                onClick = {
+                    val safe = sanitizePresetNameForFilename(activeName ?: "preset")
+                    exportLauncher.launch("$safe.neoreverb")
+                },
+                enabled = exportEnabled
+            ) {
+                Icon(Icons.Filled.Publish, contentDescription = "Export .neoreverb")
+            }
+        }
         Spacer(Modifier.height(12.dp))
 
         Text("Comb Count: $combCount")

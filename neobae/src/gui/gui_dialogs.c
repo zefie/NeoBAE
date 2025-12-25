@@ -48,6 +48,10 @@ bool g_file_tooltip_visible = false;
 Rect g_file_tooltip_rect;
 char g_file_tooltip_text[520];
 
+bool g_reverb_tooltip_visible = false;
+Rect g_reverb_tooltip_rect;
+char g_reverb_tooltip_text[520];
+
 bool g_loop_tooltip_visible = false;
 Rect g_loop_tooltip_rect;
 char g_loop_tooltip_text[520];
@@ -429,6 +433,158 @@ char *save_playlist_dialog(void)
         strcpy(ret, "playlist.m3u");
     }
     return ret;
+#endif
+}
+
+char *open_neoreverb_dialog(void)
+{
+#ifdef _WIN32
+    char fileBuf[1024] = {0};
+    OPENFILENAMEA ofn;
+    ZeroMemory(&ofn, sizeof(ofn));
+    ofn.lStructSize = sizeof(ofn);
+    ofn.hwndOwner = NULL;
+    ofn.lpstrFilter = "Neo Reverb Preset Files\0*.neoreverb\0"
+                      "All Files\0*.*\0";
+    ofn.lpstrFile = fileBuf;
+    ofn.nMaxFile = sizeof(fileBuf);
+    ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST;
+    if (GetOpenFileNameA(&ofn))
+    {
+        size_t len = strlen(fileBuf);
+        char *ret = (char *)malloc(len + 1);
+        if (ret)
+        {
+            memcpy(ret, fileBuf, len + 1);
+        }
+        return ret;
+    }
+    return NULL;
+#else
+    const char *cmds[] = {
+        "zenity --file-selection --title='Import Neo Reverb Preset' --file-filter='Neo Reverb Preset | *.neoreverb' --file-filter='All Files | *' 2>/dev/null",
+        "kdialog --getopenfilename . '*.neoreverb' 2>/dev/null",
+        "yad --file-selection --title='Import Neo Reverb Preset' 2>/dev/null",
+        NULL};
+    for (int i = 0; cmds[i]; ++i)
+    {
+        FILE *p = popen(cmds[i], "r");
+        if (!p)
+            continue;
+        char buf[1024];
+        if (fgets(buf, sizeof(buf), p))
+        {
+            pclose(p);
+            // strip newline
+            size_t l = strlen(buf);
+            while (l > 0 && (buf[l - 1] == '\n' || buf[l - 1] == '\r'))
+                buf[--l] = '\0';
+            if (l > 0)
+            {
+                char *ret = (char *)malloc(l + 1);
+                if (ret)
+                {
+                    memcpy(ret, buf, l + 1);
+                }
+                return ret;
+            }
+        }
+        pclose(p);
+    }
+    BAE_PRINTF("No GUI file chooser available (zenity/kdialog/yad).\n");
+    return NULL;
+#endif
+}
+
+char *save_neoreverb_dialog(const char *default_name)
+{
+#ifdef _WIN32
+    char fileBuf[1024] = {0};
+    if (default_name && default_name[0])
+    {
+        safe_strncpy(fileBuf, default_name, sizeof(fileBuf));
+    }
+    else
+    {
+        strcpy(fileBuf, "preset.neoreverb");
+    }
+    OPENFILENAMEA ofn;
+    ZeroMemory(&ofn, sizeof(ofn));
+    ofn.lStructSize = sizeof(ofn);
+    ofn.hwndOwner = NULL;
+    ofn.lpstrFilter = "Neo Reverb Preset Files\0*.neoreverb\0"
+                      "All Files\0*.*\0";
+    ofn.lpstrFile = fileBuf;
+    ofn.nMaxFile = sizeof(fileBuf);
+    ofn.lpstrDefExt = "neoreverb";
+    ofn.Flags = OFN_PATHMUSTEXIST | OFN_OVERWRITEPROMPT;
+    if (GetSaveFileNameA(&ofn))
+    {
+        size_t len = strlen(fileBuf);
+        char *ret = (char *)malloc(len + 1);
+        if (ret)
+        {
+            memcpy(ret, fileBuf, len + 1);
+        }
+        return ret;
+    }
+    return NULL;
+#else
+    char fname[256];
+    if (default_name && default_name[0])
+        safe_strncpy(fname, default_name, sizeof(fname));
+    else
+        strcpy(fname, "preset.neoreverb");
+
+    // These commands use single quotes; ensure fname doesn't contain single quotes.
+    for (size_t i = 0; fname[i]; i++)
+    {
+        if (fname[i] == '\'')
+            fname[i] = '_';
+    }
+
+    char cmd_zenity[1024];
+    char cmd_kdialog[1024];
+    char cmd_yad[1024];
+    snprintf(cmd_zenity, sizeof(cmd_zenity),
+             "zenity --file-selection --save --confirm-overwrite --title='Export Neo Reverb Preset' --filename='%s' --file-filter='Neo Reverb Preset | *.neoreverb' --file-filter='All Files | *' 2>/dev/null",
+             fname);
+    snprintf(cmd_kdialog, sizeof(cmd_kdialog), "kdialog --getsavefilename '%s' '*.neoreverb' 2>/dev/null", fname);
+    snprintf(cmd_yad, sizeof(cmd_yad),
+             "yad --file-selection --save --confirm-overwrite --title='Export Neo Reverb Preset' --filename='%s' 2>/dev/null",
+             fname);
+    const char *cmds[] = {cmd_zenity, cmd_kdialog, cmd_yad, NULL};
+
+    for (int i = 0; cmds[i]; ++i)
+    {
+        FILE *p = popen(cmds[i], "r");
+        if (!p)
+            continue;
+        char buf[1024];
+        if (fgets(buf, sizeof(buf), p))
+        {
+            pclose(p);
+            // strip newline
+            size_t l = strlen(buf);
+            while (l > 0 && (buf[l - 1] == '\n' || buf[l - 1] == '\r'))
+                buf[--l] = '\0';
+            if (l > 0)
+            {
+                char *ret = (char *)malloc(l + 1);
+                if (ret)
+                {
+                    memcpy(ret, buf, l + 1);
+                }
+                return ret;
+            }
+        }
+        else
+        {
+            pclose(p);
+        }
+    }
+    BAE_PRINTF("No GUI file chooser available (zenity/kdialog/yad).\n");
+    return NULL;
 #endif
 }
 

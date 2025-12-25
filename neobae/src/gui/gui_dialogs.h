@@ -21,6 +21,11 @@ extern bool g_file_tooltip_visible;
 extern Rect g_file_tooltip_rect;
 extern char g_file_tooltip_text[520];
 
+// Reverb button tooltip state
+extern bool g_reverb_tooltip_visible;
+extern Rect g_reverb_tooltip_rect;
+extern char g_reverb_tooltip_text[520];
+
 // Function declarations
 const char *rmf_info_label(BAEInfoType t);
 void rmf_info_reset(void);
@@ -31,6 +36,10 @@ char *open_file_dialog(void);
 char *open_folder_dialog(void); // For folder selection to add all files
 char *open_playlist_dialog(void); // For M3U playlist files
 char *save_playlist_dialog(void); // For saving M3U playlist files
+
+// Neo reverb preset (.neoreverb) dialogs
+char *open_neoreverb_dialog(void);
+char *save_neoreverb_dialog(const char *default_name);
 
 // Dialog rendering functions
 void render_rmf_info_dialog(SDL_Renderer *R, int mx, int my, bool mclick);
