@@ -1,6 +1,7 @@
 #include "gui_panels.h"
 #include "gui_common.h"
 #include "NeoBAE.h"
+#include "GenPriv.h"
 #include "gui_bae.h"
 #include "gui_midi_vkbd.h" // for g_show_virtual_keyboard and keyboard globals
 #include "gui_theme.h"
@@ -17,13 +18,20 @@
 const int16_t g_max_bank = 128;
 const int16_t g_max_program = 127;
 
+// Custom reverb modal state
+bool g_show_custom_reverb_dialog = false;
+bool g_custom_reverb_button_visible = false;
+
+// Bump this to force the custom reverb dialog to refresh its cached slider values
+int g_custom_reverb_dialog_sync_serial = 0;
+
 // send_bank_select_for_current_channel is defined in gui_main.c
 extern void send_bank_select_for_current_channel(void);
 
 bool ui_modal_blocking(void)
 {
     // Mirror the modal blocking condition used throughout gui_main.c
-    if (g_show_settings_dialog || g_show_about_dialog || (g_show_rmf_info_dialog && g_bae.is_rmf_file) || g_exporting)
+    if (g_show_settings_dialog || g_show_about_dialog || (g_show_rmf_info_dialog && g_bae.is_rmf_file) || g_exporting || g_show_custom_reverb_dialog)
         return true;
     return false;
 }
@@ -107,7 +115,7 @@ void ui_draw_tooltip(SDL_Renderer *R, Rect tipRect, const char *text, bool cente
 
 // Reverb names shared across the UI. Centralize to avoid duplicates.
 #if USE_NEO_EFFECTS
-static const char *kReverbNames[] = {"None", "Igor's Closet", "Igor's Garage", "Igor's Acoustic Lab", "Igor's Cavern", "Igor's Dungeon", "Small Reflections", "Early Reflections", "Basement", "Banquet Hall", "Catacombs", "Neo Room", "Neo Hall", "Neo Tap Delay"};
+static const char *kReverbNames[] = {"None", "Igor's Closet", "Igor's Garage", "Igor's Acoustic Lab", "Igor's Cavern", "Igor's Dungeon", "Small Reflections", "Early Reflections", "Basement", "Banquet Hall", "Catacombs", "Neo Room", "Neo Hall", "Neo Tap Delay", "Custom"};
 #else
 static const char *kReverbNames[] = {"None", "Igor's Closet", "Igor's Garage", "Igor's Acoustic Lab", "Igor's Cavern", "Igor's Dungeon", "Small Reflections", "Early Reflections", "Basement", "Banquet Hall", "Catacombs"};
 #endif
@@ -117,14 +125,35 @@ int get_reverb_count(void)
     int reverbCount = (int)(sizeof(kReverbNames) / sizeof(kReverbNames[0]));
     if (reverbCount > (BAE_REVERB_TYPE_COUNT - 1))
         reverbCount = (BAE_REVERB_TYPE_COUNT - 1);
+    
+#if USE_NEO_EFFECTS
+    // Add custom presets to the count
+    extern int g_custom_reverb_preset_count;
+    reverbCount += g_custom_reverb_preset_count;
+#endif
+    
     return reverbCount;
 }
 
 const char *get_reverb_name(int idx)
 {
-    int rc = get_reverb_count();
-    if (idx < 0 || idx >= rc)
+    int base_count = (int)(sizeof(kReverbNames) / sizeof(kReverbNames[0]));
+    if (base_count > (BAE_REVERB_TYPE_COUNT - 1))
+        base_count = (BAE_REVERB_TYPE_COUNT - 1);
+    
+    if (idx < 0 || idx >= get_reverb_count())
         return "?";
+    
+#if USE_NEO_EFFECTS
+    // Check if this is a custom preset
+    extern CustomReverbPreset *g_custom_reverb_presets;
+    extern int g_custom_reverb_preset_count;
+    if (idx >= base_count && idx < base_count + g_custom_reverb_preset_count)
+    {
+        return g_custom_reverb_presets[idx - base_count].name;
+    }
+#endif
+    
     return kReverbNames[idx];
 }
 
@@ -136,7 +165,7 @@ void compute_ui_layout(UiLayout *L)
     L->transportPanel = (Rect){10, 160, 880, 85};
     int keyboardPanelY = L->transportPanel.y + L->transportPanel.h + 10;
     L->chanDD = (Rect){10 + 10, keyboardPanelY + 28, 90, 22};
-    L->ddRect = (Rect){687, 43, 160, 24};
+    L->ddRect = (Rect){687, 38, 160, 24};
 
     // Keyboard panel
     L->keyboardPanel = (Rect){10, keyboardPanelY, 880, 110};
@@ -262,3 +291,170 @@ bool ui_adjust_volume(int mx, int my, int delta, bool volume_enabled_local, int 
     }
     return true;
 }
+
+// Custom reverb dialog rendering and logic
+void render_custom_reverb_dialog(SDL_Renderer *R, int mx, int my, bool mclick, bool mdown, int window_h)
+{
+    // Static state to cache values and avoid constant Get/Set every frame
+    static bool initialized = false;
+    static int last_sync_serial = -1;
+    static int cached_comb_count = 4;
+    static int cached_delays[8] = {50, 75, 100, 125, 150, 175, 200, 225};
+    static int cached_feedback[8] = {90, 90, 90, 90, 90, 90, 90, 90};
+    static int cached_gain[8] = {127, 127, 127, 127, 127, 127, 127, 127};
+    static int cached_lowpass = 64;
+    
+    if (!g_show_custom_reverb_dialog)
+    {
+        initialized = false;  // Reset when dialog closes
+        last_sync_serial = -1;
+        return;
+    }
+
+    // Dim background
+    SDL_Color dim = g_is_dark_mode ? (SDL_Color){0, 0, 0, 160} : (SDL_Color){0, 0, 0, 120};
+    draw_rect(R, (Rect){0, 0, WINDOW_W, window_h}, dim);
+
+    // Dialog dimensions
+    int dlgW = 480;
+    int dlgH = 650;
+    int pad = 10;
+    Rect dlg = {(WINDOW_W - dlgW) / 2, (window_h - dlgH) / 2, dlgW, dlgH};
+
+    SDL_Color dlgBg = g_panel_bg;
+    dlgBg.a = 250;
+    SDL_Color dlgFrame = g_panel_border;
+
+    draw_rect(R, dlg, dlgBg);
+    draw_frame(R, dlg, dlgFrame);
+
+    // Title
+    draw_text(R, dlg.x + pad, dlg.y + 8, "Custom Reverb Settings", g_header_color);
+
+    // Close button
+    Rect closeBtn = {dlg.x + dlg.w - 22, dlg.y + 6, 16, 16};
+    bool overClose = point_in(mx, my, closeBtn);
+    draw_rect(R, closeBtn, overClose ? g_button_hover : g_button_base);
+    draw_frame(R, closeBtn, g_button_border);
+    draw_text(R, closeBtn.x + 4, closeBtn.y - 1, "X", g_button_text);
+
+    if (mclick && overClose)
+    {
+        g_show_custom_reverb_dialog = false;
+        return;
+    }
+
+    // Layout
+    int labelX = dlg.x + pad + 10;
+    int sliderX = dlg.x + pad + 150;
+    int sliderW = dlgW - 170 - 40;
+    int sliderH = 16;
+    int rowH = 50;
+    int startY = dlg.y + 60;
+    
+    // Initialize cached values from backend once, or when presets change
+    if (!initialized || last_sync_serial != g_custom_reverb_dialog_sync_serial)
+    {
+        cached_comb_count = GetNeoCustomReverbCombCount();
+        for (int i = 0; i < MAX_NEO_COMBS; i++)
+        {
+            cached_delays[i] = GetNeoCustomReverbCombDelay(i);
+            cached_feedback[i] = GetNeoCustomReverbCombFeedback(i);
+            cached_gain[i] = GetNeoCustomReverbCombGain(i);
+        }
+        initialized = true;
+        last_sync_serial = g_custom_reverb_dialog_sync_serial;
+    }
+    
+    // Number of Comb Filters slider
+    int y = startY;
+    draw_text(R, labelX, y + 4, "Comb Count:", g_text_color);
+    Rect combCountSlider = {sliderX, y, sliderW, sliderH};
+    int old_count = cached_comb_count;
+    ui_slider(R, combCountSlider, &cached_comb_count, 1, MAX_NEO_COMBS, mx, my, mdown, false);
+    if (cached_comb_count != old_count)
+    {
+        SetNeoCustomReverbCombCount(cached_comb_count);
+    }
+    
+    char countBuf[32];
+    snprintf(countBuf, sizeof(countBuf), "%d", cached_comb_count);
+    draw_text(R, sliderX + sliderW + 8, y + 2, countBuf, g_text_color);
+    
+    y += rowH;
+    
+    // Per-comb settings (show first 4 combs to fit in dialog)
+    int maxDisplay = (cached_comb_count < 4) ? cached_comb_count : 4;
+    for (int i = 0; i < maxDisplay; i++)
+    {
+        char label[64];
+        
+        // Comb label
+        snprintf(label, sizeof(label), "Comb %d", i + 1);
+        draw_text(R, dlg.x + pad, y, label, g_text_color);
+        y += 25;
+        
+        // Delay
+        snprintf(label, sizeof(label), "  Delay (ms):");
+        draw_text(R, labelX + 10, y + 4, label, g_text_color);
+        Rect delaySlider = {sliderX, y, sliderW - 50, sliderH};
+        int old_delay = cached_delays[i];
+        ui_slider(R, delaySlider, &cached_delays[i], 1, 300, mx, my, mdown, false);
+        if (cached_delays[i] != old_delay)
+        {
+            SetNeoCustomReverbCombDelay(i, cached_delays[i]);
+        }
+        snprintf(label, sizeof(label), "%d ms", cached_delays[i]);
+        draw_text(R, sliderX + sliderW - 40, y + 2, label, g_text_color);
+        y += 28;
+        
+        // Feedback
+        snprintf(label, sizeof(label), "  Feedback:");
+        draw_text(R, labelX + 10, y + 4, label, g_text_color);
+        Rect feedbackSlider = {sliderX, y, sliderW - 50, sliderH};
+        int old_feedback = cached_feedback[i];
+        ui_slider(R, feedbackSlider, &cached_feedback[i], 0, 127, mx, my, mdown, false);
+        if (cached_feedback[i] != old_feedback)
+        {
+            SetNeoCustomReverbCombFeedback(i, cached_feedback[i]);
+        }
+        snprintf(label, sizeof(label), "%d", cached_feedback[i]);
+        draw_text(R, sliderX + sliderW - 40, y + 2, label, g_text_color);
+        y += 28;
+        
+        // Gain
+        snprintf(label, sizeof(label), "  Gain:");
+        draw_text(R, labelX + 10, y + 4, label, g_text_color);
+        Rect gainSlider = {sliderX, y, sliderW - 50, sliderH};
+        int old_gain = cached_gain[i];
+        ui_slider(R, gainSlider, &cached_gain[i], 0, 127, mx, my, mdown, false);
+        if (cached_gain[i] != old_gain)
+        {
+            SetNeoCustomReverbCombGain(i, cached_gain[i]);
+        }
+        snprintf(label, sizeof(label), "%d", cached_gain[i]);
+        draw_text(R, sliderX + sliderW - 40, y + 2, label, g_text_color);
+        y += 35;
+    }
+
+    // Low-pass filter
+    y += 10;
+    draw_text(R, labelX, y + 4, "Low-pass:", g_text_color);
+    Rect lowpassSlider = {sliderX, y, sliderW - 50, sliderH};
+    int old_lowpass = cached_lowpass;
+    ui_slider(R, lowpassSlider, &cached_lowpass, 0, 127, mx, my, mdown, false);
+    if (cached_lowpass != old_lowpass)
+    {
+        SetNeoCustomReverbLowpass(cached_lowpass);
+    }
+    
+    char lowpassBuf[64];
+    snprintf(lowpassBuf, sizeof(lowpassBuf), "%d", cached_lowpass);
+    draw_text(R, sliderX + sliderW - 40, y + 2, lowpassBuf, g_text_color);
+
+    // Info text at bottom
+    y += rowH - 10;
+    const char *info = "Adjust parameters in real-time. Use scroll wheel for fine tuning.";
+    draw_text(R, dlg.x + pad + 10, y, info, g_text_color);
+}
+

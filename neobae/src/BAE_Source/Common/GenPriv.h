@@ -880,6 +880,18 @@ XBOOL       CheckNeoReverbType(void);
 void        RunNeoReverb(INT32 *sourceP, INT32 *destP, int numFrames);
 void        SetNeoReverbMix(int wetLevel);
 void        SetNeoReverbTime(int reverbTime);
+
+// Custom reverb control functions
+void        SetNeoCustomReverbCombCount(int combCount);
+void        SetNeoCustomReverbCombDelay(int combIndex, int delayMs);
+void        SetNeoCustomReverbCombFeedback(int combIndex, int feedback);
+void        SetNeoCustomReverbCombGain(int combIndex, int gain);
+void        SetNeoCustomReverbLowpass(int lowpass);
+int         GetNeoCustomReverbCombCount(void);
+int         GetNeoCustomReverbCombDelay(int combIndex);
+int         GetNeoCustomReverbCombFeedback(int combIndex);
+int         GetNeoCustomReverbCombGain(int combIndex);
+#define MAX_NEO_COMBS 4
 #endif
 
 /******************************* new chorus stuff *****************************/

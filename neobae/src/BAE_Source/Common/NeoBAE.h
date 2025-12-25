@@ -161,6 +161,7 @@ extern "C"
         BAE_REVERB_TYPE_12,    // MT-32 Room (Neo reverb)
         BAE_REVERB_TYPE_13,    // MT-32 Hall (Neo reverb)
         BAE_REVERB_TYPE_14,    // MT-32 Tap Delay (Neo reverb)
+        BAE_REVERB_TYPE_15,    // Custom (Neo reverb)
         BAE_REVERB_TYPE_COUNT
     } BAEReverbType;
 

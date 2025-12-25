@@ -22,6 +22,17 @@ void compute_ui_layout(UiLayout *L);
 int get_reverb_count(void);
 const char *get_reverb_name(int idx);
 
+// Custom reverb modal state
+extern bool g_show_custom_reverb_dialog;
+extern bool g_custom_reverb_button_visible;
+
+// Increment this to force the custom reverb dialog to re-sync its cached slider values
+// from the backend (e.g. when a preset is loaded).
+extern int g_custom_reverb_dialog_sync_serial;
+
+// Custom reverb dialog rendering
+void render_custom_reverb_dialog(SDL_Renderer *R, int mx, int my, bool mclick, bool mdown, int window_h);
+
 // Bank/MSB/LSB helper
 void change_bank_value_for_current_channel(bool is_msb, int delta);
 

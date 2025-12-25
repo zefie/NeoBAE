@@ -104,10 +104,13 @@
 // Tap delay needs to hold up to ~400ms @ 44.1kHz in *stereo-interleaved* samples:
 // 400ms is 17640 frames => 35280 interleaved samples, so 32768 would wrap.
 #define NEO_TAP_BUFFER_SIZE     65536
+// Custom reverb supports up to 8 comb filters for maximum flexibility
+#define NEO_CUSTOM_BUFFER_SIZE  32768
 
 #define NEO_ROOM_BUFFER_MASK    (NEO_ROOM_BUFFER_SIZE - 1)
 #define NEO_HALL_BUFFER_MASK    (NEO_HALL_BUFFER_SIZE - 1)
 #define NEO_TAP_BUFFER_MASK     (NEO_TAP_BUFFER_SIZE - 1)
+#define NEO_CUSTOM_BUFFER_MASK  (NEO_CUSTOM_BUFFER_SIZE - 1)
 
 // MT-32 Room mode: 3 parallel comb filters
 // Delays scaled for ~30-60ms at 44.1kHz
@@ -126,6 +129,9 @@ static const INT32 neo_hall_feedback = (XFIXED_1 * 0.75); // ~0.75
 #define NEO_TAP_COUNT           4
 static const int32_t neo_tap_delays[] = {4410, 8820, 13230, 17640};
 static const INT32 neo_tap_gains[] = {XFIXED_1, 52428, 39321, 26214};  // Descending gains
+
+// Custom reverb mode: User-configurable comb filters
+#define NEO_CUSTOM_MAX_COMBS    4
 
 // Global reverb parameters
 typedef struct NeoReverbParams
@@ -162,6 +168,16 @@ typedef struct NeoReverbParams
     // Wet/dry mix
     INT32       mWetGain;
     INT32       mDryGain;
+    
+    // Custom mode buffers and parameters
+    INT32       *mCustomBuffer[NEO_CUSTOM_MAX_COMBS];
+    int         mCustomWriteIdx[NEO_CUSTOM_MAX_COMBS];
+    int         mCustomReadIdx[NEO_CUSTOM_MAX_COMBS];
+    int         mCustomDelayFrames[NEO_CUSTOM_MAX_COMBS];
+    INT32       mCustomFeedback[NEO_CUSTOM_MAX_COMBS];
+    INT32       mCustomGain[NEO_CUSTOM_MAX_COMBS];
+    int         mCustomCombCount;
+    XBOOL       mCustomParamsDirty;  // Need to rebuild delays/indices
     
 } NeoReverbParams;
 
@@ -251,6 +267,14 @@ static void PV_ApplyNeoMt32Defaults(NeoReverbParams *params)
             // Tap mode doesn't use feedback; leave time as-is.
             break;
         default:
+            if (params->mReverbMode >= REVERB_TYPE_15)
+            {
+                // Custom mode: user controls all parameters via API
+                // Apply reasonable defaults that user can override
+                params->mLopassK = 9830; // ~0.15
+                SetNeoReverbMix(110);  // More aggressive wet mix
+                SetNeoReverbTime(90);  // Longer decay
+            }
             break;
     }
 }
@@ -315,6 +339,25 @@ XBOOL InitNeoReverb(void)
     XSetMemory(params->mTapBuffer, sizeof(INT32) * NEO_TAP_BUFFER_SIZE, 0);
     params->mTapWriteIdx = 0;
     
+    // Allocate custom mode buffers
+    for (i = 0; i < NEO_CUSTOM_MAX_COMBS; i++)
+    {
+        params->mCustomBuffer[i] = (INT32*)XNewPtr(sizeof(INT32) * NEO_CUSTOM_BUFFER_SIZE);
+        if (params->mCustomBuffer[i] == NULL)
+        {
+            ShutdownNeoReverb();
+            return FALSE;
+        }
+        XSetMemory(params->mCustomBuffer[i], sizeof(INT32) * NEO_CUSTOM_BUFFER_SIZE, 0);
+        params->mCustomWriteIdx[i] = 0;
+        params->mCustomFeedback[i] = (INT32)(NEO_COEFF_MULTIPLY * 0.75);  // Default 0.75 feedback
+        params->mCustomGain[i] = NEO_COEFF_MULTIPLY;  // Default full gain
+        // Varied delay times for richer texture
+        params->mCustomDelayFrames[i] = 1000 + (i * 300);  // 22ms, 29ms, 36ms, etc. @ 44.1kHz
+    }
+    params->mCustomCombCount = 4;  // Default to 4 combs
+    params->mCustomParamsDirty = FALSE;
+    
     // Setup delay tables and read indices based on delay times
     // Multiply delays by 2 for stereo interleaving (L,R,L,R...)
     params->mSampleRate = MusicGlobals->outputRate;
@@ -332,6 +375,11 @@ XBOOL InitNeoReverb(void)
     for (i = 0; i < NEO_TAP_COUNT; i++)
     {
         params->mTapReadIdx[i] = (NEO_TAP_BUFFER_SIZE - (params->mTapDelayFrames[i] * 2)) & NEO_TAP_BUFFER_MASK;
+    }
+    
+    for (i = 0; i < NEO_CUSTOM_MAX_COMBS; i++)
+    {
+        params->mCustomReadIdx[i] = (NEO_CUSTOM_BUFFER_SIZE - (params->mCustomDelayFrames[i] * 2)) & NEO_CUSTOM_BUFFER_MASK;
     }
     
     // Initialize filter state
@@ -392,6 +440,16 @@ void ShutdownNeoReverb(void)
         XDisposePtr(params->mTapBuffer);
         params->mTapBuffer = NULL;
     }
+    
+    // Deallocate custom buffers
+    for (i = 0; i < NEO_CUSTOM_MAX_COMBS; i++)
+    {
+        if (params->mCustomBuffer[i])
+        {
+            XDisposePtr(params->mCustomBuffer[i]);
+            params->mCustomBuffer[i] = NULL;
+        }
+    }
 }
 
 //++------------------------------------------------------------------------------
@@ -438,6 +496,14 @@ XBOOL CheckNeoReverbType(void)
         if (params->mTapBuffer)
             XSetMemory(params->mTapBuffer, sizeof(INT32) * NEO_TAP_BUFFER_SIZE, 0);
         params->mTapWriteIdx = 0;
+        
+        for (i = 0; i < NEO_CUSTOM_MAX_COMBS; i++)
+        {
+            if (params->mCustomBuffer[i])
+                XSetMemory(params->mCustomBuffer[i], sizeof(INT32) * NEO_CUSTOM_BUFFER_SIZE, 0);
+            params->mCustomWriteIdx[i] = 0;
+        }
+        params->mCustomParamsDirty = FALSE;
         
         // Reset filter memory
         params->mFilterMemoryL = 0;
@@ -671,6 +737,117 @@ static void PV_ProcessNeoTapReverb(INT32 *sourceP, INT32 *destP, int numFrames)
 }
 
 //++------------------------------------------------------------------------------
+//  PV_RebuildCustomDelayIndices()
+//
+//  Rebuild read indices for custom reverb when parameters change
+//++------------------------------------------------------------------------------
+static void PV_RebuildCustomDelayIndices(NeoReverbParams *params)
+{
+    int i;
+    for (i = 0; i < params->mCustomCombCount; i++)
+    {
+        int clampedDelay = PV_ClampDelayFramesForBuffer(params->mCustomDelayFrames[i], NEO_CUSTOM_BUFFER_SIZE);
+        params->mCustomDelayFrames[i] = clampedDelay;
+        params->mCustomReadIdx[i] = (NEO_CUSTOM_BUFFER_SIZE - (clampedDelay * 2)) & NEO_CUSTOM_BUFFER_MASK;
+    }
+    params->mCustomParamsDirty = FALSE;
+}
+
+//++------------------------------------------------------------------------------
+//  PV_ProcessNeoCustomReverb()
+//
+//  Custom reverb mode: User-configurable parallel comb filters
+//  Allows full control over delay times, feedback, and gain per comb
+//++------------------------------------------------------------------------------
+static void PV_ProcessNeoCustomReverb(INT32 *sourceP, INT32 *destP, int numFrames)
+{
+    NeoReverbParams* params = GetNeoReverbParams();
+    INT32 inputL, inputR, combOutL, combOutR;
+    int64_t outputL, outputR;
+    INT32 delayedL, delayedR, feedback, gain;
+    int i, frame, readPos;
+    
+#if _DEBUG == TRUE
+    static int debugCounter = 0;
+    if (debugCounter++ % 100 == 0)
+    {
+        BAE_PRINTF("Custom reverb processing: combs=%d",params->mCustomCombCount);
+        BAE_PRINTF(" fb0=%d",params->mCustomFeedback[0]);
+        BAE_PRINTF(" gain0=%d",params->mCustomGain[0]);
+        BAE_PRINTF(" delay0=%d",params->mCustomDelayFrames[0]);
+        BAE_PRINTF("\n");
+    }
+#endif
+    
+    // Rebuild delay indices if parameters have changed
+    if (params->mCustomParamsDirty)
+    {
+        PV_RebuildCustomDelayIndices(params);
+    }
+    
+    for (frame = 0; frame < numFrames; frame++)
+    {
+        // Get mono input from reverb send buffer
+        INT32 input = PV_ScaleReverbSend(sourceP[frame]);
+        inputL = input;
+        inputR = input;
+        
+        outputL = 0;
+        outputR = 0;
+        
+        // Process parallel comb filters (up to user-defined count)
+        for (i = 0; i < params->mCustomCombCount; i++)
+        {
+            // Calculate read position: delay samples back from write position
+            readPos = (params->mCustomWriteIdx[i] - (params->mCustomDelayFrames[i] * 2)) & NEO_CUSTOM_BUFFER_MASK;
+            
+            // Read delayed samples
+            delayedL = params->mCustomBuffer[i][readPos];
+            delayedR = params->mCustomBuffer[i][(readPos + 1) & NEO_CUSTOM_BUFFER_MASK];
+            
+            // Compute comb filter output: input + delayed * feedback
+            feedback = params->mCustomFeedback[i];
+            combOutL = PV_Clamp32From64((int64_t)inputL + (((int64_t)delayedL * (int64_t)feedback) >> NEO_COEFF_SHIFT));
+            combOutR = PV_Clamp32From64((int64_t)inputR + (((int64_t)delayedR * (int64_t)feedback) >> NEO_COEFF_SHIFT));
+
+            combOutL = PV_ZapSmall(combOutL);
+            combOutR = PV_ZapSmall(combOutR);
+            
+            // Write to current position
+            params->mCustomBuffer[i][params->mCustomWriteIdx[i]] = combOutL;
+            params->mCustomBuffer[i][(params->mCustomWriteIdx[i] + 1) & NEO_CUSTOM_BUFFER_MASK] = combOutR;
+            
+            // Accumulate output with per-comb gain (use delayed values for output)
+            gain = params->mCustomGain[i];
+            outputL += (((int64_t)delayedL * (int64_t)gain) >> NEO_COEFF_SHIFT);
+            outputR += (((int64_t)delayedR * (int64_t)gain) >> NEO_COEFF_SHIFT);
+            
+            // Advance write index
+            params->mCustomWriteIdx[i] = (params->mCustomWriteIdx[i] + 2) & NEO_CUSTOM_BUFFER_MASK;
+        }
+        
+        // Average the output from all combs to prevent clipping
+        if (params->mCustomCombCount > 0)
+        {
+            outputL = outputL / params->mCustomCombCount;
+            outputR = outputR / params->mCustomCombCount;
+        }
+        
+        // Apply low-pass filtering for smoothing
+        params->mFilterMemoryL = PV_Clamp32From64((int64_t)params->mFilterMemoryL + ((((int64_t)(outputL - params->mFilterMemoryL)) * (int64_t)params->mLopassK) >> NEO_COEFF_SHIFT));
+        params->mFilterMemoryR = PV_Clamp32From64((int64_t)params->mFilterMemoryR + ((((int64_t)(outputR - params->mFilterMemoryR)) * (int64_t)params->mLopassK) >> NEO_COEFF_SHIFT));
+        
+        // Mix wet reverb signal into destination (dry) buffer
+        {
+            INT32 wetL = PV_Clamp32From64(((int64_t)params->mFilterMemoryL * (int64_t)params->mWetGain) >> NEO_COEFF_SHIFT);
+            INT32 wetR = PV_Clamp32From64(((int64_t)params->mFilterMemoryR * (int64_t)params->mWetGain) >> NEO_COEFF_SHIFT);
+            destP[frame * 2] += (XSDWORD)(((int64_t)wetL) << NEO_WETSHIFT);
+            destP[frame * 2 + 1] += (XSDWORD)(((int64_t)wetR) << NEO_WETSHIFT);
+        }
+    }
+}
+
+//++------------------------------------------------------------------------------
 //  RunNeoReverb()
 //
 //  Main entry point for Neo reverb processing
@@ -688,6 +865,16 @@ void RunNeoReverb(INT32 *sourceP, INT32 *destP, int numFrames)
     
     CheckNeoReverbType();
     
+#if _DEBUG == TRUE
+    static int debugCounter2 = 0;
+    static int lastMode = -1;
+    if (params->mReverbMode != lastMode)
+    {
+        BAE_PRINTF("Neo reverb mode changed to: %d\n", params->mReverbMode);
+        lastMode = params->mReverbMode;
+    }
+#endif
+    
     // Dispatch to appropriate reverb mode
     switch (params->mReverbMode)
     {
@@ -704,6 +891,11 @@ void RunNeoReverb(INT32 *sourceP, INT32 *destP, int numFrames)
             break;
             
         default:
+            if (params->mReverbMode >= REVERB_TYPE_15)
+            {
+                // Treat unknown custom modes as Custom reverb
+                PV_ProcessNeoCustomReverb(sourceP, destP, numFrames);
+            }
             // No reverb or unsupported type
             break;
     }
@@ -760,6 +952,178 @@ void SetNeoReverbTime(int reverbTime)
             params->mHallFeedback[i] = hallFeedback;
         }
     }
+}
+
+//++------------------------------------------------------------------------------
+//  SetNeoCustomReverbCombCount()
+//
+//  Set the number of active comb filters for custom reverb
+//  combCount: 1-8 (number of parallel comb filters)
+//++------------------------------------------------------------------------------
+void SetNeoCustomReverbCombCount(int combCount)
+{
+    NeoReverbParams* params = GetNeoReverbParams();
+    
+    if (combCount < 1) combCount = 1;
+    if (combCount > NEO_CUSTOM_MAX_COMBS) combCount = NEO_CUSTOM_MAX_COMBS;
+    
+    if (params->mCustomCombCount != combCount)
+    {
+        params->mCustomCombCount = combCount;
+        params->mCustomParamsDirty = TRUE;
+    }
+}
+
+//++------------------------------------------------------------------------------
+//  SetNeoCustomReverbCombDelay()
+//
+//  Set the delay time in milliseconds for a specific comb filter
+//  combIndex: 0-7 (which comb filter to configure)
+//  delayMs: delay time in milliseconds (1-300ms)
+//++------------------------------------------------------------------------------
+void SetNeoCustomReverbCombDelay(int combIndex, int delayMs)
+{
+    NeoReverbParams* params = GetNeoReverbParams();
+    
+    if (combIndex < 0 || combIndex >= NEO_CUSTOM_MAX_COMBS)
+        return;
+    
+    if (delayMs < 1) delayMs = 1;
+    if (delayMs > 300) delayMs = 300;
+    
+    // Convert milliseconds to frames at current sample rate
+    // delayMs * sampleRate / 1000
+    int delayFrames = (delayMs * params->mSampleRate) / 1000;
+    
+    if (params->mCustomDelayFrames[combIndex] != delayFrames)
+    {
+        params->mCustomDelayFrames[combIndex] = delayFrames;
+        params->mCustomParamsDirty = TRUE;
+    }
+}
+
+//++------------------------------------------------------------------------------
+//  SetNeoCustomReverbCombFeedback()
+//
+//  Set the feedback coefficient for a specific comb filter
+//  combIndex: 0-7 (which comb filter to configure)
+//  feedback: 0-127 (MIDI style, maps to ~0.0-0.85 feedback)
+//++------------------------------------------------------------------------------
+void SetNeoCustomReverbCombFeedback(int combIndex, int feedback)
+{
+    NeoReverbParams* params = GetNeoReverbParams();
+    
+    if (combIndex < 0 || combIndex >= NEO_CUSTOM_MAX_COMBS)
+        return;
+    
+    if (feedback < 0) feedback = 0;
+    if (feedback > 127) feedback = 127;
+    
+    // Map 0-127 to feedback range (0.0 to ~0.85)
+    // Use a safe max to avoid runaway feedback
+    const INT32 maxFeedback = (INT32)(NEO_COEFF_MULTIPLY * 0.85);
+    params->mCustomFeedback[combIndex] = (feedback * maxFeedback) / 127;
+}
+
+//++------------------------------------------------------------------------------
+//  SetNeoCustomReverbCombGain()
+//
+//  Set the output gain for a specific comb filter
+//  combIndex: 0-7 (which comb filter to configure)
+//  gain: 0-127 (MIDI style, maps to 0.0-1.0 gain)
+//++------------------------------------------------------------------------------
+void SetNeoCustomReverbCombGain(int combIndex, int gain)
+{
+    NeoReverbParams* params = GetNeoReverbParams();
+    
+    if (combIndex < 0 || combIndex >= NEO_CUSTOM_MAX_COMBS)
+        return;
+    
+    if (gain < 0) gain = 0;
+    if (gain > 127) gain = 127;
+    
+    // Map 0-127 to gain range (0.0 to 1.0)
+    params->mCustomGain[combIndex] = (gain * NEO_COEFF_MULTIPLY) / 127;
+}
+
+//++------------------------------------------------------------------------------
+//  SetNeoCustomReverbLowpass()
+//
+//  Set the low-pass filter coefficient for custom reverb
+//  lowpass: 0-127 (MIDI style, maps to filter coefficient 0.0-0.5)
+//          Lower values = more filtering (darker sound)
+//          Higher values = less filtering (brighter sound)
+//++------------------------------------------------------------------------------
+void SetNeoCustomReverbLowpass(int lowpass)
+{
+    NeoReverbParams* params = GetNeoReverbParams();
+    
+    if (lowpass < 0) lowpass = 0;
+    if (lowpass > 127) lowpass = 127;
+    
+    // Map 0-127 to lowpass coefficient range (0.0 to 0.5)
+    // This controls how much of the new signal blends with the filtered memory
+    params->mLopassK = (lowpass * NEO_COEFF_MULTIPLY / 2) / 127;
+}
+
+//++------------------------------------------------------------------------------
+//  GetNeoCustomReverbCombCount()
+//
+//  Get the current number of active comb filters
+//++------------------------------------------------------------------------------
+int GetNeoCustomReverbCombCount(void)
+{
+    NeoReverbParams* params = GetNeoReverbParams();
+    return params->mCustomCombCount;
+}
+
+//++------------------------------------------------------------------------------
+//  GetNeoCustomReverbCombDelay()
+//
+//  Get the delay time in milliseconds for a specific comb filter
+//++------------------------------------------------------------------------------
+int GetNeoCustomReverbCombDelay(int combIndex)
+{
+    NeoReverbParams* params = GetNeoReverbParams();
+    
+    if (combIndex < 0 || combIndex >= NEO_CUSTOM_MAX_COMBS)
+        return 0;
+    
+    // Convert frames back to milliseconds
+    return (params->mCustomDelayFrames[combIndex] * 1000) / params->mSampleRate;
+}
+
+//++------------------------------------------------------------------------------
+//  GetNeoCustomReverbCombFeedback()
+//
+//  Get the feedback coefficient for a specific comb filter (0-127)
+//++------------------------------------------------------------------------------
+int GetNeoCustomReverbCombFeedback(int combIndex)
+{
+    NeoReverbParams* params = GetNeoReverbParams();
+    
+    if (combIndex < 0 || combIndex >= NEO_CUSTOM_MAX_COMBS)
+        return 0;
+    
+    // Map feedback back to 0-127 range
+    const INT32 maxFeedback = (INT32)(NEO_COEFF_MULTIPLY * 0.85);
+    return (int)((params->mCustomFeedback[combIndex] * 127) / maxFeedback);
+}
+
+//++------------------------------------------------------------------------------
+//  GetNeoCustomReverbCombGain()
+//
+//  Get the output gain for a specific comb filter (0-127)
+//++------------------------------------------------------------------------------
+int GetNeoCustomReverbCombGain(int combIndex)
+{
+    NeoReverbParams* params = GetNeoReverbParams();
+    
+    if (combIndex < 0 || combIndex >= NEO_CUSTOM_MAX_COMBS)
+        return 0;
+    
+    // Map gain back to 0-127 range
+    return (int)((params->mCustomGain[combIndex] * 127) / NEO_COEFF_MULTIPLY);
 }
 
 #endif  // USE_NEO_EFFECTS

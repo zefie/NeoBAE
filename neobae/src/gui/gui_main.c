@@ -534,7 +534,8 @@ bool recreate_mixer_and_restore(int sampleRateHz, bool stereo, int reverbType,
     }
     BAEMixer_SetAudioTask(g_bae.mixer, gui_audio_task, g_bae.mixer);
     BAEMixer_ReengageAudio(g_bae.mixer);
-    BAEMixer_SetDefaultReverb(g_bae.mixer, (BAEReverbType)reverbType);
+    // reverbType may be a UI index beyond BAE_REVERB_TYPE_COUNT when using custom presets
+    bae_set_reverb(reverbType);
     BAEMixer_SetMasterVolume(g_bae.mixer, FLOAT_TO_UNSIGNED_FIXED(g_last_requested_master_volume));
 
     // Ensure the lightweight live song is recreated so external MIDI
@@ -863,6 +864,24 @@ int main(int argc, char *argv[])
 
     // Initialize export subsystem
     export_init();
+    
+    // Load custom reverb presets
+#if USE_NEO_EFFECTS
+    load_custom_reverb_preset_list();
+
+    // Apply saved custom reverb preset now that the list is available
+    if (settings.has_custom_reverb_preset && settings.custom_reverb_preset_name[0])
+    {
+        int preset_list_idx = get_custom_reverb_preset_index(settings.custom_reverb_preset_name);
+        if (preset_list_idx >= 0)
+        {
+            load_custom_reverb_preset(settings.custom_reverb_preset_name);
+            extern int g_custom_reverb_preset_count;
+            int base_count = get_reverb_count() - g_custom_reverb_preset_count;
+            reverbType = base_count + preset_list_idx + 1; // UI index is 1-based
+        }
+    }
+#endif
 
     char exe_dir[512];
     get_executable_directory(exe_dir, sizeof(exe_dir));
@@ -1265,6 +1284,25 @@ int main(int argc, char *argv[])
                             if (nt != reverbType)
                             {
                                 reverbType = nt;
+
+#if USE_NEO_EFFECTS
+                                // Mirror click-selection behavior: load preset data when selecting a custom preset.
+                                // UI indices are 1-based; get_reverb_name expects 0-based.
+                                extern int g_custom_reverb_preset_count;
+                                extern char g_current_custom_reverb_preset[64];
+                                int base_count = get_reverb_count() - g_custom_reverb_preset_count;
+                                int idx0 = reverbType - 1;
+                                if (idx0 >= base_count)
+                                {
+                                    const char *preset_name = get_reverb_name(idx0);
+                                    load_custom_reverb_preset(preset_name);
+                                }
+                                else
+                                {
+                                    g_current_custom_reverb_preset[0] = '\0';
+                                }
+#endif
+
                                 bae_set_reverb(reverbType);
                                 if (g_current_bank_path[0] != '\0')
                                 {
@@ -1295,6 +1333,8 @@ int main(int argc, char *argv[])
 #else
                                 true;
 #endif
+                            // While the reverb dropdown is expanded, disable transpose/tempo interactions.
+                            bool pitch_tempo_enabled_local = playback_controls_enabled_local && !g_reverbDropdownOpen;
                             /* Allow the user to adjust master volume even when MIDI input
                                 is enabled so incoming MIDI velocity can be scaled. Keep
                                 other playback controls disabled as before. */
@@ -1338,9 +1378,9 @@ int main(int argc, char *argv[])
                             // Try transpose/tempo/volume helpers in order (only if Bank/Program didn't handle it)
                             if (!handled_wheel_event)
                             {
-                                if (!ui_adjust_transpose(mx, my, sdelta, playback_controls_enabled_local, &transpose))
+                                if (!ui_adjust_transpose(mx, my, sdelta, pitch_tempo_enabled_local, &transpose))
                                 {
-                                    if (!ui_adjust_tempo(mx, my, sdelta, playback_controls_enabled_local, &tempo, &duration, &progress))
+                                    if (!ui_adjust_tempo(mx, my, sdelta, pitch_tempo_enabled_local, &tempo, &duration, &progress))
                                     {
                                         // For volume we pass the ddRect width as currently used in rendering
                                         // ui_adjust_volume will test using a fixed rect matching rendering
@@ -1351,7 +1391,7 @@ int main(int argc, char *argv[])
                                             if (!ui_adjust_volume(mx, my, sdelta, volume_enabled_local, &volume))
                                             {
 #if SUPPORT_PLAYLIST == TRUE
-                                                if (g_playlist.enabled) {
+                                                if (g_playlist.enabled && !g_reverbDropdownOpen) {
                                                     // Handle playlist scroll if no other controls handled the wheel event
                                                     // Compute the exact playlist panel rect the same way it is calculated
                                                     // during rendering so wheel handling matches the visible list area.
@@ -1556,6 +1596,65 @@ int main(int argc, char *argv[])
             {
                 bool isDown = (e.type == SDL_EVENT_KEY_DOWN);
                 SDL_Keycode sym = e.key.key;
+                
+                // Handle text input for preset name dialog
+#if USE_NEO_EFFECTS
+                extern bool g_show_preset_name_dialog;
+                extern char g_preset_name_input[64];
+                extern int g_preset_name_cursor;
+                if (g_show_preset_name_dialog && isDown)
+                {
+                    int len = strlen(g_preset_name_input);
+                    if (sym == SDLK_BACKSPACE && len > 0)
+                    {
+                        g_preset_name_input[len - 1] = '\0';
+                        g_preset_name_cursor = len - 1;
+                    }
+                    else if (sym == SDLK_RETURN || sym == SDLK_KP_ENTER)
+                    {
+                        if (len > 0)
+                        {
+                            save_custom_reverb_preset(g_preset_name_input);
+
+                            // After saving, switch to the new/updated preset and load it immediately
+                            {
+                                int preset_list_idx = get_custom_reverb_preset_index(g_preset_name_input);
+                                if (preset_list_idx >= 0)
+                                {
+                                    load_custom_reverb_preset(g_preset_name_input);
+                                    extern int g_custom_reverb_preset_count;
+                                    int base_count = get_reverb_count() - g_custom_reverb_preset_count;
+                                    reverbType = base_count + preset_list_idx + 1; // UI index is 1-based
+                                    bae_set_reverb(reverbType);
+                                    if (g_current_bank_path[0] != '\0')
+                                    {
+                                        save_settings(g_current_bank_path, reverbType, loopPlay);
+                                    }
+                                }
+                            }
+
+                            g_show_preset_name_dialog = false;
+                            memset(g_preset_name_input, 0, sizeof(g_preset_name_input));
+                            g_preset_name_cursor = 0;
+                        }
+                    }
+                    else if (sym == SDLK_ESCAPE)
+                    {
+                        g_show_preset_name_dialog = false;
+                        memset(g_preset_name_input, 0, sizeof(g_preset_name_input));
+                        g_preset_name_cursor = 0;
+                    }
+                    else if (len < 63 && sym >= 32 && sym < 127)
+                    {
+                        // Only allow printable ASCII characters
+                        g_preset_name_input[len] = (char)sym;
+                        g_preset_name_input[len + 1] = '\0';
+                        g_preset_name_cursor = len + 1;
+                    }
+                    break; // Don't process other keyboard shortcuts when dialog is open
+                }
+#endif
+                
                 // Initialize mapping table once
                 if (!g_keyboard_map_initialized)
                 {
@@ -2308,16 +2407,33 @@ int main(int argc, char *argv[])
         // Channel toggles in a neat grid (with measured label centering)
         // Block background interactions when a modal is active or when exporting.
         // Exporting will dim and lock most UI, but the Stop button remains active.
-        bool modal_block = g_show_settings_dialog || g_show_about_dialog || (g_show_rmf_info_dialog && g_bae.is_rmf_file) || g_exporting; // block when any modal/dialog open or export in progress
+        extern bool g_show_preset_delete_confirm_dialog;
+        bool modal_block = g_show_settings_dialog || g_show_about_dialog || (g_show_rmf_info_dialog && g_bae.is_rmf_file) || g_exporting || g_show_custom_reverb_dialog || g_show_preset_name_dialog || g_show_preset_delete_confirm_dialog; // block when any modal/dialog open or export in progress
+        bool modal_block_transport = g_show_settings_dialog || g_show_about_dialog || (g_show_rmf_info_dialog && g_bae.is_rmf_file) || g_exporting || g_show_preset_name_dialog || g_show_preset_delete_confirm_dialog; // Custom reverb dialog doesn't block transport controls
         // When a modal is active we fully swallow background hover/drag/click by using off-screen, inert inputs
         int ui_mx = mx, ui_my = my;
         bool ui_mdown = mdown;
         bool ui_mclick = mclick;
         bool ui_rclick = rclick;
+        // Transport controls use separate mouse tracking that isn't blocked by custom reverb dialog
+        int transport_mx = mx, transport_my = my;
+        bool transport_mdown = mdown;
+        bool transport_mclick = mclick;
         if (modal_block)
         {
             ui_mx = ui_my = -10000;
             ui_mdown = ui_mclick = ui_rclick = false;
+        }
+        if (modal_block_transport)
+        {
+            transport_mx = transport_my = -10000;
+            transport_mdown = transport_mclick = false;
+        }
+        // Also disable transport controls while the expanded reverb dropdown is open.
+        if (g_reverbDropdownOpen)
+        {
+            transport_mx = transport_my = -10000;
+            transport_mdown = transport_mclick = false;
         }
         int chStartX = 20, chStartY = 40;
         // Precompute estimated per-channel levels from mixer realtime info when available.
@@ -2359,7 +2475,8 @@ int main(int argc, char *argv[])
             snprintf(buf, sizeof(buf), "%d", i + 1);
             // Handle toggle and clear VU when channel is muted
             // Disable channel toggles when playing audio files (sounds, not songs)
-            bool channel_toggle_enabled = !(g_bae.is_audio_file && g_bae.sound);
+            // and while the reverb dropdown is expanded.
+            bool channel_toggle_enabled = !(g_bae.is_audio_file && g_bae.sound) && !g_reverbDropdownOpen;
             bool toggled = ui_toggle(R, r, &ch_enable[i], NULL,
                                      channel_toggle_enabled ? ui_mx : -1,
                                      channel_toggle_enabled ? ui_my : -1,
@@ -2561,7 +2678,8 @@ int main(int argc, char *argv[])
 
         // Channel control buttons in a row
         int btnY = chStartY + 75;
-        bool channel_controls_enabled = !(g_bae.is_audio_file && g_bae.sound);
+        // Disable channel controls while the reverb dropdown is expanded.
+        bool channel_controls_enabled = !(g_bae.is_audio_file && g_bae.sound) && !g_reverbDropdownOpen;
         if (ui_button(R, (Rect){20, btnY, 80, 26}, "Invert", channel_controls_enabled ? ui_mx : -1, channel_controls_enabled ? ui_my : -1, channel_controls_enabled ? ui_mdown : false) && ui_mclick && !modal_block && channel_controls_enabled)
         {
             for (int i = 0; i < BAE_MAX_MIDI_CHANNELS; i++)
@@ -2708,13 +2826,16 @@ int main(int argc, char *argv[])
         bool playback_controls_enabled = !(g_bae.is_audio_file && g_bae.sound);
 #endif
 
+    // While the reverb dropdown is expanded, disable transpose/tempo + reset controls.
+    bool pitch_tempo_enabled = playback_controls_enabled && !g_reverbDropdownOpen;
+
         // Transpose control
         draw_text(R, 410, 45, "Transpose:", labelCol);
-        ui_slider(R, (Rect){410, 63, 160, 14}, &transpose, -24, 24, playback_controls_enabled ? ui_mx : -1, playback_controls_enabled ? ui_my : -1, playback_controls_enabled ? ui_mdown : false, playback_controls_enabled ? ui_mclick : false);
+        ui_slider(R, (Rect){410, 63, 160, 14}, &transpose, -24, 24, pitch_tempo_enabled ? ui_mx : -1, pitch_tempo_enabled ? ui_my : -1, pitch_tempo_enabled ? ui_mdown : false, pitch_tempo_enabled ? ui_mclick : false);
         char tbuf[64];
         snprintf(tbuf, sizeof(tbuf), "%+d", transpose);
         draw_text(R, 577, 61, tbuf, labelCol);
-        if (playback_controls_enabled && ui_button(R, (Rect){620, 59, 50, 20}, "Reset", ui_mx, ui_my, ui_mdown) && ui_mclick && !modal_block)
+        if (pitch_tempo_enabled && ui_button(R, (Rect){620, 59, 50, 20}, "Reset", ui_mx, ui_my, ui_mdown) && ui_mclick && !modal_block)
         {
             transpose = 0;
             bae_set_transpose(transpose);
@@ -2722,10 +2843,10 @@ int main(int argc, char *argv[])
 
         // Tempo control
         draw_text(R, 410, 85, "Tempo:", labelCol);
-        ui_slider(R, (Rect){410, 103, 160, 14}, &tempo, 25, 200, playback_controls_enabled ? ui_mx : -1, playback_controls_enabled ? ui_my : -1, playback_controls_enabled ? ui_mdown : false, playback_controls_enabled ? ui_mclick : false);
+        ui_slider(R, (Rect){410, 103, 160, 14}, &tempo, 25, 200, pitch_tempo_enabled ? ui_mx : -1, pitch_tempo_enabled ? ui_my : -1, pitch_tempo_enabled ? ui_mdown : false, pitch_tempo_enabled ? ui_mclick : false);
         snprintf(tbuf, sizeof(tbuf), "%d%%", tempo);
         draw_text(R, 577, 101, tbuf, labelCol);
-        if (playback_controls_enabled && ui_button(R, (Rect){620, 99, 50, 20}, "Reset", ui_mx, ui_my, ui_mdown) && ui_mclick && !modal_block)
+        if (pitch_tempo_enabled && ui_button(R, (Rect){620, 99, 50, 20}, "Reset", ui_mx, ui_my, ui_mdown) && ui_mclick && !modal_block)
         {
             int oldTempo = tempo;
             int newTempo = 100;
@@ -2762,11 +2883,11 @@ int main(int argc, char *argv[])
         }
 
         // Reverb controls (we always leave Reverb interactive even when MIDI input is enabled)
-        draw_text(R, 687, 25, "Reverb:", labelCol);
+        draw_text(R, 687, 20, "Reverb:", labelCol);
         // Removed non-functional 'No Change' option; first entry now 'Default' (engine type 0)
         // Removed engine reverb index 0 (NO_CHANGE). UI list now maps i -> engine index (i+1)
         int reverbCount = get_reverb_count();
-        Rect ddRect = {687, 43, 160, 24}; // moved left 3px and down 3px
+        Rect ddRect = {687, 38, 160, 24}; // moved up 5px
         // Closed dropdown: use theme globals
         SDL_Color dd_bg = g_button_base;
         SDL_Color dd_txt = g_button_text;
@@ -2790,6 +2911,102 @@ int main(int argc, char *argv[])
         {
             g_reverbDropdownOpen = !g_reverbDropdownOpen;
         }
+
+        // Show "Customize", "+" and "-" buttons when Custom reverb or user preset is selected (below the dropdown)
+#if USE_NEO_EFFECTS
+        int base_count = 15; // Default reverb types including "Custom"
+        g_custom_reverb_button_visible = (reverbType >= BAE_REVERB_TYPE_15);
+        if (g_custom_reverb_button_visible && reverb_enabled)
+        {
+            // When the dropdown list is open, don't allow clicks on the buttons underneath it.
+            bool custom_controls_enabled = (!g_reverbDropdownOpen && !modal_block);
+            int btnY = ddRect.y + ddRect.h + 2;
+            int spacing = 2;
+            
+            // Customize button
+            int customTextW = 0, customTextH = 0;
+            measure_text("Custom", &customTextW, &customTextH);
+            int customBtnW = customTextW + 12; // padding
+            if (customBtnW < 44)
+                customBtnW = 44;
+            Rect customBtn = {ddRect.x, btnY, customBtnW, 20};
+            bool overCustom = custom_controls_enabled && point_in(ui_mx, ui_my, customBtn);
+            SDL_Color btn_bg = overCustom ? g_button_hover : g_button_base;
+            if (!custom_controls_enabled)
+            {
+                btn_bg.a = 180;
+            }
+            draw_rect(R, customBtn, btn_bg);
+            draw_frame(R, customBtn, g_button_border);
+            SDL_Color custom_txt = g_button_text;
+            if (!custom_controls_enabled)
+            {
+                custom_txt.a = 180;
+            }
+            draw_text(R, customBtn.x + 4, customBtn.y + 3, "Custom", custom_txt);
+            
+            if (overCustom && ui_mclick)
+            {
+                g_show_custom_reverb_dialog = true;
+                g_reverbDropdownOpen = false; // Close dropdown when opening custom dialog
+            }
+            
+            // Save preset button (+)
+            Rect saveBtn = {customBtn.x + customBtn.w + spacing, btnY, 20, 20};
+            bool overSave = custom_controls_enabled && point_in(ui_mx, ui_my, saveBtn);
+            SDL_Color save_bg = overSave ? g_button_hover : g_button_base;
+            if (!custom_controls_enabled)
+            {
+                save_bg.a = 180;
+            }
+            draw_rect(R, saveBtn, save_bg);
+            draw_frame(R, saveBtn, g_button_border);
+            SDL_Color save_txt = g_button_text;
+            if (!custom_controls_enabled)
+            {
+                save_txt.a = 180;
+            }
+            draw_text(R, saveBtn.x + 6, saveBtn.y + 2, "+", save_txt);
+            
+            if (overSave && ui_mclick)
+            {
+                // Show text input dialog for preset name
+                extern bool g_show_preset_name_dialog;
+                g_show_preset_name_dialog = true;
+            }
+            
+            // Delete preset button (-)
+            Rect deleteBtn = {saveBtn.x + saveBtn.w + spacing, btnY, 20, 20};
+            bool overDelete = custom_controls_enabled && point_in(ui_mx, ui_my, deleteBtn);
+            // Only allow delete when a saved custom preset (after "Custom") is selected.
+            // "Custom" itself is BAE_REVERB_TYPE_15.
+            bool can_delete_preset = (reverbType > BAE_REVERB_TYPE_15);
+            SDL_Color delete_bg = (overDelete && can_delete_preset) ? g_button_hover : g_button_base;
+            if (!custom_controls_enabled || !can_delete_preset)
+            {
+                delete_bg.a = 180;
+            }
+            draw_rect(R, deleteBtn, delete_bg);
+            draw_frame(R, deleteBtn, g_button_border);
+            SDL_Color delete_txt = g_button_text;
+            if (!custom_controls_enabled || !can_delete_preset)
+            {
+                delete_txt.a = 180;
+            }
+            draw_text(R, deleteBtn.x + 6, deleteBtn.y + 2, "-", delete_txt);
+            
+            if (overDelete && ui_mclick && can_delete_preset)
+            {
+                // Delete current custom reverb preset if it's a saved preset
+                const char *preset_name = get_reverb_name(reverbType - 1);
+                extern bool g_show_preset_delete_confirm_dialog;
+                extern char g_preset_delete_name[64];
+                g_show_preset_delete_confirm_dialog = true;
+                strncpy(g_preset_delete_name, preset_name, sizeof(g_preset_delete_name) - 1);
+                g_preset_delete_name[sizeof(g_preset_delete_name) - 1] = '\0';
+            }
+        }
+#endif
 
         // Volume control (aligned with Tempo)
         draw_text(R, 687, 85, "Volume:", labelCol);
@@ -2832,7 +3049,7 @@ int main(int argc, char *argv[])
             int n_y = controlPanel.y + controlPanel.h - n_h - 6;
             draw_text(R, n_x, n_y, notice, g_highlight_color);
             // Ensure the "Reverb:" label itself is also drawn above the dim layer
-            draw_text(R, 687, 25, "Reverb:", labelCol);
+            draw_text(R, 687, 20, "Reverb:", labelCol);
         }
 #endif
         // If playing an audio file (sound, not song), dim the control panel except volume-related controls
@@ -2948,7 +3165,12 @@ int main(int argc, char *argv[])
                 }
             }
         }
-        if (ui_mdown && point_in(ui_mx, ui_my, bar))
+        // Disable seekbar interaction while the reverb dropdown is expanded.
+        bool seekbar_enabled = !g_reverbDropdownOpen && !modal_block_transport;
+    #ifdef SUPPORT_MIDI_HW
+        seekbar_enabled = seekbar_enabled && !g_midi_input_enabled;
+    #endif
+        if (seekbar_enabled && ui_mdown && point_in(ui_mx, ui_my, bar))
         {
             int rel = ui_mx - bar.x;
             if (rel < 0)
@@ -3010,7 +3232,7 @@ int main(int argc, char *argv[])
 #else
         bool transport_enabled = true;
 #endif
-        bool progressInteract = !g_reverbDropdownOpen && transport_enabled;
+        bool progressInteract = !g_reverbDropdownOpen && transport_enabled && !modal_block_transport;
         bool progressHover = progressInteract && point_in(ui_mx, ui_my, progressRect);
         if (progressInteract && progressHover && ui_mclick)
         {
@@ -3095,7 +3317,7 @@ int main(int argc, char *argv[])
         }
         else
         {
-            if (ui_button(R, (Rect){20, 215, 60, 22}, playing ? "Pause" : "Play", ui_mx, ui_my, ui_mdown) && ui_mclick && !modal_block)
+            if (ui_button(R, (Rect){20, 215, 60, 22}, playing ? "Pause" : "Play", transport_mx, transport_my, transport_mdown) && transport_mclick && !modal_block_transport)
             {
                 if (bae_play(&playing))
                 {
@@ -3116,7 +3338,7 @@ int main(int argc, char *argv[])
             }
         }
         // Stop remains active even when transport is dimmed for MIDI input mode
-        if (ui_button(R, (Rect){90, 215, 60, 22}, "Stop", ui_mx, ui_my, ui_mdown) && ui_mclick && !modal_block)
+        if (ui_button(R, (Rect){90, 215, 60, 22}, "Stop", transport_mx, transport_my, transport_mdown) && transport_mclick && !modal_block_transport)
         {
             bae_stop(&playing, &progress);
 #ifdef SUPPORT_MIDI_HW
@@ -4008,7 +4230,23 @@ int main(int argc, char *argv[])
         else
         {
 #endif
-            if (ui_button(R, (Rect){258, 215, 80, 22}, "Open...", ui_mx, ui_my, ui_mdown) && ui_mclick && !modal_block) // Moved from 230 to 258
+            if (g_reverbDropdownOpen)
+            {
+                // Draw disabled Open... button (no interaction)
+                Rect openRect = {258, 215, 80, 22};
+                SDL_Color disabledBg = g_panel_bg;
+                SDL_Color disabledTxt = g_panel_border;
+                disabledBg.a = 200;
+                disabledTxt.a = 200;
+                draw_rect(R, openRect, disabledBg);
+                draw_frame(R, openRect, g_panel_border);
+                int text_w = 0, text_h = 0;
+                measure_text("Open...", &text_w, &text_h);
+                int text_x = openRect.x + (openRect.w - text_w) / 2;
+                int text_y = openRect.y + (openRect.h - text_h) / 2;
+                draw_text(R, text_x, text_y, "Open...", disabledTxt);
+            }
+            else if (ui_button(R, (Rect){258, 215, 80, 22}, "Open...", ui_mx, ui_my, ui_mdown) && ui_mclick && !modal_block) // Moved from 230 to 258
             {
                 char *sel = open_file_dialog();
                 if (sel)
@@ -4072,9 +4310,9 @@ int main(int argc, char *argv[])
                 // Export button: mutually exclusive with external MIDI Output. When MIDI Output
                 // is enabled the Export button is shown disabled and does not accept clicks.
 #ifdef SUPPORT_MIDI_HW
-                bool export_allowed = !g_midi_output_enabled && !g_exporting && !modal_block;
+                bool export_allowed = !g_midi_output_enabled && !g_exporting && !modal_block && !g_reverbDropdownOpen;
 #else
-            bool export_allowed = !g_exporting && !modal_block;
+            bool export_allowed = !g_exporting && !modal_block && !g_reverbDropdownOpen;
 #endif
                 if (export_allowed)
                 {
@@ -4871,7 +5109,14 @@ int main(int argc, char *argv[])
             {
                 playlist_update_current_file(g_bae.loaded_path);
             }
-            playlist_render(R, playlistPanel, ui_mx, ui_my, ui_mdown, ui_mclick, ui_rclick, modal_block);
+            // While the reverb dropdown is expanded, don't allow interaction with the playlist underneath it.
+            playlist_render(R, playlistPanel,
+                           g_reverbDropdownOpen ? -10000 : ui_mx,
+                           g_reverbDropdownOpen ? -10000 : ui_my,
+                           g_reverbDropdownOpen ? false : ui_mdown,
+                           g_reverbDropdownOpen ? false : ui_mclick,
+                           g_reverbDropdownOpen ? false : ui_rclick,
+                           modal_block);
         }
 #endif
 
@@ -5607,52 +5852,94 @@ int main(int argc, char *argv[])
         if (g_reverbDropdownOpen)
         {
             int reverbCount = get_reverb_count();
-            Rect ddRect = {690, 40, 160, 24}; // Moved up 20 pixels from y=60 to y=40
+            Rect ddRect = {687, 38, 160, 24}; // Match closed dropdown position
 
             // Draw the dropdown list using theme globals
             int itemH = ddRect.h;
-            int totalH = itemH * reverbCount;
-            Rect box = {ddRect.x, ddRect.y + ddRect.h + 1, ddRect.w, totalH};
-            draw_rect(R, box, g_panel_bg);
-            draw_frame(R, box, g_panel_border);
+            const int itemsPerCol = 25;
+            const int colGap = 0;
+            int cols = (reverbCount + itemsPerCol - 1) / itemsPerCol;
+            if (cols < 1) cols = 1;
 
-            for (int i = 0; i < reverbCount; i++)
+            bool overAnyBox = false;
+            int startY = ddRect.y + ddRect.h + 1;
+
+            // Column 0 is the rightmost (aligned with the dropdown). Additional columns expand left.
+            for (int col = 0; col < cols; col++)
             {
-                Rect ir = {box.x, box.y + i * itemH, box.w, itemH};
-                bool over = point_in(mx, my, ir);
-                SDL_Color ibg = ((i + 1) == reverbType) ? g_highlight_color : g_panel_bg;
-                if (over)
-                    ibg = g_button_hover;
-                draw_rect(R, ir, ibg);
-                if (i < reverbCount - 1)
-                { // separator line
-                    SDL_Color sep = g_panel_border;
-                    sep.a = 255; // use panel border as separator
-                    SDL_SetRenderDrawColor(R, sep.r, sep.g, sep.b, sep.a);
-                    SDL_RenderLine(R, ir.x, ir.y + ir.h, ir.x + ir.w, ir.y + ir.h);
-                }
-                // Choose text color: use button text on selected/hover, otherwise normal text
-                SDL_Color itemTxt = g_text_color;
-                if ((i + 1) == reverbType)
-                    itemTxt = g_button_text;
-                if (over)
-                    itemTxt = g_button_text;
-                draw_text(R, ir.x + 6, ir.y + 6, get_reverb_name(i), itemTxt);
-                if (over && mclick)
+                int startIdx = col * itemsPerCol;
+                if (startIdx >= reverbCount)
+                    break;
+                int remaining = reverbCount - startIdx;
+                int rows = (remaining > itemsPerCol) ? itemsPerCol : remaining;
+
+                int colX = ddRect.x - (col * (ddRect.w + colGap));
+                Rect box = {colX, startY, ddRect.w, itemH * rows};
+                draw_rect(R, box, g_panel_bg);
+                draw_frame(R, box, g_panel_border);
+
+                if (point_in(mx, my, box))
+                    overAnyBox = true;
+
+                for (int row = 0; row < rows; row++)
                 {
-                    reverbType = i + 1;
-                    g_reverbDropdownOpen = false;
-                    bae_set_reverb(reverbType);
-                    // Save settings when reverb is changed
-                    if (g_current_bank_path[0] != '\0')
+                    int i = startIdx + row;
+                    Rect ir = {box.x, box.y + row * itemH, box.w, itemH};
+                    bool over = point_in(mx, my, ir);
+                    SDL_Color ibg = ((i + 1) == reverbType) ? g_highlight_color : g_panel_bg;
+                    if (over)
+                        ibg = g_button_hover;
+                    draw_rect(R, ir, ibg);
+
+                    if (row < rows - 1)
+                    { // separator line
+                        SDL_Color sep = g_panel_border;
+                        sep.a = 255;
+                        SDL_SetRenderDrawColor(R, sep.r, sep.g, sep.b, sep.a);
+                        SDL_RenderLine(R, ir.x, ir.y + ir.h, ir.x + ir.w, ir.y + ir.h);
+                    }
+
+                    // Choose text color: use button text on selected/hover, otherwise normal text
+                    SDL_Color itemTxt = g_text_color;
+                    if ((i + 1) == reverbType)
+                        itemTxt = g_button_text;
+                    if (over)
+                        itemTxt = g_button_text;
+                    draw_text(R, ir.x + 6, ir.y + 6, get_reverb_name(i), itemTxt);
+
+                    if (over && mclick)
                     {
-                        save_settings(g_current_bank_path, reverbType, loopPlay);
+                        reverbType = i + 1;
+                        g_reverbDropdownOpen = false;
+
+#if USE_NEO_EFFECTS
+                        // Check if this is a custom preset and load it
+                        int base_count = 15; // Default reverb types with Custom
+                        extern char g_current_custom_reverb_preset[64];
+                        if (i >= base_count)
+                        {
+                            const char *preset_name = get_reverb_name(i);
+                            load_custom_reverb_preset(preset_name);
+                        }
+                        else
+                        {
+                            // Clear current preset name when switching to non-custom reverb
+                            g_current_custom_reverb_preset[0] = '\0';
+                        }
+#endif
+
+                        bae_set_reverb(reverbType);
+                        // Save settings when reverb is changed
+                        if (g_current_bank_path[0] != '\0')
+                        {
+                            save_settings(g_current_bank_path, reverbType, loopPlay);
+                        }
                     }
                 }
             }
 
             // Click outside closes without change
-            if (mclick && !point_in(mx, my, ddRect) && !point_in(mx, my, box))
+            if (mclick && !point_in(mx, my, ddRect) && !overAnyBox)
             {
                 g_reverbDropdownOpen = false;
             }
@@ -5735,6 +6022,52 @@ int main(int argc, char *argv[])
                                    &transpose, &tempo, &volume, &loopPlay,
                                    &reverbType, ch_enable, &progress, &duration, &playing);
         }
+
+        // Custom reverb dialog (must render on top of everything)
+#if USE_NEO_EFFECTS
+        if (g_show_custom_reverb_dialog)
+        {
+            render_custom_reverb_dialog(R, mx, my, mclick, mdown, g_window_h);
+        }
+        
+        // Preset name input dialog (must render on top of custom reverb dialog)
+        extern bool g_show_preset_name_dialog;
+        if (g_show_preset_name_dialog)
+        {
+            render_preset_name_dialog(R, mx, my, mclick, mdown, g_window_h);
+        }
+
+        // Delete confirmation dialog (must render on top of everything)
+        {
+            extern bool g_show_preset_delete_confirm_dialog;
+            extern bool g_preset_delete_confirmed;
+            extern char g_preset_delete_name[64];
+
+            if (g_show_preset_delete_confirm_dialog)
+            {
+                render_preset_delete_confirm_dialog(R, mx, my, mclick, mdown, g_window_h);
+            }
+
+            if (g_preset_delete_confirmed)
+            {
+                if (g_preset_delete_name[0])
+                {
+                    delete_custom_reverb_preset(g_preset_delete_name);
+                }
+
+                // Reset to "Custom" default
+                reverbType = BAE_REVERB_TYPE_15;
+                bae_set_reverb(reverbType);
+                if (g_current_bank_path[0] != '\0')
+                {
+                    save_settings(g_current_bank_path, reverbType, loopPlay);
+                }
+
+                g_preset_delete_confirmed = false;
+                memset(g_preset_delete_name, 0, sizeof(g_preset_delete_name));
+            }
+        }
+#endif
 
         if (g_show_about_dialog)
         {

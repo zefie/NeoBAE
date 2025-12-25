@@ -10,6 +10,7 @@
 #include "gui_common.h"
 #include "gui_midi.h"
 #include "gui_playlist.h"
+#include "GenPriv.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -139,6 +140,13 @@ Settings load_settings(void)
             settings.window_y = atoi(line + 9);
             settings.has_window_pos = true;
         }
+        // Load active custom reverb preset name
+        else if (strncmp(line, "custom_reverb_preset=", 21) == 0)
+        {
+            strncpy(settings.custom_reverb_preset_name, line + 21, sizeof(settings.custom_reverb_preset_name) - 1);
+            settings.custom_reverb_preset_name[sizeof(settings.custom_reverb_preset_name) - 1] = '\0';
+            settings.has_custom_reverb_preset = true;
+        }
     }
     fclose(f);
     return settings;
@@ -155,6 +163,24 @@ void save_settings(const char *last_bank_path, int reverb_type, bool loop_enable
 #else
     snprintf(settings_path, sizeof(settings_path), "%s/zefidi.ini", exe_dir);
 #endif
+
+    // Read existing content to preserve custom reverb presets
+    char *content = NULL;
+    size_t content_size = 0;
+    FILE *f_read = fopen(settings_path, "r");
+    if (f_read)
+    {
+        fseek(f_read, 0, SEEK_END);
+        content_size = ftell(f_read);
+        fseek(f_read, 0, SEEK_SET);
+        content = (char *)malloc(content_size + 1);
+        if (content)
+        {
+            fread(content, 1, content_size, f_read);
+            content[content_size] = '\0';
+        }
+        fclose(f_read);
+    }
 
     FILE *f = fopen(settings_path, "w");
     if (f)
@@ -186,6 +212,48 @@ void save_settings(const char *last_bank_path, int reverb_type, bool loop_enable
             fprintf(f, "window_y=%d\n", y);
         }
 
+#if USE_NEO_EFFECTS
+        // Save current custom reverb preset name if one is loaded
+        extern char g_current_custom_reverb_preset[64];
+        if (g_current_custom_reverb_preset[0])
+        {
+            fprintf(f, "custom_reverb_preset=%s\n", g_current_custom_reverb_preset);
+        }
+        
+        // Preserve existing custom reverb preset data
+        if (content)
+        {
+            char *read_ptr = content;
+            char line_buf[512];
+            
+            while (*read_ptr)
+            {
+                // Read line into buffer
+                int i = 0;
+                while (*read_ptr && *read_ptr != '\n' && i < sizeof(line_buf) - 1)
+                {
+                    if (*read_ptr != '\r')  // Skip \r characters
+                        line_buf[i++] = *read_ptr;
+                    read_ptr++;
+                }
+                line_buf[i] = '\0';
+                if (*read_ptr == '\n') read_ptr++;
+                
+                // Only write lines that start with custom_reverb_%d_
+                if (line_buf[0] && strncmp(line_buf, "custom_reverb_", 14) == 0)
+                {
+                    // Make sure it's the indexed format, not the preset name
+                    char *underscore = strchr(line_buf + 14, '_');
+                    if (underscore && line_buf[14] >= '0' && line_buf[14] <= '9')
+                    {
+                        fprintf(f, "%s\n", line_buf);
+                    }
+                }
+            }
+        }
+#endif
+
+        if (content) free(content);
         fclose(f);
     }
 }
@@ -204,6 +272,24 @@ void save_full_settings(const Settings *settings)
 #else
     snprintf(settings_path, sizeof(settings_path), "%s/zefidi.ini", exe_dir);
 #endif
+
+    // Read existing content to preserve custom reverb presets
+    char *content = NULL;
+    size_t content_size = 0;
+    FILE *f_read = fopen(settings_path, "r");
+    if (f_read)
+    {
+        fseek(f_read, 0, SEEK_END);
+        content_size = ftell(f_read);
+        fseek(f_read, 0, SEEK_SET);
+        content = (char *)malloc(content_size + 1);
+        if (content)
+        {
+            fread(content, 1, content_size, f_read);
+            content[content_size] = '\0';
+        }
+        fclose(f_read);
+    }
 
     FILE *f = fopen(settings_path, "w");
     if (f)
@@ -261,6 +347,46 @@ void save_full_settings(const Settings *settings)
             fprintf(f, "window_x=%d\n", settings->window_x);
             fprintf(f, "window_y=%d\n", settings->window_y);
         }
+        if (settings->has_custom_reverb_preset && settings->custom_reverb_preset_name[0])
+        {
+            fprintf(f, "custom_reverb_preset=%s\n", settings->custom_reverb_preset_name);
+        }
+        
+#if USE_NEO_EFFECTS
+        // Preserve existing custom reverb preset data
+        if (content)
+        {
+            char *read_ptr = content;
+            char line_buf[512];
+            
+            while (*read_ptr)
+            {
+                // Read line into buffer
+                int i = 0;
+                while (*read_ptr && *read_ptr != '\n' && i < sizeof(line_buf) - 1)
+                {
+                    if (*read_ptr != '\r')  // Skip \r characters
+                        line_buf[i++] = *read_ptr;
+                    read_ptr++;
+                }
+                line_buf[i] = '\0';
+                if (*read_ptr == '\n') read_ptr++;
+                
+                // Only write lines that start with custom_reverb_%d_
+                if (line_buf[0] && strncmp(line_buf, "custom_reverb_", 14) == 0)
+                {
+                    // Make sure it's the indexed format, not the preset name
+                    char *underscore = strchr(line_buf + 14, '_');
+                    if (underscore && line_buf[14] >= '0' && line_buf[14] <= '9')
+                    {
+                        fprintf(f, "%s\n", line_buf);
+                    }
+                }
+            }
+        }
+#endif
+        
+        if (content) free(content);
         fclose(f);
     }
 }
@@ -307,6 +433,12 @@ void apply_settings_to_ui(const Settings *settings, int *transpose, int *tempo, 
     {
         g_disable_webtv_progress_bar = settings->disable_webtv_progress_bar;
     }
+#if USE_NEO_EFFECTS
+    if (settings->has_custom_reverb_preset && settings->custom_reverb_preset_name[0])
+    {
+        load_custom_reverb_preset(settings->custom_reverb_preset_name);
+    }
+#endif
 #if SUPPORT_PLAYLIST == TRUE
     if (settings->has_shuffle)
     {
@@ -1322,4 +1454,686 @@ void settings_cleanup(void)
     g_show_settings_dialog = false;
     g_volumeCurveDropdownOpen = false;
     g_sampleRateDropdownOpen = false;
+    
+    // Free custom reverb preset list
+    if (g_custom_reverb_presets)
+    {
+        free(g_custom_reverb_presets);
+        g_custom_reverb_presets = NULL;
+    }
+    g_custom_reverb_preset_count = 0;
+}
+
+// Custom reverb preset management
+CustomReverbPreset *g_custom_reverb_presets = NULL;
+int g_custom_reverb_preset_count = 0;
+char g_current_custom_reverb_preset[64] = {0}; // Track which preset is currently loaded
+
+// Text input dialog state
+bool g_show_preset_name_dialog = false;
+char g_preset_name_input[64] = {0};
+int g_preset_name_cursor = 0;
+
+// Hard cap to keep the reverb dropdown manageable.
+#define MAX_CUSTOM_REVERB_PRESETS 65
+
+// Delete confirmation dialog state
+bool g_show_preset_delete_confirm_dialog = false;
+bool g_preset_delete_confirmed = false;
+char g_preset_delete_name[64] = {0};
+
+void load_custom_reverb_preset_list(void)
+{
+    // Free existing presets
+    if (g_custom_reverb_presets)
+    {
+        free(g_custom_reverb_presets);
+        g_custom_reverb_presets = NULL;
+    }
+    g_custom_reverb_preset_count = 0;
+
+    char exe_dir[512];
+    get_executable_directory(exe_dir, sizeof(exe_dir));
+
+    char settings_path[768];
+#ifdef _WIN32
+    snprintf(settings_path, sizeof(settings_path), "%s\\zefidi.ini", exe_dir);
+#else
+    snprintf(settings_path, sizeof(settings_path), "%s/zefidi.ini", exe_dir);
+#endif
+
+    FILE *f = fopen(settings_path, "r");
+    if (!f) return;
+
+    // First pass: find maximum numeric preset index present in custom_reverb_%d_* keys
+    int max_idx = -1;
+    char line[512];
+    while (fgets(line, sizeof(line), f))
+    {
+        // Strip newline and carriage return
+        char *nl = strchr(line, '\n');
+        if (nl) *nl = '\0';
+        char *cr = strchr(line, '\r');
+        if (cr) *cr = '\0';
+
+        if (strncmp(line, "custom_reverb_", 14) != 0)
+            continue;
+
+        const char *p = line + 14;
+        if (!(*p >= '0' && *p <= '9'))
+            continue;
+
+        int idx = 0;
+        while (*p >= '0' && *p <= '9')
+        {
+            idx = idx * 10 + (*p - '0');
+            p++;
+        }
+        if (*p != '_')
+            continue;
+
+        if (idx > max_idx)
+            max_idx = idx;
+    }
+
+    if (max_idx < 0)
+    {
+        fclose(f);
+        return;
+    }
+
+    // Temporary dense array by numeric index; later compact to g_custom_reverb_presets
+    CustomReverbPreset *tmp = (CustomReverbPreset *)calloc((size_t)max_idx + 1, sizeof(CustomReverbPreset));
+    if (!tmp)
+    {
+        fclose(f);
+        return;
+    }
+
+    for (int i = 0; i <= max_idx; i++)
+    {
+        tmp[i].comb_count = 4;
+        for (int j = 0; j < MAX_NEO_COMBS; j++)
+        {
+            tmp[i].delays[j] = 0;
+            tmp[i].feedback[j] = 0;
+            tmp[i].gain[j] = 65536;
+        }
+    }
+
+    // Second pass: parse values
+    rewind(f);
+    while (fgets(line, sizeof(line), f))
+    {
+        // Strip newline and carriage return
+        char *nl = strchr(line, '\n');
+        if (nl) *nl = '\0';
+        char *cr = strchr(line, '\r');
+        if (cr) *cr = '\0';
+
+        if (strncmp(line, "custom_reverb_", 14) != 0)
+            continue;
+
+        const char *p = line + 14;
+        if (!(*p >= '0' && *p <= '9'))
+            continue;
+
+        int idx = 0;
+        while (*p >= '0' && *p <= '9')
+        {
+            idx = idx * 10 + (*p - '0');
+            p++;
+        }
+        if (*p != '_' || idx < 0 || idx > max_idx)
+            continue;
+
+        p++; // skip '_'
+        const char *eq = strchr(p, '=');
+        if (!eq)
+            continue;
+
+        char key[64];
+        size_t key_len = (size_t)(eq - p);
+        if (key_len >= sizeof(key))
+            key_len = sizeof(key) - 1;
+        memcpy(key, p, key_len);
+        key[key_len] = '\0';
+
+        const char *value = eq + 1;
+
+        if (strcmp(key, "name") == 0)
+        {
+            strncpy(tmp[idx].name, value, sizeof(tmp[idx].name) - 1);
+            tmp[idx].name[sizeof(tmp[idx].name) - 1] = '\0';
+        }
+        else if (strcmp(key, "comb_count") == 0)
+        {
+            tmp[idx].comb_count = atoi(value);
+        }
+        else if (strncmp(key, "delay_", 6) == 0)
+        {
+            int comb = atoi(key + 6);
+            if (comb >= 0 && comb < MAX_NEO_COMBS)
+                tmp[idx].delays[comb] = atoi(value);
+        }
+        else if (strncmp(key, "feedback_", 9) == 0)
+        {
+            int comb = atoi(key + 9);
+            if (comb >= 0 && comb < MAX_NEO_COMBS)
+                tmp[idx].feedback[comb] = atoi(value);
+        }
+        else if (strncmp(key, "gain_", 5) == 0)
+        {
+            int comb = atoi(key + 5);
+            if (comb >= 0 && comb < MAX_NEO_COMBS)
+                tmp[idx].gain[comb] = atoi(value);
+        }
+    }
+
+    fclose(f);
+
+    // Compact: only presets with a name count as valid presets
+    int count = 0;
+    for (int i = 0; i <= max_idx; i++)
+    {
+        if (tmp[i].name[0])
+            count++;
+    }
+
+    if (count == 0)
+    {
+        free(tmp);
+        return;
+    }
+
+    int capped_count = (count > MAX_CUSTOM_REVERB_PRESETS) ? MAX_CUSTOM_REVERB_PRESETS : count;
+
+    g_custom_reverb_presets = (CustomReverbPreset *)malloc(sizeof(CustomReverbPreset) * (size_t)capped_count);
+    if (!g_custom_reverb_presets)
+    {
+        free(tmp);
+        return;
+    }
+
+    int out = 0;
+    for (int i = 0; i <= max_idx; i++)
+    {
+        if (!tmp[i].name[0])
+            continue;
+        if (out >= capped_count)
+            break;
+        g_custom_reverb_presets[out++] = tmp[i];
+    }
+    g_custom_reverb_preset_count = out;
+    free(tmp);
+}
+
+int get_custom_reverb_preset_index(const char *name)
+{
+    if (!name || !g_custom_reverb_presets) return -1;
+    
+    for (int i = 0; i < g_custom_reverb_preset_count; i++)
+    {
+        if (strcmp(g_custom_reverb_presets[i].name, name) == 0)
+        {
+            return i;
+        }
+    }
+    return -1;
+}
+
+void save_custom_reverb_preset(const char *name)
+{
+#if USE_NEO_EFFECTS
+    if (!name || !name[0]) return;
+
+    // Allow overwriting by name, but prevent creating more than the hard cap.
+    // (This keeps the dropdown list size bounded.)
+    extern void set_status_message(const char *msg);
+    
+    // Read all existing content
+    char exe_dir[512];
+    get_executable_directory(exe_dir, sizeof(exe_dir));
+    
+    char settings_path[768];
+#ifdef _WIN32
+    snprintf(settings_path, sizeof(settings_path), "%s\\zefidi.ini", exe_dir);
+#else
+    snprintf(settings_path, sizeof(settings_path), "%s/zefidi.ini", exe_dir);
+#endif
+    
+    // Read existing content to preserve settings and find max index
+    char *content = NULL;
+    size_t content_size = 0;
+    FILE *f = fopen(settings_path, "r");
+    if (f)
+    {
+        fseek(f, 0, SEEK_END);
+        content_size = ftell(f);
+        fseek(f, 0, SEEK_SET);
+        content = (char *)malloc(content_size + 1);
+        if (content)
+        {
+            fread(content, 1, content_size, f);
+            content[content_size] = '\0';
+        }
+        fclose(f);
+    }
+    
+    // Find existing preset index by name, or allocate next available
+    int preset_idx = -1;
+    int max_idx = -1;
+    
+    // First pass: scan file for existing preset with this name and find max index
+    if (content)
+    {
+        char *scan_ptr = content;
+        char line_buf[512];
+
+        while (*scan_ptr)
+        {
+            // Read line into buffer
+            int i = 0;
+            while (*scan_ptr && *scan_ptr != '\n' && i < (int)sizeof(line_buf) - 1)
+            {
+                if (*scan_ptr != '\r')  // Skip \r characters
+                    line_buf[i++] = *scan_ptr;
+                scan_ptr++;
+            }
+            line_buf[i] = '\0';
+            if (*scan_ptr == '\n') scan_ptr++;
+
+            if (strncmp(line_buf, "custom_reverb_", 14) != 0)
+                continue;
+
+            const char *p = line_buf + 14;
+            if (!(*p >= '0' && *p <= '9'))
+                continue;
+
+            int idx = 0;
+            while (*p >= '0' && *p <= '9')
+            {
+                idx = idx * 10 + (*p - '0');
+                p++;
+            }
+            if (*p != '_')
+                continue;
+
+            if (idx > max_idx)
+                max_idx = idx;
+
+            p++; // skip '_'
+            if (strncmp(p, "name=", 5) == 0)
+            {
+                const char *val = p + 5;
+                if (val[0] && strcmp(val, name) == 0)
+                {
+                    preset_idx = idx;
+                }
+            }
+        }
+    }
+    
+    // If preset not found by name, use next available index
+    if (preset_idx < 0)
+    {
+        if (g_custom_reverb_preset_count >= MAX_CUSTOM_REVERB_PRESETS)
+        {
+            set_status_message("Too many custom reverb presets (max 65)");
+            if (content) free(content);
+            return;
+        }
+        preset_idx = max_idx + 1;
+    }
+    
+    // Rewrite file, excluding old preset data for this index
+    f = fopen(settings_path, "w");
+    if (!f)
+    {
+        if (content) free(content);
+        return;
+    }
+    
+    // Write existing content, excluding lines for this preset index
+    if (content)
+    {
+        char prefix[64];
+        snprintf(prefix, sizeof(prefix), "custom_reverb_%d_", preset_idx);
+        int prefix_len = strlen(prefix);
+        
+        char *write_ptr = content;
+        char line_buf[512];
+        
+        while (*write_ptr)
+        {
+            // Read line into buffer
+            int i = 0;
+            while (*write_ptr && *write_ptr != '\n' && i < sizeof(line_buf) - 1)
+            {
+                if (*write_ptr != '\r')  // Skip \r characters
+                    line_buf[i++] = *write_ptr;
+                write_ptr++;
+            }
+            line_buf[i] = '\0';
+            if (*write_ptr == '\n') write_ptr++;
+            
+            // Skip lines that match this preset index
+            if (line_buf[0] && strncmp(line_buf, prefix, prefix_len) != 0)
+            {
+                fprintf(f, "%s\n", line_buf);
+            }
+        }
+        free(content);
+    }
+    
+    // Append new preset data
+    fprintf(f, "custom_reverb_%d_name=%s\n", preset_idx, name);
+    fprintf(f, "custom_reverb_%d_comb_count=%d\n", preset_idx, GetNeoCustomReverbCombCount());
+    for (int i = 0; i < MAX_NEO_COMBS; i++)
+    {
+        fprintf(f, "custom_reverb_%d_delay_%d=%d\n", preset_idx, i, GetNeoCustomReverbCombDelay(i));
+        fprintf(f, "custom_reverb_%d_feedback_%d=%d\n", preset_idx, i, GetNeoCustomReverbCombFeedback(i));
+        fprintf(f, "custom_reverb_%d_gain_%d=%d\n", preset_idx, i, GetNeoCustomReverbCombGain(i));
+    }
+    
+    fclose(f);
+    
+    // Update current preset name
+    strncpy(g_current_custom_reverb_preset, name, sizeof(g_current_custom_reverb_preset) - 1);
+    g_current_custom_reverb_preset[sizeof(g_current_custom_reverb_preset) - 1] = '\0';
+    
+    // Reload preset list
+    load_custom_reverb_preset_list();
+#endif
+}
+
+void load_custom_reverb_preset(const char *name)
+{
+#if USE_NEO_EFFECTS
+    if (!name || !name[0]) return;
+    
+    int idx = get_custom_reverb_preset_index(name);
+    if (idx < 0) return;
+    
+    CustomReverbPreset *preset = &g_custom_reverb_presets[idx];
+    SetNeoCustomReverbCombCount(preset->comb_count);
+    
+    for (int i = 0; i < MAX_NEO_COMBS; i++)
+    {
+        SetNeoCustomReverbCombDelay(i, preset->delays[i]);
+        SetNeoCustomReverbCombFeedback(i, preset->feedback[i]);
+        SetNeoCustomReverbCombGain(i, preset->gain[i]);
+    }
+    
+    // Update current preset name
+    strncpy(g_current_custom_reverb_preset, name, sizeof(g_current_custom_reverb_preset) - 1);
+    g_current_custom_reverb_preset[sizeof(g_current_custom_reverb_preset) - 1] = '\0';
+
+    // Force the custom reverb dialog to refresh its cached slider values
+    extern int g_custom_reverb_dialog_sync_serial;
+    g_custom_reverb_dialog_sync_serial++;
+#endif
+}
+
+void delete_custom_reverb_preset(const char *name)
+{
+    if (!name || !name[0]) return;
+
+    // Find the numeric preset index in the file by matching custom_reverb_%d_name
+    int preset_file_idx = -1;
+    
+    // Read all existing content
+    char exe_dir[512];
+    get_executable_directory(exe_dir, sizeof(exe_dir));
+    
+    char settings_path[768];
+#ifdef _WIN32
+    snprintf(settings_path, sizeof(settings_path), "%s\\zefidi.ini", exe_dir);
+#else
+    snprintf(settings_path, sizeof(settings_path), "%s/zefidi.ini", exe_dir);
+#endif
+    
+    // Read existing content
+    char *content = NULL;
+    size_t content_size = 0;
+    FILE *f = fopen(settings_path, "r");
+    if (f)
+    {
+        fseek(f, 0, SEEK_END);
+        content_size = ftell(f);
+        fseek(f, 0, SEEK_SET);
+        content = (char *)malloc(content_size + 1);
+        if (content)
+        {
+            fread(content, 1, content_size, f);
+            content[content_size] = '\0';
+        }
+        fclose(f);
+    }
+
+    if (!content) return;
+
+    // Scan for matching name to discover numeric index
+    {
+        char *scan_ptr = content;
+        char line_buf[512];
+        while (*scan_ptr)
+        {
+            int i = 0;
+            while (*scan_ptr && *scan_ptr != '\n' && i < (int)sizeof(line_buf) - 1)
+            {
+                if (*scan_ptr != '\r')
+                    line_buf[i++] = *scan_ptr;
+                scan_ptr++;
+            }
+            line_buf[i] = '\0';
+            if (*scan_ptr == '\n') scan_ptr++;
+
+            if (strncmp(line_buf, "custom_reverb_", 14) == 0)
+            {
+                const char *p = line_buf + 14;
+                if (*p >= '0' && *p <= '9')
+                {
+                    int idx = 0;
+                    while (*p >= '0' && *p <= '9')
+                    {
+                        idx = idx * 10 + (*p - '0');
+                        p++;
+                    }
+                    if (*p == '_' && strncmp(p + 1, "name=", 5) == 0)
+                    {
+                        const char *val = p + 1 + 5;
+                        if (strcmp(val, name) == 0)
+                        {
+                            preset_file_idx = idx;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (preset_file_idx < 0)
+    {
+        free(content);
+        return;
+    }
+    
+    // Rewrite file, skipping lines for this preset index
+    f = fopen(settings_path, "w");
+    if (!f)
+    {
+        free(content);
+        return;
+    }
+    
+    char prefix[64];
+    snprintf(prefix, sizeof(prefix), "custom_reverb_%d_", preset_file_idx);
+    int prefix_len = strlen(prefix);
+
+    // Manual parsing (avoid strtok, strip \r)
+    char *write_ptr = content;
+    char line_buf[512];
+    while (*write_ptr)
+    {
+        int i = 0;
+        while (*write_ptr && *write_ptr != '\n' && i < (int)sizeof(line_buf) - 1)
+        {
+            if (*write_ptr != '\r')
+                line_buf[i++] = *write_ptr;
+            write_ptr++;
+        }
+        line_buf[i] = '\0';
+        if (*write_ptr == '\n') write_ptr++;
+
+        if (line_buf[0] && strncmp(line_buf, prefix, prefix_len) != 0)
+        {
+            fprintf(f, "%s\n", line_buf);
+        }
+    }
+
+    free(content);
+    fclose(f);
+    
+    // Clear current preset name if we just deleted it
+    if (strcmp(g_current_custom_reverb_preset, name) == 0)
+    {
+        g_current_custom_reverb_preset[0] = '\0';
+    }
+    
+    // Reload preset list
+    load_custom_reverb_preset_list();
+}
+
+void render_preset_name_dialog(SDL_Renderer *R, int mx, int my, bool mclick, bool mdown, int window_h)
+{
+    if (!g_show_preset_name_dialog) return;
+    
+    int dlg_w = 300;
+    int dlg_h = 120;
+    
+    Rect dlg = {(WINDOW_W - dlg_w) / 2, (window_h - dlg_h) / 2, dlg_w, dlg_h};
+    
+    // Shadow
+    SDL_Color shadow = {0, 0, 0, 128};
+    Rect shadowRect = {dlg.x + 3, dlg.y + 3, dlg.w, dlg.h};
+    draw_rect(R, shadowRect, shadow);
+    
+    // Dialog background
+    draw_rect(R, dlg, g_panel_bg);
+    draw_frame(R, dlg, g_panel_border);
+    
+    // Title
+    draw_text(R, dlg.x + 10, dlg.y + 10, "Enter Preset Name:", g_text_color);
+    
+    // Text input box
+    Rect inputBox = {dlg.x + 10, dlg.y + 35, dlg.w - 20, 24};
+    draw_rect(R, inputBox, g_bg_color);
+    draw_frame(R, inputBox, g_panel_border);
+    draw_text(R, inputBox.x + 4, inputBox.y + 4, g_preset_name_input, g_text_color);
+    
+    // Cursor
+    int cursor_x = inputBox.x + 4 + (g_preset_name_cursor * 7); // Approximate char width
+    SDL_SetRenderDrawColor(R, g_text_color.r, g_text_color.g, g_text_color.b, g_text_color.a);
+    SDL_RenderLine(R, cursor_x, inputBox.y + 4, cursor_x, inputBox.y + inputBox.h - 4);
+    
+    // Buttons
+    Rect okBtn = {dlg.x + dlg.w - 160, dlg.y + dlg.h - 35, 70, 25};
+    Rect cancelBtn = {dlg.x + dlg.w - 80, dlg.y + dlg.h - 35, 70, 25};
+    
+    bool overOk = point_in(mx, my, okBtn);
+    bool overCancel = point_in(mx, my, cancelBtn);
+    
+    SDL_Color ok_bg = overOk ? g_button_hover : g_button_base;
+    SDL_Color cancel_bg = overCancel ? g_button_hover : g_button_base;
+    
+    draw_rect(R, okBtn, ok_bg);
+    draw_frame(R, okBtn, g_button_border);
+    draw_text(R, okBtn.x + 20, okBtn.y + 5, "OK", g_button_text);
+    
+    draw_rect(R, cancelBtn, cancel_bg);
+    draw_frame(R, cancelBtn, g_button_border);
+    draw_text(R, cancelBtn.x + 10, cancelBtn.y + 5, "Cancel", g_button_text);
+    
+    if (mclick)
+    {
+        if (overOk && g_preset_name_input[0])
+        {
+            save_custom_reverb_preset(g_preset_name_input);
+            g_show_preset_name_dialog = false;
+            memset(g_preset_name_input, 0, sizeof(g_preset_name_input));
+            g_preset_name_cursor = 0;
+        }
+        else if (overCancel)
+        {
+            g_show_preset_name_dialog = false;
+            memset(g_preset_name_input, 0, sizeof(g_preset_name_input));
+            g_preset_name_cursor = 0;
+        }
+    }
+}
+
+void render_preset_delete_confirm_dialog(SDL_Renderer *R, int mx, int my, bool mclick, bool mdown, int window_h)
+{
+    (void)mdown;
+
+    if (!g_show_preset_delete_confirm_dialog) return;
+
+    int dlg_w = 360;
+    int dlg_h = 130;
+
+    Rect dlg = {(WINDOW_W - dlg_w) / 2, (window_h - dlg_h) / 2, dlg_w, dlg_h};
+
+    // Shadow
+    SDL_Color shadow = (SDL_Color){0, 0, 0, 128};
+    Rect shadowRect = (Rect){dlg.x + 3, dlg.y + 3, dlg.w, dlg.h};
+    draw_rect(R, shadowRect, shadow);
+
+    // Dialog background
+    draw_rect(R, dlg, g_panel_bg);
+    draw_frame(R, dlg, g_panel_border);
+
+    // Title + message
+    draw_text(R, dlg.x + 10, dlg.y + 10, "Delete Preset?", g_text_color);
+
+    char msg[256];
+    if (g_preset_delete_name[0])
+        snprintf(msg, sizeof(msg), "Delete preset \"%s\"?", g_preset_delete_name);
+    else
+        snprintf(msg, sizeof(msg), "Delete preset?");
+    draw_text(R, dlg.x + 10, dlg.y + 38, msg, g_text_color);
+
+    // Buttons
+    Rect cancelBtn = (Rect){dlg.x + dlg.w - 160, dlg.y + dlg.h - 35, 70, 25};
+    Rect deleteBtn = (Rect){dlg.x + dlg.w - 80, dlg.y + dlg.h - 35, 70, 25};
+
+    bool overCancel = point_in(mx, my, cancelBtn);
+    bool overDelete = point_in(mx, my, deleteBtn);
+
+    SDL_Color cancel_bg = overCancel ? g_button_hover : g_button_base;
+    SDL_Color delete_bg = overDelete ? g_button_hover : g_button_base;
+
+    draw_rect(R, cancelBtn, cancel_bg);
+    draw_frame(R, cancelBtn, g_button_border);
+    draw_text(R, cancelBtn.x + 10, cancelBtn.y + 5, "Cancel", g_button_text);
+
+    draw_rect(R, deleteBtn, delete_bg);
+    draw_frame(R, deleteBtn, g_button_border);
+    draw_text(R, deleteBtn.x + 10, deleteBtn.y + 5, "Delete", g_button_text);
+
+    if (mclick)
+    {
+        if (overDelete)
+        {
+            g_preset_delete_confirmed = true;
+            g_show_preset_delete_confirm_dialog = false;
+        }
+        else if (overCancel)
+        {
+            g_show_preset_delete_confirm_dialog = false;
+            g_preset_delete_confirmed = false;
+            memset(g_preset_delete_name, 0, sizeof(g_preset_delete_name));
+        }
+    }
 }
