@@ -59,7 +59,7 @@ static int g_fluidsynth_xmf_overlay_id = -1;     // XMF embedded bank overlay
 static int g_fluidsynth_xmf_overlay_bank_offset = 0;  // Bank offset for XMF overlay (0 or 2)
 static XBOOL g_fluidsynth_initialized = FALSE;
 static XBOOL g_fluidsynth_mono_mode = FALSE;
-static XFIXED g_fluidsynth_master_volume = (XFIXED)(XFIXED_1 / 384);
+static XFIXED g_fluidsynth_master_volume = (XFIXED)(XFIXED_1 / 768);
 static uint16_t g_fluidsynth_sample_rate = BAE_DEFAULT_SAMPLE_RATE;
 static char g_fluidsynth_sf2_path[256] = {0};
 // Track a temp file we create for DLS fallback so we can remove it on unload
@@ -1328,6 +1328,16 @@ void GM_SF2_ProcessNoteOn(GM_Song* pSong, int16_t channel, int16_t note, int16_t
         return;
     }
     
+    // IMPORTANT:
+    // Do NOT scale velocity by CC7/CC11 or song volume here.
+    // FluidSynth already applies CC7 (Volume) and CC11 (Expression) to *all* active voices,
+    // and we apply song volume once at render time. Pre-scaling here causes double attenuation
+    // and also changes velocity-layer selection in SF2s (making some notes unexpectedly quiet).
+    int scaledVelocity = velocity;
+    if (scaledVelocity <= 0)
+        return;
+    if (scaledVelocity > MAX_NOTE_VOLUME)
+        scaledVelocity = MAX_NOTE_VOLUME;
     
     // Check what preset is selected on this channel
     fluid_preset_t* preset = fluid_synth_get_channel_preset(g_fluidsynth_synth, channel);
@@ -1335,10 +1345,10 @@ void GM_SF2_ProcessNoteOn(GM_Song* pSong, int16_t channel, int16_t note, int16_t
         BAE_PRINTF("[SF2 NoteOn] Channel %d has NO PRESET selected!\n", channel);
     }
     
-    fluid_synth_noteon(g_fluidsynth_synth, channel, note, velocity);
+    fluid_synth_noteon(g_fluidsynth_synth, channel, note, scaledVelocity);
     
-    // Update channel activity tracking
-    PV_SF2_UpdateChannelActivity(channel, velocity, TRUE);
+    // Update channel activity tracking with original velocity
+    PV_SF2_UpdateChannelActivity(channel, scaledVelocity, TRUE);
 }
 
 void GM_SF2_ProcessNoteOff(GM_Song* pSong, int16_t channel, int16_t note, int16_t velocity)
@@ -1535,6 +1545,13 @@ void GM_SF2_ProcessProgramChange(GM_Song* pSong, int16_t channel, int32_t progra
             BAE_PRINTF("[FluidProgChange] XMF overlay check: requested bank %d -> overlay bank %d (offset=%d) prog %d - not found or invalid\n",
                        useBank, overlayBank, g_fluidsynth_xmf_overlay_bank_offset, useProg);
         }
+    }
+
+    // Alias bank 121 -> bank 0 if bank 121 preset doesn't exist but bank 0 does
+    // This handles MIDI files that request bank 121 but the soundfont only has bank 0
+    if (useBank == 121 && !PV_SF2_PresetExists(121, useProg) && PV_SF2_PresetExists(0, useProg)) {
+        BAE_PRINTF("[FluidProgChange] Aliasing bank 121 prog %d -> bank 0 prog %d (121:%d not found)\n", useProg, useProg, useProg);
+        useBank = 0;
     }
 
     if (!PV_SF2_PresetExists(useBank, useProg)) {
@@ -2042,18 +2059,10 @@ static void PV_SF2_ConvertFloatToInt32(float* input, int32_t* output, int32_t* r
 {
     const float kScale = 2147483647.0f;
     
-    // For now, apply a simple global scaling since we don't have per-channel separation in the final mix
-    // A more sophisticated implementation would require per-channel rendering
+    // Note: Channel volume/expression are handled by FluidSynth via CC7/CC11.
+    // We only apply song-level volume here. `channelScales` are used only for weighting reverb/chorus
+    // amounts across active channels.
     float globalScale = songVolumeScale;
-    
-    // Average the channel scales for a rough approximation
-    float avgChannelScale = 0.0f;
-    for (int c = 0; c < BAE_MAX_MIDI_CHANNELS; c++)
-    {
-        avgChannelScale += channelScales[c];
-    }
-    avgChannelScale /= 16.0f;
-    globalScale *= avgChannelScale;
     
     // Average reverb/chorus levels only across channels with non-zero volume
     // This prevents inactive channels from affecting the reverb mix
