@@ -1410,7 +1410,7 @@ void GM_SF2_ProcessProgramChange(GM_Song* pSong, int16_t channel, int32_t progra
     {
         return;
     }
-    //BAE_PRINTF("[SF2 ProcessProgramChange] Raw Request: program: %i, channel %i\n", program, channel);    
+    BAE_PRINTF("[SF2 ProcessProgramChange] Raw Request: program: %i, channel %i\n", program, channel);    
     // Convert program ID to MIDI bank/program
     // NeoBAE uses: instrument = (bank * 128) + program + note
     // For percussion: bank = (bank * 2) + 1, note is included
@@ -1489,8 +1489,6 @@ void GM_SF2_ProcessProgramChange(GM_Song* pSong, int16_t channel, int32_t progra
         }
 
     }
-
-    //BAE_PRINTF("[SF2 ProcessProgramChange] Final Interpretation: midiBank: %i, midiProgram: %i, channel: %i\n", midiBank, midiProgram, channel);
 
     // mobileBAE MIDI quirk: bank 121 program 124:125 are used for motor vibration.
     // Best behavior is to give the channel no preset at all.
@@ -1610,6 +1608,8 @@ void GM_SF2_ProcessProgramChange(GM_Song* pSong, int16_t channel, int32_t progra
     // Send MIDI program change event to FluidSynth
     fluid_synth_bank_select(g_fluidsynth_synth, channel, useBank);
     fluid_synth_program_change(g_fluidsynth_synth, channel, useProg);
+    BAE_PRINTF("[SF2 ProcessProgramChange] Final Interpretation: midiBank: %i, midiProgram: %i, channel: %i\n", useBank, useProg, channel);
+
     
 }
 
@@ -2284,8 +2284,6 @@ static void PV_SF2_SetValidDefaultProgramsForAllChannels(void)
     int foundMelodicBank = -1, foundMelodicProg = 0;
     int foundDrumBank = -1, foundDrumProg = 0; // look for bank 128 if available
     int firstBank = -1, firstProg = 0;         // fallback to the very first preset seen
-
-    const int preferredDrumBank = g_fluidsynth_soundfont_is_dls ? 120 : 128;
     
     // Search through ALL loaded soundfonts (overlay + base)
     int sfcount = fluid_synth_sfcount(g_fluidsynth_synth);
@@ -2296,20 +2294,47 @@ static void PV_SF2_SetValidDefaultProgramsForAllChannels(void)
             fluid_sfont_iteration_start(sf);
             while ((p = fluid_sfont_iteration_next(sf)) != NULL) {
                 int bank = fluid_preset_get_banknum(p);
-                int prog = fluid_preset_get_num(p);
-                if (firstBank < 0) { firstBank = bank; firstProg = prog; }
+                if (firstBank < 0 && bank != 120 && bank != 128) { firstBank = bank; firstProg = 0; }
                 if (bank == 0 && foundMelodicBank < 0) { // capture first bank 0 as a generic melodic default
-                    foundMelodicBank = bank; foundMelodicProg = prog;
+                    foundMelodicBank = bank; foundMelodicProg = 0;
+                }
+                if (bank == 128 && foundDrumBank < 0) { // canonical SF2 drum kit
+                    foundDrumBank = bank; foundDrumProg = 0;
+                }
+                if (bank != 128 && bank != 120 && foundMelodicBank < 0) { // first non-drum melodic preset
+                    foundMelodicBank = bank; foundMelodicProg = 0;
+                }
+                if (foundMelodicBank >= 0 && foundDrumBank >= 0) {
+                    break; // found both preferred presets
                 }
             }
+        }
+        if (foundMelodicBank >= 0 && !PV_SF2_PresetExists(foundMelodicBank, foundMelodicProg)) {
+            PV_SF2_FindFirstPresetInBank(foundMelodicBank, &firstProg);
+            foundMelodicProg = firstProg;
+        }
+        if (foundDrumBank >= 0 && !PV_SF2_PresetExists(foundDrumBank, foundDrumProg)) {
+            PV_SF2_FindFirstPresetInBank(foundDrumBank, &foundDrumProg);
         }
     }
 
     // Only accept the canonical drum kit preset.
-    if (PV_SF2_PresetExists(preferredDrumBank, 0))
-    {
-        foundDrumBank = preferredDrumBank;
-        foundDrumProg = 0;
+    if (foundDrumBank < 0) {
+        // try SF2 percussion bank
+        int preferredDrumBank = 128;
+        if (PV_SF2_PresetExists(preferredDrumBank, 0))
+        {
+            foundDrumBank = preferredDrumBank;
+            foundDrumProg = 0;
+        } else {
+            // try DLS percussion bank
+            preferredDrumBank = 120;
+            if (PV_SF2_PresetExists(preferredDrumBank, 0))
+            {
+                foundDrumBank = preferredDrumBank;
+                foundDrumProg = 0;
+            }
+        }
     }
 
     // Fallbacks if preferred banks not found
