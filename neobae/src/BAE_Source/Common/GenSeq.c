@@ -3675,8 +3675,10 @@ static XBOOL PV_ProcessMetaMarkerEvents(GM_Song *pSong, char *markerText, long m
         if (XLStrnCmp("loopstart", markerText, 9) == 0 || XLStrnCmp("start", markerText, 5) == 0 || XLStrnCmp("[", markerText, 1) == 0)
         {
             // Limit markerLength for debug output to prevent buffer issues
+#if _DEBUG
             long debugLength = (markerLength > 256) ? 256 : markerLength;
             BAE_PRINTF("Loop Start found: %.*s\n", (int)debugLength, markerText);
+#endif
             count = -1;                        // loop forever
             if (pSong->loopbackSaved == FALSE) // only allow one save
             {

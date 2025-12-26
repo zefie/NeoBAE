@@ -328,6 +328,8 @@ static void PV_ApplyNeoReverbDefaults(NeoReverbParams *params)
 
     if (params->mReverbMode < REVERB_TYPE_18) {
         GetNeoReverbPresetParams(params->mReverbMode, &combCount, delaysMs, feedback, gain, &lowpass, &mix);
+        if (combCount > NEO_CUSTOM_MAX_COMBS)
+            combCount = NEO_CUSTOM_MAX_COMBS;
         SetNeoCustomReverbCombCount(combCount);
         for (int i = 0; i < combCount; i++)
         {
