@@ -2378,7 +2378,9 @@ XPTR XGetFileResource(XFILE fileRef, XResourceType resourceType, XLongResourceID
             else
             {
                 err = -1;   // can't find it
+#if DEBUG_PRINT_RESOURCE                
                 BAE_PRINTF("Can't find it\n");
+#endif                
             }
         }
         else

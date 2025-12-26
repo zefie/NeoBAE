@@ -351,7 +351,7 @@ static XBOOL PV_SF2_AllInstrumentsAreRMFEmbedded(GM_Song* pSong)
     
     // Check if there are any USED instruments that aren't loaded (would need SF2)
     // Strategy: Check all channels that have been programmed
-    BAE_PRINTF("[SF2] Checking programmed channels for non-embedded instruments...\n");
+    BAE_PRINTF("[SF2-RMF] Checking RMF for non-embedded instruments...\n");
     for (int channel = 0; channel < MAX_CHANNELS; channel++)
     {
         // Skip channels that have never been programmed
@@ -368,11 +368,10 @@ static XBOOL PV_SF2_AllInstrumentsAreRMFEmbedded(GM_Song* pSong)
         // This is often a default value on channels that may not actually play notes
         if (program == 0 && allLoadedEmbedded)
         {
-            BAE_PRINTF("[SF2] Channel %d uses program 0 (bank 0 program 0) - skipping (default value, all loaded are embedded)\n", channel);
+            //BAE_PRINTF("[SF2-RMF] Channel %d uses program 0 (bank 0 program 0) - skipping (default value)\n", channel);
             continue;
         }
         
-        BAE_PRINTF("[SF2] Channel %d uses program %d\n", channel, program);
         
         // Check if this instrument is loaded
         if (pSong->instrumentData[program] == NULL)
@@ -391,25 +390,21 @@ static XBOOL PV_SF2_AllInstrumentsAreRMFEmbedded(GM_Song* pSong)
             // If programmed but not loaded and not embedded, SF2 must provide it
             if (!isEmbedded)
             {
-                BAE_PRINTF("[SF2] Channel %d program %d is not loaded and NOT RMF-embedded - SF2 needed\n", 
+                BAE_PRINTF("[SF2-RMF] Channel %d program %d is not RMF-embedded - SF2 needed\n", 
                            channel, program);
                 return FALSE;
             }
             else
             {
-                BAE_PRINTF("[SF2] Channel %d program %d is not loaded but IS RMF-embedded (will load on demand)\n",
+                BAE_PRINTF("[SF2-RMF] Channel %d program %d is RMF-embedded\n",
                            channel, program);
             }
-        }
-        else
-        {
-            BAE_PRINTF("[SF2] Channel %d program %d is loaded\n", channel, program);
         }
     }
     
     if (allLoadedEmbedded)
     {
-        BAE_PRINTF("[SF2] All %d loaded instruments are RMF-embedded (out of %u declared in RMF)\n",
+        BAE_PRINTF("[SF2-RMF] All %d loaded instruments are RMF-embedded (out of %u declared in RMF)\n",
                    loadedCount, rmfInstCount);
     }
     
@@ -438,7 +433,7 @@ void GM_SF2_CheckAndDisableSF2ForRMFEmbedded(GM_Song* pSong)
     // Check if this song has all instruments embedded in RMF
     if (PV_SF2_AllInstrumentsAreRMFEmbedded(pSong))
     {
-        BAE_PRINTF("[SF2] RMF has all instruments embedded - disabling SF2 mode for this song\n");
+        BAE_PRINTF("[SF2-RMF] RMF detected to use solely embedded instruments - disabling SF2 mode for this song\n");
         // Disable SF2 for this specific song
         pSong->songFlags &= ~SONG_FLAG_USE_SF2;
         GM_EnableSF2ForSong(pSong, FALSE);
