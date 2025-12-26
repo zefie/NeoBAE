@@ -430,6 +430,7 @@ static void PV_ScaleDivision(GM_Song *pSong, UFLOAT div)
             midiDivsion = (UFLOAT)0x7FFF; // speed things up
         }
         pSong->MIDIDivision = midiDivsion;
+        pSong->lyricLineBreakThreshold = 500000; // 0.5 seconds in microseconds for lyric line breaks
     }
 }
 
@@ -584,6 +585,10 @@ OPErr PV_ConfigureMusic(GM_Song *pSong)
     XDWORD lengthToMidiEnd;
 
     theErr = BAD_MIDI_DATA; // assume the worst
+    // Reset lyric state
+    pSong->lastLyricTimeUs = 0;
+    pSong->currentLineLength = 0;
+    pSong->lyricsHaveNewlines = FALSE;
     // DEBUG: begin MIDI parse of song sequenceData
     //BAE_PRINTF("DEBUG: PV_ConfigureMusic: sequenceData=%p size=%u\n", pSong ? pSong->sequenceData : NULL, pSong ? (unsigned)pSong->sequenceDataSize : 0);
     PV_ConfigureInstruments(pSong);
@@ -3906,6 +3911,7 @@ OPErr PV_ProcessMidiSequencerSlice(void *threadContext, GM_Song *pSong)
                             if (lyricStr && lyricStr[0] && lyricStr[0] == '\r')
                             {
                                 /* Translate Carrage Return to newline by sending empty lyric */
+                                pSong->lyricsHaveNewlines = TRUE;
                                 uint32_t lyrTimeUs = (uint32_t)pSong->songMicroseconds;
                                 char empty[1] = {'\0'};
                                 pSong->lyricCallbackPtr(pSong, empty, lyrTimeUs, pSong->lyricCallbackReference);
@@ -3923,6 +3929,7 @@ OPErr PV_ProcessMidiSequencerSlice(void *threadContext, GM_Song *pSong)
                                 /* Control/reset: translate to newline by sending empty lyric */
                                 uint32_t lyrTimeUs = (uint32_t)pSong->songMicroseconds;
                                 char empty[1] = {'\0'};
+                                pSong->lyricsHaveNewlines = TRUE;
                                 pSong->lyricCallbackPtr(pSong, empty, lyrTimeUs, pSong->lyricCallbackReference);
                             }
                             else if (lyricStr && lyricStr[0] == '\\')
@@ -3961,8 +3968,37 @@ OPErr PV_ProcessMidiSequencerSlice(void *threadContext, GM_Song *pSong)
                             
                             if (!isDuplicate)
                             {
-                                pSong->lyricCallbackPtr(pSong, lyricStr, lyrTimeUs, pSong->lyricCallbackReference);
-                                
+
+                                // Timing-based lyric line breaks
+                                XDWORD currentTime = lyrTimeUs;
+                                XBOOL insertLineBreak = (pSong->lastLyricTimeUs != 0) &&
+                                                        ((currentTime - pSong->lastLyricTimeUs) > pSong->lyricLineBreakThreshold) &&
+                                                        !pSong->lyricsHaveNewlines;
+
+                                // Word wrapping: break line if adding this word would exceed 128 characters
+                                size_t wordLen = strlen(lyricStr);
+                                XBOOL forceBreak = FALSE;
+                                if (pSong->currentLineLength + wordLen > 64 && !pSong->lyricsHaveNewlines)
+                                {
+                                    forceBreak = TRUE;
+                                }
+
+                                if (insertLineBreak || forceBreak)
+                                {
+                                    // Prepend newline to indicate line break
+                                    pSong->lyricCallbackPtr(pSong, "\0", lyrTimeUs, pSong->lyricCallbackReference);
+                                    pSong->lyricCallbackPtr(pSong, lyricStr, lyrTimeUs, pSong->lyricCallbackReference);
+                                    pSong->currentLineLength = wordLen;
+                                }
+                                else
+                                {
+                                    pSong->lyricCallbackPtr(pSong, lyricStr, lyrTimeUs, pSong->lyricCallbackReference);
+                                    pSong->currentLineLength += wordLen;
+                                }
+
+                                // Update timing
+                                pSong->lastLyricTimeUs = currentTime;
+
                                 // Store this lyric for duplicate detection
                                 if (lyricLen < sizeof(pSong->lastLyric))
                                 {

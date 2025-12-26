@@ -1151,6 +1151,12 @@ typedef int32_t UNIT_TYPE;
         char lastLyric[256];          // Last lyric text sent to callback
         XDWORD lastLyricTimestamp;    // Timestamp of last lyric (microseconds)
 
+        // Lyric line break timing
+        XDWORD lastLyricTimeUs;       // Timestamp of last lyric for gap detection
+        XDWORD lyricLineBreakThreshold; // Threshold in microseconds for line breaks
+        XDWORD currentLineLength;      // Current line length for word wrapping
+        XBOOL lyricsHaveNewlines;     // TRUE if MIDI lyrics contain explicit newlines
+
         // Optional raw MIDI event callback (mirroring/export). If set, this will be
         // called with the raw MIDI bytes for any MIDI event processed for this song.
         GM_MidiEventCallbackPtr midiEventCallbackPtr;
