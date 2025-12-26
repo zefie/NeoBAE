@@ -891,7 +891,11 @@ int         GetNeoCustomReverbCombCount(void);
 int         GetNeoCustomReverbCombDelay(int combIndex);
 int         GetNeoCustomReverbCombFeedback(int combIndex);
 int         GetNeoCustomReverbCombGain(int combIndex);
-#define MAX_NEO_COMBS 4
+// Custom reverb mode: User-configurable comb filters
+#define NEO_CUSTOM_MAX_COMBS    4
+#define NEO_CUSTOM_MAX_FEEDBACK 127   // Max feedback value for combs, > 127 causes feedback loop
+#define NEO_CUSTOM_MAX_GAIN     255   // Max gain value for combs
+#define NEO_CUSTOM_MAX_LOWPASS  127   // values over 127 appear to have no effect
 #define NEO_CUSTOM_MAX_DELAY_MS 500
 #endif
 

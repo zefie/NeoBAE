@@ -2,7 +2,7 @@
 #define GUI_SETTINGS_H
 
 #include "gui_common.h"
-#include "GenPriv.h" // For MAX_NEO_COMBS
+#include "GenPriv.h" // For NEO_CUSTOM_MAX_COMBS
 
 // Settings structure for persistence
 typedef struct
@@ -43,9 +43,9 @@ typedef struct
 {
     char name[64];
     int comb_count;
-    int delays[MAX_NEO_COMBS];
-    int feedback[MAX_NEO_COMBS];
-    int gain[MAX_NEO_COMBS];
+    int delays[NEO_CUSTOM_MAX_COMBS];
+    int feedback[NEO_CUSTOM_MAX_COMBS];
+    int gain[NEO_CUSTOM_MAX_COMBS];
     int lowpass; // 0-127 (MIDI-style)
 } CustomReverbPreset;
 
@@ -55,9 +55,9 @@ extern int g_custom_reverb_preset_count;
 extern char g_current_custom_reverb_preset[64];
 extern int g_current_custom_reverb_lowpass;
 extern int g_current_custom_reverb_comb_count;
-extern int g_current_custom_reverb_delays[MAX_NEO_COMBS];
-extern int g_current_custom_reverb_feedback[MAX_NEO_COMBS];
-extern int g_current_custom_reverb_gain[MAX_NEO_COMBS];
+extern int g_current_custom_reverb_delays[NEO_CUSTOM_MAX_COMBS];
+extern int g_current_custom_reverb_feedback[NEO_CUSTOM_MAX_COMBS];
+extern int g_current_custom_reverb_gain[NEO_CUSTOM_MAX_COMBS];
 
 // Settings dialog state
 extern bool g_show_settings_dialog;

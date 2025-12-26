@@ -126,8 +126,6 @@
 static const int32_t neo_tap_delays[] = {4410, 8820, 13230, 17640};
 static const INT32 neo_tap_gains[] = {XFIXED_1, 52428, 39321, 26214};  // Descending gains
 
-// Custom reverb mode: User-configurable comb filters
-#define NEO_CUSTOM_MAX_COMBS    4
 
 // Global reverb parameters
 typedef struct NeoReverbParams
@@ -314,20 +312,20 @@ static void PV_ApplyNeoReverbDefaults(NeoReverbParams *params)
             SetNeoCustomReverbLowpass(64);
             SetNeoReverbMix(110);
             break;
-        case REVERB_TYPE_16: // Reserved
+        case REVERB_TYPE_16: // ROMPler by nehochupechatat
             SetNeoCustomReverbCombCount(4);
-            SetNeoCustomReverbCombDelay(0, 22);
-            SetNeoCustomReverbCombDelay(1, 29);
-            SetNeoCustomReverbCombDelay(2, 36);
-            SetNeoCustomReverbCombDelay(3, 43);
-            SetNeoCustomReverbCombFeedback(0, 112);
-            SetNeoCustomReverbCombFeedback(1, 112);
-            SetNeoCustomReverbCombFeedback(2, 112);
-            SetNeoCustomReverbCombFeedback(3, 112);
-            SetNeoCustomReverbCombGain(0, 127);
-            SetNeoCustomReverbCombGain(1, 127);
-            SetNeoCustomReverbCombGain(2, 127);
-            SetNeoCustomReverbCombGain(3, 127);
+            SetNeoCustomReverbCombDelay(0, 75);
+            SetNeoCustomReverbCombDelay(1, 30);
+            SetNeoCustomReverbCombDelay(2, 110);
+            SetNeoCustomReverbCombDelay(3, 47);
+            SetNeoCustomReverbCombFeedback(0, 110);
+            SetNeoCustomReverbCombFeedback(1, 110);
+            SetNeoCustomReverbCombFeedback(2, 110);
+            SetNeoCustomReverbCombFeedback(3, 110);
+            SetNeoCustomReverbCombGain(0, 93);
+            SetNeoCustomReverbCombGain(1, 137);
+            SetNeoCustomReverbCombGain(2, 131);
+            SetNeoCustomReverbCombGain(3, 254);
             SetNeoCustomReverbLowpass(64);
             SetNeoReverbMix(110);
             break;
@@ -872,9 +870,9 @@ void SetNeoCustomReverbCombFeedback(int combIndex, int feedback)
         return;
     
     if (feedback < 0) feedback = 0;
-    if (feedback > 127) feedback = 127;
+    if (feedback > NEO_CUSTOM_MAX_FEEDBACK) feedback = NEO_CUSTOM_MAX_FEEDBACK;
     
-    // Map 0-127 to feedback range (0.0 to ~0.85)
+    // Map 0-255 to feedback range (0.0 to ~0.85)
     // Use a safe max to avoid runaway feedback
     const INT32 maxFeedback = (INT32)(NEO_COEFF_MULTIPLY * 0.85);
     params->mCustomFeedback[combIndex] = (feedback * maxFeedback) / 127;
@@ -895,9 +893,9 @@ void SetNeoCustomReverbCombGain(int combIndex, int gain)
         return;
     
     if (gain < 0) gain = 0;
-    if (gain > 127) gain = 127;
+    if (gain > NEO_CUSTOM_MAX_GAIN) gain = NEO_CUSTOM_MAX_GAIN;
     
-    // Map 0-127 to gain range (0.0 to 1.0)
+    // Map 0-255 to gain range (0.0 to 1.0)
     params->mCustomGain[combIndex] = (gain * NEO_COEFF_MULTIPLY) / 127;
 }
 
@@ -914,9 +912,9 @@ void SetNeoCustomReverbLowpass(int lowpass)
     NeoReverbParams* params = GetNeoReverbParams();
     
     if (lowpass < 0) lowpass = 0;
-    if (lowpass > 127) lowpass = 127;
+    if (lowpass > NEO_CUSTOM_MAX_LOWPASS) lowpass = NEO_CUSTOM_MAX_LOWPASS;
     
-    // Map 0-127 to lowpass coefficient range (0.0 to 0.5)
+    // Map 0-255 to lowpass coefficient range (0.0 to 0.5)
     // This controls how much of the new signal blends with the filtered memory
     params->mLopassK = (lowpass * NEO_COEFF_MULTIPLY / 2) / 127;
 }

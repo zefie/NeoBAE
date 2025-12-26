@@ -1472,9 +1472,9 @@ int g_current_custom_reverb_lowpass = 64; // Track current lowpass (engine has n
 // Track the *intended* custom reverb values (so import/export/persistence round-trips exactly).
 // Engine getters can quantize due to internal fixed-point conversions.
 int g_current_custom_reverb_comb_count = 0; // 0 means "not yet synced"
-int g_current_custom_reverb_delays[MAX_NEO_COMBS] = {0};
-int g_current_custom_reverb_feedback[MAX_NEO_COMBS] = {0};
-int g_current_custom_reverb_gain[MAX_NEO_COMBS] = {127, 127, 127, 127};
+int g_current_custom_reverb_delays[NEO_CUSTOM_MAX_COMBS] = {0};
+int g_current_custom_reverb_feedback[NEO_CUSTOM_MAX_COMBS] = {0};
+int g_current_custom_reverb_gain[NEO_CUSTOM_MAX_COMBS] = {127, 127, 127, 127};
 
 #if USE_NEO_EFFECTS
 static void ensure_current_custom_reverb_state_synced_from_engine(void)
@@ -1484,10 +1484,10 @@ static void ensure_current_custom_reverb_state_synced_from_engine(void)
         g_current_custom_reverb_comb_count = GetNeoCustomReverbCombCount();
         if (g_current_custom_reverb_comb_count < 1)
             g_current_custom_reverb_comb_count = 1;
-        if (g_current_custom_reverb_comb_count > MAX_NEO_COMBS)
-            g_current_custom_reverb_comb_count = MAX_NEO_COMBS;
+        if (g_current_custom_reverb_comb_count > NEO_CUSTOM_MAX_COMBS)
+            g_current_custom_reverb_comb_count = NEO_CUSTOM_MAX_COMBS;
 
-        for (int i = 0; i < MAX_NEO_COMBS; i++)
+        for (int i = 0; i < NEO_CUSTOM_MAX_COMBS; i++)
         {
             g_current_custom_reverb_delays[i] = GetNeoCustomReverbCombDelay(i);
             g_current_custom_reverb_feedback[i] = GetNeoCustomReverbCombFeedback(i);
@@ -1581,7 +1581,7 @@ void load_custom_reverb_preset_list(void)
     for (int i = 0; i <= max_idx; i++)
     {
         tmp[i].comb_count = 4;
-        for (int j = 0; j < MAX_NEO_COMBS; j++)
+        for (int j = 0; j < NEO_CUSTOM_MAX_COMBS; j++)
         {
             tmp[i].delays[j] = 0;
             tmp[i].feedback[j] = 0;
@@ -1642,19 +1642,19 @@ void load_custom_reverb_preset_list(void)
         else if (strncmp(key, "delay_", 6) == 0)
         {
             int comb = atoi(key + 6);
-            if (comb >= 0 && comb < MAX_NEO_COMBS)
+            if (comb >= 0 && comb < NEO_CUSTOM_MAX_COMBS)
                 tmp[idx].delays[comb] = atoi(value);
         }
         else if (strncmp(key, "feedback_", 9) == 0)
         {
             int comb = atoi(key + 9);
-            if (comb >= 0 && comb < MAX_NEO_COMBS)
+            if (comb >= 0 && comb < NEO_CUSTOM_MAX_COMBS)
                 tmp[idx].feedback[comb] = atoi(value);
         }
         else if (strncmp(key, "gain_", 5) == 0)
         {
             int comb = atoi(key + 5);
-            if (comb >= 0 && comb < MAX_NEO_COMBS)
+            if (comb >= 0 && comb < NEO_CUSTOM_MAX_COMBS)
                 tmp[idx].gain[comb] = atoi(value);
         }
         else if (strcmp(key, "lowpass") == 0)
@@ -1863,7 +1863,7 @@ void save_custom_reverb_preset(const char *name)
     fprintf(f, "custom_reverb_%d_name=%s\n", preset_idx, name);
     ensure_current_custom_reverb_state_synced_from_engine();
     fprintf(f, "custom_reverb_%d_comb_count=%d\n", preset_idx, g_current_custom_reverb_comb_count);
-    for (int i = 0; i < MAX_NEO_COMBS; i++)
+    for (int i = 0; i < NEO_CUSTOM_MAX_COMBS; i++)
     {
         fprintf(f, "custom_reverb_%d_delay_%d=%d\n", preset_idx, i, g_current_custom_reverb_delays[i]);
         fprintf(f, "custom_reverb_%d_feedback_%d=%d\n", preset_idx, i, g_current_custom_reverb_feedback[i]);
@@ -1896,9 +1896,9 @@ void load_custom_reverb_preset(const char *name)
     g_current_custom_reverb_comb_count = preset->comb_count;
     if (g_current_custom_reverb_comb_count < 1)
         g_current_custom_reverb_comb_count = 1;
-    if (g_current_custom_reverb_comb_count > MAX_NEO_COMBS)
-        g_current_custom_reverb_comb_count = MAX_NEO_COMBS;
-    for (int i = 0; i < MAX_NEO_COMBS; i++)
+    if (g_current_custom_reverb_comb_count > NEO_CUSTOM_MAX_COMBS)
+        g_current_custom_reverb_comb_count = NEO_CUSTOM_MAX_COMBS;
+    for (int i = 0; i < NEO_CUSTOM_MAX_COMBS; i++)
     {
         g_current_custom_reverb_delays[i] = preset->delays[i];
         g_current_custom_reverb_feedback[i] = preset->feedback[i];
@@ -1907,7 +1907,7 @@ void load_custom_reverb_preset(const char *name)
 
     SetNeoCustomReverbCombCount(preset->comb_count);
     
-    for (int i = 0; i < MAX_NEO_COMBS; i++)
+    for (int i = 0; i < NEO_CUSTOM_MAX_COMBS; i++)
     {
         SetNeoCustomReverbCombDelay(i, preset->delays[i]);
         SetNeoCustomReverbCombFeedback(i, preset->feedback[i]);
@@ -2022,7 +2022,7 @@ bool export_custom_reverb_neoreverb(const char *preset_name, const char *path)
     ensure_current_custom_reverb_state_synced_from_engine();
     fprintf(f, "  <combCount>%d</combCount>\n", g_current_custom_reverb_comb_count);
     fprintf(f, "  <lowpass>%d</lowpass>\n", g_current_custom_reverb_lowpass);
-    for (int i = 0; i < MAX_NEO_COMBS; i++)
+    for (int i = 0; i < NEO_CUSTOM_MAX_COMBS; i++)
     {
         fprintf(f,
                 "  <comb index=\"%d\" delayMs=\"%d\" feedback=\"%d\" gain=\"%d\"/>\n",
@@ -2073,7 +2073,7 @@ bool import_custom_reverb_neoreverb(const char *path, char *out_preset_name, siz
     CustomReverbPreset preset;
     memset(&preset, 0, sizeof(preset));
     preset.comb_count = 4;
-    for (int i = 0; i < MAX_NEO_COMBS; i++)
+    for (int i = 0; i < NEO_CUSTOM_MAX_COMBS; i++)
     {
         preset.delays[i] = 0;
         preset.feedback[i] = 0;
@@ -2101,7 +2101,7 @@ bool import_custom_reverb_neoreverb(const char *path, char *out_preset_name, siz
         if (sscanf(p, "<comb index=\"%d\" delayMs=\"%d\" feedback=\"%d\" gain=\"%d\"",
                    &index, &delayMs, &feedback, &gain) == 4)
         {
-            if (index >= 0 && index < MAX_NEO_COMBS)
+            if (index >= 0 && index < NEO_CUSTOM_MAX_COMBS)
             {
                 preset.delays[index] = delayMs;
                 preset.feedback[index] = feedback;
@@ -2125,10 +2125,10 @@ bool import_custom_reverb_neoreverb(const char *path, char *out_preset_name, siz
     g_current_custom_reverb_comb_count = preset.comb_count;
     if (g_current_custom_reverb_comb_count < 1)
         g_current_custom_reverb_comb_count = 1;
-    if (g_current_custom_reverb_comb_count > MAX_NEO_COMBS)
-        g_current_custom_reverb_comb_count = MAX_NEO_COMBS;
+    if (g_current_custom_reverb_comb_count > NEO_CUSTOM_MAX_COMBS)
+        g_current_custom_reverb_comb_count = NEO_CUSTOM_MAX_COMBS;
     SetNeoCustomReverbCombCount(g_current_custom_reverb_comb_count);
-    for (int i = 0; i < MAX_NEO_COMBS; i++)
+    for (int i = 0; i < NEO_CUSTOM_MAX_COMBS; i++)
     {
         g_current_custom_reverb_delays[i] = preset.delays[i];
         g_current_custom_reverb_feedback[i] = preset.feedback[i];

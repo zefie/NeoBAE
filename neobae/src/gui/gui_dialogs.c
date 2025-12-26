@@ -445,7 +445,7 @@ char *open_neoreverb_dialog(void)
     ZeroMemory(&ofn, sizeof(ofn));
     ofn.lStructSize = sizeof(ofn);
     ofn.hwndOwner = NULL;
-    ofn.lpstrFilter = "Neo Reverb Preset Files\0*.neoreverb\0"
+    ofn.lpstrFilter = "Neo Reverb Preset Files\0*.neoreverb;*.neoreverb.xml\0"
                       "All Files\0*.*\0";
     ofn.lpstrFile = fileBuf;
     ofn.nMaxFile = sizeof(fileBuf);
@@ -463,8 +463,8 @@ char *open_neoreverb_dialog(void)
     return NULL;
 #else
     const char *cmds[] = {
-        "zenity --file-selection --title='Import Neo Reverb Preset' --file-filter='Neo Reverb Preset | *.neoreverb' --file-filter='All Files | *' 2>/dev/null",
-        "kdialog --getopenfilename . '*.neoreverb' 2>/dev/null",
+        "zenity --file-selection --title='Import Neo Reverb Preset' --file-filter='Neo Reverb Preset | *.neoreverb *.neoreverb.xml' --file-filter='All Files | *' 2>/dev/null",
+        "kdialog --getopenfilename . '*.neoreverb *.neoreverb.xml' 2>/dev/null",
         "yad --file-selection --title='Import Neo Reverb Preset' 2>/dev/null",
         NULL};
     for (int i = 0; cmds[i]; ++i)
@@ -513,7 +513,7 @@ char *save_neoreverb_dialog(const char *default_name)
     ZeroMemory(&ofn, sizeof(ofn));
     ofn.lStructSize = sizeof(ofn);
     ofn.hwndOwner = NULL;
-    ofn.lpstrFilter = "Neo Reverb Preset Files\0*.neoreverb\0"
+    ofn.lpstrFilter = "Neo Reverb Preset Files\0*.neoreverb;*.neoreverb.xml\0"
                       "All Files\0*.*\0";
     ofn.lpstrFile = fileBuf;
     ofn.nMaxFile = sizeof(fileBuf);
@@ -548,9 +548,9 @@ char *save_neoreverb_dialog(const char *default_name)
     char cmd_kdialog[1024];
     char cmd_yad[1024];
     snprintf(cmd_zenity, sizeof(cmd_zenity),
-             "zenity --file-selection --save --confirm-overwrite --title='Export Neo Reverb Preset' --filename='%s' --file-filter='Neo Reverb Preset | *.neoreverb' --file-filter='All Files | *' 2>/dev/null",
+             "zenity --file-selection --save --confirm-overwrite --title='Export Neo Reverb Preset' --filename='%s' --file-filter='Neo Reverb Preset | *.neoreverb *.neoreverb.xml' --file-filter='All Files | *' 2>/dev/null",
              fname);
-    snprintf(cmd_kdialog, sizeof(cmd_kdialog), "kdialog --getsavefilename '%s' '*.neoreverb' 2>/dev/null", fname);
+    snprintf(cmd_kdialog, sizeof(cmd_kdialog), "kdialog --getsavefilename '%s' '*.neoreverb *.neoreverb.xml' 2>/dev/null", fname);
     snprintf(cmd_yad, sizeof(cmd_yad),
              "yad --file-selection --save --confirm-overwrite --title='Export Neo Reverb Preset' --filename='%s' 2>/dev/null",
              fname);

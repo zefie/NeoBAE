@@ -3133,6 +3133,26 @@ int main(int argc, char *argv[])
             {
                 // Show text input dialog for preset name
                 extern bool g_show_preset_name_dialog;
+                extern char g_preset_name_input[64];
+                extern int g_preset_name_cursor;
+                
+                // If we're on an existing custom preset, populate the text field with its name
+                if (reverbType > BAE_REVERB_TYPE_18)
+                {
+                    const char *current_name = get_reverb_name(reverbType - 1);
+                    if (current_name)
+                    {
+                        safe_strncpy(g_preset_name_input, current_name, sizeof(g_preset_name_input) - 1);
+                        g_preset_name_cursor = strlen(g_preset_name_input);
+                    }
+                }
+                else
+                {
+                    // Clear the input for new presets
+                    memset(g_preset_name_input, 0, sizeof(g_preset_name_input));
+                    g_preset_name_cursor = 0;
+                }
+                
                 g_show_preset_name_dialog = true;
             }
             
@@ -3181,7 +3201,7 @@ int main(int argc, char *argv[])
                 g_preset_delete_name[sizeof(g_preset_delete_name) - 1] = '\0';
             }
 
-            // Import/Export (.neoreverb)
+            // Import/Export (.neoreverb, .neoreverb.xml)
             Rect importBtn = {deleteBtn.x + deleteBtn.w + spacing, btnY, 20, 20};
             Rect exportBtn = {importBtn.x + importBtn.w + spacing, btnY, 20, 20};
 
@@ -3258,7 +3278,7 @@ int main(int argc, char *argv[])
                     }
                     else
                     {
-                        set_status_message("Failed to import .neoreverb");
+                        set_status_message("Failed to import .neoreverb or .neoreverb.xml");
                     }
                     free(path);
                 }
@@ -3288,7 +3308,7 @@ int main(int argc, char *argv[])
                     if (export_custom_reverb_neoreverb(g_current_custom_reverb_preset, path))
                         set_status_message("Exported .neoreverb preset");
                     else
-                        set_status_message("Failed to export .neoreverb");
+                        set_status_message("Failed to export .neoreverb or .neoreverb.xml");
                     free(path);
                 }
                 g_reverbDropdownOpen = false;

@@ -35,6 +35,8 @@ private const val DEFAULT_COMB_COUNT = 4
 private val DEFAULT_DELAYS_MS = intArrayOf(22, 29, 36, 43)
 private const val DEFAULT_FEEDBACK = 112 // ~0.75 feedback mapped to 0..127 (max is ~0.85)
 private const val DEFAULT_GAIN = 127
+private const val MAX_GAIN = 255
+private const val MAX_LOWPASS = 127
 private const val DEFAULT_LOWPASS = 64
 
 private fun looksLikeEngineNotStarted(rawCombCount: Int, delays: IntArray, feedback: IntArray, gain: IntArray): Boolean {
@@ -145,7 +147,7 @@ fun parseNeoReverbXml(xml: String): CustomReverbPreset? {
     for (i in 0 until MAX_COMBS) {
         delays[i] = delays[i].coerceIn(1, MAX_DELAY_MS)
         feedback[i] = feedback[i].coerceIn(0, 127)
-        gain[i] = gain[i].coerceIn(0, 127)
+        gain[i] = gain[i].coerceIn(0, MAX_GAIN)
     }
 
     return CustomReverbPreset(finalName, clampedCombCount, delays, feedback, gain, clampedLowpass)
@@ -233,10 +235,10 @@ fun snapshotCustomReverbFromEngine(ctx: Context, name: String): CustomReverbPres
         combCount = rawCombCount.coerceIn(1, MAX_COMBS)
         delays = IntArray(MAX_COMBS) { i -> rawDelays[i].coerceIn(1, MAX_DELAY_MS) }
         feedback = IntArray(MAX_COMBS) { i -> rawFeedback[i].coerceIn(0, 127) }
-        gain = IntArray(MAX_COMBS) { i -> rawGain[i].coerceIn(0, 127) }
+        gain = IntArray(MAX_COMBS) { i -> rawGain[i].coerceIn(0, MAX_GAIN) }
     }
 
-    val lowpass = p.getInt(KEY_CURRENT_LOWPASS, DEFAULT_LOWPASS).coerceIn(0, 127)
+    val lowpass = p.getInt(KEY_CURRENT_LOWPASS, DEFAULT_LOWPASS).coerceIn(0, MAX_LOWPASS)
     return CustomReverbPreset(name.trim(), combCount, delays, feedback, gain, lowpass)
 }
 
@@ -249,8 +251,8 @@ fun loadCustomReverbPreset(ctx: Context, name: String): CustomReverbPreset? {
 
     val delays = IntArray(MAX_COMBS) { i -> p.getInt("custom_reverb_${idx}_delay_${i}", DEFAULT_DELAYS_MS[i]).coerceIn(1, MAX_DELAY_MS) }
     val feedback = IntArray(MAX_COMBS) { i -> p.getInt("custom_reverb_${idx}_feedback_${i}", DEFAULT_FEEDBACK).coerceIn(0, 127) }
-    val gain = IntArray(MAX_COMBS) { i -> p.getInt("custom_reverb_${idx}_gain_${i}", DEFAULT_GAIN).coerceIn(0, 127) }
-    val lowpass = p.getInt("custom_reverb_${idx}_lowpass", DEFAULT_LOWPASS).coerceIn(0, 127)
+    val gain = IntArray(MAX_COMBS) { i -> p.getInt("custom_reverb_${idx}_gain_${i}", DEFAULT_GAIN).coerceIn(0, MAX_GAIN) }
+    val lowpass = p.getInt("custom_reverb_${idx}_lowpass", DEFAULT_LOWPASS).coerceIn(0, MAX_LOWPASS)
 
     return CustomReverbPreset(presetName, combCount, delays, feedback, gain, lowpass)
 }
@@ -329,7 +331,7 @@ fun CustomReverbScreenContent(
     var delays by remember { mutableStateOf(IntArray(MAX_COMBS) { DEFAULT_DELAYS_MS[it] }) }
     var feedback by remember { mutableStateOf(IntArray(MAX_COMBS) { DEFAULT_FEEDBACK }) }
     var gain by remember { mutableStateOf(IntArray(MAX_COMBS) { DEFAULT_GAIN }) }
-    var lowpass by remember { mutableStateOf(prefs(ctx).getInt(KEY_CURRENT_LOWPASS, DEFAULT_LOWPASS).coerceIn(0, 127)) }
+    var lowpass by remember { mutableStateOf(prefs(ctx).getInt(KEY_CURRENT_LOWPASS, DEFAULT_LOWPASS).coerceIn(0, MAX_LOWPASS)) }
 
     fun reloadFromEngine() {
         val rawCombCount = Mixer.getNeoCustomReverbCombCount()
@@ -346,9 +348,9 @@ fun CustomReverbScreenContent(
             combCount = rawCombCount.coerceIn(1, MAX_COMBS)
             delays = IntArray(MAX_COMBS) { i -> rawDelays[i].coerceIn(1, MAX_DELAY_MS) }
             feedback = IntArray(MAX_COMBS) { i -> rawFeedback[i].coerceIn(0, 127) }
-            gain = IntArray(MAX_COMBS) { i -> rawGain[i].coerceIn(0, 127) }
+            gain = IntArray(MAX_COMBS) { i -> rawGain[i].coerceIn(0, MAX_GAIN) }
         }
-        lowpass = prefs(ctx).getInt(KEY_CURRENT_LOWPASS, DEFAULT_LOWPASS).coerceIn(0, 127)
+        lowpass = prefs(ctx).getInt(KEY_CURRENT_LOWPASS, DEFAULT_LOWPASS).coerceIn(0, MAX_LOWPASS)
     }
 
     LaunchedEffect(syncSerial) {
@@ -373,7 +375,7 @@ fun CustomReverbScreenContent(
                 Toast.makeText(ctx, "Invalid .neoreverb file", Toast.LENGTH_SHORT).show()
             }
         } catch (_: Exception) {
-            Toast.makeText(ctx, "Failed to import .neoreverb", Toast.LENGTH_SHORT).show()
+            Toast.makeText(ctx, "Failed to import .neoreverb or .neoreverb.xml", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -392,7 +394,7 @@ fun CustomReverbScreenContent(
             ctx.contentResolver.openOutputStream(uri)?.use { it.write(xml.toByteArray(Charsets.UTF_8)) }
             Toast.makeText(ctx, "Exported preset: ${preset.name}", Toast.LENGTH_SHORT).show()
         } catch (_: Exception) {
-            Toast.makeText(ctx, "Failed to export .neoreverb", Toast.LENGTH_SHORT).show()
+            Toast.makeText(ctx, "Failed to export .neoreverb.xml", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -410,7 +412,7 @@ fun CustomReverbScreenContent(
             IconButton(onClick = {
                 importLauncher.launch(arrayOf("application/xml", "text/xml", "*/*"))
             }) {
-                Icon(Icons.Filled.GetApp, contentDescription = "Import .neoreverb")
+                Icon(Icons.Filled.GetApp, contentDescription = "Import .neoreverb or .neoreverb.xml")
             }
 
             val activeName = getActiveCustomReverbPresetName(ctx)
@@ -418,11 +420,11 @@ fun CustomReverbScreenContent(
             IconButton(
                 onClick = {
                     val safe = sanitizePresetNameForFilename(activeName ?: "preset")
-                    exportLauncher.launch("$safe.neoreverb")
+                    exportLauncher.launch("$safe.neoreverb.xml")
                 },
                 enabled = exportEnabled
             ) {
-                Icon(Icons.Filled.Publish, contentDescription = "Export .neoreverb")
+                Icon(Icons.Filled.Publish, contentDescription = "Export .neoreverb.xml")
             }
         }
         Spacer(Modifier.height(12.dp))
@@ -483,7 +485,7 @@ fun CustomReverbScreenContent(
                     Slider(
                         value = gain[i].toFloat(),
                         onValueChange = { v ->
-                            val newVal = v.toInt().coerceIn(0, 127)
+                            val newVal = v.toInt().coerceIn(0, MAX_GAIN)
                             if (newVal != gain[i]) {
                                 val arr = gain.clone()
                                 arr[i] = newVal
@@ -491,7 +493,7 @@ fun CustomReverbScreenContent(
                                 Mixer.setNeoCustomReverbCombGain(i, newVal)
                             }
                         },
-                        valueRange = 0f..127f
+                        valueRange = 0f..MAX_GAIN.toFloat()
                     )
                 }
             }
@@ -502,7 +504,7 @@ fun CustomReverbScreenContent(
         Slider(
             value = lowpass.toFloat(),
             onValueChange = { v ->
-                val newVal = v.toInt().coerceIn(0, 127)
+                val newVal = v.toInt().coerceIn(0, MAX_LOWPASS)
                 if (newVal != lowpass) {
                     lowpass = newVal
                     Mixer.setNeoCustomReverbLowpass(newVal)
@@ -510,7 +512,7 @@ fun CustomReverbScreenContent(
                     onLowpassChanged(newVal)
                 }
             },
-            valueRange = 0f..127f
+            valueRange = 0f..MAX_LOWPASS.toFloat()
         )
 
         Spacer(Modifier.height(8.dp))
