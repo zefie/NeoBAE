@@ -810,7 +810,7 @@ void render_about_dialog(SDL_Renderer *R, int mx, int my, bool mclick)
     SDL_Color dim = g_is_dark_mode ? (SDL_Color){0, 0, 0, 120} : (SDL_Color){0, 0, 0, 90};
     draw_rect(R, (Rect){0, 0, WINDOW_W, g_window_h}, dim);
     int dlgW = 560;
-    int dlgH = 280;
+    int dlgH = 380;
     int pad = 10;
     Rect dlg = {(WINDOW_W - dlgW) / 2, (g_window_h - dlgH) / 2, dlgW, dlgH};
     SDL_Color dlgBg = g_panel_bg;
@@ -853,15 +853,9 @@ void render_about_dialog(SDL_Renderer *R, int mx, int my, bool mclick)
     else
         line2[0] = '\0';
 
-    char line3[256];
+    char line3[512];
     if (baeFeatures && baeFeatures[0]) {
         snprintf(line3, sizeof(line3), "features: %s", baeFeatures);
-        const char *renderer_name = SDL_GetRendererName(R);
-        if (renderer_name && renderer_name[0]) {
-            strncat(line3, " | SDL Graphics Renderer: ", sizeof(line3) - strlen(line3) - 1);
-            strncat(line3, renderer_name, sizeof(line3) - strlen(line3) - 1);
-        }
-
     }
     else
         line3[0] = '\0';
@@ -953,7 +947,14 @@ void render_about_dialog(SDL_Renderer *R, int mx, int my, bool mclick)
             y += wrapCount * featureLineH;
         }
         draw_text(R, dlg.x + pad, y, "", g_text_color); /* spacer */
-        y += 6;
+        y += dlg.h - (y - dlg.y) - 78;          // move down to near bottom for links
+        const char *renderer_name = SDL_GetRendererName(R);
+        if (renderer_name && renderer_name[0]) {
+            char renderer[128];
+            snprintf(renderer, sizeof(renderer), "SDL Graphics Layer: %s", renderer_name);
+            draw_text(R, dlg.x + pad, y, renderer, g_text_color);
+            y += 18;
+        }
         draw_text(R, dlg.x + pad, y, "(C) 2025 Zefie Networks", g_text_color);
         y += 18;
         const char *urls[] = {"https://www.soundmusicsys.com/", "https://github.com/zefie/NeoBAE/", NULL};
@@ -993,27 +994,36 @@ void render_about_dialog(SDL_Renderer *R, int mx, int my, bool mclick)
         draw_text(R, dlg.x + pad, y, "This software makes use of the following software:", g_text_color);
         y += 18;
         const char *credits_page1[] = {
-            // miniBAE is obviously required
+            // NeoBAE is obviously required
             "",
-            "miniBAE",
-            "Copyright (c) 2009 Beatnik, Inc All rights reserved.",
+            "NeoBAE",
+            "Copyright (c) 2025 Zefie Networks",
+            "Based on miniBAE, Copyright (c) 2009 Beatnik, Inc.",
             "Original miniBAE source code available at:",
             "https://github.com/heyigor/miniBAE/",
             // SDL is also required for this GUI so no #ifdef is necessary
-            "",
 #if X_PLATFORM == X_SDL2            
+            "",
             "SDL2 & SDL2_ttf",
 #elif X_PLATFORM == X_SDL3
+            "",
             "SDL3 & SDL3_ttf",
-#else
-            "SDL & SDL_ttf",
 #endif
+#if X_PLATFORM == X_SDL2 || X_PLATFORM == X_SDL3
             "Copyright (C) 1997-2025 Sam Lantinga <slouken@libsdl.org>",
             "https://www.libsdl.org/",
-#if USE_MPEG_ENCODER == TRUE
+#endif      
+#if USE_MPEG_DECODER == TRUE
             "",
-            "libmp3lame",
-            "https://lame.sourceforge.io/",
+            "minimp3",
+            "Licensed under the CC0",
+            "http://creativecommons.org/publicdomain/zero/1.0/",
+#endif
+#if USE_XMF_SUPPORT == TRUE
+            "",
+            "zlib",
+            "Copyright (C) 1995-2024 Jean-loup Gailly and Mark Adler",
+            "http://www.zlib.net/",
 #endif
             "",
             NULL};
@@ -1054,17 +1064,16 @@ void render_about_dialog(SDL_Renderer *R, int mx, int my, bool mclick)
         }
     }
 
-#if (USE_MPEG_DECODER == TRUE) || (USE_MPEG_ENCODER == TRUE) || (SUPPORT_MIDI_HW == TRUE)
+#if (USE_MPEG_DECODER == TRUE) || (USE_MPEG_ENCODER == TRUE) || (SUPPORT_MIDI_HW == TRUE) || (SUPPORT_OGG_FORMAT == TRUE) || (USE_VORBIS_DECODER == TRUE) || (USE_VORBIS_ENCODER == TRUE) || (USE_FLAC_DECODER == TRUE) || (USE_FLAC_ENCODER == TRUE) || (_USING_FLUIDSYNTH == TRUE)
     // Page 2 & 3: credits/licenses (part 2)
     else if (g_about_page == 2 || g_about_page == 3)
     {
         const char *credits_page2[] = {
-#if USE_MPEG_DECODER == TRUE
+#if USE_MPEG_ENCODER == TRUE
             "",
-            "minimp3",
-            "Licensed under the CC0",
-            "http://creativecommons.org/publicdomain/zero/1.0/",
-#endif
+            "libmp3lame",
+            "https://lame.sourceforge.io/",
+#endif            
 #if SUPPORT_MIDI_HW == TRUE
             "",
             "RtMidi: realtime MIDI i/o C++ classes",
@@ -1086,14 +1095,13 @@ void render_about_dialog(SDL_Renderer *R, int mx, int my, bool mclick)
 #if (USE_FLAC_DECODER == TRUE) || (USE_FLAC_ENCODER == TRUE)
             "",
             "libFLAC",
-            "Copyright (C) 2000-2009  Josh Coalson",
-            "Copyright (C) 2011-2025  Xiph.Org Foundation",
+            "Copyright (C) 2000-2009 Josh Coalson, (C) 2011-2025 Xiph.Org Foundation",
             "https://www.xiph.org/flac/",
 #endif
 #if _USING_FLUIDSYNTH == TRUE
             "",
             "FluidSynth",
-            "Copyright (C) 2004-2023 FluidSynth Team",
+            "Copyright (C) 2004-205 FluidSynth Team",
             "https://www.fluidsynth.org/",
 #endif
             "",
