@@ -1415,7 +1415,7 @@ void GM_SF2_ProcessProgramChange(GM_Song* pSong, int16_t channel, int32_t progra
     {
         return;
     }
-    BAE_PRINTF("[SF2 ProcessProgramChange] Raw Request: program: %i, channel %i\n", program, channel);    
+    //BAE_PRINTF("[SF2 ProcessProgramChange] Raw Request: program: %i, channel %i\n", program, channel);    
     // Convert program ID to MIDI bank/program
     // NeoBAE uses: instrument = (bank * 128) + program + note
     // For percussion: bank = (bank * 2) + 1, note is included
@@ -1495,7 +1495,7 @@ void GM_SF2_ProcessProgramChange(GM_Song* pSong, int16_t channel, int32_t progra
 
     }
 
-    BAE_PRINTF("[SF2 ProcessProgramChange] Final Interpretation: midiBank: %i, midiProgram: %i, channel: %i\n", midiBank, midiProgram, channel);
+    //BAE_PRINTF("[SF2 ProcessProgramChange] Final Interpretation: midiBank: %i, midiProgram: %i, channel: %i\n", midiBank, midiProgram, channel);
 
     // mobileBAE MIDI quirk: bank 121 program 124:125 are used for motor vibration.
     // Best behavior is to give the channel no preset at all.
