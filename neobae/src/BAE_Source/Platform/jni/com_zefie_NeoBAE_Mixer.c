@@ -348,6 +348,26 @@ JNIEXPORT jint JNICALL Java_com_zefie_NeoBAE_Mixer__1setMasterVolume
 		return 0;
 }
 
+JNIEXPORT jint JNICALL Java_com_zefie_NeoBAE_Mixer__1setGlobalVolume
+    (JNIEnv* env, jclass clazz, jlong reference, jint fixedVolume)
+{
+		BAEMixer mixer = (BAEMixer)(intptr_t)reference;
+		if(!mixer) return -1;
+		BAEMixer_SetGlobalVolume(mixer, (BAE_UNSIGNED_FIXED)fixedVolume);
+		return 0;
+}
+
+JNIEXPORT jint JNICALL Java_com_zefie_NeoBAE_Mixer__1getGlobalVolume
+    (JNIEnv* env, jclass clazz, jlong reference, jintArray outVolume)
+{
+		BAEMixer mixer = (BAEMixer)(intptr_t)reference;
+		if(!mixer) return -1;
+		BAE_UNSIGNED_FIXED volume;
+		if(BAEMixer_GetGlobalVolume(mixer, &volume) != BAE_NO_ERROR) return -1;
+		(*env)->SetIntArrayRegion(env, outVolume, 0, 1, (jint*)&volume);
+		return 0;
+}
+
 #if defined(__ANDROID__)
 // Android-only: post-mix output gain boost control (0..512, where 256 == 1.0x).
 extern void BAE_Android_SetOutputGainBoost(int16_t boost256);

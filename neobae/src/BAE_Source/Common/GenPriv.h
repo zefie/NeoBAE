@@ -679,6 +679,7 @@ struct GM_Mixer
     XBYTE               sampleFrameSize;                // size in bytes of each sample frame
     XBYTE               sampleExpansion;                // output expansion factor 1, 2, or 4
     XSWORD              MasterVolume;
+    XSWORD              globalVolume;                   // global volume for final mixdown
 
     XSWORD              effectsVolume;                  // volume multiplier of all effects
     XSDWORD             scaleBackAmount;

@@ -2909,6 +2909,17 @@ void PV_ProcessSampleFrame(void *threadContext, void *destinationSamples)
             PV_ClearMixBuffers(pMixer->generateStereoOutput);
         }
 
+        // Apply global volume to the final mix buffer
+        if (pMixer->globalVolume != MAX_MASTER_VOLUME)
+        {
+            INT32 *buffer = pMixer->songBufferDry;
+            LOOPCOUNT samples = pMixer->One_Loop * (pMixer->generateStereoOutput ? 2 : 1);
+            for (LOOPCOUNT i = 0; i < samples; i++)
+            {
+                buffer[i] = (buffer[i] * pMixer->globalVolume) / MAX_MASTER_VOLUME;
+            }
+        }
+
         // mix down to final output stage for output to speaker
         if (pMixer->generate16output)
         {

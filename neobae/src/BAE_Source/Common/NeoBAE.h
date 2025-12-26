@@ -1020,6 +1020,22 @@ extern "C"
     BAEResult BAEMixer_GetMasterVolume(BAEMixer mixer,
                                        BAE_UNSIGNED_FIXED *outVolume);
 
+    // BAEMixer_SetGlobalVolume()
+    // ------------------------------------
+    // Sets the global volume of the indicated BAEMixer to the indicated volume.
+    // This affects the final mixdown volume.
+    //
+    BAEResult BAEMixer_SetGlobalVolume(BAEMixer mixer,
+                                       BAE_UNSIGNED_FIXED theVolume);
+
+    // BAEMixer_GetGlobalVolume()
+    // ------------------------------------
+    // Upon return, parameter outVolume will point to the current global volume
+    // of the indicated BAEMixer.
+    //
+    BAEResult BAEMixer_GetGlobalVolume(BAEMixer mixer,
+                                       BAE_UNSIGNED_FIXED *outVolume);
+
     // BAEMixer_SetHardwareVolume()
     // ------------------------------------
     // Sets the hardware-based final output volume of the audio output device

@@ -1315,11 +1315,7 @@ class HomeFragment : Fragment() {
         // clamping/normalization inside the engine.
         val shouldBoostHsb = isHsbBank && (currentSong != null) && (currentSong?.isSF2Song() == false)
         Mixer.setAndroidHsbBoostEnabled(shouldBoostHsb)
-
-        Mixer.setMasterVolumePercent(basePercent)
-
-        currentSong?.setVolumePercent(basePercent)
-        currentSound?.setVolumePercent(basePercent)
+        Mixer.setGlobalVolumePercent(basePercent)
     }
 
     private fun applyMidiChannelMuteState(song: Song) {

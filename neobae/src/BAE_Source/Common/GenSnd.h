@@ -1762,6 +1762,8 @@ typedef int32_t UNIT_TYPE;
     /*************************************************/
     void GM_SetMasterVolume(XSDWORD theVolume);
     XSDWORD GM_GetMasterVolume(void);
+    void GM_SetGlobalVolume(XSDWORD theVolume);
+    XSDWORD GM_GetGlobalVolume(void);
 
 // This is an active voice reference that represents a valid/active voice.
 // Used in various functions that need to return and reference a voice.

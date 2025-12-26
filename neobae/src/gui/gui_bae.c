@@ -959,14 +959,14 @@ void bae_set_volume(int volPct)
     }
     else if (!g_bae.is_audio_file && g_bae.song)
     {
-        BAESong_SetVolume(g_bae.song, FLOAT_TO_UNSIGNED_FIXED(engineGain));
+        BAEMixer_SetGlobalVolume(g_bae.mixer, FLOAT_TO_UNSIGNED_FIXED(engineGain));
     }
 
     /* Also apply to the lightweight live synth used for incoming MIDI so changes
        to the master volume UI affect live input immediately. */
     if (g_live_song)
     {
-        BAESong_SetVolume(g_live_song, FLOAT_TO_UNSIGNED_FIXED(engineGain));
+        BAEMixer_SetGlobalVolume(g_bae.mixer, FLOAT_TO_UNSIGNED_FIXED(engineGain));
     }
 
     // Also adjust master volume unless globally muted for MIDI Out
@@ -976,7 +976,7 @@ void bae_set_volume(int volPct)
     if (g_bae.mixer)
 #endif
     {
-        BAEMixer_SetMasterVolume(g_bae.mixer, FLOAT_TO_UNSIGNED_FIXED(engineGain));
+        //BAEMixer_SetMasterVolume(g_bae.mixer, FLOAT_TO_UNSIGNED_FIXED(engineGain));
     }
 }
 

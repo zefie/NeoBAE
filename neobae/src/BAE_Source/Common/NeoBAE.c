@@ -2736,6 +2736,53 @@ BAEResult BAEMixer_GetMasterVolume(BAEMixer mixer, BAE_UNSIGNED_FIXED *outVolume
     return BAE_TranslateOPErr(err);
 }
 
+// BAEMixer_SetGlobalVolume()
+// ------------------------------------
+//
+//
+BAEResult BAEMixer_SetGlobalVolume(BAEMixer mixer, BAE_UNSIGNED_FIXED theVolume)
+{
+    OPErr err;
+
+    err = NO_ERR;
+    if (mixer)
+    {
+        GM_SetGlobalVolume((INT32)(UNSIGNED_FIXED_TO_LONG_ROUNDED(theVolume * MAX_MASTER_VOLUME)));
+    }
+    else
+    {
+        err = NULL_OBJECT;
+    }
+    return BAE_TranslateOPErr(err);
+}
+
+// BAEMixer_GetGlobalVolume()
+// ------------------------------------
+//
+//
+BAEResult BAEMixer_GetGlobalVolume(BAEMixer mixer, BAE_UNSIGNED_FIXED *outVolume)
+{
+    OPErr err;
+
+    err = NO_ERR;
+    if (mixer)
+    {
+        if (outVolume)
+        {
+            *outVolume = UNSIGNED_RATIO_TO_FIXED(GM_GetGlobalVolume(), MAX_MASTER_VOLUME);
+        }
+        else
+        {
+            err = PARAM_ERR;
+        }
+    }
+    else
+    {
+        err = NULL_OBJECT;
+    }
+    return BAE_TranslateOPErr(err);
+}
+
 // BAEMixer_SetHardwareVolume()
 // ------------------------------------
 //

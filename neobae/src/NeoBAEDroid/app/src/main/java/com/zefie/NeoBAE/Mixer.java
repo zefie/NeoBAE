@@ -112,7 +112,9 @@ public class Mixer
 	private static native int _addBankFromMemory(long reference, byte[] data);
 	private static native int _addBankFromMemoryWithFilename(long reference, byte[] data, String filename);
 	private static native void _setNativeCacheDir(String path);
-	private static native int _setMasterVolume(long reference, int fixedVolume);
+    private static native int _setMasterVolume(long reference, int fixedVolume);
+    private static native int _setGlobalVolume(long reference, int fixedVolume);
+    private static native int _getGlobalVolume(long reference);
 	// Android-only: post-mix output gain boost (0..512 where 256 == 1.0x)
 	private static native int _setAndroidOutputGainBoost(int boost256);
 	private static native String _getBankFriendlyName(long reference);
@@ -154,7 +156,15 @@ public class Mixer
 		return _setMasterVolume(mMixer.mReference, fixed);
 	}
 
-	// Android-only helper: set master volume directly (16.16 fixed).
+	public static int setGlobalVolumePercent(int percent){
+		if(mMixer==null) return -1;
+		if(percent<0) percent=0; if(percent>100) percent=100;
+		// 16.16 fixed where 1.0 == 65536. Percent needs scaling /100.
+		int fixed = (int)( (percent * 65536L) / 100L );
+		return _setGlobalVolume(mMixer.mReference, fixed);
+	}
+
+    // Android-only helper: set master volume directly (16.16 fixed).
 	// Unlike setMasterVolumePercent(), this does NOT clamp at 100%.
 	public static int setMasterVolumeFixed(int fixedVolume){
 		if(mMixer==null) return -1;

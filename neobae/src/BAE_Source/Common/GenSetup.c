@@ -436,6 +436,30 @@ INT32 GM_GetMasterVolume(void)
     }
 }
 
+void GM_SetGlobalVolume(INT32 theVolume)
+{
+    if (MusicGlobals)
+    {
+        if (theVolume < 0)
+            theVolume = 0;
+        if (theVolume > MAX_MASTER_VOLUME)
+            theVolume = MAX_MASTER_VOLUME;
+        MusicGlobals->globalVolume = (INT16)theVolume;
+    }
+}
+
+INT32 GM_GetGlobalVolume(void)
+{
+    if (MusicGlobals)
+    {
+        return MusicGlobals->globalVolume;
+    }
+    else
+    {
+        return MAX_MASTER_VOLUME;
+    }
+}
+
 
 // Return the number of microseconds of real time that will be generated when calling
 // BAE_BuildMixerSlice.
@@ -589,6 +613,7 @@ OPErr GM_InitGeneralSound(void *threadContext, Rate theRate, TerpMode theTerp, A
             pMixer->interpolationMode = theTerp;
         
             pMixer->MasterVolume = MAX_MASTER_VOLUME;
+            pMixer->globalVolume = MAX_MASTER_VOLUME;
             pMixer->effectsVolume = MAX_MASTER_VOLUME * 2 * 4;
 
             // set control loops
