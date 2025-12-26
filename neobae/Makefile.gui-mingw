@@ -82,7 +82,15 @@ ifneq ($(BAE_LIBS),)
 	LIBS += $(BAE_LIBS)
 endif	
 
-all: $(TARGET_LIB).a ${TARGET_LIB}.dll $(TARGET_BIN)
+all: $(TARGET_LIB).a ${TARGET_LIB}.dll $(TARGET_BIN) $(TARGET_OUT)RegisterFiletypes.exe
+
+$(OBJ_DIR)winreg_filetypes.o:
+	$(CC) $(CFLAGS) -DUNICODE -D_UNICODE -c src/gui/winreg_filetypes.c -o $(OBJ_DIR)winreg_filetypes.o
+
+$(TARGET_OUT)RegisterFiletypes.exe: $(OBJ_DIR)winreg_filetypes.o
+	@mkdir -p $(TARGET_OUT)
+	${WINDRES} src/gui/winreg_filetypes.rc $(OBJ_DIR)winreg_filetypes_res.o; \
+	${LD} -o $(TARGET_OUT)RegisterFiletypes.exe ${LDFLAGS} $(OBJ_DIR)winreg_filetypes.o $(OBJ_DIR)winreg_filetypes_res.o -Wl,--subsystem,windows -lshlwapi -lgdi32 -lcomctl32
 
 $(TARGET_LIB).a: $(OBJ)
 	@mkdir -p $(TARGET_OUT)

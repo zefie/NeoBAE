@@ -33,6 +33,7 @@
         "USE_FLAC_DECODER=1",
         "USE_VORBIS_DECODER=1",
         "USE_VORBIS_ENCODER=1",
+        "SUPPORT_OGG_FORMAT=1",
         "SUPPORT_PLAYLIST=1",
         "SUPPORT_KARAOKE=1",
         "USE_SF2_SUPPORT=1",

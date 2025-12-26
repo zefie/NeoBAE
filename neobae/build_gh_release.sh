@@ -103,7 +103,7 @@ if [ -z "${SKIPTO}" ] || [ "${SKIPTO}" -le 4 ]; then
 	runcmd make -f Makefile.gui-mingw "-j$(nproc)" all
     signit "${BDIR}/zefidi.exe" "${BDIR}/zefidi_signed.exe"
     mv "${BDIR}/zefidi_signed.exe" "${BDIR}/zefidi.exe"
-	runcmd cd "${BDIR}" || exit 1 && runcmd zip -9 "${ODIR}/zefidi_win_sdl3_x32.zip" -- zefidi.exe libfluid*.dll SDL*.dll sndfile.dll
+	runcmd cd "${BDIR}" || exit 1 && runcmd zip -9 "${ODIR}/zefidi_win_sdl3_x32.zip" -- zefidi.exe RegisterFiletypes.exe libfluid*.dll SDL*.dll sndfile.dll
 	runcmd cd "${RDIR}" || exit 1
 	runcmd make -f Makefile.gui-mingw clean
 fi
@@ -116,7 +116,7 @@ if [ -z "${SKIPTO}" ] || [ "${SKIPTO}" -le 5 ]; then
 	runcmd make -f Makefile.gui-mingw "-j$(nproc)" all
     signit "${BDIR}/zefidi.exe" "${BDIR}/zefidi_signed.exe"
     mv "${BDIR}/zefidi_signed.exe" "${BDIR}/zefidi.exe"
-	runcmd cd "${BDIR}" || exit 1 && runcmd zip -9 "${ODIR}/zefidi_win_sdl3_x64.zip" -- zefidi.exe libfluid*.dll SDL*.dll sndfile.dll
+	runcmd cd "${BDIR}" || exit 1 && runcmd zip -9 "${ODIR}/zefidi_win_sdl3_x64.zip" -- zefidi.exe RegisterFiletypes.exe libfluid*.dll SDL*.dll sndfile.dll
 	runcmd cd "${RDIR}" || exit 1
 	runcmd make -f Makefile.gui-mingw clean
 fi
