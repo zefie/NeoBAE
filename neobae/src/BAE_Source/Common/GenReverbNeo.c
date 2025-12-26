@@ -56,7 +56,6 @@
 #include "BAE_API.h"
 #include "X_API.h"
 #include <stdint.h>
-#include "X_Assert.h"
 
 #if USE_NEO_EFFECTS     // Conditionally compile this file
 
@@ -636,19 +635,7 @@ static void PV_ProcessNeoCustomReverb(INT32 *sourceP, INT32 *destP, int numFrame
     int i, frame, readPos;
 
     const int idleHoldFrames = PV_ClampInt(params->mSampleRate / 50, NEO_IDLE_HOLD_FRAMES_MIN, NEO_IDLE_HOLD_FRAMES_MAX);
-    
-#if _DEBUG == TRUE
-    static int debugCounter = 0;
-    if (debugCounter++ % 100 == 0)
-    {
-        BAE_PRINTF("Custom reverb processing: combs=%d",params->mCustomCombCount);
-        BAE_PRINTF(" fb0=%d",params->mCustomFeedback[0]);
-        BAE_PRINTF(" gain0=%d",params->mCustomGain[0]);
-        BAE_PRINTF(" delay0=%d",params->mCustomDelayFrames[0]);
-        BAE_PRINTF("\n");
-    }
-#endif
-    
+       
     // Rebuild delay indices if parameters have changed
     if (params->mCustomParamsDirty)
     {

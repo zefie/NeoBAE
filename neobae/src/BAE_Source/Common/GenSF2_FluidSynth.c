@@ -1335,18 +1335,6 @@ void GM_SF2_ProcessNoteOn(GM_Song* pSong, int16_t channel, int16_t note, int16_t
     if (!preset) {
         BAE_PRINTF("[SF2 NoteOn] Channel %d has NO PRESET selected!\n", channel);
     }
-    
-    // Query FluidSynth's internal CC values for debugging
-    int fs_volume = 0, fs_expression = 0;
-    fluid_synth_get_cc(g_fluidsynth_synth, channel, 7, &fs_volume);
-    fluid_synth_get_cc(g_fluidsynth_synth, channel, 11, &fs_expression);
-    
-    BAE_PRINTF("[SF2 NoteOn] Channel %d Note %d Velocity %d (scaled %d) Preset '%s' (Bank %d, Program %d) FS_CC7=%d FS_CC11=%d\n", 
-               channel, note, velocity, scaledVelocity,
-               preset ? fluid_preset_get_name(preset) : "(null)",
-               preset ? fluid_preset_get_banknum(preset) : -1,
-               preset ? fluid_preset_get_num(preset) : -1,
-               fs_volume, fs_expression);
 
     fluid_synth_noteon(g_fluidsynth_synth, channel, note, scaledVelocity);
     
@@ -1427,7 +1415,7 @@ void GM_SF2_ProcessProgramChange(GM_Song* pSong, int16_t channel, int32_t progra
     {
         return;
     }
-        BAE_PRINTF("raw request: program: %i, channel %i\n", program, channel);    
+    //BAE_PRINTF("[SF2 ProcessProgramChange] Raw Request: program: %i, channel %i\n", program, channel);    
     // Convert program ID to MIDI bank/program
     // NeoBAE uses: instrument = (bank * 128) + program + note
     // For percussion: bank = (bank * 2) + 1, note is included
@@ -1507,13 +1495,13 @@ void GM_SF2_ProcessProgramChange(GM_Song* pSong, int16_t channel, int32_t progra
 
     }
 
-    BAE_PRINTF("final intepretation: midiBank: %i, midiProgram: %i, channel: %i\n", midiBank, midiProgram, channel);
+    //BAE_PRINTF("[SF2 ProcessProgramChange] Final Interpretation: midiBank: %i, midiProgram: %i, channel: %i\n", midiBank, midiProgram, channel);
 
     // mobileBAE MIDI quirk: bank 121 program 124:125 are used for motor vibration.
     // Best behavior is to give the channel no preset at all.
     if (midiBank == 121 && (midiProgram == 124 || midiProgram == 125))
     {
-        BAE_PRINTF("[FluidProgChange] Denying preset request %i:%i on channel %d (unsetting program)\n", midiBank, midiProgram, channel);
+        BAE_PRINTF("[SF2 ProcessProgramChange] Denying preset request %i:%i on channel %d (unsetting program)\n", midiBank, midiProgram, channel);
         fluid_synth_all_sounds_off(g_fluidsynth_synth, channel);
         fluid_synth_all_notes_off(g_fluidsynth_synth, channel);
         fluid_synth_unset_program(g_fluidsynth_synth, channel);
@@ -1532,20 +1520,20 @@ void GM_SF2_ProcessProgramChange(GM_Song* pSong, int16_t channel, int32_t progra
         // Alias bank 0 → bank 121 if overlay has bank 121 presets
         if (g_hasBank121Presets && useBank == 0 && PV_SF2_PresetExistsInSoundFont(g_fluidsynth_xmf_overlay_id, 121, useProg)) {
             overlayBank = 121;
-            BAE_PRINTF("[FluidProgChange] Aliasing bank 0 → bank 121 for overlay preset\n");
+            BAE_PRINTF("[SF2 ProcessProgramChange] Aliasing bank 0 → bank 121 for overlay preset\n");
         }
         
         if (overlayBank >= 0 && PV_SF2_PresetExistsInSoundFont(g_fluidsynth_xmf_overlay_id, overlayBank, useProg)) {
-            BAE_PRINTF("[FluidProgChange] Using XMF overlay preset: requested bank %d -> overlay bank %d prog %d on channel %d\n", 
+            BAE_PRINTF("[SF2 ProcessProgramChange] Using XMF overlay preset: requested bank %d -> overlay bank %d prog %d on channel %d\n", 
                        useBank, overlayBank, useProg, channel);
             // Use program_select to explicitly select from the XMF overlay soundfont
             // This avoids ambiguity if the base soundfont also has the same bank/program
             fluid_synth_program_select(g_fluidsynth_synth, channel, g_fluidsynth_xmf_overlay_id, overlayBank, useProg);
-            BAE_PRINTF("[FluidProgChange] Called fluid_synth_program_select(sfid=%d, bank=%d, prog=%d)\n", 
+            BAE_PRINTF("[SF2 ProcessProgramChange] Called fluid_synth_program_select(sfid=%d, bank=%d, prog=%d)\n", 
                        g_fluidsynth_xmf_overlay_id, overlayBank, useProg);            
             return;
         } else {
-            BAE_PRINTF("[FluidProgChange] XMF overlay check: requested bank %d -> overlay bank %d (offset=%d) prog %d - not found or invalid\n",
+            BAE_PRINTF("[SF2 ProcessProgramChange] XMF overlay check: requested bank %d -> overlay bank %d (offset=%d) prog %d - not found or invalid\n",
                        useBank, overlayBank, g_fluidsynth_xmf_overlay_bank_offset, useProg);
         }
     }
@@ -1553,7 +1541,7 @@ void GM_SF2_ProcessProgramChange(GM_Song* pSong, int16_t channel, int32_t progra
     // Alias bank 121 -> bank 0 if bank 121 preset doesn't exist but bank 0 does
     // This handles MIDI files that request bank 121 but the soundfont only has bank 0
     if (useBank == 121 && !PV_SF2_PresetExists(121, useProg) && PV_SF2_PresetExists(0, useProg)) {
-        BAE_PRINTF("[FluidProgChange] Aliasing bank 121 prog %d -> bank 0 prog %d (121:%d not found)\n", useProg, useProg, useProg);
+        BAE_PRINTF("[SF2 ProcessProgramChange] Aliasing bank 121 prog %d -> bank 0 prog %d (121:%d not found)\n", useProg, useProg, useProg);
         useBank = 0;
     }
 
@@ -1565,7 +1553,7 @@ void GM_SF2_ProcessProgramChange(GM_Song* pSong, int16_t channel, int32_t progra
         // This is the standard GM fallback: if variation is missing, use standard instrument
         if (!percIntent && useBank != 0) {
             if (PV_SF2_PresetExists(0, useProg)) {
-                BAE_PRINTF("[FluidProgChange] Fallback: bank %d prog %d not found; using bank 0 prog %d\n", useBank, useProg, useProg);
+                BAE_PRINTF("[SF2 ProcessProgramChange] Fallback: bank %d prog %d not found; using bank 0 prog %d\n", useBank, useProg, useProg);
                 useBank = 0;
                 found = TRUE;
             }
@@ -1593,7 +1581,7 @@ void GM_SF2_ProcessProgramChange(GM_Song* pSong, int16_t channel, int32_t progra
                 // leave as found
             }
             if (fbBank >= 0) {
-                BAE_PRINTF("[FluidProgChange] Fallback: no presets in bank %d; selecting %d:%d\n", useBank, fbBank, fbProg);
+                BAE_PRINTF("[SF2 ProcessProgramChange] Fallback: no presets in bank %d; selecting %d:%d\n", useBank, fbBank, fbProg);
                 useBank = fbBank; useProg = fbProg;
             }
         }
@@ -1611,7 +1599,7 @@ void GM_SF2_ProcessProgramChange(GM_Song* pSong, int16_t channel, int32_t progra
             // try DLS percussion bank
             drumBank = 120;
             if (!PV_SF2_PresetExists(drumBank, 0)) {        
-                BAE_PRINTF("[FluidProgChange] No drum kit preset 128:0 or 120:0 found; unsetting program on percussion channel %d\n", channel);
+                BAE_PRINTF("[SF2 ProcessProgramChange] No drum kit preset 128:0 or 120:0 found; unsetting program on percussion channel %d\n", channel);
                 fluid_synth_all_sounds_off(g_fluidsynth_synth, channel);
                 fluid_synth_all_notes_off(g_fluidsynth_synth, channel);
                 fluid_synth_unset_program(g_fluidsynth_synth, channel);
