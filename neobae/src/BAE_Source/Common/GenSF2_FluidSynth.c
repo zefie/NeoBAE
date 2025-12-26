@@ -330,9 +330,9 @@ static XBOOL PV_SF2_AllInstrumentsAreRMFEmbedded(GM_Song* pSong)
         {
             // Check if this instrument ID exists in the RMF embedded list
             XBOOL found = FALSE;
-            for (uint32_t j = 1; j <= rmfInstCount; j++)
+            for (XDWORD j = 1; j <= rmfInstCount; j++)
             {
-                if (pSong->RMFInstrumentIDs[j] == (uint32_t)i)
+                if (pSong->RMFInstrumentIDs[j] == (XDWORD)i)
                 {
                     found = TRUE;
                     break;
@@ -379,9 +379,9 @@ static XBOOL PV_SF2_AllInstrumentsAreRMFEmbedded(GM_Song* pSong)
         {
             // Not loaded - check if it's in the RMF embedded list
             XBOOL isEmbedded = FALSE;
-            for (uint32_t j = 1; j <= rmfInstCount; j++)
+            for (XDWORD j = 1; j <= rmfInstCount; j++)
             {
-                if (pSong->RMFInstrumentIDs[j] == (uint32_t)program)
+                if (pSong->RMFInstrumentIDs[j] == (XDWORD)program || pSong->RMFInstrumentIDs[j] == (XDWORD)(program  + 512))
                 {
                     isEmbedded = TRUE;
                     break;

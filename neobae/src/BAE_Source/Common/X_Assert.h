@@ -82,7 +82,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#ifdef OUTPUT_TO_LOGFILE
 #ifdef _WIN32
     #include <windows.h>
     static void get_executable_directory(char *buffer, size_t size) {
@@ -116,6 +115,7 @@
     }
 #endif
 
+#ifdef OUTPUT_TO_LOGFILE
 #ifdef _ZEFI_GUI
     #define LOGFILE_NAME "/zefidi.log"
 #else

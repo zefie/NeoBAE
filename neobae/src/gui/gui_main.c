@@ -43,7 +43,6 @@
 #include "gui_common.h"
 #include "gui_settings.h"
 #include "gui_dialogs.h"
-#include "gui_logging.h"
 #include "gui_bae.h"
 #include "gui_export.h"
 #include "gui_theme.h"    // for theme globals and detection functions

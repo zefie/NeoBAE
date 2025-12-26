@@ -1772,18 +1772,9 @@ static void PV_ProcessProgramChange(GM_Song *pSong, INT16 MIDIChannel, INT16 cur
             
 #if USE_SF2_SUPPORT == TRUE
 
-            // Check for RMF embedded instruments first
-            XBOOL useRMF = FALSE;
-            for (int i = 1; i <= pSong->RMFInstrumentIDs[0]; i++) {
-                if (pSong->RMFInstrumentIDs[i] == program) {
-                    pSong->channelType[MIDIChannel] = CHANNEL_TYPE_RMF;
-                    useRMF = TRUE;
-                    BAE_PRINTF("ProcessProgramChange Debug: Channel %d is using an Embedded RMF Instrument (%d)\n", MIDIChannel, program);
-                    break;
-                }
-            }
+
             
-            if (!useRMF) {
+            if (pSong->channelType[MIDIChannel] != CHANNEL_TYPE_RMF) {
                 // Calculate bank/program for SF2 or XMF overlay check
                 INT32 theBank = pSong->channelRawBank[MIDIChannel];
                 INT32 thePatch = program;
@@ -1849,6 +1840,8 @@ static void PV_ProcessProgramChange(GM_Song *pSong, INT16 MIDIChannel, INT16 cur
                     // HSB mode without overlay - use native synthesis
                     pSong->channelType[MIDIChannel] = CHANNEL_TYPE_GM;
                 }
+            } else {
+                BAE_PRINTF("ProcessProgramChange Debug: Channel %d is using an Embedded RMF Instrument (%d)\n", MIDIChannel, program);
             }
 #endif
         }

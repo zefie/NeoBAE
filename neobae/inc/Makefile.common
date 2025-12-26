@@ -492,8 +492,7 @@ endif
 
 ifeq ($(BUILD_GUI),1)
 	BAE_FLAGS += -D_ZEFI_GUI=1
-	SRC_BIN	:= $(SRC) src/gui/gui_logging.c \
-		src/gui/gui_theme.c \
+	SRC_BIN	:= $(SRC) src/gui/gui_theme.c \
 		src/gui/gui_widgets.c \
 		src/gui/gui_text.c \
 		src/gui/gui_midi_vkbd.c \
