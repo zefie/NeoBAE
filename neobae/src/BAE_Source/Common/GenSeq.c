@@ -493,6 +493,7 @@ void PV_ResetControlers(GM_Song *pSong, INT16 channel2Reset, XBOOL completeReset
         pSong->channelSustain[count] = FALSE;
         pSong->channelBankMode[count] = USE_GM_DEFAULT;
         pSong->channelBank[count] = 0;
+        pSong->channelRawBank[count] = 0; // Reset raw bank to 0
         pSong->channelPitchBendRange[count] = DEFAULT_PITCH_RANGE; // pitch bend controler
         pSong->channelBend[count] = 0;
         pSong->channelModWheel[count] = 0;
@@ -1840,6 +1841,7 @@ static void PV_ProcessProgramChange(GM_Song *pSong, INT16 MIDIChannel, INT16 cur
                     // If SF2 is active for this song, send program change to SF2
                     pSong->channelType[MIDIChannel] = CHANNEL_TYPE_SF2;
                     INT32 combinedProgram = (theBank * 128) + thePatch;
+                    BAE_PRINTF("ProcessProgramChange Debug: Channel %d is using SF2 Instrument (bank=%d prog=%d)\n", MIDIChannel, theBank, thePatch);
                     GM_SF2_ProcessProgramChange(pSong, MIDIChannel, combinedProgram);
                 }
                 else
@@ -2406,7 +2408,7 @@ void PV_ProcessController(GM_Song *pSong, INT16 MIDIChannel, INT16 currentTrack,
 #endif          
             break;
         case B_BANK_MSB: // bank select MSB.
-            pSong->channelRawBank[MIDIChannel] = (SBYTE)value;
+            pSong->channelRawBank[MIDIChannel] = (XBYTE)value;
 #if USE_SF2_SUPPORT == TRUE
             if (!GM_IsSF2Song(pSong) && !GM_SF2_HasXmfEmbeddedBank()) {
 #endif          

@@ -1257,7 +1257,7 @@ typedef int32_t UNIT_TYPE;
         XBYTE channelMonoMode[MAX_CHANNELS];              // boolean for mono mode being on or off (NOT CONNECTED as of 6.8.99)
         XSWORD channelBend[MAX_CHANNELS];                 // MUST BE AN XSWORD!! current amount to bend new notes
         XSWORD channelProgram[MAX_CHANNELS];              // current channel program
-        XSBYTE channelRawBank[MAX_CHANNELS];              // current raw bank
+        XBYTE channelRawBank[MAX_CHANNELS];              // current raw bank (0-255)
         XSBYTE channelLSB[MAX_CHANNELS];                   // current LSB bank
         XSBYTE channelBank[MAX_CHANNELS];                 // current bank
         XSWORD channelStereoPosition[MAX_CHANNELS];       // current channel stereo position
