@@ -450,8 +450,10 @@ void GM_SoftResetSF2(void) {
         return;
 
     // Soft reset: Reset controllers without resetting programs
-    // This resets pitch bend, modulation, expression, sustain, etc.
+    // This resets pitch bend, modulation, sustain, etc.
     // but preserves the currently selected instrument on each channel
+    // NOTE: We do NOT reset CC7 (volume) or CC11 (expression) here because
+    // MIDI files set these during preroll and we don't want to overwrite them
     
     for (int ch = 0; ch < BAE_MAX_MIDI_CHANNELS; ch++) {
         // Reset pitch bend to center (8192 = 0x2000)
@@ -460,14 +462,11 @@ void GM_SoftResetSF2(void) {
         // Reset modulation wheel (CC 1)
         fluid_synth_cc(g_fluidsynth_synth, ch, 1, 0);
         
-        // Reset volume (CC 7) to default
-        fluid_synth_cc(g_fluidsynth_synth, ch, 7, MAX_NOTE_VOLUME);
+        // DO NOT reset CC7 (volume) - let MIDI file control it
+        // DO NOT reset CC11 (expression) - let MIDI file control it
         
         // Reset pan (CC 10) to center
         fluid_synth_cc(g_fluidsynth_synth, ch, 10, 64);
-        
-        // Reset expression (CC 11) to maximum
-        fluid_synth_cc(g_fluidsynth_synth, ch, 11, MAX_NOTE_VOLUME);
         
         // Reset sustain pedal (CC 64) to off
         fluid_synth_cc(g_fluidsynth_synth, ch, 64, 0);
@@ -779,15 +778,11 @@ OPErr GM_LoadSF2Soundfont(const char* sf2_path)
     unsigned char sf2_header[16] = {0};
     size_t bytes_read = fread(sf2_header, 1, 16, sf2_file);
     fclose(sf2_file);
-    if (bytes_read < 16) {
+    if (bytes_read < 16) 
+    {
         BAE_PRINTF("[FluidMem] Could not read 16 bytes from SF2 file: %s\n", sf2_path);
         return BAD_FILE;
     }
-    BAE_PRINTF("[FluidMem] First 16 bytes of SF2 file (hex): ");
-    for (size_t i = 0; i < 16; i++) {
-        BAE_PRINTF("%02X ", sf2_header[i]);
-    }
-    BAE_PRINTF("\n");
 
     g_fluidsynth_soundfont_is_dls = FALSE;
     XBOOL isRIFF = (sf2_header[0]=='R' && sf2_header[1]=='I' && sf2_header[2]=='F' && sf2_header[3]=='F');
@@ -1328,12 +1323,8 @@ void GM_SF2_ProcessNoteOn(GM_Song* pSong, int16_t channel, int16_t note, int16_t
         return;
     }
     
-    // IMPORTANT:
-    // Do NOT scale velocity by CC7/CC11 or song volume here.
-    // FluidSynth already applies CC7 (Volume) and CC11 (Expression) to *all* active voices,
-    // and we apply song volume once at render time. Pre-scaling here causes double attenuation
-    // and also changes velocity-layer selection in SF2s (making some notes unexpectedly quiet).
-    int scaledVelocity = velocity;
+    uint32_t scaledVelocity = velocity;
+
     if (scaledVelocity <= 0)
         return;
     if (scaledVelocity > MAX_NOTE_VOLUME)
@@ -1345,6 +1336,18 @@ void GM_SF2_ProcessNoteOn(GM_Song* pSong, int16_t channel, int16_t note, int16_t
         BAE_PRINTF("[SF2 NoteOn] Channel %d has NO PRESET selected!\n", channel);
     }
     
+    // Query FluidSynth's internal CC values for debugging
+    int fs_volume = 0, fs_expression = 0;
+    fluid_synth_get_cc(g_fluidsynth_synth, channel, 7, &fs_volume);
+    fluid_synth_get_cc(g_fluidsynth_synth, channel, 11, &fs_expression);
+    
+    BAE_PRINTF("[SF2 NoteOn] Channel %d Note %d Velocity %d (scaled %d) Preset '%s' (Bank %d, Program %d) FS_CC7=%d FS_CC11=%d\n", 
+               channel, note, velocity, scaledVelocity,
+               preset ? fluid_preset_get_name(preset) : "(null)",
+               preset ? fluid_preset_get_banknum(preset) : -1,
+               preset ? fluid_preset_get_num(preset) : -1,
+               fs_volume, fs_expression);
+
     fluid_synth_noteon(g_fluidsynth_synth, channel, note, scaledVelocity);
     
     // Update channel activity tracking with original velocity
