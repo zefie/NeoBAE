@@ -427,6 +427,9 @@ bool debug_console_handle_event(SDL_Event *event)
         case SDL_EVENT_MOUSE_BUTTON_UP:
             is_our_event = (event->button.windowID == debug_window_id);
             break;
+        case SDL_EVENT_MOUSE_WHEEL:
+            is_our_event = (event->wheel.windowID == debug_window_id);
+            break;
         case SDL_EVENT_TEXT_INPUT:
             is_our_event = (event->text.windowID == debug_window_id);
             break;
