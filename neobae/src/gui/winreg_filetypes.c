@@ -359,7 +359,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     wc.lpfnWndProc = WndProc;
     wc.hInstance = hInstance;
     wc.hCursor = LoadCursor(NULL, IDC_ARROW);
-    wc.hbrBackground = (HBRUSH)(COLOR_WINDOW+1);
+    wc.hbrBackground = (HBRUSH)(COLOR_BTNFACE+1);
     wc.lpszClassName = _T("zefidiHelperClass");
 
     if(!RegisterClassEx(&wc)) return -1;
