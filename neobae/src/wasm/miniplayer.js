@@ -1,5 +1,5 @@
 /**
- * miniBAE Mini Player - Self-contained popup player
+ * NeoBAE Mini Player - Self-contained popup player
  * 
  * Usage:
  *   playSong(songUrl, bankUrl) - Opens a popup player and plays the song
@@ -528,7 +528,7 @@
     }
 
     // Create modal HTML
-    function createModal(title = 'miniBAE Player') {
+    function createModal(title = 'NeoBAE Player') {
         const overlay = document.createElement('div');
         overlay.className = 'miniplayer-overlay';
         
@@ -602,7 +602,7 @@
         const infoBtn = overlay.querySelector('.miniplayer-info');
         infoBtn.addEventListener('click', () => {
             toggleInfoPanel(overlay).catch((err) => {
-                console.error('miniBAE info error:', err);
+                console.error('NeoBAE info error:', err);
             });
         });
 
@@ -953,10 +953,10 @@
             injectStyles();
 
             // Extract title from options or source
-            let title = options.title || 'miniBAE Player';
+            let title = options.title || 'NeoBAE Player';
             if (typeof songSource === 'string' && !options.title) {
                 const filename = songSource.split('/').pop().split('?')[0];
-                title = filename || 'miniBAE Player';
+                title = filename || 'NeoBAE Player';
             }
 
             // Create or reuse modal
@@ -1069,7 +1069,7 @@
             }
 
         } catch (error) {
-            console.error('miniBAE Player Error:', error);
+            console.error('NeoBAE Player Error:', error);
             if (currentModal) {
                 const statusEl = currentModal.querySelector('.miniplayer-status');
                 statusEl.textContent = 'Error: ' + error.message;

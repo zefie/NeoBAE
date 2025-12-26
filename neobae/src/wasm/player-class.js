@@ -128,7 +128,7 @@ class BeatnikPlayer {
         }
 
         if (typeof BeatnikModule === 'undefined') {
-            throw new Error('BeatnikModule not loaded. Make sure minibae.js is included.');
+            throw new Error('BeatnikModule not loaded. Make sure NeoBAE.js is included.');
         }
 
         // Initialize the Emscripten module

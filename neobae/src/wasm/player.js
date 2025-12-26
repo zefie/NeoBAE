@@ -1,4 +1,4 @@
-class MiniBAEPlayer {
+class NeoBAEPlayer {
     constructor() {
         this.player = null;
         this.isFirstPlay = true;
@@ -1302,7 +1302,7 @@ class MiniBAEPlayer {
         modal.innerHTML = `
             <div style="padding: 20px;">
                 <h2 style="font-size: 20px; margin-bottom: 16px; color: #9cdcfe; border-bottom: 1px solid #555; padding-bottom: 8px;">
-                    miniBAE Build Information
+                    NeoBAE Build Information
                 </h2>
                 <div style="margin-bottom: 16px;">
                     <strong style="color: #dcdcaa;">Version:</strong>
@@ -1351,5 +1351,5 @@ class MiniBAEPlayer {
 
 // Initialize the player when the page loads
 document.addEventListener('DOMContentLoaded', () => {
-    new MiniBAEPlayer();
+    new NeoBAEPlayer();
 });
