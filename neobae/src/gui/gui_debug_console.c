@@ -68,6 +68,14 @@ static int g_selection_start_col = -1;
 static int g_selection_end_line = -1;
 static int g_selection_end_col = -1;
 
+// Filter state
+static char g_filter_text[256] = {0};  // Filter/search text
+static bool g_filter_active = false;  // Whether filtering is enabled
+static int *g_filtered_lines = NULL;  // Array of line indices that match filter
+static int g_filtered_count = 0;      // Number of filtered lines
+static int g_filtered_capacity = 0;   // Capacity of filtered lines array
+static bool g_filter_focused = false; // Whether filter input is focused
+
 // Initialize debug console
 void debug_console_init(void)
 {
@@ -84,6 +92,14 @@ void debug_console_init(void)
     g_selecting = false;
     g_selection_start_line = -1;
     g_selection_end_line = -1;
+    
+    // Initialize filter state
+    memset(g_filter_text, 0, sizeof(g_filter_text));
+    g_filter_active = false;
+    g_filtered_lines = NULL;
+    g_filtered_count = 0;
+    g_filtered_capacity = 0;
+    g_filter_focused = false;
     
     // Register callback with BAE library
     BAE_SetDebugOutputCallback(debug_console_append_internal);
@@ -106,6 +122,113 @@ void debug_console_shutdown(void)
         SDL_DestroyMutex(g_debug_mutex);
         g_debug_mutex = NULL;
     }
+    
+    // Free filter resources
+    if (g_filtered_lines) {
+        free(g_filtered_lines);
+        g_filtered_lines = NULL;
+    }
+    g_filtered_count = 0;
+    g_filtered_capacity = 0;
+}
+
+// Update filtered lines based on current filter text
+// Get line from buffer
+static bool get_line(int line_index, char *buffer, size_t buffer_size)
+{
+    if (line_index < 0 || line_index >= g_line_count) {
+        return false;
+    }
+    
+    DebugLine *line = &g_debug_lines[line_index];
+    size_t copy_len = (line->length < buffer_size - 1) ? line->length : (buffer_size - 1);
+    
+    // Handle circular buffer wrap
+    if (line->offset + copy_len <= DEBUG_BUFFER_SIZE) {
+        memcpy(buffer, &g_debug_buffer[line->offset], copy_len);
+    } else {
+        // Line wraps around buffer
+        size_t first_part = DEBUG_BUFFER_SIZE - line->offset;
+        size_t second_part = copy_len - first_part;
+        memcpy(buffer, &g_debug_buffer[line->offset], first_part);
+        memcpy(buffer + first_part, g_debug_buffer, second_part);
+    }
+    
+    buffer[copy_len] = '\0';
+    return true;
+}
+
+static void update_filter(void)
+{
+    if (!g_filter_text[0]) {
+        g_filter_active = false;
+        g_filtered_count = 0;
+        return;
+    }
+    
+    g_filter_active = true;
+    
+    // Parse filter terms (space-separated)
+    char filter_copy[256];
+    strcpy(filter_copy, g_filter_text);
+    
+    // Count terms and allocate arrays
+    int max_terms = 10; // Reasonable limit
+    const char *positive_terms[10];
+    const char *negative_terms[10];
+    int positive_count = 0;
+    int negative_count = 0;
+    
+    char *token = strtok(filter_copy, " ");
+    while (token && (positive_count + negative_count) < max_terms) {
+        if (token[0] == '!') {
+            negative_terms[negative_count++] = token + 1;
+        } else {
+            positive_terms[positive_count++] = token;
+        }
+        token = strtok(NULL, " ");
+    }
+    
+    // Ensure we have enough capacity
+    int needed_capacity = g_line_count;
+    if (needed_capacity > g_filtered_capacity) {
+        int *new_filtered = realloc(g_filtered_lines, needed_capacity * sizeof(int));
+        if (new_filtered) {
+            g_filtered_lines = new_filtered;
+            g_filtered_capacity = needed_capacity;
+        } else {
+            // Out of memory, disable filtering
+            g_filter_active = false;
+            return;
+        }
+    }
+    
+    g_filtered_count = 0;
+    char line_buf[512];
+    
+    for (int i = 0; i < g_line_count; i++) {
+        if (get_line(i, line_buf, sizeof(line_buf))) {
+            bool matches = true;
+            
+            // Check positive terms (must ALL be present)
+            for (int j = 0; j < positive_count && matches; j++) {
+                if (strstr(line_buf, positive_terms[j]) == NULL) {
+                    matches = false;
+                }
+            }
+            
+            // Check negative terms (must NONE be present)
+            for (int j = 0; j < negative_count && matches; j++) {
+                if (strstr(line_buf, negative_terms[j]) != NULL) {
+                    matches = false;
+                }
+            }
+            
+            if (matches) {
+                g_filtered_lines[g_filtered_count++] = i;
+            }
+        }
+    }
 }
 
 // Add a line to the line tracking array
@@ -122,6 +245,21 @@ static void add_line(size_t offset, size_t length)
         g_debug_lines[g_line_head].offset = offset;
         g_debug_lines[g_line_head].length = length;
     }
+    
+    // Update filter if active
+    if (g_filter_active && g_filter_text[0] != '\0') {
+        update_filter();
+    }
+}
+
+// Clear filter
+static void clear_filter(void)
+{
+    g_filter_text[0] = '\0';
+    g_filter_active = false;
+    g_filtered_count = 0;
+    g_filter_focused = false;
+    SDL_StopTextInput(g_debug_window);
 }
 
 // Internal append function (the real implementation)
@@ -227,7 +365,7 @@ bool debug_console_is_visible(void)
     return g_debug_visible;
 }
 
-// Convert mouse position to line and column
+// Convert mouse position to line and column (handles filtering)
 static void mouse_to_text_position(int mx, int my, int win_h, int *out_line, int *out_col)
 {
     int content_y = DEBUG_TITLE_BAR_HEIGHT + DEBUG_PADDING;
@@ -236,41 +374,17 @@ static void mouse_to_text_position(int mx, int my, int win_h, int *out_line, int
     
     // Calculate which line
     int line_offset = (my - content_y) / DEBUG_LINE_HEIGHT;
-    int start_line = g_line_count - visible_lines - g_scroll_offset;
+    int total_lines = g_filter_active ? g_filtered_count : g_line_count;
+    int start_line = total_lines - visible_lines - g_scroll_offset;
     if (start_line < 0) start_line = 0;
     
     *out_line = start_line + line_offset;
     if (*out_line < 0) *out_line = 0;
-    if (*out_line >= g_line_count) *out_line = g_line_count - 1;
+    if (*out_line >= total_lines) *out_line = total_lines - 1;
     
     // Rough column estimate (fixed-width assumed, 8 pixels per char)
     *out_col = (mx - DEBUG_PADDING) / 8;
     if (*out_col < 0) *out_col = 0;
-}
-
-// Get line from buffer
-static bool get_line(int line_index, char *buffer, size_t buffer_size)
-{
-    if (line_index < 0 || line_index >= g_line_count) {
-        return false;
-    }
-    
-    DebugLine *line = &g_debug_lines[line_index];
-    size_t copy_len = (line->length < buffer_size - 1) ? line->length : (buffer_size - 1);
-    
-    // Handle circular buffer wrap
-    if (line->offset + copy_len <= DEBUG_BUFFER_SIZE) {
-        memcpy(buffer, &g_debug_buffer[line->offset], copy_len);
-    } else {
-        // Line wraps around buffer
-        size_t first_part = DEBUG_BUFFER_SIZE - line->offset;
-        size_t second_part = copy_len - first_part;
-        memcpy(buffer, &g_debug_buffer[line->offset], first_part);
-        memcpy(buffer + first_part, g_debug_buffer, second_part);
-    }
-    
-    buffer[copy_len] = '\0';
-    return true;
 }
 
 // Handle an event (returns true if consumed, false if should be passed to main window)
@@ -313,25 +427,60 @@ bool debug_console_handle_event(SDL_Event *event)
         case SDL_EVENT_MOUSE_BUTTON_UP:
             is_our_event = (event->button.windowID == debug_window_id);
             break;
-        case SDL_EVENT_MOUSE_WHEEL:
-            is_our_event = (event->wheel.windowID == debug_window_id);
+        case SDL_EVENT_TEXT_INPUT:
+            is_our_event = (event->text.windowID == debug_window_id);
             break;
-        default:
-            return false; // Not our event
     }
     
     if (!is_our_event) {
         return false; // Let main window handle it
     }
     
-    // Handle window close
+    // Handle window close request
     if (event->type == SDL_EVENT_WINDOW_CLOSE_REQUESTED) {
         debug_console_hide();
         return true;
     }
     
+    // Handle text input for filter
+    if (event->type == SDL_EVENT_TEXT_INPUT && g_filter_focused) {
+        size_t len = strlen(g_filter_text);
+        size_t input_len = strlen(event->text.text);
+        if (len + input_len < sizeof(g_filter_text) - 1) {
+            strcat(g_filter_text, event->text.text);
+        }
+        return true;
+    }
+    
     // Handle keyboard events
     if (event->type == SDL_EVENT_KEY_DOWN) {
+        // Handle filter input if focused
+        if (g_filter_focused) {
+            if (event->key.key == SDLK_RETURN || event->key.key == SDLK_KP_ENTER) {
+                // Apply filter
+                update_filter();
+                g_scroll_offset = 0;
+                g_auto_scroll = true;
+                g_filter_focused = false;
+                SDL_StopTextInput(g_debug_window);
+                return true;
+            } else if (event->key.key == SDLK_ESCAPE) {
+                // Clear filter
+                clear_filter();
+                g_scroll_offset = 0;
+                g_auto_scroll = true;
+                return true;
+            } else if (event->key.key == SDLK_BACKSPACE) {
+                // Remove last character
+                size_t len = strlen(g_filter_text);
+                if (len > 0) {
+                    g_filter_text[len - 1] = '\0';
+                }
+                return true;
+            }
+            return true; // Consume other keys when filter is focused
+        }
+        
         // Ctrl+C to copy selection
         if (event->key.key == SDLK_C && (event->key.mod & SDL_KMOD_CTRL)) {
             if (g_selection_start_line >= 0 && g_selection_end_line >= 0) {
@@ -347,7 +496,8 @@ bool debug_console_handle_event(SDL_Event *event)
                     
                     char line_buf[512];
                     for (int i = start; i <= end && i < g_line_count; i++) {
-                        if (get_line(i, line_buf, sizeof(line_buf))) {
+                        int actual_line = g_filter_active ? g_filtered_lines[i] : i;
+                        if (get_line(actual_line, line_buf, sizeof(line_buf))) {
                             size_t line_len = strlen(line_buf);
                             if (pos + line_len + 2 < 65536) {
                                 strcpy(selected_text + pos, line_buf);
@@ -367,9 +517,10 @@ bool debug_console_handle_event(SDL_Event *event)
         }
         // Ctrl+A to select all
         else if (event->key.key == SDLK_A && (event->key.mod & SDL_KMOD_CTRL)) {
+            int total_display_lines = g_filter_active ? g_filtered_count : g_line_count;
             g_selection_start_line = 0;
             g_selection_start_col = 0;
-            g_selection_end_line = g_line_count - 1;
+            g_selection_end_line = total_display_lines - 1;
             g_selection_end_col = 999;
             return true;
         }
@@ -382,7 +533,8 @@ bool debug_console_handle_event(SDL_Event *event)
             }
             debug_console_hide();
         } else if (event->key.key == SDLK_HOME) {
-            g_scroll_offset = g_line_count;
+            int total_display_lines = g_filter_active ? g_filtered_count : g_line_count;
+            g_scroll_offset = total_display_lines;
             g_auto_scroll = false;
         } else if (event->key.key == SDLK_END) {
             g_scroll_offset = 0;
@@ -392,7 +544,8 @@ bool debug_console_handle_event(SDL_Event *event)
             SDL_GetWindowSize(g_debug_window, NULL, &win_h);
             int visible_lines = (win_h - 2 * DEBUG_PADDING - 40) / DEBUG_LINE_HEIGHT;
             g_scroll_offset += visible_lines;
-            if (g_scroll_offset > g_line_count) g_scroll_offset = g_line_count;
+            int total_display_lines = g_filter_active ? g_filtered_count : g_line_count;
+            if (g_scroll_offset > total_display_lines) g_scroll_offset = total_display_lines;
             g_auto_scroll = false;
         } else if (event->key.key == SDLK_PAGEDOWN) {
             int win_h;
@@ -428,6 +581,27 @@ bool debug_console_handle_event(SDL_Event *event)
         g_mouse_down = true;
         g_drag_start_scroll = g_scroll_offset;
         g_drag_start_y = event->button.y;
+        
+        // Check if click is on filter field
+        int filter_x = DEBUG_PADDING + 300;
+        int filter_y = 5;
+        int filter_w = 200;
+        int filter_h = 20;
+        
+        if (event->button.x >= filter_x && event->button.x <= filter_x + filter_w &&
+            event->button.y >= filter_y && event->button.y <= filter_y + filter_h) {
+            g_filter_focused = true;
+            SDL_StartTextInput(g_debug_window);
+            g_scrollbar_dragging = false;
+            g_selecting = false;
+            return true;
+        } else {
+            // Click outside filter - unfocus it
+            if (g_filter_focused) {
+                g_filter_focused = false;
+                SDL_StopTextInput(g_debug_window);
+            }
+        }
         
         // Check if click is on scrollbar
         int win_w, win_h;
@@ -483,9 +657,10 @@ bool debug_console_handle_event(SDL_Event *event)
             int content_y = DEBUG_TITLE_BAR_HEIGHT + DEBUG_PADDING;
             int content_h = win_h - content_y - DEBUG_PADDING - DEBUG_STATUS_BAR_HEIGHT;
             int visible_lines = content_h / DEBUG_LINE_HEIGHT;
+            int total_scroll_lines = g_filter_active ? g_filtered_count : g_line_count;
             
-            if (g_line_count > visible_lines) {
-                float thumb_ratio = (float)visible_lines / (float)g_line_count;
+            if (total_scroll_lines > visible_lines) {
+                float thumb_ratio = (float)visible_lines / (float)total_scroll_lines;
                 int thumb_h = (int)(content_h * thumb_ratio);
                 if (thumb_h < 20) thumb_h = 20;
                 
@@ -495,9 +670,9 @@ bool debug_console_handle_event(SDL_Event *event)
                 if (scroll_ratio < 0.0f) scroll_ratio = 0.0f;
                 if (scroll_ratio > 1.0f) scroll_ratio = 1.0f;
                 
-                g_scroll_offset = (int)(scroll_ratio * (g_line_count - visible_lines));
+                g_scroll_offset = (int)(scroll_ratio * (total_scroll_lines - visible_lines));
                 if (g_scroll_offset < 0) g_scroll_offset = 0;
-                if (g_scroll_offset > g_line_count) g_scroll_offset = g_line_count;
+                if (g_scroll_offset > total_scroll_lines) g_scroll_offset = total_scroll_lines;
                 g_auto_scroll = (g_scroll_offset == 0);
             }
         } else {
@@ -542,8 +717,32 @@ void debug_console_render(void)
     draw_rect(g_debug_renderer, title_bar, title_bg);
     
     char title[128];
-    snprintf(title, sizeof(title), "Debug Console - %d lines (F12 to close)", g_line_count);
+    if (g_filter_active) {
+        snprintf(title, sizeof(title), "Debug Console - %d/%d lines (F12 to close)", g_filtered_count, g_line_count);
+    } else {
+        snprintf(title, sizeof(title), "Debug Console - %d lines (F12 to close)", g_line_count);
+    }
     draw_text(g_debug_renderer, DEBUG_PADDING, 8, title, (SDL_Color){200, 200, 200, 255});
+    
+    // Draw filter input field
+    int filter_x = DEBUG_PADDING + 300;
+    int filter_y = 5;
+    int filter_w = 200;
+    int filter_h = 20;
+    
+    // Filter background
+    SDL_Color filter_bg = g_filter_focused ? (SDL_Color){60, 80, 100, 255} : (SDL_Color){50, 50, 60, 255};
+    Rect filter_rect = {filter_x, filter_y, filter_w, filter_h};
+    draw_rect(g_debug_renderer, filter_rect, filter_bg);
+    
+    // Filter text
+    char filter_display[256];
+    if (g_filter_text[0] == '\0' && !g_filter_focused) {
+        snprintf(filter_display, sizeof(filter_display), "Filter... (click to search)");
+    } else {
+        snprintf(filter_display, sizeof(filter_display), "%s%s", g_filter_text, g_filter_focused ? "_" : "");
+    }
+    draw_text(g_debug_renderer, filter_x + 5, filter_y + 2, filter_display, (SDL_Color){220, 220, 220, 255});
     
     // Draw buttons
     int btn_w = 80;
@@ -574,11 +773,12 @@ void debug_console_render(void)
     SDL_LockMutex(g_debug_mutex);
     
     // Calculate which lines to display
-    int start_line = g_line_count - visible_lines - g_scroll_offset;
+    int total_lines = g_filter_active ? g_filtered_count : g_line_count;
+    int start_line = total_lines - visible_lines - g_scroll_offset;
     if (start_line < 0) start_line = 0;
     
     int end_line = start_line + visible_lines;
-    if (end_line > g_line_count) end_line = g_line_count;
+    if (end_line > total_lines) end_line = total_lines;
     
     // Draw selection highlight and lines
     char line_buffer[512];
@@ -594,7 +794,10 @@ void debug_console_render(void)
             draw_rect(g_debug_renderer, sel_rect, (SDL_Color){60, 80, 120, 128});
         }
         
-        if (get_line(i, line_buffer, sizeof(line_buffer))) {
+        // Get the actual line index (filtered or direct)
+        int actual_line_index = g_filter_active ? g_filtered_lines[i] : i;
+        
+        if (get_line(actual_line_index, line_buffer, sizeof(line_buffer))) {
             draw_text(g_debug_renderer, DEBUG_PADDING, y, line_buffer, (SDL_Color){220, 220, 220, 255});
         }
     }
@@ -602,7 +805,8 @@ void debug_console_render(void)
     SDL_UnlockMutex(g_debug_mutex);
     
     // Draw scrollbar if needed
-    if (g_line_count > visible_lines) {
+    int total_display_lines = g_filter_active ? g_filtered_count : g_line_count;
+    if (total_display_lines > visible_lines) {
         int scrollbar_x = win_w - DEBUG_SCROLLBAR_WIDTH - 5;
         int scrollbar_h = content_h;
         
@@ -611,11 +815,11 @@ void debug_console_render(void)
         draw_rect(g_debug_renderer, scrollbar_bg, (SDL_Color){50, 50, 60, 255});
         
         // Thumb
-        float thumb_ratio = (float)visible_lines / (float)g_line_count;
+        float thumb_ratio = (float)visible_lines / (float)total_lines;
         int thumb_h = (int)(scrollbar_h * thumb_ratio);
         if (thumb_h < 20) thumb_h = 20;
         
-        float scroll_ratio = (float)g_scroll_offset / (float)(g_line_count - visible_lines);
+        float scroll_ratio = (float)g_scroll_offset / (float)(total_lines - visible_lines);
         int thumb_y = content_y + (int)((scrollbar_h - thumb_h) * (1.0f - scroll_ratio));
         
         Rect scrollbar_thumb = {scrollbar_x, thumb_y, DEBUG_SCROLLBAR_WIDTH, thumb_h};
@@ -627,13 +831,24 @@ void debug_console_render(void)
     Rect status_bar = {0, status_y, win_w, DEBUG_STATUS_BAR_HEIGHT};
     draw_rect(g_debug_renderer, status_bar, (SDL_Color){30, 30, 40, 255});
     
-    char status[128];
+    char status[256];
+    total_lines = g_filter_active ? g_filtered_count : g_line_count;
     if (g_auto_scroll) {
-        snprintf(status, sizeof(status), "Auto-scroll: ON | Lines: %d/%d | Use mouse wheel or PgUp/PgDn/Home/End to scroll",
-                 end_line - start_line, g_line_count);
+        if (g_filter_active) {
+            snprintf(status, sizeof(status), "FILTERED | Auto-scroll: ON | Lines: %d-%d of %d filtered (%d total) | Filter: '%s'",
+                     start_line + 1, end_line, total_lines, g_line_count, g_filter_text);
+        } else {
+            snprintf(status, sizeof(status), "Auto-scroll: ON | Lines: %d-%d of %d | Use mouse wheel or PgUp/PgDn/Home/End to scroll",
+                     start_line + 1, end_line, total_lines);
+        }
     } else {
-        snprintf(status, sizeof(status), "Auto-scroll: OFF | Lines: %d-%d of %d | Scroll offset: %d",
-                 start_line + 1, end_line, g_line_count, g_scroll_offset);
+        if (g_filter_active) {
+            snprintf(status, sizeof(status), "FILTERED | Auto-scroll: OFF | Lines: %d-%d of %d filtered (%d total) | Scroll offset: %d | Filter: '%s'",
+                     start_line + 1, end_line, total_lines, g_line_count, g_scroll_offset, g_filter_text);
+        } else {
+            snprintf(status, sizeof(status), "Auto-scroll: OFF | Lines: %d-%d of %d | Scroll offset: %d",
+                     start_line + 1, end_line, total_lines, g_scroll_offset);
+        }
     }
     draw_text(g_debug_renderer, DEBUG_PADDING, status_y + 5, status, (SDL_Color){180, 180, 180, 255});
     
