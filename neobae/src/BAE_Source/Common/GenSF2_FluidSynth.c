@@ -1567,11 +1567,15 @@ void GM_SF2_ProcessProgramChange(GM_Song* pSong, int16_t channel, int32_t progra
                 // DLS special case: try bank 121/120 first
                 fbProg = useProg;
                 if (!percIntent && PV_SF2_FindFirstPresetInBank(121, &fbProg)) {
-                    fbBank = 121;
-                    fbProg = useProg;
+                    fbBank = 121;                    
+                    if (PV_SF2_PresetExists(fbBank, useProg)) {
+                        fbProg = useProg;
+                    }
                 } else if (percIntent && PV_SF2_FindFirstPresetInBank(120, &fbProg)) {
                     fbBank = 120;
-                    fbProg = useProg;
+                    if (PV_SF2_PresetExists(fbBank, useProg)) {
+                        fbProg = useProg;
+                    }
                 }
             } else if (percIntent && PV_SF2_FindFirstPresetInBank(128, &fbProg)) {
                 fbBank = 128;
@@ -1581,7 +1585,7 @@ void GM_SF2_ProcessProgramChange(GM_Song* pSong, int16_t channel, int32_t progra
                 // leave as found
             }
             if (fbBank >= 0) {
-                BAE_PRINTF("[SF2 ProcessProgramChange] Fallback: no presets in bank %d; selecting %d:%d\n", useBank, fbBank, fbProg);
+                BAE_PRINTF("[SF2 ProcessProgramChange] Fallback: no preset for bank %d:%d; selecting %d:%d\n", useBank, useProg, fbBank, fbProg);
                 useBank = fbBank; useProg = fbProg;
             }
         }

@@ -585,7 +585,7 @@ OPErr PV_ConfigureMusic(GM_Song *pSong)
 
     theErr = BAD_MIDI_DATA; // assume the worst
     // DEBUG: begin MIDI parse of song sequenceData
-    BAE_PRINTF("DEBUG: PV_ConfigureMusic: sequenceData=%p size=%u\n", pSong ? pSong->sequenceData : NULL, (unsigned)pSong->sequenceDataSize);
+    //BAE_PRINTF("DEBUG: PV_ConfigureMusic: sequenceData=%p size=%u\n", pSong ? pSong->sequenceData : NULL, pSong ? (unsigned)pSong->sequenceDataSize : 0);
     PV_ConfigureInstruments(pSong);
     pMidiStream = (UBYTE *)pSong->sequenceData;
     lengthToMidiEnd = pSong->sequenceDataSize;
@@ -601,7 +601,7 @@ OPErr PV_ConfigureMusic(GM_Song *pSong)
             if (XGetLong(pMidiStream) == ID_MTHD)
             {
                 safe = TRUE;
-                BAE_PRINTF("DEBUG: PV_ConfigureMusic: Found 'MThd' at offset %ld (remaining=%u)\n", (long)(pSong->sequenceDataSize - lengthToMidiEnd), (unsigned)lengthToMidiEnd);
+                //BAE_PRINTF("DEBUG: PV_ConfigureMusic: Found 'MThd' at offset %ld (remaining=%u)\n", (long)(pSong->sequenceDataSize - lengthToMidiEnd), (unsigned)lengthToMidiEnd);
                 break;
             }
             pMidiStream++;
@@ -612,7 +612,7 @@ OPErr PV_ConfigureMusic(GM_Song *pSong)
             XWORD midiFormat = XGetShort(&pMidiStream[8]);
             XWORD declaredTracks = XGetShort(&pMidiStream[10]);
             XWORD ticksPerQN = XGetShort(&pMidiStream[12]);
-            BAE_PRINTF("DEBUG: PV_ConfigureMusic: Header format=%u declaredTracks=%u ticksPerQN=%u\n", (unsigned)midiFormat, (unsigned)declaredTracks, (unsigned)ticksPerQN);
+            //BAE_PRINTF("DEBUG: PV_ConfigureMusic: Header format=%u declaredTracks=%u ticksPerQN=%u\n", (unsigned)midiFormat, (unsigned)declaredTracks, (unsigned)ticksPerQN);
             if (midiFormat < 2) // only support format 0 and 1 midi files
             {
                 realtracks = declaredTracks; // get real tracks and compare with tracks found to determine if corrupt
@@ -629,7 +629,7 @@ OPErr PV_ConfigureMusic(GM_Song *pSong)
                     if (XGetLong(pMidiStream) == ID_MTRK)
                     {
                         safe = TRUE;
-                        BAE_PRINTF("DEBUG: PV_ConfigureMusic: Found first 'MTrk' at offset %ld (remaining=%u)\n", (long)(pSong->sequenceDataSize - lengthToMidiEnd), (unsigned)lengthToMidiEnd);
+                        //BAE_PRINTF("DEBUG: PV_ConfigureMusic: Found first 'MTrk' at offset %ld (remaining=%u)\n", (long)(pSong->sequenceDataSize - lengthToMidiEnd), (unsigned)lengthToMidiEnd);
                         break;
                     }
                     pMidiStream++;
@@ -648,7 +648,7 @@ OPErr PV_ConfigureMusic(GM_Song *pSong)
                         trackLength = (trackLength << 8) + *pMidiStream++;
                         trackLength = (trackLength << 8) + *pMidiStream++;
                         trackLength = (trackLength << 8) + *pMidiStream++;
-                        BAE_PRINTF("DEBUG: PV_ConfigureMusic: Track %u length=%u bytes (absOffset=%ld)\n", (unsigned)numtracks, (unsigned)trackLength, (long)(pSong->sequenceDataSize - lengthToMidiEnd));
+                        //BAE_PRINTF("DEBUG: PV_ConfigureMusic: Track %u length=%u bytes (absOffset=%ld)\n", (unsigned)numtracks, (unsigned)trackLength, (long)(pSong->sequenceDataSize - lengthToMidiEnd));
 
                         pSong->ptrack[numtracks] = pMidiStream;
                         pSong->trackstart[numtracks] = pMidiStream;
@@ -678,7 +678,7 @@ OPErr PV_ConfigureMusic(GM_Song *pSong)
                     if (numtracks == realtracks) // do real tracks match number of found tracks (or we stopped early in lenient mode)?
                     {
                         theErr = NO_ERR; // all is well in midi land
-                        BAE_PRINTF("DEBUG: PV_ConfigureMusic: Parsed %u tracks successfully.\n", (unsigned)numtracks);
+                        //BAE_PRINTF("DEBUG: PV_ConfigureMusic: Parsed %u tracks successfully.\n", (unsigned)numtracks);
                     }
                     else
                     {
@@ -688,7 +688,7 @@ OPErr PV_ConfigureMusic(GM_Song *pSong)
                             theErr = MAX_TRACKS_EXCEEDED;
                             BAE_PRINTF("ERROR: PV_ConfigureMusic: Declared tracks %u exceeds MAX_TRACKS %u\n", (unsigned)realtracks, (unsigned)MAX_TRACKS);
                         }
-                        else if (numtracks > realtracks)
+                        else if (numtracks > realtracks && numtracks <= MAX_TRACKS)
                         {
                             // Parse extras and succeed.
                             BAE_PRINTF("WARN: PV_ConfigureMusic: Declared %u tracks but found %u. Parsing %u extra track(s).\n", (unsigned)realtracks, (unsigned)numtracks, (unsigned)(numtracks - realtracks));
@@ -3676,7 +3676,9 @@ static XBOOL PV_ProcessMetaMarkerEvents(GM_Song *pSong, char *markerText, long m
     {
         if (XLStrnCmp("loopstart", markerText, 9) == 0 || XLStrnCmp("start", markerText, 5) == 0 || XLStrnCmp("[", markerText, 1) == 0)
         {
-            BAE_PRINTF("Loop Start found: %.*s\n", (int)markerLength, markerText);
+            // Limit markerLength for debug output to prevent buffer issues
+            long debugLength = (markerLength > 256) ? 256 : markerLength;
+            BAE_PRINTF("Loop Start found: %.*s\n", (int)debugLength, markerText);
             count = -1;                        // loop forever
             if (pSong->loopbackSaved == FALSE) // only allow one save
             {
@@ -3698,9 +3700,11 @@ static XBOOL PV_ProcessMetaMarkerEvents(GM_Song *pSong, char *markerText, long m
                 pSong->songMicrosecondsSave = pSong->songMicroseconds;
             }
         }
-        else if (XLStrnCmp("loopend", markerText, markerLength) == 0 || XLStrnCmp("end", markerText, 3) == 0 || XLStrnCmp("]", markerText, 1) == 0)
+        else if (XLStrnCmp("loopend", markerText, 7) == 0 || XLStrnCmp("end", markerText, 3) == 0 || XLStrnCmp("]", markerText, 1) == 0)
         {
-            BAE_PRINTF("Loop End found: %.*s\n", (int)markerLength, markerText);
+            // Limit markerLength for debug output to prevent buffer issues
+            long debugLength = (markerLength > 256) ? 256 : markerLength;
+            BAE_PRINTF("Loop End found: %.*s\n", (int)debugLength, markerText);
             if (pSong->loopbackSaved) // have we saved a position?
             {
                 if ((pSong->loopbackCount > 0) && (pSong->loopbackCount < 100))
