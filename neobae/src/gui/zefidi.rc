@@ -1,7 +1,21 @@
 #include <windows.h>
 
 // Application icon - using ID 101 to match the code
-101 ICON "neobae.ico"
+101 ICON "../icons/neobae.ico"
+102 ICON "../icons/BAEFileType_MIDI.ico"
+103 ICON "../icons/BAEFileType_KAR.ico"
+104 ICON "../icons/BAEFileType_RMF.ico"
+105 ICON "../icons/BAEFileType_RMI.ico"
+106 ICON "../icons/BAEFileType_XMF.ico"
+107 ICON "../icons/BAEFileType_MXMF.ico"
+108 ICON "../icons/BAEFileType_WAV.ico"
+109 ICON "../icons/BAEFileType_AU.ico"
+110 ICON "../icons/BAEFileType_AIFF.ico"
+111 ICON "../icons/BAEFileType_FLAC.ico"
+112 ICON "../icons/BAEFileType_OGG.ico"
+113 ICON "../icons/BAEFileType_MP2.ico"
+114 ICON "../icons/BAEFileType_MP3.ico"
+
 
 // Version information
 VS_VERSION_INFO VERSIONINFO
