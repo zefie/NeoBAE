@@ -438,8 +438,15 @@ bool debug_console_handle_event(SDL_Event *event)
     
     // Handle window close request
     if (event->type == SDL_EVENT_WINDOW_CLOSE_REQUESTED) {
-        debug_console_hide();
-        return true;
+        if (event->window.windowID == debug_window_id) {
+            // Close debug window
+            debug_console_hide();
+            return true;
+        } else {
+            // Main window close request - hide debug console first, then let main app handle it
+            debug_console_hide();
+            return false;
+        }
     }
     
     // Handle text input for filter

@@ -1260,6 +1260,9 @@ int main(int argc, char *argv[])
             }
             break;
 
+            case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
+                running = false;
+                break;
             case SDL_EVENT_QUIT:
                 running = false;
                 break;
