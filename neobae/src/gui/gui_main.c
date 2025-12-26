@@ -52,6 +52,9 @@
 #include "gui_midi.h"     // for virtual keyboard functions
 #include "gui_playlist.h" // for playlist panel functions
 #include "gui_panels.h"
+#ifdef _DEBUG
+#include "gui_debug_console.h" // for debug console window
+#endif
 
 #if USE_SF2_SUPPORT == TRUE
     #if _USING_FLUIDSYNTH == TRUE
@@ -772,6 +775,13 @@ int main(int argc, char *argv[])
         BAE_PRINTF("SDL_Init failed: %s\n", SDL_GetError());
         return 1;
     }
+    
+#ifdef _DEBUG
+    // Initialize debug console
+    debug_console_init();
+    BAE_PRINTF("Debug console initialized (press F12 to toggle)\n");
+#endif
+    
     if (TTF_Init() != true)
     {
         BAE_PRINTF("SDL_ttf init failed: %s (continuing with bitmap font)\n", SDL_GetError());
@@ -1144,6 +1154,12 @@ int main(int argc, char *argv[])
         rclick = false;
         while (SDL_PollEvent(&e))
         {
+#ifdef _DEBUG
+            // Let debug console handle its events first
+            if (debug_console_handle_event(&e)) {
+                continue; // Event consumed by debug console, skip main window processing
+            }
+#endif
             switch (e.type)
             {
             case SDL_EVENT_USER:
@@ -1732,6 +1748,14 @@ int main(int argc, char *argv[])
                 // Octave shift: ',' -> down, '.' -> up (on keydown only)
                 if (isDown)
                 {
+#ifdef _DEBUG
+                    // F12 toggles debug console
+                    if (sym == SDLK_F12)
+                    {
+                        debug_console_toggle();
+                        break;
+                    }
+#endif
                     if (sym == SDLK_COMMA)
                     {
                         g_keyboard_base_octave = MAX(0, g_keyboard_base_octave - 1);
@@ -6016,7 +6040,11 @@ int main(int argc, char *argv[])
         {
             // Muted fallback text that adapts to theme; darker on light backgrounds for readability
             SDL_Color muted = g_is_dark_mode ? (SDL_Color){150, 150, 150, 255} : (SDL_Color){80, 80, 80, 255};
+#ifdef _DEBUG
+            draw_text(R, 120, lineY3, "(Debug build, press F12 for console)", muted);
+#else
             draw_text(R, 120, lineY3, "(Drag & drop media/bank files here)", muted);
+#endif
         }
 
         // Draw deferred file tooltip (full path)
@@ -6440,6 +6468,12 @@ int main(int argc, char *argv[])
             }
         }
         SDL_RenderPresent(R);
+        
+#ifdef _DEBUG
+        // Render debug console if visible
+        debug_console_render();
+#endif
+        
         Uint64 freq = SDL_GetPerformanceFrequency();
         Uint64 frame_end = SDL_GetPerformanceCounter();
         float elapsed_ms = (frame_end - frame_start) * 1000.0f / freq;
@@ -6568,6 +6602,9 @@ int main(int argc, char *argv[])
     bae_shutdown();
 #if SUPPORT_PLAYLIST == TRUE
     playlist_cleanup();
+#endif
+#ifdef _DEBUG
+    debug_console_shutdown();
 #endif
     if (g_font)
         TTF_CloseFont(g_font);

@@ -720,7 +720,6 @@ void playlist_handle_drag_update(int mx, int my)
         if (drag_distance > 5)
         {
             g_playlist.is_dragging = true;
-            BAE_PRINTF("Drag started: index=%d, distance=%d\n", g_playlist.drag_start_index, drag_distance);
         }
     }
     
@@ -745,14 +744,7 @@ void playlist_handle_drag_end(void)
             target_pos--; // Adjust for the removed item shifting indices down
         }
         
-        BAE_PRINTF("Drag end: from=%d, to=%d (adjusted to %d)\n", 
-                   g_playlist.drag_start_index, g_playlist.drag_insert_position, target_pos);
         playlist_move_entry(g_playlist.drag_start_index, target_pos);
-    }
-    else
-    {
-        BAE_PRINTF("Drag end: No move - dragging=%d, from=%d, to=%d\n", 
-                   g_playlist.is_dragging, g_playlist.drag_start_index, g_playlist.drag_insert_position);
     }
     
     // Reset all drag state
@@ -1257,7 +1249,6 @@ void playlist_render(SDL_Renderer *R, Rect panel_rect, int mx, int my, bool mdow
                 g_playlist.drag_start_index = entry_index;
                 g_playlist.drag_start_y = my;
                 g_playlist.drag_current_y = my;
-                BAE_PRINTF("Drag prepared: start_index=%d, start_y=%d\n", entry_index, my);
                 // Don't set is_dragging yet - wait for movement
             }
             // Handle left-click for double-click detection
@@ -1300,8 +1291,6 @@ void playlist_render(SDL_Renderer *R, Rect panel_rect, int mx, int my, bool mdow
             
             if (g_playlist.drag_insert_position != insert_index)
             {
-                BAE_PRINTF("Drag update: mouse_y=%d, insert_y=%d, insert_index=%d\n", 
-                           g_playlist.drag_current_y, insert_y, insert_index);
                 g_playlist.drag_insert_position = insert_index;
             }
         }

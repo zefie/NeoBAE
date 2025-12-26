@@ -201,6 +201,8 @@ endif
 # Debug
 ifeq ($(DEBUG),1)
 	BAE_FLAGS +=    -D_DEBUG=1 -Wall -Wno-unused-function
+	# Add debug callback stub for library
+	SRC += src/BAE_Source/Common/X_DebugCallback.c
 endif
 
 
@@ -489,7 +491,7 @@ endif
 
 
 ifeq ($(BUILD_GUI),1)
-	BAE_FLAGS += -DOUTPUT_TO_LOGFILE=1
+	BAE_FLAGS += -DOUTPUT_TO_LOGFILE=1 -D_ZEFI_GUI=1
 	SRC_BIN	:= $(SRC) src/gui/gui_logging.c \
 		src/gui/gui_theme.c \
 		src/gui/gui_widgets.c \
@@ -501,6 +503,11 @@ ifeq ($(BUILD_GUI),1)
 		src/gui/gui_settings.c \
 		src/gui/gui_panels.c \
 		src/gui/gui_main.c
+	
+	# Add debug console for DEBUG builds
+	ifeq ($(DEBUG),1)
+		SRC_BIN += src/gui/gui_debug_console.c
+	endif
 else
 ifeq ($(RMFINFO),1)
 	# libNeoBAE srcs + rmfinfo.c

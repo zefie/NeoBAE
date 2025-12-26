@@ -157,8 +157,30 @@
     #define BAE_ASSERT(exp)         ((void)0)
     #define BAE_VERIFY(exp)         (exp)
 #else
-    #if (X_PLATFORM == X_WIN95) || (X_PLATFORM == X_WIN_HARDWARE) || (X_PLATFORM == X_MACINTOSH) || (X_PLATFORM == X_IOS) || (X_PLATFORM == X_ANSI) || (X_PLATFORM == X_SDL2) || (X_PLATFORM == X_SDL3)
+    // Forward declare debug console function for GUI debug builds
+    #if defined(_ZEFI_GUI) && defined(_DEBUG)
+        #ifdef __cplusplus
+        extern "C" {
+        #endif
+        void debug_console_append(const char *message);
+        #ifdef __cplusplus
+        }
+        #endif
+        
+        // BAE_PRINTF for GUI: format to buffer then send to debug console
+        #define BAE_PRINTF(...)                     \
+            do {                                     \
+                char _dbg_buf[1024];                \
+                snprintf(_dbg_buf, sizeof(_dbg_buf), __VA_ARGS__); \
+                debug_console_append(_dbg_buf);     \
+                BAE_STDERR(__VA_ARGS__);            \
+            } while (0)
+    #else
+        // Non-GUI debug builds (or non-DEBUG GUI builds) use BAE_STDERR as before
         #define BAE_PRINTF		BAE_STDERR
+    #endif
+    
+    #if (X_PLATFORM == X_WIN95) || (X_PLATFORM == X_WIN_HARDWARE) || (X_PLATFORM == X_MACINTOSH) || (X_PLATFORM == X_IOS) || (X_PLATFORM == X_ANSI) || (X_PLATFORM == X_SDL2) || (X_PLATFORM == X_SDL3)
         #ifdef ASSERT
             #define BAE_ASSERT(exp)     ASSERT(exp)
             #define BAE_VERIFY(exp)     ASSERT(exp)
@@ -168,14 +190,12 @@
             #define BAE_VERIFY(exp)     assert(exp)
         #endif
     #elif __EMSCRIPTEN__
-        #define BAE_PRINTF(...) emscripten_log(EM_LOG_CONSOLE, __VA_ARGS__)
         #include <assert.h>
         #define BAE_ASSERT(exp)     assert(exp)
         #define BAE_VERIFY(exp)     assert(exp)                   
     #else
         #ifdef  __ANDROID__
-            #define BAE_STDOUT(...) __android_log_print(ANDROID_LOG_INFO, "miniBAE", __VA_ARGS__)            
-            #define BAE_PRINTF(...) BAE_STDOUT(__VA_ARGS__)
+            #define BAE_STDOUT(...) __android_log_print(ANDROID_LOG_INFO, "miniBAE", __VA_ARGS__)
         #endif    
         #include <assert.h>
         #define BAE_ASSERT(exp)     assert(exp)
