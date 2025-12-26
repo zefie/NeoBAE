@@ -2902,15 +2902,8 @@ fun NewMusicPlayerScreen(
             topBar = {
             // Header with folder navigation
             TopAppBar(
-                navigationIcon = {
-                    if (!showBankBrowser && !viewModel.showFullPlayer && viewModel.currentScreen == NavigationScreen.CUSTOM_REVERB) {
-                        IconButton(onClick = { onNavigate(NavigationScreen.SETTINGS) }) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                        }
-                    }
-                },
                 title = {
-                    Column {
+                    Column(modifier = Modifier.padding(start = 0.dp)) {
                         // Dynamic title based on current screen or bank browser
                         val titleText = if (showBankBrowser) {
                             "Bank Select"
@@ -2984,6 +2977,16 @@ fun NewMusicPlayerScreen(
                     }
                     // Close button for File Types page
                     else if (!viewModel.showFullPlayer && viewModel.currentScreen == NavigationScreen.FILE_TYPES) {
+                        IconButton(onClick = { onNavigate(NavigationScreen.SETTINGS) }, enabled = !isLoadingBank) {
+                            Icon(
+                                Icons.Filled.Close,
+                                contentDescription = "Close",
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                    }
+                    // Close button for Custom Reverb page
+                    else if (!viewModel.showFullPlayer && viewModel.currentScreen == NavigationScreen.CUSTOM_REVERB) {
                         IconButton(onClick = { onNavigate(NavigationScreen.SETTINGS) }, enabled = !isLoadingBank) {
                             Icon(
                                 Icons.Filled.Close,
