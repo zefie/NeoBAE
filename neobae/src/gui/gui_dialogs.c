@@ -888,7 +888,7 @@ void render_about_dialog(SDL_Renderer *R, int mx, int my, bool mclick)
                 {
                     size_t copylen = (len > 6) ? len - 6 : 0;
                     if (copylen >= sizeof(url)) copylen = sizeof(url) - 1;
-                    strncpy(url, raw, copylen);
+                    safe_strncpy(url, raw, copylen);
                     url[copylen] = '\0';
                 }
                 else

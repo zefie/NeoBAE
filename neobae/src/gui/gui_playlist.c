@@ -125,7 +125,7 @@ void playlist_add_file(const char *filepath)
     memset(entry, 0, sizeof(PlaylistEntry));
 
     // Store full path
-    strncpy(entry->filename, filepath, sizeof(entry->filename) - 1);
+    safe_strncpy(entry->filename, filepath, sizeof(entry->filename) - 1);
     entry->filename[sizeof(entry->filename) - 1] = '\0';
 
     // Extract display name from path
@@ -141,7 +141,7 @@ void playlist_add_file(const char *filepath)
         basename = filepath;
     }
 
-    strncpy(entry->display_name, basename, sizeof(entry->display_name) - 1);
+    safe_strncpy(entry->display_name, basename, sizeof(entry->display_name) - 1);
     entry->display_name[sizeof(entry->display_name) - 1] = '\0';
 
     entry->duration_ms = 0; // Will be set when file is loaded/scanned
@@ -1208,7 +1208,7 @@ void playlist_render(SDL_Renderer *R, Rect panel_rect, int mx, int my, bool mdow
         // Song name (truncated to fit)
         int name_x = item_x + 45; // Increased from 30 to accommodate music note
         char display_name[256];
-        strncpy(display_name, entry->display_name, sizeof(display_name) - 1);
+        safe_strncpy(display_name, entry->display_name, sizeof(display_name) - 1);
         display_name[sizeof(display_name) - 1] = '\0';
 
         // Simple truncation (could be improved with text measurement)

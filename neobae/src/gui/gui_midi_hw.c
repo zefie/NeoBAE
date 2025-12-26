@@ -722,7 +722,7 @@ bool pcm_flac_start(const char *path, int channels, int sample_rate, int bits)
     g_pcm_wav_sample_rate = sample_rate;
     g_pcm_wav_bits = bits;
 
-    strncpy(g_pcm_flac_output_path, path, sizeof(g_pcm_flac_output_path) - 1);
+    safe_strncpy(g_pcm_flac_output_path, path, sizeof(g_pcm_flac_output_path) - 1);
     g_pcm_flac_output_path[sizeof(g_pcm_flac_output_path) - 1] = '\0';
 
     // Allocate buffer for accumulating samples (2 minutes max)
@@ -894,7 +894,7 @@ bool pcm_vorbis_start(const char *path, int channels, int sample_rate, int bits,
     g_pcm_wav_bits = bits;
     g_pcm_vorbis_bitrate = bitrate;
 
-    strncpy(g_pcm_vorbis_output_path, path, sizeof(g_pcm_vorbis_output_path) - 1);
+    safe_strncpy(g_pcm_vorbis_output_path, path, sizeof(g_pcm_vorbis_output_path) - 1);
     g_pcm_vorbis_output_path[sizeof(g_pcm_vorbis_output_path) - 1] = '\0';
 
     // Allocate buffer for accumulating samples (2 minutes max)

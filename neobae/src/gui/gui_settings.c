@@ -63,7 +63,7 @@ Settings load_settings(void)
 
         if (strncmp(line, "bank_path=", 10) == 0)
         {
-            strncpy(settings.bank_path, line + 10, sizeof(settings.bank_path) - 1);
+            safe_strncpy(settings.bank_path, line + 10, sizeof(settings.bank_path) - 1);
             settings.bank_path[sizeof(settings.bank_path) - 1] = '\0';
             settings.has_bank = true;
         }
@@ -143,7 +143,7 @@ Settings load_settings(void)
         // Load active custom reverb preset name
         else if (strncmp(line, "custom_reverb_preset=", 21) == 0)
         {
-            strncpy(settings.custom_reverb_preset_name, line + 21, sizeof(settings.custom_reverb_preset_name) - 1);
+            safe_strncpy(settings.custom_reverb_preset_name, line + 21, sizeof(settings.custom_reverb_preset_name) - 1);
             settings.custom_reverb_preset_name[sizeof(settings.custom_reverb_preset_name) - 1] = '\0';
             settings.has_custom_reverb_preset = true;
         }
@@ -1632,7 +1632,7 @@ void load_custom_reverb_preset_list(void)
 
         if (strcmp(key, "name") == 0)
         {
-            strncpy(tmp[idx].name, value, sizeof(tmp[idx].name) - 1);
+            safe_strncpy(tmp[idx].name, value, sizeof(tmp[idx].name) - 1);
             tmp[idx].name[sizeof(tmp[idx].name) - 1] = '\0';
         }
         else if (strcmp(key, "comb_count") == 0)
@@ -1874,7 +1874,7 @@ void save_custom_reverb_preset(const char *name)
     fclose(f);
     
     // Update current preset name
-    strncpy(g_current_custom_reverb_preset, name, sizeof(g_current_custom_reverb_preset) - 1);
+    safe_strncpy(g_current_custom_reverb_preset, name, sizeof(g_current_custom_reverb_preset) - 1);
     g_current_custom_reverb_preset[sizeof(g_current_custom_reverb_preset) - 1] = '\0';
     
     // Reload preset list
@@ -1918,7 +1918,7 @@ void load_custom_reverb_preset(const char *name)
     SetNeoCustomReverbLowpass(g_current_custom_reverb_lowpass);
     
     // Update current preset name
-    strncpy(g_current_custom_reverb_preset, name, sizeof(g_current_custom_reverb_preset) - 1);
+    safe_strncpy(g_current_custom_reverb_preset, name, sizeof(g_current_custom_reverb_preset) - 1);
     g_current_custom_reverb_preset[sizeof(g_current_custom_reverb_preset) - 1] = '\0';
 
     // Force the custom reverb dialog to refresh its cached slider values

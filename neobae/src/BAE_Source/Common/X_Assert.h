@@ -81,7 +81,7 @@
 
 #include <stdlib.h>
 #include <string.h>
-
+#if (!defined(__ANDROID__) && !defined(__EMSCRIPTEN__))
 #ifdef _WIN32
     #include <windows.h>
     static void get_executable_directory(char *buffer, size_t size) {
@@ -113,6 +113,7 @@
             }
         }
     }
+#endif
 #endif
 
 #ifdef OUTPUT_TO_LOGFILE

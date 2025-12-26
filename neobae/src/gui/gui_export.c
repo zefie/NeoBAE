@@ -393,7 +393,7 @@ bool bae_start_export(const char *output_file, int export_type, int compression)
     g_export_progress = 0; // reset (unused for display)
     g_export_last_pos = 0;
     g_export_stall_iters = 0;
-    strncpy(g_export_path, output_file ? output_file : "", sizeof(g_export_path) - 1);
+    safe_strncpy(g_export_path, output_file ? output_file : "", sizeof(g_export_path) - 1);
     g_export_path[sizeof(g_export_path) - 1] = '\0';
 
     // Initialize thread synchronization variables
@@ -611,7 +611,7 @@ bool bae_start_mpeg_export(const char *output_file, int codec_index)
     g_export_progress = 0;
     g_export_last_pos = 0;
     g_export_stall_iters = 0;
-    strncpy(g_export_path, output_file ? output_file : "", sizeof(g_export_path) - 1);
+    safe_strncpy(g_export_path, output_file ? output_file : "", sizeof(g_export_path) - 1);
     g_export_path[sizeof(g_export_path) - 1] = '\0';
 
     // Initialize thread synchronization variables

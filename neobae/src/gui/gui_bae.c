@@ -80,12 +80,12 @@ static uint32_t g_status_message_time = 0;
 
 void set_status_message(const char *msg)
 {
-    strncpy(g_status_message, msg, sizeof(g_status_message) - 1);
+    safe_strncpy(g_status_message, msg, sizeof(g_status_message) - 1);
     g_status_message[sizeof(g_status_message) - 1] = '\0';
     g_status_message_time = SDL_GetTicks();
 
     // Also update the global g_bae status message for GUI display
-    strncpy(g_bae.status_message, msg, sizeof(g_bae.status_message) - 1);
+    safe_strncpy(g_bae.status_message, msg, sizeof(g_bae.status_message) - 1);
     g_bae.status_message[sizeof(g_bae.status_message) - 1] = '\0';
     g_bae.status_message_time = SDL_GetTicks();
 }
@@ -140,8 +140,8 @@ void load_bankinfo()
         BankEntry *be = &banks[bank_count];
         memset(be, 0, sizeof(*be));
         // src now unknown until user loads; retain legacy src field only for UI display when known
-        strncpy(be->name, eb->name, sizeof(be->name) - 1);
-        strncpy(be->sha1, eb->sha1, sizeof(be->sha1) - 1);
+        safe_strncpy(be->name, eb->name, sizeof(be->name) - 1);
+        safe_strncpy(be->sha1, eb->sha1, sizeof(be->sha1) - 1);
         bank_count++;
     }
     BAE_PRINTF("Loaded info about %d banks\n", bank_count);
@@ -219,9 +219,9 @@ bool load_bank(const char *path, bool current_playing_state, int transpose, int 
             {
                 display_name = "(built-in)";
             }
-            strncpy(g_bae.bank_name, display_name, sizeof(g_bae.bank_name) - 1);
+            safe_strncpy(g_bae.bank_name, display_name, sizeof(g_bae.bank_name) - 1);
             g_bae.bank_loaded = true;
-            strncpy(g_current_bank_path, "__builtin__", sizeof(g_current_bank_path) - 1);
+            safe_strncpy(g_current_bank_path, "__builtin__", sizeof(g_current_bank_path) - 1);
             g_current_bank_path[sizeof(g_current_bank_path) - 1] = '\0';
             BAE_PRINTF("Loaded built-in bank\n");
             set_status_message("Loaded built-in bank");
@@ -283,10 +283,10 @@ bool load_bank(const char *path, bool current_playing_state, int transpose, int 
 
         // Store the display name (friendly name or filename) instead of full path
 
-        strncpy(g_bae.bank_name, display_name, sizeof(g_bae.bank_name) - 1);
+        safe_strncpy(g_bae.bank_name, display_name, sizeof(g_bae.bank_name) - 1);
         g_bae.bank_name[sizeof(g_bae.bank_name) - 1] = '\0';
         g_bae.bank_loaded = true;
-        strncpy(g_current_bank_path, path, sizeof(g_current_bank_path) - 1);
+        safe_strncpy(g_current_bank_path, path, sizeof(g_current_bank_path) - 1);
         g_current_bank_path[sizeof(g_current_bank_path) - 1] = '\0';
         BAE_PRINTF("Loaded bank %s\n", path);
 
@@ -598,9 +598,9 @@ bool bae_load_song(const char *path, bool use_embedded_banks)
         {
             if (bae_load_bank(g_user_bank_path))
             {
-                strncpy(g_bae.bank_name, g_user_bank_name, sizeof(g_bae.bank_name) - 1);
+                safe_strncpy(g_bae.bank_name, g_user_bank_name, sizeof(g_bae.bank_name) - 1);
                 g_bae.bank_name[sizeof(g_bae.bank_name) - 1] = '\0';
-                strncpy(g_current_bank_path, g_user_bank_path, sizeof(g_current_bank_path) - 1);
+                safe_strncpy(g_current_bank_path, g_user_bank_path, sizeof(g_current_bank_path) - 1);
                 g_current_bank_path[sizeof(g_current_bank_path) - 1] = '\0';
                 g_bae.bank_loaded = true;
                 BAE_PRINTF("Restored user bank successfully\n");
@@ -690,7 +690,7 @@ bool bae_load_song(const char *path, bool use_embedded_banks)
             return false;
         }
 
-        strncpy(g_bae.loaded_path, path, sizeof(g_bae.loaded_path) - 1);
+        safe_strncpy(g_bae.loaded_path, path, sizeof(g_bae.loaded_path) - 1);
         g_bae.loaded_path[sizeof(g_bae.loaded_path) - 1] = '\0';
         g_bae.song_loaded = true;
         g_bae.is_audio_file = true;
@@ -755,8 +755,8 @@ bool bae_load_song(const char *path, bool use_embedded_banks)
         
         if (use_embedded_banks && had_bank_before)
         {
-            strncpy(temp_bank_path, g_current_bank_path, sizeof(temp_bank_path) - 1);
-            strncpy(temp_bank_name, g_bae.bank_name, sizeof(temp_bank_name) - 1);
+            safe_strncpy(temp_bank_path, g_current_bank_path, sizeof(temp_bank_path) - 1);
+            safe_strncpy(temp_bank_name, g_bae.bank_name, sizeof(temp_bank_name) - 1);
         }
         
         sr = BAESong_LoadRmiFromFile(g_bae.song, (BAEPathName)path, TRUE, (XBOOL)use_embedded_banks);
@@ -767,9 +767,9 @@ bool bae_load_song(const char *path, bool use_embedded_banks)
             BAE_PRINTF("RMI load with embedded bank failed (error %d), restoring previous bank and retrying: %s\n", sr, temp_bank_name);
             if (bae_load_bank(temp_bank_path))
             {
-                strncpy(g_bae.bank_name, temp_bank_name, sizeof(g_bae.bank_name) - 1);
+                safe_strncpy(g_bae.bank_name, temp_bank_name, sizeof(g_bae.bank_name) - 1);
                 g_bae.bank_name[sizeof(g_bae.bank_name) - 1] = '\0';
-                strncpy(g_current_bank_path, temp_bank_path, sizeof(g_current_bank_path) - 1);
+                safe_strncpy(g_current_bank_path, temp_bank_path, sizeof(g_current_bank_path) - 1);
                 g_current_bank_path[sizeof(g_current_bank_path) - 1] = '\0';
                 BAE_PRINTF("Successfully restored previous bank, now loading RMI without embedded bank\n");
                 
@@ -821,16 +821,16 @@ bool bae_load_song(const char *path, bool use_embedded_banks)
             // Store current user bank if not already stored
             if (!g_user_bank_stored && g_bae.bank_loaded)
             {
-                strncpy(g_user_bank_path, g_current_bank_path, sizeof(g_user_bank_path) - 1);
+                safe_strncpy(g_user_bank_path, g_current_bank_path, sizeof(g_user_bank_path) - 1);
                 g_user_bank_path[sizeof(g_user_bank_path) - 1] = '\0';
-                strncpy(g_user_bank_name, g_bae.bank_name, sizeof(g_user_bank_name) - 1);
+                safe_strncpy(g_user_bank_name, g_bae.bank_name, sizeof(g_user_bank_name) - 1);
                 g_user_bank_name[sizeof(g_user_bank_name) - 1] = '\0';
                 g_user_bank_stored = true;
                 BAE_PRINTF("Stored user bank: %s (%s)\n", g_user_bank_name, g_user_bank_path);
             }
             
             // Update GUI to show embedded bank
-            strncpy(g_bae.bank_name, "RMI Embedded Bank", sizeof(g_bae.bank_name) - 1);
+            safe_strncpy(g_bae.bank_name, "RMI Embedded Bank", sizeof(g_bae.bank_name) - 1);
             g_bae.bank_name[sizeof(g_bae.bank_name) - 1] = '\0';
             g_bae.has_embedded_soundbank = true;
             BAE_PRINTF("Using embedded soundbank from RMI file\n");
@@ -848,7 +848,7 @@ bool bae_load_song(const char *path, bool use_embedded_banks)
     // Defer preroll until just before first Start so that any user settings
     // (transpose, tempo, channel mutes, reverb, loops) are applied first.
     BAESong_GetMicrosecondLength(g_bae.song, &g_bae.song_length_us);
-    strncpy(g_bae.loaded_path, path, sizeof(g_bae.loaded_path) - 1);
+    safe_strncpy(g_bae.loaded_path, path, sizeof(g_bae.loaded_path) - 1);
     g_bae.loaded_path[sizeof(g_bae.loaded_path) - 1] = '\0';
     g_bae.song_loaded = true;
     g_bae.is_audio_file = false; // is_rmf_file already set
@@ -1612,7 +1612,7 @@ bool bae_get_bank_name(char *name, size_t name_size)
         return true;
     }
 
-    strncpy(name, "Unknown Bank", name_size - 1);
+    safe_strncpy(name, "Unknown Bank", name_size - 1);
     name[name_size - 1] = '\0';
     return false;
 }

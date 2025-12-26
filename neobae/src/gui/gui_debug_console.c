@@ -262,6 +262,34 @@ static void clear_filter(void)
     SDL_StopTextInput(g_debug_window);
 }
 
+// Clear all debug messages
+static void clear_console(void)
+{
+    SDL_LockMutex(g_debug_mutex);
+    
+    // Reset buffer
+    memset(g_debug_buffer, 0, sizeof(g_debug_buffer));
+    g_buffer_head = 0;
+    g_buffer_tail = 0;
+    g_buffer_wrapped = false;
+    
+    // Reset line tracking
+    memset(g_debug_lines, 0, sizeof(g_debug_lines));
+    g_line_count = 0;
+    g_line_head = 0;
+    
+    // Reset filter state
+    clear_filter();
+    
+    // Reset scrolling and selection
+    g_scroll_offset = 0;
+    g_auto_scroll = true;
+    g_selection_start_line = -1;
+    g_selection_end_line = -1;
+    
+    SDL_UnlockMutex(g_debug_mutex);
+}
+
 // Internal append function (the real implementation)
 static void debug_console_append_internal(const char *message)
 {
@@ -613,9 +641,23 @@ bool debug_console_handle_event(SDL_Event *event)
             }
         }
         
-        // Check if click is on scrollbar
+        // Check if click is on clear button
         int win_w, win_h;
         SDL_GetWindowSize(g_debug_window, &win_w, &win_h);
+        int btn_w = 80;
+        int btn_h = 20;
+        int btn_y = 5;
+        int btn_x = win_w - DEBUG_PADDING - btn_w;
+        Rect clear_btn = {btn_x, btn_y, btn_w, btn_h};
+        
+        if (event->button.x >= clear_btn.x && event->button.x <= clear_btn.x + clear_btn.w &&
+            event->button.y >= clear_btn.y && event->button.y <= clear_btn.y + clear_btn.h) {
+            clear_console();
+            return true;
+        }
+        
+        // Check if click is on scrollbar
+
         int scrollbar_x = win_w - DEBUG_SCROLLBAR_WIDTH - 5;
         int content_y = DEBUG_TITLE_BAR_HEIGHT + DEBUG_PADDING;
         int content_h = win_h - content_y - DEBUG_PADDING - DEBUG_STATUS_BAR_HEIGHT;
@@ -764,15 +806,18 @@ void debug_console_render(void)
     Rect clear_btn = {btn_x, btn_y, btn_w, btn_h};
     btn_x -= btn_w + 10;
     
-    // Auto-scroll toggle
-    Rect auto_scroll_btn = {btn_x, btn_y, btn_w, btn_h};
-    
     // Get mouse state
     float mx_f, my_f;
     SDL_GetMouseState(&mx_f, &my_f);
     int mx = (int)mx_f;
     int my = (int)my_f;
-    bool clicked = false; // We handle clicks through events above
+    
+    // Draw clear button
+    bool clear_hover = (mx >= clear_btn.x && mx <= clear_btn.x + clear_btn.w &&
+                       my >= clear_btn.y && my <= clear_btn.y + clear_btn.h);
+    SDL_Color clear_bg = clear_hover ? (SDL_Color){80, 60, 60, 255} : (SDL_Color){60, 50, 50, 255};
+    draw_rect(g_debug_renderer, clear_btn, clear_bg);
+    draw_text(g_debug_renderer, clear_btn.x + 10, clear_btn.y + 2, "Clear", (SDL_Color){220, 220, 220, 255});
     
     // Draw text content area (reserve space for status bar at bottom)
     int content_y = title_bar.h + DEBUG_PADDING;

@@ -7536,6 +7536,7 @@ BAEResult BAESong_LoadRmfFromMemory(BAESong song, void const *pRMFData, uint32_t
     #if USE_SF2_SUPPORT == TRUE
                             uint32_t instBuf[MAX_INSTRUMENTS];
                             uint32_t totalInst = 0;
+                            memset(instBuf, 0, sizeof(instBuf));
                             BAEUtil_GetRmfInstrumentListFromMemory(pRMFData, rmfSize, songIndex, instBuf, MAX_INSTRUMENTS, &totalInst);
                             BAE_PRINTF("pSong = %p\n", pSong);
                             BAE_PRINTF("instBuf[0] = %d\n", instBuf[0]);

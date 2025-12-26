@@ -66,7 +66,7 @@ void ui_set_tooltip(Rect r, const char *text, bool *visible_ptr, Rect *rect_ptr,
     if (!visible_ptr || !rect_ptr || !text_buf || !text)
         return;
     *rect_ptr = r;
-    strncpy(text_buf, text, text_buf_len - 1);
+    safe_strncpy(text_buf, text, text_buf_len - 1);
     text_buf[text_buf_len - 1] = '\0';
     *visible_ptr = true;
 }

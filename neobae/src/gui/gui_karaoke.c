@@ -73,7 +73,7 @@ void karaoke_newline(uint32_t t_us)
     if (g_karaoke_line_current[0])
     {
         karaoke_commit_line(t_us, g_karaoke_line_current);
-        strncpy(g_karaoke_line_previous, g_karaoke_line_current, sizeof(g_karaoke_line_previous) - 1);
+        safe_strncpy(g_karaoke_line_previous, g_karaoke_line_current, sizeof(g_karaoke_line_previous) - 1);
         g_karaoke_line_previous[sizeof(g_karaoke_line_previous) - 1] = '\0';
         g_karaoke_line_current[0] = '\0';
     }
@@ -91,7 +91,7 @@ void karaoke_add_fragment(const char *frag)
     if (cumulativeExtension)
     {
         // Replace with growing cumulative substring
-        strncpy(g_karaoke_line_current, frag, sizeof(g_karaoke_line_current) - 1);
+        safe_strncpy(g_karaoke_line_current, frag, sizeof(g_karaoke_line_current) - 1);
         g_karaoke_line_current[sizeof(g_karaoke_line_current) - 1] = '\0';
     }
     else
@@ -99,7 +99,7 @@ void karaoke_add_fragment(const char *frag)
         // Append raw fragment (no added spaces)
         strncat(g_karaoke_line_current, frag, sizeof(g_karaoke_line_current) - strlen(g_karaoke_line_current) - 1);
     }
-    strncpy(g_karaoke_last_fragment, frag, sizeof(g_karaoke_last_fragment) - 1);
+    safe_strncpy(g_karaoke_last_fragment, frag, sizeof(g_karaoke_last_fragment) - 1);
     g_karaoke_last_fragment[sizeof(g_karaoke_last_fragment) - 1] = '\0';
 }
 

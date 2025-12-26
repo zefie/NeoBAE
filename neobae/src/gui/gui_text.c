@@ -123,7 +123,7 @@ int count_wrapped_lines(const char *text, int max_w)
         char word[512];
         if (wlen >= (int)sizeof(word))
             wlen = (int)sizeof(word) - 1;
-        strncpy(word, p, wlen);
+        safe_strncpy(word, p, wlen);
         word[wlen] = '\0';
 
         char attempt[1536];
@@ -149,7 +149,7 @@ int count_wrapped_lines(const char *text, int max_w)
             measure_text(word, &tw, &th);
             if (tw <= max_w)
             {
-                strncpy(buf, word, sizeof(buf) - 1);
+                safe_strncpy(buf, word, sizeof(buf) - 1);
                 buf[sizeof(buf) - 1] = '\0';
             }
             else
@@ -164,7 +164,7 @@ int count_wrapped_lines(const char *text, int max_w)
                         char sub[512];
                         if (take >= (int)sizeof(sub))
                             take = (int)sizeof(sub) - 1;
-                        strncpy(sub, word + start, take);
+                        safe_strncpy(sub, word + start, take);
                         sub[take] = '\0';
                         measure_text(sub, &tw, &th);
                         if (tw <= max_w)
@@ -207,7 +207,7 @@ int draw_wrapped_text(SDL_Renderer *R, int x, int y, const char *text, SDL_Color
         char word[512];
         if (wlen >= (int)sizeof(word))
             wlen = (int)sizeof(word) - 1;
-        strncpy(word, p, wlen);
+        safe_strncpy(word, p, wlen);
         word[wlen] = '\0';
 
         char attempt[1536];
@@ -234,7 +234,7 @@ int draw_wrapped_text(SDL_Renderer *R, int x, int y, const char *text, SDL_Color
             measure_text(word, &tw, &th);
             if (tw <= max_w)
             {
-                strncpy(buf, word, sizeof(buf) - 1);
+                safe_strncpy(buf, word, sizeof(buf) - 1);
                 buf[sizeof(buf) - 1] = '\0';
             }
             else
@@ -248,7 +248,7 @@ int draw_wrapped_text(SDL_Renderer *R, int x, int y, const char *text, SDL_Color
                         char sub[512];
                         if (take >= (int)sizeof(sub))
                             take = (int)sizeof(sub) - 1;
-                        strncpy(sub, word + start, take);
+                        safe_strncpy(sub, word + start, take);
                         sub[take] = '\0';
                         measure_text(sub, &tw, &th);
                         if (tw <= max_w)
@@ -260,7 +260,7 @@ int draw_wrapped_text(SDL_Renderer *R, int x, int y, const char *text, SDL_Color
                     char sub[512];
                     if (take >= (int)sizeof(sub))
                         take = (int)sizeof(sub) - 1;
-                    strncpy(sub, word + start, take);
+                    safe_strncpy(sub, word + start, take);
                     sub[take] = '\0';
                     draw_text(R, x, y + lines * lineH, sub, col);
                     lines++;

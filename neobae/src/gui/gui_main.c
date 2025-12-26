@@ -128,9 +128,17 @@ bool load_bank_simple(const char *path, bool save_to_settings, int reverb_type, 
 int g_max_vu_channels = 16;
 
 void safe_strncpy(char *dst, const char *src, size_t size) {
-    strncpy(dst, src, size - 1);
-    dst[size - 1] = '\0';
+    if (size == 0)
+        return;
+
+    size_t len = strlen(src);
+    if (len >= size)
+        len = size + 1;
+
+    memcpy(dst, src, len);
+    dst[len] = '\0';
 }
+
 
 // Helper function to update Bank/Program display values based on current channel's bank settings
 void update_bank_program_for_channel(void)
@@ -506,7 +514,7 @@ bool recreate_mixer_and_restore(int sampleRateHz, bool stereo, int reverbType,
     int pos_ms = 0;
     if (had_song)
     {
-        strncpy(last_song_path, g_bae.loaded_path, sizeof(last_song_path) - 1);
+        safe_strncpy(last_song_path, g_bae.loaded_path, sizeof(last_song_path) - 1);
         last_song_path[sizeof(last_song_path) - 1] = '\0';
         pos_ms = bae_get_pos_ms();
     }
@@ -1021,7 +1029,7 @@ int main(int argc, char *argv[])
                 if (load_bank_simple(patches_try, false, reverbType, loopPlay))
                 {
                     // Remember which bank we loaded for UI (do not overwrite user settings file)
-                    strncpy(g_current_bank_path, patches_try, sizeof(g_current_bank_path) - 1);
+                    safe_strncpy(g_current_bank_path, patches_try, sizeof(g_current_bank_path) - 1);
                     g_current_bank_path[sizeof(g_current_bank_path) - 1] = '\0';
                     loaded_saved = true; // treat as loaded to skip built-in fallback
                 }
@@ -1050,7 +1058,7 @@ int main(int argc, char *argv[])
         else
         {
             // Only record the saved path if that specific bank actually loaded
-            strncpy(g_current_bank_path, settings.bank_path, sizeof(g_current_bank_path) - 1);
+            safe_strncpy(g_current_bank_path, settings.bank_path, sizeof(g_current_bank_path) - 1);
             g_current_bank_path[sizeof(g_current_bank_path) - 1] = '\0';
         }
     }
@@ -1073,7 +1081,7 @@ int main(int argc, char *argv[])
             fclose(tf);
             if (load_bank_simple(patches_try, false, reverbType, loopPlay))
             {
-                strncpy(g_current_bank_path, patches_try, sizeof(g_current_bank_path) - 1);
+                safe_strncpy(g_current_bank_path, patches_try, sizeof(g_current_bank_path) - 1);
                 g_current_bank_path[sizeof(g_current_bank_path) - 1] = '\0';
             }
             else
@@ -3054,7 +3062,6 @@ int main(int argc, char *argv[])
 
         // Show "Customize", "+" and "-" buttons when Custom reverb or user preset is selected (below the dropdown)
 #if USE_NEO_EFFECTS
-        int base_count = 15; // Default reverb types including "Custom"
         g_custom_reverb_button_visible = (reverbType >= BAE_REVERB_TYPE_18);
         if (g_custom_reverb_button_visible && reverb_enabled)
         {
@@ -3170,7 +3177,7 @@ int main(int argc, char *argv[])
                 extern bool g_show_preset_delete_confirm_dialog;
                 extern char g_preset_delete_name[64];
                 g_show_preset_delete_confirm_dialog = true;
-                strncpy(g_preset_delete_name, preset_name, sizeof(g_preset_delete_name) - 1);
+                safe_strncpy(g_preset_delete_name, preset_name, sizeof(g_preset_delete_name) - 1);
                 g_preset_delete_name[sizeof(g_preset_delete_name) - 1] = '\0';
             }
 
@@ -5050,7 +5057,7 @@ int main(int argc, char *argv[])
                                                     g_bae.is_playing = true;
                                                     g_pcm_wav_recording = true;
                                                     g_exporting = false; // use our own writer
-                                                    strncpy(g_export_path, export_file, sizeof(g_export_path) - 1);
+                                                    safe_strncpy(g_export_path, export_file, sizeof(g_export_path) - 1);
                                                     g_export_path[sizeof(g_export_path) - 1] = '\0';
                                                     set_status_message("WAV recording started");
                                                     free(export_file);
@@ -5061,7 +5068,7 @@ int main(int argc, char *argv[])
                                                 // MIDI-in mode: do not change engine playback; just enable PCM writer.
                                                 g_pcm_wav_recording = true;
                                                 g_exporting = false; // use our own writer
-                                                strncpy(g_export_path, export_file, sizeof(g_export_path) - 1);
+                                                safe_strncpy(g_export_path, export_file, sizeof(g_export_path) - 1);
                                                 g_export_path[sizeof(g_export_path) - 1] = '\0';
                                                 set_status_message("WAV recording started");
                                                 free(export_file);
@@ -5106,7 +5113,7 @@ int main(int argc, char *argv[])
                                                     g_pcm_flac_recording = true;
                                                     g_midi_recording = true;
                                                     g_exporting = false; // use our own writer
-                                                    strncpy(g_export_path, export_file, sizeof(g_export_path) - 1);
+                                                    safe_strncpy(g_export_path, export_file, sizeof(g_export_path) - 1);
                                                     g_export_path[sizeof(g_export_path) - 1] = '\0';
                                                     set_status_message("FLAC recording started");
                                                     free(export_file);
@@ -5118,7 +5125,7 @@ int main(int argc, char *argv[])
                                                 g_pcm_flac_recording = true;
                                                 g_midi_recording = true;
                                                 g_exporting = false; // use our own writer
-                                                strncpy(g_export_path, export_file, sizeof(g_export_path) - 1);
+                                                safe_strncpy(g_export_path, export_file, sizeof(g_export_path) - 1);
                                                 g_export_path[sizeof(g_export_path) - 1] = '\0';
                                                 set_status_message("FLAC recording started");
                                                 free(export_file);
@@ -5149,7 +5156,7 @@ int main(int argc, char *argv[])
                                                     g_pcm_mp3_recording = true;
                                                     g_midi_recording = true;
                                                     g_exporting = false;
-                                                    strncpy(g_export_path, export_file, sizeof(g_export_path) - 1);
+                                                    safe_strncpy(g_export_path, export_file, sizeof(g_export_path) - 1);
                                                     g_export_path[sizeof(g_export_path) - 1] = '\0';
                                                     set_status_message("MP3 recording started");
                                                     free(export_file);
@@ -5172,7 +5179,7 @@ int main(int argc, char *argv[])
                                                 {
                                                     g_exporting = true;
                                                     g_export_file_type = BAE_MPEG_TYPE;
-                                                    strncpy(g_export_path, export_file, sizeof(g_export_path) - 1);
+                                                    safe_strncpy(g_export_path, export_file, sizeof(g_export_path) - 1);
                                                     g_export_path[sizeof(g_export_path) - 1] = '\0';
                                                     set_status_message("MP3 export started");
                                                     free(export_file);
@@ -5220,7 +5227,7 @@ int main(int argc, char *argv[])
                                                         g_pcm_vorbis_recording = true;
                                                         g_midi_recording = true;
                                                         g_exporting = false; // use our own writer
-                                                        strncpy(g_export_path, export_file, sizeof(g_export_path) - 1);
+                                                        safe_strncpy(g_export_path, export_file, sizeof(g_export_path) - 1);
                                                         g_export_path[sizeof(g_export_path) - 1] = '\0';
                                                         set_status_message("Vorbis recording started");
                                                         free(export_file);
@@ -5232,7 +5239,7 @@ int main(int argc, char *argv[])
                                                     g_pcm_vorbis_recording = true;
                                                     g_midi_recording = true;
                                                     g_exporting = false; // use our own writer
-                                                    strncpy(g_export_path, export_file, sizeof(g_export_path) - 1);
+                                                    safe_strncpy(g_export_path, export_file, sizeof(g_export_path) - 1);
                                                     g_export_path[sizeof(g_export_path) - 1] = '\0';
                                                     set_status_message("Vorbis recording started");
                                                     free(export_file);
