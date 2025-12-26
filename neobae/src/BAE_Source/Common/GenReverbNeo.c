@@ -194,6 +194,19 @@ static INLINE int PV_ClampInt(int v, int lo, int hi)
     return v;
 }
 
+static INLINE INT32 PV_MulQ16_Trunc(INT32 a, INT32 b)
+{
+    int64_t p = (int64_t)a * (int64_t)b;
+    
+    // If negative, add (2^Shift - 1) before shifting.
+    // This forces small negative numbers (e.g. -0.5) to become 0 instead of -1.
+    if (p < 0) {
+        p += (1LL << NEO_COEFF_SHIFT) - 1; 
+    }
+    
+    return PV_Clamp32From64(p >> NEO_COEFF_SHIFT);
+}
+
 static INLINE INT32 PV_MulQ16_Round(INT32 a, INT32 b)
 {
     int64_t p = (int64_t)a * (int64_t)b;
@@ -662,8 +675,8 @@ static void PV_ProcessNeoCustomReverb(INT32 *sourceP, INT32 *destP, int numFrame
             // Compute comb filter output: input + delayed * feedback
             // Use rounding instead of truncation to prevent error accumulation
             feedback = params->mCustomFeedback[i];
-            INT32 feedbackL = PV_MulQ16_Round(delayedL, feedback);
-            INT32 feedbackR = PV_MulQ16_Round(delayedR, feedback);
+            INT32 feedbackL = PV_ZapSmall(PV_MulQ16_Trunc(delayedL, feedback));
+            INT32 feedbackR = PV_ZapSmall(PV_MulQ16_Trunc(delayedR, feedback));
             
             combOutL = PV_Clamp32From64((int64_t)inputL + (int64_t)feedbackL);
             combOutR = PV_Clamp32From64((int64_t)inputR + (int64_t)feedbackR);
@@ -700,8 +713,8 @@ static void PV_ProcessNeoCustomReverb(INT32 *sourceP, INT32 *destP, int numFrame
             INT32 out32R = PV_Clamp32From64(outputR);
             INT32 dL = (INT32)(out32L - params->mFilterMemoryL);
             INT32 dR = (INT32)(out32R - params->mFilterMemoryR);
-            params->mFilterMemoryL = PV_Clamp32From64((int64_t)params->mFilterMemoryL + (int64_t)PV_MulQ16_Round(dL, params->mLopassK));
-            params->mFilterMemoryR = PV_Clamp32From64((int64_t)params->mFilterMemoryR + (int64_t)PV_MulQ16_Round(dR, params->mLopassK));
+            params->mFilterMemoryL = PV_Clamp32From64((int64_t)params->mFilterMemoryL + (int64_t)PV_MulQ16_Trunc(dL, params->mLopassK));
+            params->mFilterMemoryR = PV_Clamp32From64((int64_t)params->mFilterMemoryR + (int64_t)PV_MulQ16_Trunc(dR, params->mLopassK));
         }
 
         // Output-side idle shutoff: once wet is very small for long enough (and no input),
@@ -871,10 +884,10 @@ void SetNeoCustomReverbCombFeedback(int combIndex, int feedback)
     if (feedback < 0) feedback = 0;
     if (feedback > NEO_CUSTOM_MAX_FEEDBACK) feedback = NEO_CUSTOM_MAX_FEEDBACK;
     
-    // Map 0-255 to feedback range (0.0 to ~0.85)
+    // Map 0-127 to feedback range (0.0 to ~0.85)
     // Use a safe max to avoid runaway feedback
     const INT32 maxFeedback = (INT32)(NEO_COEFF_MULTIPLY * 0.85);
-    params->mCustomFeedback[combIndex] = (feedback * maxFeedback) / 127;
+    params->mCustomFeedback[combIndex] = (feedback * maxFeedback) / NEO_CUSTOM_MAX_FEEDBACK;
 }
 
 //++------------------------------------------------------------------------------
@@ -882,7 +895,7 @@ void SetNeoCustomReverbCombFeedback(int combIndex, int feedback)
 //
 //  Set the output gain for a specific comb filter
 //  combIndex: 0-7 (which comb filter to configure)
-//  gain: 0-127 (MIDI style, maps to 0.0-1.0 gain)
+//  gain: 0-127 (MIDI style, maps to 0.0-2.0 gain)
 //++------------------------------------------------------------------------------
 void SetNeoCustomReverbCombGain(int combIndex, int gain)
 {
@@ -894,7 +907,7 @@ void SetNeoCustomReverbCombGain(int combIndex, int gain)
     if (gain < 0) gain = 0;
     if (gain > NEO_CUSTOM_MAX_GAIN) gain = NEO_CUSTOM_MAX_GAIN;
     
-    // Map 0-255 to gain range (0.0 to 1.0)
+    // Map 0-255 to gain range (0.0 to 2.0)
     params->mCustomGain[combIndex] = (gain * NEO_COEFF_MULTIPLY) / 127;
 }
 
