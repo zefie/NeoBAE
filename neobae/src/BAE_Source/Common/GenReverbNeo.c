@@ -234,115 +234,112 @@ static void PV_UpdateNeoDelayTables(NeoReverbParams *params)
     }
 }
 
+
+//++------------------------------------------------------------------------------
+//  GetNeoReverbPresetParams()
+//
+//  Get the preset parameters for a Neo reverb type (for UI customization)
+//++------------------------------------------------------------------------------
+void GetNeoReverbPresetParams(int reverbType, int *combCount, int *delaysMs, int *feedback, int *gain, int *lowpass, int *mix)
+{
+    if (!combCount || !delaysMs || !feedback || !gain || !lowpass || !mix)
+        return;
+
+    // Initialize with defaults
+    *combCount = 4;
+    for (int i = 0; i < NEO_CUSTOM_MAX_COMBS; i++)
+    {
+        delaysMs[i] = 50 + (i * 25);  // Default delays
+        feedback[i] = 90;
+        gain[i] = 127;
+    }
+    *lowpass = 64;
+
+    switch (reverbType)
+    {
+        case REVERB_TYPE_12: // Room
+            *combCount = 3;
+            delaysMs[0] = 35; delaysMs[1] = 43; delaysMs[2] = 52;
+            feedback[0] = 70; feedback[1] = 70; feedback[2] = 70;
+            gain[0] = 127; gain[1] = 127; gain[2] = 127;
+            *lowpass = 50;
+            *mix = 96;
+            break;
+        case REVERB_TYPE_13: // Hall
+            *combCount = 4;
+            delaysMs[0] = 52; delaysMs[1] = 65; delaysMs[2] = 79; delaysMs[3] = 93;
+            feedback[0] = 85; feedback[1] = 85; feedback[2] = 85; feedback[3] = 85;
+            gain[0] = 127; gain[1] = 127; gain[2] = 127; gain[3] = 127;
+            *lowpass = 40;
+            *mix = 88;
+            break;
+        case REVERB_TYPE_14: // Cavern
+            *combCount = 4;
+            delaysMs[0] = 75; delaysMs[1] = 125; delaysMs[2] = 175; delaysMs[3] = 200;
+            feedback[0] = 107; feedback[1] = 107; feedback[2] = 107; feedback[3] = 107;
+            gain[0] = 127; gain[1] = 127; gain[2] = 127; gain[3] = 127;
+            *lowpass = 64;
+            *mix = 110;
+            break;
+        case REVERB_TYPE_15: // Dungeon
+            *combCount = 4;
+            delaysMs[0] = 175; delaysMs[1] = 250; delaysMs[2] = 325; delaysMs[3] = 450;
+            feedback[0] = 107; feedback[1] = 107; feedback[2] = 107; feedback[3] = 107;
+            gain[0] = 127; gain[1] = 127; gain[2] = 127; gain[3] = 127;
+            *lowpass = 64;
+            *mix = 110;
+            break;
+        case REVERB_TYPE_16: // Nokia-style
+            *combCount = 4;
+            delaysMs[0] = 27; delaysMs[1] = 15; delaysMs[2] = 37; delaysMs[3] = 33;
+            feedback[0] = 127; feedback[1] = 125; feedback[2] = 127; feedback[3] = 127;
+            gain[0] = 254; gain[1] = 254; gain[2] = 254; gain[3] = 254;
+            *lowpass = 10;
+            *mix = 110;
+            break;
+        case REVERB_TYPE_17: // Tap delay - doesn't use custom reverb params
+            *combCount = 4;
+            *lowpass = 13107; // ~0.20
+            *mix = 104;
+            // Tap delay doesn't set custom params, so use defaults
+            break;
+        default:
+            // For custom or unknown types, use current engine values
+            *combCount = GetNeoCustomReverbCombCount();
+            for (int i = 0; i < NEO_CUSTOM_MAX_COMBS; i++)
+            {
+                delaysMs[i] = GetNeoCustomReverbCombDelay(i);
+                feedback[i] = GetNeoCustomReverbCombFeedback(i);
+                gain[i] = GetNeoCustomReverbCombGain(i);
+            }
+            *lowpass = 64;
+            *mix = 110;
+            // Note: lowpass is not directly accessible, use default
+            break;
+    }
+}
+
 static void PV_ApplyNeoReverbDefaults(NeoReverbParams *params)
 {
     if (!params)
         return;
 
-    switch (params->mReverbMode)
-    {
-        case REVERB_TYPE_12: // Room - Use Custom reverb preset
-            SetNeoCustomReverbCombCount(3);
-            // Short delays for room: ~35ms, 43ms, 52ms
-            SetNeoCustomReverbCombDelay(0, 35);
-            SetNeoCustomReverbCombDelay(1, 43);
-            SetNeoCustomReverbCombDelay(2, 52);
-            // Moderate feedback for all combs
-            SetNeoCustomReverbCombFeedback(0, 70);
-            SetNeoCustomReverbCombFeedback(1, 70);
-            SetNeoCustomReverbCombFeedback(2, 70);
-            // Equal gain for all combs
-            SetNeoCustomReverbCombGain(0, 127);
-            SetNeoCustomReverbCombGain(1, 127);
-            SetNeoCustomReverbCombGain(2, 127);
-            SetNeoCustomReverbLowpass(50);
-            SetNeoReverbMix(96);
-            break;
-        case REVERB_TYPE_13: // Hall - Use Custom reverb preset
-            SetNeoCustomReverbCombCount(4);
-            // Longer delays for hall: ~52ms, 65ms, 79ms, 93ms
-            SetNeoCustomReverbCombDelay(0, 52);
-            SetNeoCustomReverbCombDelay(1, 65);
-            SetNeoCustomReverbCombDelay(2, 79);
-            SetNeoCustomReverbCombDelay(3, 93);
-            // Longer feedback for hall
-            SetNeoCustomReverbCombFeedback(0, 85);
-            SetNeoCustomReverbCombFeedback(1, 85);
-            SetNeoCustomReverbCombFeedback(2, 85);
-            SetNeoCustomReverbCombFeedback(3, 85);
-            // Equal gain for all combs
-            SetNeoCustomReverbCombGain(0, 127);
-            SetNeoCustomReverbCombGain(1, 127);
-            SetNeoCustomReverbCombGain(2, 127);
-            SetNeoCustomReverbCombGain(3, 127);
-            SetNeoCustomReverbLowpass(40);
-            SetNeoReverbMix(88);
-            break;
-        case REVERB_TYPE_14: // Cavern - Use Custom reverb preset
-            SetNeoCustomReverbCombCount(4);
-            SetNeoCustomReverbCombDelay(0, 75);
-            SetNeoCustomReverbCombDelay(1, 125);
-            SetNeoCustomReverbCombDelay(2, 175);
-            SetNeoCustomReverbCombDelay(3, 200);
-            SetNeoCustomReverbCombFeedback(0, 107);
-            SetNeoCustomReverbCombFeedback(1, 107);
-            SetNeoCustomReverbCombFeedback(2, 107);
-            SetNeoCustomReverbCombFeedback(3, 107);
-            SetNeoCustomReverbCombGain(0, 127);
-            SetNeoCustomReverbCombGain(1, 127);
-            SetNeoCustomReverbCombGain(2, 127);
-            SetNeoCustomReverbCombGain(3, 127);
-            SetNeoCustomReverbLowpass(64);
-            SetNeoReverbMix(110);
-            break;
-        case REVERB_TYPE_15: // Dungeon - Use Custom reverb preset
-            SetNeoCustomReverbCombCount(4);
-            SetNeoCustomReverbCombDelay(0, 175);
-            SetNeoCustomReverbCombDelay(1, 250);
-            SetNeoCustomReverbCombDelay(2, 325);
-            SetNeoCustomReverbCombDelay(3, 450);
-            SetNeoCustomReverbCombFeedback(0, 107);
-            SetNeoCustomReverbCombFeedback(1, 107);
-            SetNeoCustomReverbCombFeedback(2, 107);
-            SetNeoCustomReverbCombFeedback(3, 107);
-            SetNeoCustomReverbCombGain(0, 127);
-            SetNeoCustomReverbCombGain(1, 127);
-            SetNeoCustomReverbCombGain(2, 127);
-            SetNeoCustomReverbCombGain(3, 127);
-            SetNeoCustomReverbLowpass(64);
-            SetNeoReverbMix(110);
-            break;
-        case REVERB_TYPE_16: // ROMPler by nehochupechatat
-            SetNeoCustomReverbCombCount(4);
-            SetNeoCustomReverbCombDelay(0, 75);
-            SetNeoCustomReverbCombDelay(1, 30);
-            SetNeoCustomReverbCombDelay(2, 110);
-            SetNeoCustomReverbCombDelay(3, 47);
-            SetNeoCustomReverbCombFeedback(0, 110);
-            SetNeoCustomReverbCombFeedback(1, 110);
-            SetNeoCustomReverbCombFeedback(2, 110);
-            SetNeoCustomReverbCombFeedback(3, 110);
-            SetNeoCustomReverbCombGain(0, 93);
-            SetNeoCustomReverbCombGain(1, 137);
-            SetNeoCustomReverbCombGain(2, 131);
-            SetNeoCustomReverbCombGain(3, 254);
-            SetNeoCustomReverbLowpass(64);
-            SetNeoReverbMix(110);
-            break;
-        case REVERB_TYPE_17: // Tap delay
-            params->mLopassK = 13107; // ~0.20
-            SetNeoReverbMix(104);
-            // Tap mode doesn't use feedback; leave time as-is.
-            break;
-        default:
-            if (params->mReverbMode >= REVERB_TYPE_18)
-            {
-                // Custom mode: user controls all parameters via API
-                // Apply reasonable defaults that user can override
-                SetNeoCustomReverbLowpass(50);
-                SetNeoReverbMix(110);  // More aggressive wet mix
-            }
-            break;
+    int combCount, delaysMs[NEO_CUSTOM_MAX_COMBS], feedback[NEO_CUSTOM_MAX_COMBS], gain[NEO_CUSTOM_MAX_COMBS], lowpass, mix;    
+
+    if (params->mReverbMode < REVERB_TYPE_18) {
+        GetNeoReverbPresetParams(params->mReverbMode, &combCount, delaysMs, feedback, gain, &lowpass, &mix);
+        SetNeoCustomReverbCombCount(combCount);
+        for (int i = 0; i < combCount; i++)
+        {
+            SetNeoCustomReverbCombDelay(i, delaysMs[i]);
+            SetNeoCustomReverbCombFeedback(i, feedback[i]);
+            SetNeoCustomReverbCombGain(i, gain[i]);
+        }
+        SetNeoCustomReverbLowpass(lowpass); 
+        SetNeoReverbMix(mix);
+    } else {
+        SetNeoCustomReverbLowpass(50);
+        SetNeoReverbMix(110);  // More aggressive wet mix
     }
 }
 
@@ -977,6 +974,17 @@ int GetNeoCustomReverbCombGain(int combIndex)
     
     // Map gain back to 0-127 range
     return (int)((params->mCustomGain[combIndex] * 127) / NEO_COEFF_MULTIPLY);
+}
+
+//++------------------------------------------------------------------------------
+//  GetNeoCustomLowpass()
+//
+//  Get the current low-pass filter coefficient (0-127)
+//++------------------------------------------------------------------------------
+int GetNeoCustomReverbLowpass()
+{
+    NeoReverbParams* params = GetNeoReverbParams();
+    return (int)((params->mLopassK * 254) / NEO_COEFF_MULTIPLY) + 1;
 }
 
 #endif  // USE_NEO_EFFECTS

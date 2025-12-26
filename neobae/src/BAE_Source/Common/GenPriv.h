@@ -891,6 +891,8 @@ int         GetNeoCustomReverbCombCount(void);
 int         GetNeoCustomReverbCombDelay(int combIndex);
 int         GetNeoCustomReverbCombFeedback(int combIndex);
 int         GetNeoCustomReverbCombGain(int combIndex);
+// Get Neo reverb preset parameters (for UI customization)
+void        GetNeoReverbPresetParams(int reverbType, int *combCount, int *delaysMs, int *feedback, int *gain, int *lowpass, int *mix);
 // Custom reverb mode: User-configurable comb filters
 #define NEO_CUSTOM_MAX_COMBS    4
 #define NEO_CUSTOM_MAX_FEEDBACK 127   // Max feedback value for combs, > 127 causes feedback loop
@@ -1299,6 +1301,8 @@ int32_t PV_ModifyVelocityFromCurve(GM_Song *pSong, int32_t volume);
 
 // GenSample.c
 GM_Voice * PV_GetVoiceFromSoundReference(VOICE_REFERENCE reference);
+
+int GetNeoCustomReverbLowpass();
 
 // GenSetup.c
 #if (X_PLATFORM == X_WIN95) && (USE_KAT)

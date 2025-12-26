@@ -118,7 +118,7 @@ void ui_draw_tooltip(SDL_Renderer *R, Rect tipRect, const char *text, bool cente
 
 // Reverb names shared across the UI. Centralize to avoid duplicates.
 #if USE_NEO_EFFECTS
-static const char *kReverbNames[] = {"None", "Igor's Closet", "Igor's Garage", "Igor's Acoustic Lab", "Igor's Cavern", "Igor's Dungeon", "Small Reflections", "Early Reflections", "Basement", "Banquet Hall", "Catacombs", "Neo Room", "Neo Hall", "Neo Cavern", "Neo Dungeon", "Neo Reserved", "Neo Tap Delay", "Custom"};
+static const char *kReverbNames[] = {"None", "Igor's Closet", "Igor's Garage", "Igor's Acoustic Lab", "Igor's Cavern", "Igor's Dungeon", "Small Reflections", "Early Reflections", "Basement", "Banquet Hall", "Catacombs", "Neo Room", "Neo Hall", "Neo Cavern", "Neo Dungeon", "Neo Nokia", "Neo Tap Delay", "Custom"};
 #else
 static const char *kReverbNames[] = {"None", "Igor's Closet", "Igor's Garage", "Igor's Acoustic Lab", "Igor's Cavern", "Igor's Dungeon", "Small Reflections", "Early Reflections", "Basement", "Banquet Hall", "Catacombs"};
 #endif
@@ -369,22 +369,18 @@ void render_custom_reverb_dialog(SDL_Renderer *R, int mx, int my, bool mclick, b
         extern int g_current_custom_reverb_gain[NEO_CUSTOM_MAX_COMBS];
         extern int g_current_custom_reverb_lowpass;
 
-        // If state hasn't been initialized yet (startup edge), fall back to current engine values.
+        g_current_custom_reverb_comb_count = GetNeoCustomReverbCombCount();
         if (g_current_custom_reverb_comb_count < 1)
+            g_current_custom_reverb_comb_count = 1;
+        if (g_current_custom_reverb_comb_count > NEO_CUSTOM_MAX_COMBS)
+            g_current_custom_reverb_comb_count = NEO_CUSTOM_MAX_COMBS;
+        for (int i = 0; i < NEO_CUSTOM_MAX_COMBS; i++)
         {
-            g_current_custom_reverb_comb_count = GetNeoCustomReverbCombCount();
-            if (g_current_custom_reverb_comb_count < 1)
-                g_current_custom_reverb_comb_count = 1;
-            if (g_current_custom_reverb_comb_count > NEO_CUSTOM_MAX_COMBS)
-                g_current_custom_reverb_comb_count = NEO_CUSTOM_MAX_COMBS;
-            for (int i = 0; i < NEO_CUSTOM_MAX_COMBS; i++)
-            {
-                g_current_custom_reverb_delays[i] = GetNeoCustomReverbCombDelay(i);
-                g_current_custom_reverb_feedback[i] = GetNeoCustomReverbCombFeedback(i);
-                g_current_custom_reverb_gain[i] = GetNeoCustomReverbCombGain(i);
-            }
+            g_current_custom_reverb_delays[i] = GetNeoCustomReverbCombDelay(i);
+            g_current_custom_reverb_feedback[i] = GetNeoCustomReverbCombFeedback(i);
+            g_current_custom_reverb_gain[i] = GetNeoCustomReverbCombGain(i);            
         }
-
+        g_current_custom_reverb_lowpass = GetNeoCustomReverbLowpass();
         cached_comb_count = g_current_custom_reverb_comb_count;
         for (int i = 0; i < NEO_CUSTOM_MAX_COMBS; i++)
         {

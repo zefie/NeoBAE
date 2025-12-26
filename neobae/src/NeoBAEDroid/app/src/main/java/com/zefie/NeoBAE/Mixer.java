@@ -51,6 +51,10 @@ public class Mixer
 		}
 	}
 
+	public static boolean exists() {
+		return (mMixer != null && mMixer.mReference != 0L);
+	}
+
 	// Suspend/resume the hardware audio output without destroying the mixer.
 	// This keeps the loaded bank(s) resident while stopping the audio thread.
 	public static int disengageAudio() {
@@ -101,6 +105,7 @@ public class Mixer
 	private static native int _getNeoCustomReverbCombFeedback(long reference, int combIndex);
 	private static native void _setNeoCustomReverbCombGain(long reference, int combIndex, int gain);
 	private static native int _getNeoCustomReverbCombGain(long reference, int combIndex);
+	private static native void _getNeoReverbPresetParams(long reference, int reverbType, int[] combCount, int[] delaysMs, int[] feedback, int[] gain, int[] lowpass);
 	private static native void _setNeoCustomReverbLowpass(long reference, int lowpass);
 	private static native int _addBankFromFile(long reference, String path);
 	private static native int _addBankFromAsset(long reference, android.content.res.AssetManager assetManager, String assetName);
@@ -135,6 +140,7 @@ public class Mixer
 	public static void setNeoCustomReverbCombGain(int combIndex, int gain){ if(mMixer==null) return; _setNeoCustomReverbCombGain(mMixer.mReference, combIndex, gain); }
 	public static int getNeoCustomReverbCombGain(int combIndex){ if(mMixer==null) return 0; return _getNeoCustomReverbCombGain(mMixer.mReference, combIndex); }
 	public static void setNeoCustomReverbLowpass(int lowpass){ if(mMixer==null) return; _setNeoCustomReverbLowpass(mMixer.mReference, lowpass); }
+	public static void getNeoReverbPresetParams(int reverbType, int[] combCount, int[] delaysMs, int[] feedback, int[] gain, int[] lowpass){ if(mMixer==null) return; _getNeoReverbPresetParams(mMixer.mReference, reverbType, combCount, delaysMs, feedback, gain, lowpass); }
 	public static int addBankFromFile(String path){ if(mMixer==null) return -1; return _addBankFromFile(mMixer.mReference, path); }
 	public static int addBankFromAsset(String assetName){ if(mMixer==null) return -1; return _addBankFromAsset(mMixer.mReference, mMixer.mAssetManager, assetName); }
 	public static int addBankFromMemory(byte[] data){ if(mMixer==null) return -1; return _addBankFromMemory(mMixer.mReference, data); }

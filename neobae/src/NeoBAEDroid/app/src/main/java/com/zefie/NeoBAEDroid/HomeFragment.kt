@@ -3344,7 +3344,13 @@ fun NewMusicPlayerScreen(
                     onSearchLimitChange = onSearchLimitChange,
                     onOpenFileTypes = { onNavigate(NavigationScreen.FILE_TYPES) },
                     onBrowseBanks = onBrowseBanks,
-                    onOpenCustomReverb = { onNavigate(NavigationScreen.CUSTOM_REVERB) },
+                    onOpenCustomReverb = {
+                        if (Mixer.exists()) {
+                            onNavigate(NavigationScreen.CUSTOM_REVERB)
+                        } else {
+                            Toast.makeText(context, "Please start playback first to access custom reverb settings", Toast.LENGTH_SHORT).show()
+                        }
+                    },
                     onCustomReverbSync = { viewModel.bumpCustomReverbSync() }
                 )
                 NavigationScreen.FILE_TYPES -> FileTypesScreenContent(
@@ -5547,7 +5553,7 @@ fun SettingsScreenContent(
         "None", "Igor's Closet", "Igor's Garage", "Igor's Acoustic Lab",
         "Igor's Cavern", "Igor's Dungeon", "Small Reflections",
         "Early Reflections", "Basement", "Banquet Hall", "Catacombs",
-        "Neo Room", "Neo Hall", "Neo Cavern", "Neo Dungeon", "Neo Reserved", "Neo Tap Delay"
+        "Neo Room", "Neo Hall", "Neo Cavern", "Neo Dungeon", "Neo Nokia", "Neo Tap Delay"
     )
 
     var presetNames by remember { mutableStateOf(loadCustomReverbPresetNames(context)) }
@@ -5810,7 +5816,14 @@ fun SettingsScreenContent(
                                 when {
                                     index < customEntryIndex -> {
                                         clearActivePreset()
-                                        onReverbChange(index + 1)
+                                        val selectedReverbType = index + 1
+                                        onReverbChange(selectedReverbType)
+                                        // For Neo presets (REVERB_TYPE_13-16), load their values into custom reverb for editing
+                                        if (selectedReverbType in 13..16) {
+                                            val preset = getNeoReverbPreset(context, selectedReverbType, option)
+                                            applyCustomReverbPresetToEngine(context, preset)
+                                            onCustomReverbSync()
+                                        }
                                     }
                                     index == customEntryIndex -> {
                                         clearActivePreset()
@@ -5833,7 +5846,7 @@ fun SettingsScreenContent(
                     }
                 }
 
-                if (reverbType == 18) {
+                if (reverbType >= 12 && reverbType != 17) {
                     Spacer(modifier = Modifier.height(8.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                         OutlinedButton(onClick = onOpenCustomReverb, modifier = Modifier.weight(1f)) {
@@ -6308,7 +6321,7 @@ fun SettingsScreenContent(
                         }
                     }
 
-                    if (reverbType == 18) {
+                    if (reverbType >= 12 && reverbType != 17) {
                         Spacer(modifier = Modifier.height(8.dp))
                         Column(modifier = Modifier.fillMaxWidth()) {
                             // Keep the small action buttons in one row for portrait.

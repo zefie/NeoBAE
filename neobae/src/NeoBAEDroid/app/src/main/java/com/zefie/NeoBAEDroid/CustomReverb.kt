@@ -298,6 +298,25 @@ fun saveCustomReverbPreset(ctx: Context, preset: CustomReverbPreset) {
     setActiveCustomReverbPresetName(ctx, preset.name)
 }
 
+fun getNeoReverbPreset(ctx: Context, reverbType: Int, presetName: String): CustomReverbPreset {
+    val combCount = intArrayOf(0)
+    val delaysMs = IntArray(MAX_COMBS)
+    val feedback = IntArray(MAX_COMBS)
+    val gain = IntArray(MAX_COMBS)
+    val lowpass = intArrayOf(0)
+
+    Mixer.getNeoReverbPresetParams(reverbType, combCount, delaysMs, feedback, gain, lowpass)
+
+    return CustomReverbPreset(
+        name = presetName,
+        combCount = combCount[0],
+        delaysMs = delaysMs,
+        feedback = feedback,
+        gain = gain,
+        lowpass = lowpass[0]
+    )
+}
+
 fun deleteCustomReverbPreset(ctx: Context, name: String): Boolean {
     val p = prefs(ctx)
     val idx = findPresetIndexByName(p, name) ?: return false

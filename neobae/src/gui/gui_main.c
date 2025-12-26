@@ -3062,7 +3062,7 @@ int main(int argc, char *argv[])
 
         // Show "Customize", "+" and "-" buttons when Custom reverb or user preset is selected (below the dropdown)
 #if USE_NEO_EFFECTS
-        g_custom_reverb_button_visible = (reverbType >= BAE_REVERB_TYPE_18);
+        g_custom_reverb_button_visible = (reverbType >= BAE_REVERB_TYPE_12 && reverbType != BAE_REVERB_TYPE_17);
         if (g_custom_reverb_button_visible && reverb_enabled)
         {
             // When the dropdown list is open, don't allow clicks on the buttons underneath it.
@@ -3094,6 +3094,9 @@ int main(int argc, char *argv[])
             
             if (overCustom && ui_mclick)
             {
+                // Force the custom reverb dialog to refresh its cached slider values from current engine state
+                extern int g_custom_reverb_dialog_sync_serial;
+                g_custom_reverb_dialog_sync_serial++;
                 g_show_custom_reverb_dialog = true;
                 g_reverbDropdownOpen = false; // Close dropdown when opening custom dialog
             }
