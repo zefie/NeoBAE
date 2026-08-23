@@ -402,6 +402,7 @@
 
 #include "X_API.h"
 #include <stdint.h>
+#include <limits.h>
 #include "X_Formats.h"
 #include "X_Assert.h"
 #include "BAE_API.h"
@@ -6243,35 +6244,49 @@ XBankToken CreateBankTokenFromInputs(uint32_t tok1, uint32_t tok2)
 static bool PV_AddToAccessCache(XFILE fileRef, XFILE_CACHED_ITEM *cacheItemPtr )
 {
     XFILENAME           *pReference;
-    XFILERESOURCECACHE  *pCache,*newCache;
-    int32_t           resCount;
+    XFILERESOURCECACHE  *pCache;
+    XFILERESOURCECACHE  *newCache;
+    int32_t             oldCount;
+    int32_t             newSize;
+    int32_t             itemSize;
     XFILE_CACHED_ITEM   *pItem;
 
     pReference = fileRef;
-    if (PV_XFileValid(fileRef))
+    if (!PV_XFileValid(fileRef) || !cacheItemPtr)
     {
-        pCache = pReference->pCache;
-        if (pCache)
-        {
-            resCount = pCache->totalResources + 1;
-            newCache = (XFILERESOURCECACHE *)XNewPtr((int32_t)sizeof(XFILERESOURCECACHE) + 
-                                                    ((int32_t)sizeof(XFILE_CACHED_ITEM) * resCount));
-            if (newCache)
-            {
-                XBlockMove(pCache, newCache, (int32_t)sizeof(XFILERESOURCECACHE) + 
-                                                ((int32_t)sizeof(XFILE_CACHED_ITEM) * (resCount - 1)));
-
-                XDisposePtr(pCache);
-                pReference->pCache = newCache;
-                newCache->totalResources = resCount;
-                pItem = &newCache->cached[resCount - 1];
-                // copy cache item
-                *pItem = *cacheItemPtr;
-                return TRUE;
-            }
-        }
+        return FALSE;
     }
-    return FALSE;
+    pCache = pReference->pCache;
+    if (!pCache)
+    {
+        return FALSE;
+    }
+    oldCount = pCache->totalResources;
+    if (oldCount < 0)
+    {
+        return FALSE;
+    }
+    /* cached[1] is already in sizeof(XFILERESOURCECACHE); N items need (N-1)
+     * extra slots. Growing to oldCount+1 items => extra == oldCount. */
+    itemSize = (int32_t)sizeof(XFILE_CACHED_ITEM);
+    if (itemSize > 0 &&
+        oldCount > (INT32_MAX - (int32_t)sizeof(XFILERESOURCECACHE)) / itemSize)
+    {
+        return FALSE;
+    }
+    newSize = (int32_t)sizeof(XFILERESOURCECACHE) + itemSize * oldCount;
+    /* XResizePtr copies from the stored block size, so it cannot over-read
+     * the FAM allocation used by XCreateAccessCache. */
+    newCache = (XFILERESOURCECACHE *)XResizePtr(pCache, newSize);
+    if (!newCache)
+    {
+        return FALSE;
+    }
+    pReference->pCache = newCache;
+    newCache->totalResources = oldCount + 1;
+    pItem = &newCache->cached[oldCount];
+    *pItem = *cacheItemPtr;
+    return TRUE;
 }
 #endif  // USE_CREATION_API == TRUE
 
@@ -8970,7 +8985,11 @@ int32_t XAddFileResource(XFILE fileRef, XResourceType resourceType,
                                                 if (pReference->pCache)
                                                 {
 #if USE_CREATION_API == TRUE
-                                                    PV_AddToAccessCache(fileRef, &cacheItem );
+                                                    if (PV_AddToAccessCache(fileRef, &cacheItem ) == FALSE)
+                                                    {
+                                                        /* Grow failed; rebuild so RAM cache matches the map. */
+                                                        (void)XCreateAccessCache(fileRef);
+                                                    }
 #endif
                                                 }
                                             }

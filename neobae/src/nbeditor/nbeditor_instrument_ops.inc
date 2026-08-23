@@ -483,6 +483,19 @@
         return true;
     }
 
+    /* Remap declined: still finish the move. Notes keep the old slot. */
+    void FinishPendingInstrumentMoveLeavingNotes(void)
+    {
+        if (m_inst_move_pending_delete_source_id == 0)
+        {
+            return;
+        }
+        if (FinishPendingInstrumentMove(true))
+        {
+            SetStatus("Moved instrument; song notes left on original slot");
+        }
+    }
+
     void StripInstrumentFromSessionSongs(uint32_t inst_id)
     {
         /* INST id 0 is valid (B0P000); never treat as unset. */
@@ -893,24 +906,18 @@
                                     &popup_open,
                                     ImGuiWindowFlags_AlwaysAutoResize))
         {
-            /* Closed via title-bar X while a Move delete was deferred → keep original. */
+            /* Closed via title-bar X: still finish the move; notes stay. */
             if (m_inst_move_remap_confirm_open && !popup_open)
             {
                 m_inst_move_remap_confirm_open = false;
-                if (m_inst_move_pending_delete_source_id != 0)
-                {
-                    (void)FinishPendingInstrumentMove(false);
-                }
+                FinishPendingInstrumentMoveLeavingNotes();
             }
             return;
         }
         if (!popup_open)
         {
             m_inst_move_remap_confirm_open = false;
-            if (m_inst_move_pending_delete_source_id != 0)
-            {
-                (void)FinishPendingInstrumentMove(false);
-            }
+            FinishPendingInstrumentMoveLeavingNotes();
             ImGui::EndPopup();
             return;
         }
@@ -938,12 +945,7 @@
         ImGui::SameLine();
         if (ImGui::Button("No", ImVec2(120.0f, 0.0f)))
         {
-            /* Keep the original bank slot so Session save won't re-promote a
-             * deleted INST from song embeds while notes still reference it. */
-            if (m_inst_move_pending_delete_source_id != 0)
-            {
-                (void)FinishPendingInstrumentMove(false);
-            }
+            FinishPendingInstrumentMoveLeavingNotes();
             m_inst_move_remap_confirm_open = false;
             ImGui::CloseCurrentPopup();
         }
