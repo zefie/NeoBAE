@@ -557,11 +557,7 @@
             case SessionTab::Instruments:
             {
                 std::vector<int> indices = CollectTargetInstrumentIndices();
-                std::sort(indices.begin(), indices.end(), std::greater<int>());
-                for (int idx : indices)
-                {
-                    DeleteInstrumentAt(idx);
-                }
+                RequestDeleteInstruments(indices);
                 m_multi_instruments.clear();
                 break;
             }

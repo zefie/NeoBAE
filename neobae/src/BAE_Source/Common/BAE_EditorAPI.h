@@ -983,6 +983,29 @@ BAEResult BAERmfEditorBank_DeleteInstrument(BAEBankToken bankToken,
 BAEResult BAERmfEditorBank_DeleteAlias(BAEBankToken bankToken,
                                        uint32_t aliasFromInstID);
 
+/* Remove ALIS entries whose aliasTo equals instID. No-op if none match. */
+BAEResult BAERmfEditorBank_PruneAliasesToInstID(BAEBankToken bankToken,
+                                                uint32_t instID);
+
+/* Rewrite ALIS entries with aliasTo == oldToInstID so they point at newToInstID. */
+BAEResult BAERmfEditorBank_RetargetAliases(BAEBankToken bankToken,
+                                           uint32_t oldToInstID,
+                                           uint32_t newToInstID);
+
+/* Remove ALIS entries whose aliasTo INST resource does not exist.
+ * outRemoved may be NULL. */
+BAEResult BAERmfEditorBank_PruneOrphanAliases(BAEBankToken bankToken,
+                                              uint32_t *outRemoved);
+
+/* Count ALIS entries whose aliasTo INST resource does not exist. */
+BAEResult BAERmfEditorBank_CountOrphanAliases(BAEBankToken bankToken,
+                                              uint32_t *outCount);
+
+/* Count ALIS entries whose aliasTo equals instID. */
+BAEResult BAERmfEditorBank_CountAliasesToInstID(BAEBankToken bankToken,
+                                                uint32_t instID,
+                                                uint32_t *outCount);
+
 /* Promote a mixer-loaded bank (typically read-only disk/memory) to an in-memory
  * writable/resizable resource image so XAddFileResource and other mutations work.
  * No-op if the bank is already writable. Safe to call repeatedly. */

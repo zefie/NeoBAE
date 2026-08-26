@@ -1955,11 +1955,7 @@
         if (m_clip_cut_instruments_after_publish)
         {
             m_clip_cut_instruments_after_publish = false;
-            std::sort(list_indices.begin(), list_indices.end(), std::greater<int>());
-            for (int idx : list_indices)
-            {
-                DeleteInstrumentAt(idx);
-            }
+            RequestDeleteInstruments(list_indices);
             m_multi_instruments.clear();
         }
     }

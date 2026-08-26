@@ -1612,6 +1612,8 @@ public:
         DrawEditConfirmDialogs();
         DrawResourceUsageDialog();
         DrawInstDestDialog();
+        DrawDeleteInstrumentAliasConfirmDialog();
+        DrawRemoveOrphanAliasesConfirmDialog();
         DrawInstMoveSongRemapConfirmDialog();
         PollInstMoveSongRemapPendingApply();
         DrawMidiNoteRemapperDialog();
@@ -4501,6 +4503,7 @@ private:
                 {
                     const uint32_t from_id = static_cast<uint32_t>(XGetLong(&alias->list[a].aliasFrom));
                     const uint32_t to_id = static_cast<uint32_t>(XGetLong(&alias->list[a].aliasTo));
+                    bool found = false;
                     for (const InstrumentRow &e : m_instruments)
                     {
                         if (e.is_alias || e.target_inst_id != to_id)
@@ -4519,7 +4522,25 @@ private:
                             alias_row.name += " (Alias)";
                         }
                         alias_rows.push_back(alias_row);
+                        found = true;
                         break;
+                    }
+                    if (!found)
+                    {
+                        InstrumentRow alias_row;
+                        alias_row.is_alias = true;
+                        alias_row.inst_id = from_id;
+                        alias_row.target_inst_id = to_id;
+                        alias_row.bank = static_cast<int>(from_id / 256u);
+                        alias_row.program = static_cast<int>(from_id % 128u);
+                        alias_row.percussion = ((from_id & 0x80u) != 0u);
+                        char missing[80];
+                        std::snprintf(missing,
+                                      sizeof(missing),
+                                      "Empty alias (missing INST %u)",
+                                      to_id);
+                        alias_row.name = missing;
+                        alias_rows.push_back(alias_row);
                     }
                 }
                 XDisposePtr(reinterpret_cast<XPTR>(alias));
@@ -6914,6 +6935,11 @@ private:
     bool m_confirm_load_builtin_open = false;
     bool m_confirm_new_session_open = false;
     bool m_confirm_delete_song_open = false;
+    bool m_confirm_delete_inst_aliases_open = false;
+    std::vector<uint32_t> m_pending_delete_inst_ids;
+    uint32_t m_pending_delete_inst_alias_count = 0;
+    bool m_confirm_remove_orphan_aliases_open = false;
+    uint32_t m_confirm_remove_orphan_aliases_count = 0;
     bool m_confirm_export_midi_open = false;
     std::vector<int> m_pending_delete_song_indices;
     bool m_pending_delete_song_trash_unused = true;
@@ -6976,10 +7002,11 @@ private:
     bool m_note_remap_dst_percussion = false;
     bool m_note_remap_scanned = false;
     uint32_t m_note_remap_count = 0;
-    /* Nonzero while Move cloned to dest but source delete is deferred until
-     * the song-remap dialog is answered (Yes → delete; No → keep original). */
-    uint32_t m_inst_move_pending_delete_source_id = 0;
-    uint32_t m_inst_move_pending_dest_id = 0;
+    /* Set while Move cloned to dest but source delete is deferred until
+     * the song-remap dialog is answered (Yes -> delete; No -> keep original).
+     * INST id 0 is valid (B0P000); NONE means no pending move. */
+    uint32_t m_inst_move_pending_delete_source_id = BAE_EDITOR_INST_ID_NONE;
+    uint32_t m_inst_move_pending_dest_id = BAE_EDITOR_INST_ID_NONE;
 
     int m_sample_rate_hz = 44100;
     int m_sample_rate_index = 2;

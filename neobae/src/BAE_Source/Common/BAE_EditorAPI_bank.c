@@ -2740,6 +2740,256 @@ BAEResult PV_BankDeleteResource(XFILE bankFile,
 }
 
 
+/* Keep-callback may rewrite *to. Return TRUE to keep the entry. */
+typedef bool (*PV_BankAliasKeepFn)(uint32_t from, uint32_t *to, void *user);
+
+static BAEResult PV_BankFilterAliases(XFILE bankFile,
+                                      PV_BankAliasKeepFn keep,
+                                      void *user)
+{
+    XAliasLinkResource *oldAlias;
+    XAliasLinkResource *newAlias;
+    uint32_t oldCount;
+    uint32_t newCount;
+    uint32_t i;
+    bool changed;
+    int32_t newSize;
+    char emptyName[1];
+    BAEResult result;
+
+    if (!bankFile || !keep)
+    {
+        return BAE_PARAM_ERR;
+    }
+
+    oldAlias = XGetAliasLinkFromFile(bankFile);
+    if (!oldAlias)
+    {
+        return BAE_NO_ERROR;
+    }
+
+    oldCount = (uint32_t)XGetLong(&oldAlias->numberOfAliases);
+    newCount = 0;
+    changed = FALSE;
+    for (i = 0; i < oldCount; ++i)
+    {
+        uint32_t from = (uint32_t)XGetLong(&oldAlias->list[i].aliasFrom);
+        uint32_t to = (uint32_t)XGetLong(&oldAlias->list[i].aliasTo);
+        uint32_t newTo = to;
+        if (keep(from, &newTo, user))
+        {
+            ++newCount;
+            if (newTo != to)
+            {
+                changed = TRUE;
+            }
+        }
+        else
+        {
+            changed = TRUE;
+        }
+    }
+
+    if (!changed)
+    {
+        XDisposePtr((XPTR)oldAlias);
+        return BAE_NO_ERROR;
+    }
+
+    if (newCount == 0)
+    {
+        XDisposePtr((XPTR)oldAlias);
+        return PV_BankDeleteResource(bankFile, ID_ALIAS, DEFAULT_RESOURCE_ALIAS_ID);
+    }
+
+    newSize = (int32_t)(sizeof(uint32_t) * 2 + newCount * sizeof(XAliasLink));
+    newAlias = (XAliasLinkResource *)XNewPtr(newSize);
+    if (!newAlias)
+    {
+        XDisposePtr((XPTR)oldAlias);
+        return BAE_MEMORY_ERR;
+    }
+
+    XPutLong(&newAlias->version, ALIAS_ID_RESOURCE_VERSION);
+    XPutLong(&newAlias->numberOfAliases, newCount);
+    {
+        uint32_t dst = 0;
+        for (i = 0; i < oldCount; ++i)
+        {
+            uint32_t from = (uint32_t)XGetLong(&oldAlias->list[i].aliasFrom);
+            uint32_t to = (uint32_t)XGetLong(&oldAlias->list[i].aliasTo);
+            uint32_t newTo = to;
+            if (keep(from, &newTo, user))
+            {
+                XPutLong(&newAlias->list[dst].aliasFrom, from);
+                XPutLong(&newAlias->list[dst].aliasTo, newTo);
+                ++dst;
+            }
+        }
+    }
+    XDisposePtr((XPTR)oldAlias);
+
+    emptyName[0] = 0;
+    result = PV_BankCommitResource(bankFile, ID_ALIAS,
+                                   DEFAULT_RESOURCE_ALIAS_ID,
+                                   emptyName, newAlias, newSize);
+    XDisposePtr((XPTR)newAlias);
+    return result;
+}
+
+static bool PV_BankAliasKeepIfNotTo(uint32_t from, uint32_t *to, void *user)
+{
+    (void)from;
+    return *to != *(uint32_t *)user;
+}
+
+static bool PV_BankAliasKeepRetarget(uint32_t from, uint32_t *to, void *user)
+{
+    uint32_t const *ids = (uint32_t const *)user;
+    (void)from;
+    if (*to == ids[0])
+    {
+        *to = ids[1];
+    }
+    return TRUE;
+}
+
+static bool PV_BankAliasKeepIfTargetInstExists(uint32_t from, uint32_t *to, void *user)
+{
+    (void)from;
+    return XExistsFileResource((XFILE)user, ID_INST, (XLongResourceID)*to) != FALSE;
+}
+
+static uint32_t PV_BankCountOrphanAliases(XFILE bankFile)
+{
+    XAliasLinkResource *alias;
+    uint32_t count;
+    uint32_t n;
+    uint32_t i;
+
+    alias = XGetAliasLinkFromFile(bankFile);
+    if (!alias)
+    {
+        return 0;
+    }
+    n = (uint32_t)XGetLong(&alias->numberOfAliases);
+    count = 0;
+    for (i = 0; i < n; ++i)
+    {
+        uint32_t to = (uint32_t)XGetLong(&alias->list[i].aliasTo);
+        if (XExistsFileResource(bankFile, ID_INST, (XLongResourceID)to) == FALSE)
+        {
+            ++count;
+        }
+    }
+    XDisposePtr((XPTR)alias);
+    return count;
+}
+
+static uint32_t PV_BankCountAliasesToInstID(XFILE bankFile, uint32_t instID)
+{
+    XAliasLinkResource *alias;
+    uint32_t count;
+    uint32_t n;
+    uint32_t i;
+
+    alias = XGetAliasLinkFromFile(bankFile);
+    if (!alias)
+    {
+        return 0;
+    }
+    n = (uint32_t)XGetLong(&alias->numberOfAliases);
+    count = 0;
+    for (i = 0; i < n; ++i)
+    {
+        if ((uint32_t)XGetLong(&alias->list[i].aliasTo) == instID)
+        {
+            ++count;
+        }
+    }
+    XDisposePtr((XPTR)alias);
+    return count;
+}
+
+static BAEResult PV_BankPruneAliasesToInstID(XFILE bankFile, uint32_t instID)
+{
+    return PV_BankFilterAliases(bankFile, PV_BankAliasKeepIfNotTo, &instID);
+}
+
+BAEResult BAERmfEditorBank_PruneAliasesToInstID(BAEBankToken bankToken,
+                                                uint32_t instID)
+{
+    if (!bankToken)
+    {
+        return BAE_PARAM_ERR;
+    }
+    return PV_BankPruneAliasesToInstID((XFILE)bankToken, instID);
+}
+
+BAEResult BAERmfEditorBank_RetargetAliases(BAEBankToken bankToken,
+                                           uint32_t oldToInstID,
+                                           uint32_t newToInstID)
+{
+    uint32_t ids[2];
+
+    if (!bankToken)
+    {
+        return BAE_PARAM_ERR;
+    }
+    if (oldToInstID == newToInstID)
+    {
+        return BAE_NO_ERROR;
+    }
+    ids[0] = oldToInstID;
+    ids[1] = newToInstID;
+    return PV_BankFilterAliases((XFILE)bankToken, PV_BankAliasKeepRetarget, ids);
+}
+
+BAEResult BAERmfEditorBank_CountOrphanAliases(BAEBankToken bankToken,
+                                              uint32_t *outCount)
+{
+    if (!bankToken || !outCount)
+    {
+        return BAE_PARAM_ERR;
+    }
+    *outCount = PV_BankCountOrphanAliases((XFILE)bankToken);
+    return BAE_NO_ERROR;
+}
+
+BAEResult BAERmfEditorBank_CountAliasesToInstID(BAEBankToken bankToken,
+                                                uint32_t instID,
+                                                uint32_t *outCount)
+{
+    if (!bankToken || !outCount)
+    {
+        return BAE_PARAM_ERR;
+    }
+    *outCount = PV_BankCountAliasesToInstID((XFILE)bankToken, instID);
+    return BAE_NO_ERROR;
+}
+
+BAEResult BAERmfEditorBank_PruneOrphanAliases(BAEBankToken bankToken,
+                                              uint32_t *outRemoved)
+{
+    XFILE bankFile;
+    uint32_t before;
+    BAEResult result;
+
+    if (!bankToken)
+    {
+        return BAE_PARAM_ERR;
+    }
+    bankFile = (XFILE)bankToken;
+    before = PV_BankCountOrphanAliases(bankFile);
+    result = PV_BankFilterAliases(bankFile, PV_BankAliasKeepIfTargetInstExists, bankFile);
+    if (outRemoved)
+    {
+        *outRemoved = (result == BAE_NO_ERROR) ? before : 0;
+    }
+    return result;
+}
+
+
 // Public API to delete an instrument from a bank
 BAEResult BAERmfEditorBank_DeleteInstrument(BAEBankToken bankToken,
                                             uint32_t instrumentIndex)
@@ -2773,60 +3023,7 @@ BAEResult BAERmfEditorBank_DeleteInstrument(BAEBankToken bankToken,
             return r;
     }
 
-    // Also remove any alias entries that pointed at this instID
-    {
-        XAliasLinkResource *oldAlias = XGetAliasLinkFromFile(bankFile);
-        if (oldAlias)
-        {
-            uint32_t oldCount = (uint32_t)XGetLong(&oldAlias->numberOfAliases);
-            uint32_t newCount = 0;
-            int32_t newSize;
-            XAliasLinkResource *newAlias;
-
-            for (uint32_t i = 0; i < oldCount; ++i)
-                if ((uint32_t)XGetLong(&oldAlias->list[i].aliasTo) != (uint32_t)instID)
-                    ++newCount;
-
-            if (newCount < oldCount)
-            {
-                if (newCount == 0)
-                {
-                    // No aliases left - remove the ID_ALIAS resource entirely
-                    PV_BankDeleteResource(bankFile, ID_ALIAS, DEFAULT_RESOURCE_ALIAS_ID);
-                }
-                else
-                {
-                    newSize  = (int32_t)(sizeof(uint32_t) * 2 +
-                                         newCount * sizeof(XAliasLink));
-                    newAlias = (XAliasLinkResource *)XNewPtr(newSize);
-                    if (newAlias)
-                    {
-                        uint32_t dst = 0;
-                        XPutLong(&newAlias->version, ALIAS_ID_RESOURCE_VERSION);
-                        XPutLong(&newAlias->numberOfAliases, newCount);
-                        for (uint32_t i = 0; i < oldCount; ++i)
-                        {
-                            if ((uint32_t)XGetLong(&oldAlias->list[i].aliasTo) != (uint32_t)instID)
-                            {
-                                XPutLong(&newAlias->list[dst].aliasFrom,
-                                         XGetLong(&oldAlias->list[i].aliasFrom));
-                                XPutLong(&newAlias->list[dst].aliasTo,
-                                         XGetLong(&oldAlias->list[i].aliasTo));
-                                ++dst;
-                            }
-                        }
-                        char emptyName[1] = {0};
-                        PV_BankCommitResource(bankFile, ID_ALIAS,
-                                              DEFAULT_RESOURCE_ALIAS_ID,
-                                              emptyName, newAlias, newSize);
-                        XDisposePtr((XPTR)newAlias);
-                    }
-                }
-            }
-            XDisposePtr((XPTR)oldAlias);
-        }
-    }
-    return BAE_NO_ERROR;
+    return PV_BankPruneAliasesToInstID(bankFile, (uint32_t)instID);
 }
 
 
@@ -3527,9 +3724,11 @@ BAEResult BAERmfEditorBank_CloneInstrument(BAEBankToken bankToken,
 
     if (deepClone && splitCount > 0)
     {
-        /* One used-SND-id scan for the whole clone (was per-split). */
+        /* One used-SND-id scan for the whole clone (was per-split).
+         * sndRemap[old] = new: shared splits keep one copy. */
         unsigned char *cloneData = (unsigned char *)XNewPtr(instSize);
         bool usedIDs[65536];
+        uint16_t sndRemap[65536];
         static const XResourceType sndTypes[] = { ID_SND, ID_CSND, ID_ESND, 0 };
         int nextFree = 1;
         int t;
@@ -3541,6 +3740,7 @@ BAEResult BAERmfEditorBank_CloneInstrument(BAEBankToken bankToken,
         }
         XBlockMove(instData, cloneData, instSize);
         XSetMemory(usedIDs, (int32_t)sizeof(usedIDs), 0);
+        XSetMemory(sndRemap, (int32_t)sizeof(sndRemap), 0);
         for (t = 0; sndTypes[t] != 0; ++t)
         {
             int32_t cnt = XCountFileResourcesOfType(bankFile, sndTypes[t]);
@@ -3564,9 +3764,18 @@ BAEResult BAERmfEditorBank_CloneInstrument(BAEBankToken bankToken,
         {
             unsigned char *splitPtr = cloneData + 14 + s * kInstKeySplitSize;
             XShortResourceID oldSndID = (XShortResourceID)XGetShort(splitPtr + 2);
-            if (oldSndID != 0)
+            uint16_t oldSndU = (uint16_t)oldSndID;
+            if (oldSndU != 0)
             {
-                XShortResourceID newSndID = 0;
+                XShortResourceID newSndID;
+
+                if (sndRemap[oldSndU] != 0)
+                {
+                    XPutShort(splitPtr + 2, sndRemap[oldSndU]);
+                    continue;
+                }
+
+                newSndID = 0;
                 for (; nextFree < 65536; ++nextFree)
                 {
                     if (!usedIDs[nextFree])
@@ -3602,6 +3811,7 @@ BAEResult BAERmfEditorBank_CloneInstrument(BAEBankToken bankToken,
                             return BAE_FILE_IO_ERROR;
                         }
                         XDisposePtr(sndData);
+                        sndRemap[oldSndU] = (uint16_t)newSndID;
                         XPutShort(splitPtr + 2, (uint16_t)newSndID);
                         break;
                     }

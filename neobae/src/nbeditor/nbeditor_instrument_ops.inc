@@ -256,17 +256,15 @@
             break;
         case InstDestMode::Move:
         {
-            /* Clone first; finish source slot after song-remap is decided.
-             * Bank 0/1 sources are deep-cloned so restoring the pristine GM
-             * slot cannot clobber samples still shared with the new custom. */
-            const bool deep_for_bank01 = (static_cast<int>(source_id / 256u) < 2);
+            /* Shallow clone first; finish source slot after song-remap is decided.
+             * Move keeps the same SND ids (true relocate). */
             r = BAERmfEditorBank_CloneInstrument(m_bank_token,
                                                  static_cast<uint32_t>(src_index),
                                                  dest_id,
-                                                 deep_for_bank01 ? TRUE : FALSE);
+                                                 FALSE);
             if (r == BAE_NO_ERROR)
             {
-                TrackCustomInstIdAfterDestOp(source_id, dest_id, false);
+                TrackCustomInstIdAfterDestOp(source_id, dest_id, true);
                 m_inst_move_pending_delete_source_id = source_id;
                 m_inst_move_pending_dest_id = dest_id;
                 std::snprintf(status, sizeof(status), "Moved instrument to instID %u", dest_id);
@@ -418,12 +416,12 @@
     {
         const uint32_t source_id = m_inst_move_pending_delete_source_id;
         const uint32_t dest_id = m_inst_move_pending_dest_id;
-        if (source_id == 0)
+        if (source_id == BAE_EDITOR_INST_ID_NONE)
         {
             return true;
         }
-        m_inst_move_pending_delete_source_id = 0;
-        m_inst_move_pending_dest_id = 0;
+        m_inst_move_pending_delete_source_id = BAE_EDITOR_INST_ID_NONE;
+        m_inst_move_pending_dest_id = BAE_EDITOR_INST_ID_NONE;
 
         if (!delete_source)
         {
@@ -440,53 +438,53 @@
         /* Drop stale song embeds so Session save cannot resurrect this INST. */
         StripInstrumentFromSessionSongs(source_id);
 
+        /* Keep other slots that aliased the moved INST pointing at the new id. */
+        if (dest_id != BAE_EDITOR_INST_ID_NONE && dest_id != source_id)
+        {
+            const BAEResult retarget =
+                BAERmfEditorBank_RetargetAliases(m_bank_token, source_id, dest_id);
+            if (retarget != BAE_NO_ERROR)
+            {
+                SetStatus(std::string("Move incomplete: failed to retarget aliases: ") +
+                          FormatBAEError(retarget));
+                return false;
+            }
+        }
+
         const int source_bank = static_cast<int>(source_id / 256u);
-        bool restored_or_deleted = false;
-        if (source_bank < 2)
+        const int del_index = FindInstrumentIndexByInstId(source_id);
+        if (del_index < 0)
         {
-            /* Moving an override/custom off Bank 0/1: put the bank's own
-             * program back instead of leaving a hole. */
-            if (RestoreBank01SlotFromPristine(source_id))
+            m_session_custom_inst_ids.erase(source_id);
+        }
+        else
+        {
+            const BAEResult r = BAERmfEditorBank_DeleteInstrument(
+                m_bank_token, static_cast<uint32_t>(del_index));
+            if (r != BAE_NO_ERROR)
             {
-                restored_or_deleted = true;
+                SetStatus(std::string("Move incomplete: failed to remove original: ") +
+                          FormatBAEError(r));
+                return false;
             }
+            m_session_custom_inst_ids.erase(source_id);
+            MarkBank01TouchedIfNeeded(source_bank);
         }
 
-        if (!restored_or_deleted)
-        {
-            const int del_index = FindInstrumentIndexByInstId(source_id);
-            if (del_index < 0)
-            {
-                m_session_custom_inst_ids.erase(source_id);
-            }
-            else
-            {
-                const BAEResult r = BAERmfEditorBank_DeleteInstrument(
-                    m_bank_token, static_cast<uint32_t>(del_index));
-                if (r != BAE_NO_ERROR)
-                {
-                    SetStatus(std::string("Move incomplete: failed to remove original: ") +
-                              FormatBAEError(r));
-                    return false;
-                }
-                m_session_custom_inst_ids.erase(source_id);
-                MarkBank01TouchedIfNeeded(source_bank);
-            }
-        }
-
-        /* Rebuild bank list, then re-scan song embeds so restored GM slots are
-         * not still tagged (Override)/custom from the pre-strip override cache. */
+        /* Rebuild bank list, then re-scan song embeds so the emptied source
+         * slot is not still tagged (Override)/custom from the pre-strip cache. */
         m_song_override_instruments.clear();
         RefreshListsFromBank();
         RefreshSongOverridesFromDocument();
-        RefreshAuditionInstrumentLoad(source_id, dest_id != 0 ? dest_id : source_id);
+        RefreshAuditionInstrumentLoad(
+            source_id, dest_id != BAE_EDITOR_INST_ID_NONE ? dest_id : source_id);
         return true;
     }
 
     /* Remap declined: still finish the move. Notes keep the old slot. */
     void FinishPendingInstrumentMoveLeavingNotes(void)
     {
-        if (m_inst_move_pending_delete_source_id == 0)
+        if (m_inst_move_pending_delete_source_id == BAE_EDITOR_INST_ID_NONE)
         {
             return;
         }
@@ -984,7 +982,7 @@
         {
             SetStatus("Song note update failed");
             /* Leave original in place if remap failed. */
-            if (m_inst_move_pending_delete_source_id != 0)
+            if (m_inst_move_pending_delete_source_id != BAE_EDITOR_INST_ID_NONE)
             {
                 (void)FinishPendingInstrumentMove(false);
             }
@@ -1021,60 +1019,361 @@
         (void)ReloadPlaybackPreservingTransport();
     }
 
-    void DeleteInstrumentAt(int list_index)
+    int CountOrphanAliases() const
     {
-        if (list_index < 0 || list_index >= static_cast<int>(m_instruments.size()))
+        uint32_t n = 0;
+        if (!m_bank_token)
+        {
+            return 0;
+        }
+        if (BAERmfEditorBank_CountOrphanAliases(m_bank_token, &n) != BAE_NO_ERROR)
+        {
+            return 0;
+        }
+        return static_cast<int>(n);
+    }
+
+    uint32_t CountAliasesToInstID(uint32_t inst_id) const
+    {
+        uint32_t n = 0;
+        if (!m_bank_token)
+        {
+            return 0;
+        }
+        if (BAERmfEditorBank_CountAliasesToInstID(m_bank_token, inst_id, &n) != BAE_NO_ERROR)
+        {
+            return 0;
+        }
+        return n;
+    }
+
+    void RequestRemoveOrphanAliases()
+    {
+        const int n = CountOrphanAliases();
+        if (n <= 0)
+        {
+            SetStatus("No aliases for non-existent instruments");
+            return;
+        }
+        m_confirm_remove_orphan_aliases_count = static_cast<uint32_t>(n);
+        m_confirm_remove_orphan_aliases_open = true;
+    }
+
+    void RemoveOrphanAliases()
+    {
+        if (!m_bank_token || !EnsureActiveBankWritable())
         {
             return;
         }
-        const InstrumentRow &row = m_instruments[static_cast<size_t>(list_index)];
-        if (row.from_song_document || row.has_song_override)
+        uint32_t removed = 0;
+        const BAEResult r = BAERmfEditorBank_PruneOrphanAliases(m_bank_token, &removed);
+        if (r != BAE_NO_ERROR)
         {
-            if (m_document)
+            SetStatus(std::string("Remove orphan aliases failed: ") + FormatBAEError(r));
+            return;
+        }
+        if (removed == 0)
+        {
+            SetStatus("No aliases for non-existent instruments");
+            return;
+        }
+        MarkBank01TouchedIfNeeded(0);
+        MarkBank01TouchedIfNeeded(1);
+        char status[128];
+        std::snprintf(status,
+                      sizeof(status),
+                      "Removed %u alias%s for non-existent instruments",
+                      removed,
+                      removed == 1u ? "" : "es");
+        SetStatus(status);
+        RefreshListsFromBank();
+        MarkPlaybackStale();
+        (void)ReloadPlaybackPreservingTransport();
+    }
+
+    void DrawRemoveOrphanAliasesConfirmDialog()
+    {
+        if (m_confirm_remove_orphan_aliases_open)
+        {
+            ImGui::OpenPopup("Remove Empty Aliases?");
+        }
+        if (!ImGui::BeginPopupModal("Remove Empty Aliases?",
+                                    &m_confirm_remove_orphan_aliases_open,
+                                    ImGuiWindowFlags_AlwaysAutoResize))
+        {
+            return;
+        }
+        ImGui::TextWrapped(
+            "Remove %u alias%s whose target instrument no longer exists?",
+            m_confirm_remove_orphan_aliases_count,
+            m_confirm_remove_orphan_aliases_count == 1u ? "" : "es");
+        ImGui::Separator();
+        if (ImGui::Button("Remove", ImVec2(120.0f, 0.0f)))
+        {
+            m_confirm_remove_orphan_aliases_open = false;
+            ImGui::CloseCurrentPopup();
+            RemoveOrphanAliases();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel", ImVec2(120.0f, 0.0f)))
+        {
+            m_confirm_remove_orphan_aliases_open = false;
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
+
+    void FinishDeleteBankInstruments(bool prune_aliases)
+    {
+        if (m_pending_delete_inst_ids.empty())
+        {
+            return;
+        }
+        if (!m_bank_token || !EnsureActiveBankWritable())
+        {
+            m_pending_delete_inst_ids.clear();
+            m_pending_delete_inst_alias_count = 0;
+            return;
+        }
+
+        XFILE bank = reinterpret_cast<XFILE>(m_bank_token);
+        unsigned trashed = 0;
+        unsigned hard_deleted = 0;
+        unsigned failed = 0;
+        for (uint32_t deleted_id : m_pending_delete_inst_ids)
+        {
+            const XLongResourceID iid = static_cast<XLongResourceID>(deleted_id);
+            if (XTrashFileResource(bank, ID_INST, iid) != FALSE)
             {
-                (void)BAERmfEditorDocument_DeleteInstrument(m_document, row.inst_id);
-                (void)BAERmfEditorDocument_DeleteInstrument(m_document, row.target_inst_id);
-                m_session_custom_inst_ids.erase(row.inst_id);
-                m_session_custom_inst_ids.erase(row.target_inst_id);
-                RefreshListsFromBank();
-                SetStatus(std::string("Deleted song instrument ") + row.name);
-                return;
+                if (prune_aliases)
+                {
+                    (void)BAERmfEditorBank_PruneAliasesToInstID(m_bank_token, deleted_id);
+                }
+                m_session_custom_inst_ids.erase(deleted_id);
+                ++trashed;
+                continue;
             }
-            SetStatus("Cannot delete a song-document instrument");
+            /* Fallback when ZTRS trash rebuild fails. Hard delete always
+             * prunes aliases; skip it if the user asked to keep them. */
+            if (!prune_aliases)
+            {
+                ++failed;
+                continue;
+            }
+            const int del_index = FindInstrumentIndexByInstId(deleted_id);
+            if (del_index < 0)
+            {
+                ++failed;
+                continue;
+            }
+            const BAEResult r = BAERmfEditorBank_DeleteInstrument(
+                m_bank_token, static_cast<uint32_t>(del_index));
+            if (r != BAE_NO_ERROR)
+            {
+                ++failed;
+                continue;
+            }
+            m_session_custom_inst_ids.erase(deleted_id);
+            ++hard_deleted;
+        }
+
+        const unsigned done = trashed + hard_deleted;
+        char status[160];
+        if (done == 0)
+        {
+            SetStatus("Move instrument to Trash failed");
+        }
+        else if (prune_aliases)
+        {
+            std::snprintf(status,
+                          sizeof(status),
+                          "Moved %u instrument%s to Trash (aliases removed)",
+                          done,
+                          done == 1u ? "" : "s");
+            SetStatus(status);
+        }
+        else
+        {
+            std::snprintf(status,
+                          sizeof(status),
+                          "Moved %u instrument%s to Trash (empty aliases kept)",
+                          done,
+                          done == 1u ? "" : "s");
+            SetStatus(status);
+        }
+        (void)failed;
+
+        m_pending_delete_inst_ids.clear();
+        m_pending_delete_inst_alias_count = 0;
+        RefreshListsFromBank();
+        MarkPlaybackStale();
+        (void)ReloadPlaybackPreservingTransport();
+    }
+
+    void RequestDeleteInstruments(const std::vector<int> &list_indices)
+    {
+        if (list_indices.empty())
+        {
             return;
         }
-        if (row.is_alias)
+
+        std::vector<uint32_t> bank_ids;
+        std::vector<uint32_t> alias_from_ids;
+        bool deleted_song = false;
+        for (int list_index : list_indices)
         {
-            RemoveAliasAt(list_index);
+            if (list_index < 0 || list_index >= static_cast<int>(m_instruments.size()))
+            {
+                continue;
+            }
+            const InstrumentRow &row = m_instruments[static_cast<size_t>(list_index)];
+            if (row.from_song_document || row.has_song_override)
+            {
+                if (m_document)
+                {
+                    (void)BAERmfEditorDocument_DeleteInstrument(m_document, row.inst_id);
+                    (void)BAERmfEditorDocument_DeleteInstrument(m_document, row.target_inst_id);
+                    m_session_custom_inst_ids.erase(row.inst_id);
+                    m_session_custom_inst_ids.erase(row.target_inst_id);
+                    deleted_song = true;
+                    SetStatus(std::string("Deleted song instrument ") + row.name);
+                }
+                else
+                {
+                    SetStatus("Cannot delete a song-document instrument");
+                }
+                continue;
+            }
+            if (row.is_alias)
+            {
+                alias_from_ids.push_back(row.inst_id);
+                continue;
+            }
+            bank_ids.push_back(row.inst_id);
+        }
+
+        if (!alias_from_ids.empty() && EnsureActiveBankWritable())
+        {
+            unsigned removed = 0;
+            for (uint32_t from_id : alias_from_ids)
+            {
+                if (BAERmfEditorBank_DeleteAlias(m_bank_token, from_id) == BAE_NO_ERROR)
+                {
+                    ++removed;
+                }
+            }
+            if (removed > 0)
+            {
+                char status[128];
+                std::snprintf(status, sizeof(status), "Removed %u alias%s",
+                              removed, removed == 1u ? "" : "es");
+                SetStatus(status);
+                MarkPlaybackStale();
+                (void)ReloadPlaybackPreservingTransport();
+            }
+        }
+
+        if (bank_ids.empty())
+        {
+            if (deleted_song || !alias_from_ids.empty())
+            {
+                RefreshListsFromBank();
+            }
             return;
         }
         if (!EnsureActiveBankWritable())
         {
-            return;
-        }
-        XFILE bank = reinterpret_cast<XFILE>(m_bank_token);
-        const XLongResourceID iid = static_cast<XLongResourceID>(row.inst_id);
-        if (XTrashFileResource(bank, ID_INST, iid) == FALSE)
-        {
-            /* Fallback for edge cases where ZTRS trash rebuild fails. */
-            const BAEResult r =
-                BAERmfEditorBank_DeleteInstrument(m_bank_token, row.instrument_index);
-            if (r != BAE_NO_ERROR)
+            if (deleted_song || !alias_from_ids.empty())
             {
-                SetStatus(std::string("Move instrument to Trash failed: ") + FormatBAEError(r));
-                return;
+                RefreshListsFromBank();
             }
-            char status[128];
-            std::snprintf(status, sizeof(status), "Deleted instrument instID %u", row.inst_id);
-            SetStatus(status);
-            RefreshListsFromBank();
             return;
         }
-        m_session_custom_inst_ids.erase(row.inst_id);
-        char status[128];
-        std::snprintf(status, sizeof(status), "Moved instrument instID %u to Trash", row.inst_id);
-        SetStatus(status);
-        RefreshListsFromBank();
+
+        uint32_t alias_count = 0;
+        for (uint32_t inst_id : bank_ids)
+        {
+            alias_count += CountAliasesToInstID(inst_id);
+        }
+        m_pending_delete_inst_ids = std::move(bank_ids);
+        m_pending_delete_inst_alias_count = alias_count;
+        if (deleted_song || !alias_from_ids.empty())
+        {
+            RefreshListsFromBank();
+        }
+        if (alias_count == 0)
+        {
+            FinishDeleteBankInstruments(false);
+            return;
+        }
+        m_confirm_delete_inst_aliases_open = true;
+    }
+
+    void DeleteInstrumentAt(int list_index)
+    {
+        RequestDeleteInstruments(std::vector<int>{list_index});
+    }
+
+    void DrawDeleteInstrumentAliasConfirmDialog()
+    {
+        if (m_confirm_delete_inst_aliases_open)
+        {
+            ImGui::OpenPopup("Remove Aliases?");
+        }
+        bool popup_open = m_confirm_delete_inst_aliases_open;
+        if (!ImGui::BeginPopupModal("Remove Aliases?",
+                                    &popup_open,
+                                    ImGuiWindowFlags_AlwaysAutoResize))
+        {
+            if (m_confirm_delete_inst_aliases_open && !popup_open)
+            {
+                m_confirm_delete_inst_aliases_open = false;
+                m_pending_delete_inst_ids.clear();
+                m_pending_delete_inst_alias_count = 0;
+            }
+            return;
+        }
+        if (!popup_open)
+        {
+            m_confirm_delete_inst_aliases_open = false;
+            m_pending_delete_inst_ids.clear();
+            m_pending_delete_inst_alias_count = 0;
+            ImGui::EndPopup();
+            return;
+        }
+
+        const unsigned inst_n = static_cast<unsigned>(m_pending_delete_inst_ids.size());
+        ImGui::TextWrapped(
+            "%u alias%s point at the instrument%s you are deleting.",
+            m_pending_delete_inst_alias_count,
+            m_pending_delete_inst_alias_count == 1u ? "" : "es",
+            inst_n == 1u ? "" : "s");
+        ImGui::Spacing();
+        ImGui::TextWrapped(
+            "Remove those aliases, or keep them as empty aliases you can delete later?");
+        ImGui::Separator();
+        if (ImGui::Button("Remove aliases", ImVec2(150.0f, 0.0f)))
+        {
+            m_confirm_delete_inst_aliases_open = false;
+            ImGui::CloseCurrentPopup();
+            FinishDeleteBankInstruments(true);
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Keep empty aliases", ImVec2(170.0f, 0.0f)))
+        {
+            m_confirm_delete_inst_aliases_open = false;
+            ImGui::CloseCurrentPopup();
+            FinishDeleteBankInstruments(false);
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel", ImVec2(100.0f, 0.0f)))
+        {
+            m_confirm_delete_inst_aliases_open = false;
+            m_pending_delete_inst_ids.clear();
+            m_pending_delete_inst_alias_count = 0;
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
     }
 
     void DrawInstDestDialog()

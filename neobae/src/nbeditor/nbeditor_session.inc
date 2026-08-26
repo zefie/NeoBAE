@@ -128,6 +128,19 @@
                 ImGui::SetTooltip(
                     "Move all unassigned bank samples to Trash (not referenced by any instrument).");
             }
+            if (ImGui::MenuItem("Remove Aliases for Non-existent Instruments",
+                                nullptr,
+                                false,
+                                m_bank_token != 0 && CountOrphanAliases() > 0))
+            {
+                RequestRemoveOrphanAliases();
+            }
+            if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal |
+                                     ImGuiHoveredFlags_AllowWhenDisabled))
+            {
+                ImGui::SetTooltip(
+                    "Drop bank aliases whose target instrument is gone.");
+            }
             ImGui::Separator();
             if (ImGui::MenuItem("Quit"))
             {
