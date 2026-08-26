@@ -1488,6 +1488,141 @@
         return true;
     }
 
+    XResourceType GroovoidObjectType(XFILE bank, const GroovoidEntry &entry) const
+    {
+        const XLongResourceID oid = static_cast<XLongResourceID>(entry.emid_resource_id);
+        if (!bank)
+        {
+            return 0;
+        }
+        if (entry.object_is_midi)
+        {
+            if (XExistsFileResource(bank, ID_MIDI, oid) != FALSE)
+            {
+                return ID_MIDI;
+            }
+            if (XExistsFileResource(bank, ID_MIDI_OLD, oid) != FALSE)
+            {
+                return ID_MIDI_OLD;
+            }
+        }
+        if (XExistsFileResource(bank, ID_EMID, oid) != FALSE)
+        {
+            return ID_EMID;
+        }
+        if (XExistsFileResource(bank, ID_ECMI, oid) != FALSE)
+        {
+            return ID_ECMI;
+        }
+        if (XExistsFileResource(bank, ID_CMID, oid) != FALSE)
+        {
+            return ID_CMID;
+        }
+        return 0;
+    }
+
+    bool BankSongObjectReferencedByOtherSong(XFILE bank,
+                                             uint32_t object_id,
+                                             uint32_t except_song_id) const
+    {
+        if (!bank)
+        {
+            return false;
+        }
+        const int32_t song_count = XCountFileResourcesOfType(bank, ID_SONG);
+        for (int32_t i = 0; i < song_count; ++i)
+        {
+            XLongResourceID song_id = 0;
+            int32_t song_size = 0;
+            XPTR song_data =
+                XGetIndexedFileResource(bank, ID_SONG, &song_id, i, nullptr, &song_size);
+            if (!song_data)
+            {
+                continue;
+            }
+            if (song_size < 2 || static_cast<uint32_t>(song_id) == except_song_id)
+            {
+                XDisposePtr(song_data);
+                continue;
+            }
+            const unsigned char *body = static_cast<const unsigned char *>(song_data);
+            const uint16_t other_id =
+                static_cast<uint16_t>((static_cast<uint16_t>(body[0]) << 8) | body[1]);
+            XDisposePtr(song_data);
+            if (other_id == object_id)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    void DeleteGroovoidAt(int index)
+    {
+        if (index < 0 || index >= static_cast<int>(m_groovoids.size()))
+        {
+            SetStatus("No groovoid selected");
+            return;
+        }
+        if (!m_bank_token || !EnsureActiveBankWritable())
+        {
+            return;
+        }
+
+        const GroovoidEntry entry = m_groovoids[static_cast<size_t>(index)];
+        XFILE bank = reinterpret_cast<XFILE>(m_bank_token);
+
+        if (m_song && m_groovoid_index == index)
+        {
+            BAESong_Stop(m_song, FALSE);
+            BAESong_Delete(m_song);
+            m_song = nullptr;
+            m_song_started = false;
+        }
+
+        XResourceType types[2];
+        XLongResourceID ids[2];
+        int32_t count = 0;
+        types[count] = ID_SONG;
+        ids[count] = static_cast<XLongResourceID>(entry.song_resource_id);
+        ++count;
+
+        const XResourceType object_type = GroovoidObjectType(bank, entry);
+        if (object_type != 0 &&
+            !BankSongObjectReferencedByOtherSong(bank,
+                                                 entry.emid_resource_id,
+                                                 entry.song_resource_id))
+        {
+            types[count] = object_type;
+            ids[count] = static_cast<XLongResourceID>(entry.emid_resource_id);
+            ++count;
+        }
+
+        bool ok = XTrashFileResources(bank, types, ids, count) != FALSE;
+        if (!ok)
+        {
+            ok = true;
+            for (int32_t i = 0; i < count; ++i)
+            {
+                if (XPurgeFileResource(bank, types[i], ids[i]) == FALSE)
+                {
+                    ok = false;
+                    break;
+                }
+            }
+        }
+        if (!ok)
+        {
+            SetStatus(std::string("Move groovoid to Trash failed: ") + entry.name);
+            return;
+        }
+
+        char status[160];
+        std::snprintf(status, sizeof(status), "Moved groovoid \"%s\" to Trash", entry.name.c_str());
+        SetStatus(status);
+        RefreshGroovoidsFromBank();
+    }
+
     void RestartSessionSongFromStart()
     {
         if (!m_song)
@@ -4180,6 +4315,13 @@
                     if (ImGui::MenuItem("Export as RMF..."))
                     {
                         BeginGroovoidRmfExport(i);
+                    }
+                    if (ImGui::MenuItem("Move Groovoid to Trash",
+                                        nullptr,
+                                        false,
+                                        m_bank_token != 0))
+                    {
+                        DeleteGroovoidAt(i);
                     }
                     ImGui::EndPopup();
                 }

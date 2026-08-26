@@ -552,7 +552,14 @@
             switch (m_session_tab)
             {
             case SessionTab::Songs:
-                RequestDeleteSessionSongs(CollectTargetSongIndices());
+                if (m_groovoid_index >= 0 && m_multi_songs.empty())
+                {
+                    DeleteGroovoidAt(m_groovoid_index);
+                }
+                else
+                {
+                    RequestDeleteSessionSongs(CollectTargetSongIndices());
+                }
                 break;
             case SessionTab::Instruments:
             {
