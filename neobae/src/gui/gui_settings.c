@@ -56,6 +56,7 @@ static int g_settings_mx = -10000;
 static int g_settings_my = -10000;
 static bool g_settings_mdown = false;
 static bool g_settings_mclick = false;
+static int g_settings_wheel_delta = 0;
 
 typedef struct {
     int w, h;
@@ -299,6 +300,12 @@ bool settings_handle_event(SDL_Event *event)
         settings_window_hide();
         return true;
     }
+    if (event->type == SDL_MOUSEWHEEL)
+    {
+        int wy = event->wheel.y;
+        g_settings_wheel_delta += (wy > 0) ? -1 : 1;
+        return true;
+    }
 #else
     if (event->type == SDL_EVENT_MOUSE_MOTION)
     {
@@ -326,12 +333,22 @@ bool settings_handle_event(SDL_Event *event)
         settings_window_hide();
         return true;
     }
+    if (event->type == SDL_EVENT_MOUSE_WHEEL)
+    {
+        int wy = (int)event->wheel.y;
+        g_settings_wheel_delta += (wy > 0) ? -1 : 1;
+        return true;
+    }
 #endif
     return true;
 }
 
 bool g_midi_input_device_dd_open = false;
 bool g_midi_output_device_dd_open = false;
+#if SUPPORT_MIDI_HW == TRUE
+static int g_midi_input_dd_scroll = 0;
+static int g_midi_output_dd_scroll = 0;
+#endif
 
 // MIDI device enumeration dirty flag - set true to force re-enumeration
 static bool g_midi_device_list_dirty = true;
@@ -1144,6 +1161,151 @@ void settings_window_render(int *transpose, int *tempo, int *volume, bool *loopP
     SDL_RenderPresent(g_settings_renderer);
 }
 
+#if SUPPORT_MIDI_HW == TRUE
+/* MIDI device rows sit at the bottom of the settings window. A list sized
+ * itemH * deviceCount is clipped by the window, so only ~3 ports showed.
+ * Open toward the larger gap, clamp height, and scroll the rest. */
+static int render_clamped_device_menu(SDL_Renderer *R, Rect trigger, int dlgH,
+                                      char names[][128], int count, int selected,
+                                      int *scroll, bool *open,
+                                      int mx, int my, bool mclick)
+{
+    int itemH = trigger.h;
+    if (itemH < 18)
+        itemH = 18;
+    int listCount = count > 0 ? count : 1;
+    const int margin = 4;
+    int spaceBelow = dlgH - (trigger.y + trigger.h + 1) - margin;
+    int spaceAbove = trigger.y - margin;
+    if (spaceBelow < 0)
+        spaceBelow = 0;
+    if (spaceAbove < 0)
+        spaceAbove = 0;
+    bool openUp = spaceAbove > spaceBelow;
+    int avail = openUp ? spaceAbove : spaceBelow;
+    if (avail < itemH)
+        avail = itemH;
+    int visible = avail / itemH;
+    if (visible < 1)
+        visible = 1;
+    if (visible > listCount)
+        visible = listCount;
+
+    if (g_settings_wheel_delta != 0)
+    {
+        *scroll += g_settings_wheel_delta;
+        g_settings_wheel_delta = 0;
+    }
+
+    int maxScroll = listCount - visible;
+    if (maxScroll < 0)
+        maxScroll = 0;
+    if (*scroll < 0)
+        *scroll = 0;
+    if (*scroll > maxScroll)
+        *scroll = maxScroll;
+
+    int boxH = visible * itemH;
+    Rect box = {trigger.x, openUp ? (trigger.y - boxH) : (trigger.y + trigger.h + 1), trigger.w, boxH};
+
+    SDL_Color ddBg = g_panel_bg;
+    ddBg.a = 255;
+    SDL_Color shadow = {0, 0, 0, g_is_dark_mode ? 120 : 90};
+    Rect shadowRect = {box.x + 2, box.y + 2, box.w, box.h};
+    draw_rect(R, shadowRect, shadow);
+    draw_rect(R, box, ddBg);
+    draw_frame(R, box, g_panel_border);
+
+    int sbW = (maxScroll > 0) ? 8 : 0;
+    Rect track = {box.x + box.w - 7, box.y + 2, 5, box.h - 4};
+    bool onScroll = (sbW > 0) && point_in(mx, my, track);
+    if (onScroll && mclick && maxScroll > 0 && box.h > 0)
+    {
+        int rel = my - box.y;
+        if (rel < 0)
+            rel = 0;
+        if (rel > box.h)
+            rel = box.h;
+        *scroll = (rel * maxScroll) / box.h;
+        if (*scroll < 0)
+            *scroll = 0;
+        if (*scroll > maxScroll)
+            *scroll = maxScroll;
+        mclick = false;
+    }
+
+#if USE_SDL2 == TRUE
+    SDL_Rect sdl_clip = {box.x, box.y, box.w, box.h};
+    SDL_RenderSetClipRect(R, &sdl_clip);
+#else
+    SDL_Rect sdl_clip = {box.x, box.y, box.w, box.h};
+    SDL_SetRenderClipRect(R, &sdl_clip);
+#endif
+
+    int chosen = -1;
+    if (count <= 0)
+    {
+        Rect ir = {box.x, box.y, box.w, itemH};
+        draw_rect(R, ir, g_panel_bg);
+        draw_text(R, ir.x + 6, ir.y + 6, "No MIDI devices", g_text_color);
+    }
+    else
+    {
+        int first = *scroll;
+        for (int vis = 0; vis < visible && (first + vis) < count; vis++)
+        {
+            int i = first + vis;
+            Rect ir = {box.x, box.y + vis * itemH, box.w - sbW, itemH};
+            bool over = !onScroll && point_in(mx, my, ir);
+            SDL_Color ibg = (i == selected) ? g_highlight_color : g_panel_bg;
+            if (over)
+                ibg = g_button_hover;
+            draw_rect(R, ir, ibg);
+            if (i < count - 1)
+            {
+                SDL_SetRenderDrawColor(R, g_panel_border.r, g_panel_border.g, g_panel_border.b, 255);
+#if USE_SDL2 == TRUE
+                SDL_RenderDrawLine(R, ir.x, ir.y + ir.h, ir.x + ir.w, ir.y + ir.h);
+#else
+                SDL_RenderLine(R, ir.x, ir.y + ir.h, ir.x + ir.w, ir.y + ir.h);
+#endif
+            }
+            draw_text(R, ir.x + 6, ir.y + 6, names[i], g_button_text);
+            if (over && mclick)
+            {
+                chosen = i;
+                *open = false;
+            }
+        }
+    }
+
+#if USE_SDL2 == TRUE
+    SDL_RenderSetClipRect(R, NULL);
+#else
+    SDL_SetRenderClipRect(R, NULL);
+#endif
+
+    if (maxScroll > 0)
+    {
+        SDL_Color trackCol = g_is_dark_mode ? (SDL_Color){40, 40, 48, 255} : (SDL_Color){200, 200, 210, 255};
+        draw_rect(R, track, trackCol);
+        int thumbH = (track.h * visible) / listCount;
+        if (thumbH < 12)
+            thumbH = 12;
+        int thumbY = track.y;
+        if (maxScroll > 0 && track.h > thumbH)
+            thumbY = track.y + ((track.h - thumbH) * (*scroll)) / maxScroll;
+        Rect thumb = {track.x, thumbY, track.w, thumbH};
+        draw_rect(R, thumb, g_accent_color);
+    }
+
+    if (mclick && chosen < 0 && !point_in(mx, my, trigger) && !point_in(mx, my, box))
+        *open = false;
+
+    return chosen;
+}
+#endif
+
 // Settings dialog rendering
 static void render_settings_dialog(SDL_Renderer *R, int mx, int my, bool mclick, bool mdown,
                             int *transpose, int *tempo, int *volume, bool *loopPlay,
@@ -1208,7 +1370,7 @@ static void render_settings_dialog(SDL_Renderer *R, int mx, int my, bool mclick,
     draw_text(R, leftX, dlg.y + 36, "Vol. Curve (HSB):", g_text_color);
     const char *volumeCurveNames[] = {"NeoBAE S Curve", "Peaky S Curve", "WebTV Curve", "2x Exponential", "2x Linear", "No Curve"};
     int vcCount = 6;
-    bool volumeCurveEnabled = !g_midiRecordFormatDropdownOpen;
+    bool volumeCurveEnabled = !g_midiRecordFormatDropdownOpen && !g_midi_input_device_dd_open && !g_midi_output_device_dd_open;
     SDL_Color dd_bg = g_button_base;
     SDL_Color dd_txt = g_button_text;
     SDL_Color dd_frame = g_button_border;
@@ -1267,7 +1429,7 @@ static void render_settings_dialog(SDL_Renderer *R, int mx, int my, bool mclick,
     }
     char srLabel[32];
     snprintf(srLabel, sizeof(srLabel), "%d Hz", g_sample_rate_hz);
-    bool sampleRateEnabled = !g_volumeCurveDropdownOpen && !g_midiRecordFormatDropdownOpen;
+    bool sampleRateEnabled = !g_volumeCurveDropdownOpen && !g_midiRecordFormatDropdownOpen && !g_midi_input_device_dd_open && !g_midi_output_device_dd_open;
     SDL_Color sr_bg = g_button_base;
     if (!sampleRateEnabled)
     {
@@ -1301,7 +1463,7 @@ static void render_settings_dialog(SDL_Renderer *R, int mx, int my, bool mclick,
     // Export codec selector (left column, below sample rate)
 #if USE_MPEG_ENCODER == TRUE
     draw_text(R, leftX, dlg.y + 108, "Export Codec:", g_text_color);
-    bool exportEnabled = !g_volumeCurveDropdownOpen && !g_sampleRateDropdownOpen && !g_midiRecordFormatDropdownOpen;
+    bool exportEnabled = !g_volumeCurveDropdownOpen && !g_sampleRateDropdownOpen && !g_midiRecordFormatDropdownOpen && !g_midi_input_device_dd_open && !g_midi_output_device_dd_open;
     SDL_Color exp_bg = g_button_base;
     SDL_Color exp_txt = g_button_text;
     if (!exportEnabled)
@@ -1640,6 +1802,9 @@ static void render_settings_dialog(SDL_Renderer *R, int mx, int my, bool mclick,
         if (g_midi_input_device_dd_open)
         {
             g_midi_device_list_dirty = true;
+            g_midi_input_dd_scroll = g_midi_input_device_index;
+            if (g_midi_input_dd_scroll < 0)
+                g_midi_input_dd_scroll = 0;
             g_volumeCurveDropdownOpen = false;
             g_sampleRateDropdownOpen = false;
             g_exportDropdownOpen = false;
@@ -1745,6 +1910,9 @@ static void render_settings_dialog(SDL_Renderer *R, int mx, int my, bool mclick,
         if (g_midi_output_device_dd_open)
         {
             g_midi_device_list_dirty = true;
+            g_midi_output_dd_scroll = g_midi_output_device_index;
+            if (g_midi_output_dd_scroll < 0)
+                g_midi_output_dd_scroll = 0;
             g_volumeCurveDropdownOpen = false;
             g_sampleRateDropdownOpen = false;
             g_exportDropdownOpen = false;
@@ -2087,135 +2255,62 @@ static void render_settings_dialog(SDL_Renderer *R, int mx, int my, bool mclick,
     // MIDI input device dropdown
     if (g_midi_input_device_dd_open)
     {
-        int itemH = midiDevRect.h;
-        int deviceCount = g_midi_input_device_count;
-        if (deviceCount <= 0)
-            deviceCount = 1; // show placeholder
-        Rect box = {midiDevRect.x, midiDevRect.y + midiDevRect.h + 1, midiDevRect.w, itemH * deviceCount};
-        SDL_Color ddBg = g_panel_bg;
-        ddBg.a = 255;
-        SDL_Color shadow = {0, 0, 0, g_is_dark_mode ? 120 : 90};
-        Rect shadowRect = {box.x + 2, box.y + 2, box.w, box.h};
-        draw_rect(R, shadowRect, shadow);
-        draw_rect(R, box, ddBg);
-        draw_frame(R, box, g_panel_border);
-        if (g_midi_input_device_count == 0)
-        { // placeholder
-            Rect ir = {box.x, box.y, box.w, itemH};
-            draw_rect(R, ir, g_panel_bg);
-            draw_text(R, ir.x + 6, ir.y + 6, "No MIDI devices", g_text_color);
-        }
-        else
+        int chosen = render_clamped_device_menu(R, midiDevRect, dlgH,
+                                                g_midi_device_name_cache, g_midi_input_device_count,
+                                                g_midi_input_device_index, &g_midi_input_dd_scroll,
+                                                &g_midi_input_device_dd_open, mx, my, mclick);
+        if (chosen >= 0)
         {
-            for (int i = 0; i < g_midi_input_device_count && i < 64; i++)
-            {
-                Rect ir = {box.x, box.y + i * itemH, box.w, itemH};
-                bool over = point_in(mx, my, ir);
-                SDL_Color ibg = (i == g_midi_input_device_index) ? g_highlight_color : g_panel_bg;
-                if (over)
-                    ibg = g_button_hover;
-                draw_rect(R, ir, ibg);
-                if (i < g_midi_input_device_count - 1)
-                {
-                    SDL_SetRenderDrawColor(R, g_panel_border.r, g_panel_border.g, g_panel_border.b, 255);
-#if USE_SDL2 == TRUE
-                    SDL_RenderDrawLine(R, ir.x, ir.y + ir.h, ir.x + ir.w, ir.y + ir.h);
-#else
-                    SDL_RenderLine(R, ir.x, ir.y + ir.h, ir.x + ir.w, ir.y + ir.h);
-#endif
-                }
-                draw_text(R, ir.x + 6, ir.y + 6, g_midi_device_name_cache[i], g_button_text);
-                if (over && mclick)
-                {
-                    g_midi_input_device_index = i;
-                    g_midi_input_device_dd_open = false; // reopen midi input with chosen device
-                    midi_service_stop();
-                    midi_input_shutdown();
-                    midi_input_init("NeoBAE", g_midi_device_api[i], g_midi_device_port[i]);
-                    midi_service_start();
-                    save_settings(g_current_bank_path[0] ? g_current_bank_path : NULL, *reverbType, *loopPlay);
-                }
-            }
-        }
-        if (mclick && !point_in(mx, my, midiDevRect) && !point_in(mx, my, box))
+            g_midi_input_device_index = chosen;
             g_midi_input_device_dd_open = false;
+            midi_service_stop();
+            midi_input_shutdown();
+            midi_input_init("NeoBAE", g_midi_device_api[chosen], g_midi_device_port[chosen]);
+            midi_service_start();
+            save_settings(g_current_bank_path[0] ? g_current_bank_path : NULL, *reverbType, *loopPlay);
+        }
     }
 
     // MIDI output device dropdown
     // Don't render the output dropdown while the input dropdown is open
     if (g_midi_output_device_dd_open && !g_midi_input_device_dd_open)
     {
-        int itemH = midiOutDevRect.h;
-        int deviceCount = g_midi_output_device_count;
-        if (deviceCount <= 0)
-            deviceCount = 1; // show placeholder
-        Rect box = {midiOutDevRect.x, midiOutDevRect.y + midiOutDevRect.h + 1, midiOutDevRect.w, itemH * deviceCount};
-        SDL_Color ddBg = g_panel_bg;
-        ddBg.a = 255;
-        SDL_Color shadow = {0, 0, 0, g_is_dark_mode ? 120 : 90};
-        Rect shadowRect = {box.x + 2, box.y + 2, box.w, box.h};
-        draw_rect(R, shadowRect, shadow);
-        draw_rect(R, box, ddBg);
-        draw_frame(R, box, g_panel_border);
-        if (g_midi_output_device_count == 0)
-        { // placeholder
-            Rect ir = {box.x, box.y, box.w, itemH};
-            draw_rect(R, ir, g_panel_bg);
-            draw_text(R, ir.x + 6, ir.y + 6, "No MIDI devices", g_text_color);
-        }
-        else
+        int outOffset = g_midi_input_device_count;
+        if (outOffset < 0)
+            outOffset = 0;
+        if (outOffset > 63)
+            outOffset = 63;
+        int chosen = render_clamped_device_menu(R, midiOutDevRect, dlgH,
+                                                &g_midi_device_name_cache[outOffset], g_midi_output_device_count,
+                                                g_midi_output_device_index, &g_midi_output_dd_scroll,
+                                                &g_midi_output_device_dd_open, mx, my, mclick);
+        if (chosen >= 0)
         {
-            for (int i = 0; i < g_midi_output_device_count && i < 64; i++)
+            g_midi_output_device_index = chosen;
+            g_midi_output_device_dd_open = false;
+            midi_output_send_all_notes_off();
+            midi_output_shutdown();
+            midi_output_init("NeoBAE", g_midi_device_api[outOffset + chosen], g_midi_device_port[outOffset + chosen]);
+            if (g_bae.song)
             {
-                Rect ir = {box.x, box.y + i * itemH, box.w, itemH};
-                bool over = point_in(mx, my, ir);
-                SDL_Color ibg = (i == g_midi_output_device_index) ? g_highlight_color : g_panel_bg;
-                if (over)
-                    ibg = g_button_hover;
-                draw_rect(R, ir, ibg);
-                if (i < g_midi_output_device_count - 1)
+                for (unsigned char ch = 0; ch < 16; ++ch)
                 {
-                    SDL_SetRenderDrawColor(R, g_panel_border.r, g_panel_border.g, g_panel_border.b, 255);
-#if USE_SDL2 == TRUE
-                    SDL_RenderDrawLine(R, ir.x, ir.y + ir.h, ir.x + ir.w, ir.y + ir.h);
-#else
-                    SDL_RenderLine(R, ir.x, ir.y + ir.h, ir.x + ir.w, ir.y + ir.h);
-#endif
-                }
-                draw_text(R, ir.x + 6, ir.y + 6, g_midi_device_name_cache[g_midi_input_device_count + i], g_button_text);
-                if (over && mclick)
-                {
-                    g_midi_output_device_index = i;
-                    g_midi_output_device_dd_open = false; // reopen midi output with chosen device
-                    // Silence previous device before switching
-                    midi_output_send_all_notes_off();
-                    midi_output_shutdown();
-                    midi_output_init("NeoBAE", g_midi_device_api[g_midi_input_device_count + i], g_midi_device_port[g_midi_input_device_count + i]);
-                    // After opening, send current instrument table
-                    if (g_bae.song)
+                    unsigned char program = 0, bank = 0;
+                    if (BAESong_GetProgramBank(g_bae.song, ch, &program, &bank, TRUE) == BAE_NO_ERROR)
                     {
-                        for (unsigned char ch = 0; ch < 16; ++ch)
-                        {
-                            unsigned char program = 0, bank = 0;
-                            if (BAESong_GetProgramBank(g_bae.song, ch, &program, &bank, TRUE) == BAE_NO_ERROR)
-                            {
-                                unsigned char buf[3];
-                                buf[0] = (unsigned char)(0xB0 | (ch & 0x0F));
-                                buf[1] = 0;
-                                buf[2] = (unsigned char)(bank & 0x7F);
-                                midi_output_send(buf, 3);
-                                buf[0] = (unsigned char)(0xC0 | (ch & 0x0F));
-                                buf[1] = (unsigned char)(program & 0x7F);
-                                midi_output_send(buf, 2);
-                            }
-                        }
+                        unsigned char buf[3];
+                        buf[0] = (unsigned char)(0xB0 | (ch & 0x0F));
+                        buf[1] = 0;
+                        buf[2] = (unsigned char)(bank & 0x7F);
+                        midi_output_send(buf, 3);
+                        buf[0] = (unsigned char)(0xC0 | (ch & 0x0F));
+                        buf[1] = (unsigned char)(program & 0x7F);
+                        midi_output_send(buf, 2);
                     }
-                    save_settings(g_current_bank_path[0] ? g_current_bank_path : NULL, *reverbType, *loopPlay);
                 }
             }
+            save_settings(g_current_bank_path[0] ? g_current_bank_path : NULL, *reverbType, *loopPlay);
         }
-        if (mclick && !point_in(mx, my, midiOutDevRect) && !point_in(mx, my, box))
-            g_midi_output_device_dd_open = false;
     }
 #endif
 
@@ -2369,6 +2464,8 @@ static void render_settings_dialog(SDL_Renderer *R, int mx, int my, bool mclick,
     {
         ui_draw_tooltip(R, g_dls_compat_tooltip_rect, g_dls_compat_tooltip_text, true, true);
     }
+
+    g_settings_wheel_delta = 0;
 }
 
 void settings_init(void)
