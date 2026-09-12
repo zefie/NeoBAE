@@ -104,7 +104,7 @@ static const char *HELP_TEXT =
     "    midi.tempobpm          Song tempo in BPM (read/write)\n"
     "    midi.transpose         Song transpose in semitones (read/write)\n"
     "    midi.allnotesoff()     Send all-notes-off immediately\n"
-    "    mixer.volume           Global mixer volume in percent (0-100, read/write)\n"
+    "    mixer.volume           Mixer volume in percent (0-100, read/write; pre-limiter mix bus)\n"
     "    mixer.voices           Currently active mixer voices (read-only)\n"
     "    mixer.reverbtype       Default reverb type enum value\n"
     "    mixer.classicchorus    Classic chorus mode (0/1, default 0)\n"
@@ -451,10 +451,10 @@ int32_t BAEScript_Eval(BAEScript_Context *ctx, BAEScript_Node *node)
         case NODE_MIXER_PROP:
             if (node->data.mixer_prop == MIXERPROP_VOLUME) {
                 BAEMixer mixer = get_bound_mixer(ctx);
-                BAE_UNSIGNED_FIXED vol = 0;
-                if (mixer && BAEMixer_GetGlobalVolume(mixer, &vol) == BAE_NO_ERROR)
-                    return fixed_to_percent(vol);
-                return 0;
+                int32_t gainPct = 100;
+                if (mixer && BAEMixer_GetOutputGain(mixer, &gainPct) == BAE_NO_ERROR)
+                    return gainPct;
+                return 100;
             }
             if (node->data.mixer_prop == MIXERPROP_CLASSIC_CHORUS) {
                 BAE_BOOL enabled = FALSE;
@@ -663,7 +663,11 @@ void BAEScript_Exec(BAEScript_Context *ctx, BAEScript_Node *node)
                 case MIXERPROP_VOLUME: {
                     BAEMixer mixer = get_bound_mixer(ctx);
                     if (mixer)
-                        BAEMixer_SetGlobalVolume(mixer, percent_to_fixed(v));
+                    {
+                        if (v < 0) v = 0;
+                        BAEMixer_SetOutputGain(mixer, v);
+                        BAEMixer_SetGlobalVolume(mixer, percent_to_fixed(100));
+                    }
                     break;
                 }
                 case MIXERPROP_CLASSIC_CHORUS:
@@ -703,7 +707,10 @@ void BAEScript_Exec(BAEScript_Context *ctx, BAEScript_Node *node)
         case NODE_MIXER_RESET: {
             BAEMixer mixer = get_bound_mixer(ctx);
             if (mixer)
+            {
+                BAEMixer_SetOutputGain(mixer, 100);
                 BAEMixer_SetGlobalVolume(mixer, percent_to_fixed(100));
+            }
             BAE_SetClassicChorus(FALSE);
             BAE_SetSpanDCFix(TRUE);
             break;

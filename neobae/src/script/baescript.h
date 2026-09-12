@@ -57,7 +57,7 @@
  *   midi.tempobpm                     // raw BPM tempo
  *   midi.transpose                    // semitone transpose
  *   midi.allnotesoff();               // send all notes off
- *   mixer.volume                      // BAEMixer global volume percent (0-100)
+ *   mixer.volume                      // mixer volume percent (0-100, pre-limiter)
  *   mixer.voices                      // currently active voices (read-only)
  *   mixer.reverbtype                  // BAEReverbType enum value
  *   mixer.classicchorus               // 0 or 1 (default 0)

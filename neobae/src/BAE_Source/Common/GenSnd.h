@@ -1881,8 +1881,9 @@ typedef int32_t UNIT_TYPE;
     int32_t GM_GetMasterVolume(void);
     void GM_SetGlobalVolume(int32_t theVolume);
     int32_t GM_GetGlobalVolume(void);
-    // Set output gain as a percent (100 = normal, >100 = overdrive). Scales scaleBackAmount,
-    // which controls MIDI voice amplitude. Capped by the per-frame peak limiter.
+    // Set output gain as a percent (100 = normal, >100 = overdrive). Applied on
+    // the full mix bus (HSB+SF2+DLS) before the peak limiter — not via
+    // scaleBackAmount — so player volume does not skew DLS-RMF balance.
     void GM_SetOutputGain(int32_t gainPct);
     int32_t GM_GetOutputGain(void);
 

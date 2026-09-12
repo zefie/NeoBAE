@@ -1522,9 +1522,10 @@ bool bae_load_song(const char *path, bool use_embedded_banks)
     // Update MSB/LSB values for the current channel after loading a new song
     update_bank_program_for_channel();
 
-    /* Apply current UI master volume via the same bus path as bae_set_volume
-       (GlobalVolume). Do NOT route UI volume through BAESong_SetVolume /
-       SetMasterVolume — those only scale HSB and skew DLS-RMF balance. */
+    /* Apply current UI master volume via OutputGain (full mix bus, before
+       the limiter). Do NOT route UI volume through BAESong_SetVolume /
+       SetMasterVolume — those only scale HSB and skew DLS-RMF balance.
+       Do NOT use GlobalVolume after the limiter — that fades a clipped mix. */
     {
         double stored = g_last_requested_master_volume; /* 0..1 engine space */
         double baseline = (NEW_BASELINE_PCT / 100.0);
@@ -1603,6 +1604,8 @@ bool bae_load_song_with_settings(const char *path, int transpose, int tempo, int
 
 void bae_set_volume(int volPct)
 {
+    int gainPct;
+
     // Accept expanded UI range: 0 .. NEW_MAX_VOLUME_PCT
     if (volPct < 0)
         volPct = 0;
@@ -1621,6 +1624,10 @@ void bae_set_volume(int volPct)
     double storedVol = engineGain;
     g_last_requested_master_volume = storedVol; // remember user intent
 
+    gainPct = (int)(engineGain * 100.0 + 0.5);
+    if (gainPct < 0)
+        gainPct = 0;
+
     if (g_bae.is_audio_file && g_bae.sound)
     {
         /* For raw audio files we apply an extra per-sound multiplier so the
@@ -1636,27 +1643,23 @@ void bae_set_volume(int volPct)
         /* remember actual per-sound engine gain applied so BAESound_Start
             can use the same value when it starts playback */
         g_last_applied_sound_volume = soundGain;
+        /* PCM is already scaled on the voice (input). Keep the mix-bus gain
+           at unity so the slider is not applied twice. */
+        if (g_bae.mixer)
+        {
+            BAEMixer_SetOutputGain(g_bae.mixer, 100);
+            BAEMixer_SetGlobalVolume(g_bae.mixer, FLOAT_TO_UNSIGNED_FIXED(1.0));
+        }
     }
-    else if (!g_bae.is_audio_file && g_bae.song)
+    else if (g_bae.mixer)
     {
-        BAEMixer_SetGlobalVolume(g_bae.mixer, FLOAT_TO_UNSIGNED_FIXED(engineGain));
-    }
-
-    /* Also apply to the lightweight live synth used for incoming MIDI so changes
-       to the master volume UI affect live input immediately. */
-    if (g_live_song)
-    {
-        BAEMixer_SetGlobalVolume(g_bae.mixer, FLOAT_TO_UNSIGNED_FIXED(engineGain));
-    }
-
-    // Also adjust master volume unless globally muted for MIDI Out
-#if SUPPORT_MIDI_HW == TRUE
-    if (g_bae.mixer && !g_master_muted_for_midi_out)
-#else
-    if (g_bae.mixer)
-#endif
-    {
-        //BAEMixer_SetMasterVolume(g_bae.mixer, FLOAT_TO_UNSIGNED_FIXED(engineGain));
+        /* MIDI/RMF/live: full mix bus BEFORE the peak limiter (same path as
+           playbae -v / nbeditor). Turning the slider down reduces limiter
+           engagement instead of fading an already-clipped mix. */
+        if (g_bae.song)
+            BAESong_SetVolume(g_bae.song, FLOAT_TO_UNSIGNED_FIXED(1.0));
+        BAEMixer_SetOutputGain(g_bae.mixer, gainPct);
+        BAEMixer_SetGlobalVolume(g_bae.mixer, FLOAT_TO_UNSIGNED_FIXED(1.0));
     }
 }
 
@@ -2332,7 +2335,9 @@ void bae_set_master_muted_for_midi_out(bool muted)
         }
         else
         {
-            BAEMixer_SetMasterVolume(g_bae.mixer, FLOAT_TO_UNSIGNED_FIXED(g_last_requested_master_volume));
+            /* MasterVolume is HSB voice scale / MIDI-out mute, not the UI
+               slider. Restore unity; player level lives on OutputGain. */
+            BAEMixer_SetMasterVolume(g_bae.mixer, FLOAT_TO_UNSIGNED_FIXED(1.0));
         }
     }
 }
@@ -2520,7 +2525,8 @@ bool recreate_mixer_and_restore(int sampleRateHz, int reverbType,
     BAE_SetClassicLFO(g_classic_lfo_enabled ? TRUE : FALSE);
     // reverbType may be a UI index beyond BAE_REVERB_TYPE_COUNT when using custom presets
     bae_set_reverb(reverbType);
-    BAEMixer_SetMasterVolume(g_bae.mixer, FLOAT_TO_UNSIGNED_FIXED(g_last_requested_master_volume));
+    BAEMixer_SetMasterVolume(g_bae.mixer, FLOAT_TO_UNSIGNED_FIXED(1.0));
+    bae_set_volume(volume);
 
     // Create a new live song bound to the new mixer for external MIDI input.
     g_live_song = BAESong_New(g_bae.mixer);

@@ -1190,7 +1190,10 @@ extern "C"
     // BAEMixer_SetGlobalVolume()
     // ------------------------------------
     // Sets the global volume of the indicated BAEMixer to the indicated volume.
-    // This affects the final mixdown volume.
+    // Applied on the full mix bus (HSB+SF2+DLS) before the peak limiter, so
+    // lowering it reduces limiter engagement instead of fading an already
+    // clipped mix. Prefer BAEMixer_SetOutputGain for the player slider
+    // (percent, overdrive). Keep this at unity when OutputGain is in use.
     //
     BAEResult BAEMixer_SetGlobalVolume(BAEMixer mixer,
                                        BAE_UNSIGNED_FIXED theVolume);
@@ -1216,8 +1219,9 @@ extern "C"
     // BAEMixer_SetSongNormalizeGain()
     // ------------------------------------
     // Sets the final-mix normalize gain as a percent (100 = unity). Scales the
-    // mixed bus after all engines (HSB/SF2/DLS), EQ, limiter, and global volume.
-    // Intended for automatic song normalize, not the interactive player slider.
+    // mixed bus after all engines (HSB/SF2/DLS), EQ, and player volume, and
+    // before the peak limiter. Intended for automatic song normalize, not
+    // the interactive player slider.
     //
     BAEResult BAEMixer_SetSongNormalizeGain(BAEMixer mixer, int32_t gainPct);
     BAEResult BAEMixer_GetSongNormalizeGain(BAEMixer mixer, int32_t *outGainPct);

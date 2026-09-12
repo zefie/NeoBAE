@@ -4131,9 +4131,13 @@ void PV_ProcessSampleFrame(void *threadContext, void *destinationSamples)
         // Apply EQ to final mix buffer
         PV_ApplyEQ(pMixer);
 
-        /* User OutputGain on the full dry bus (HSB + SF2 + Native DLS) before
-         * the limiter so overdrive still engages peak limiting, and DLS-RMF
-         * balance tracks the player volume the same way as pure HSB content. */
+        /* Player volume (OutputGain + GlobalVolume) on the full dry bus
+         * (HSB + SF2 + Native DLS) BEFORE the limiter. Scaling after the
+         * limiter turns the slider into an output fader: hot mixes are
+         * already brickwalled, so turning down still sounds clipped and
+         * loses dynamic range. Pre-limit gain lets a lower volume keep
+         * peaks under 0 dBFS. DLS-RMF balance tracks HSB because this is
+         * the shared mix, not HSB-only MasterVolume. */
         if (pMixer->outputGainPct != 100)
         {
             int32_t *buffer = pMixer->songBufferDry;
@@ -4157,11 +4161,6 @@ void PV_ProcessSampleFrame(void *threadContext, void *destinationSamples)
             }
         }
 
-        // Limit the raw mix bus before global volume so the limiter
-        // never interacts with the volume slider.
-        PV_ApplyOutputLimiter(pMixer);
-
-        // Apply global volume to the final mix buffer
         if (pMixer->globalVolume != MAX_MASTER_VOLUME)
         {
             int32_t *buffer = pMixer->songBufferDry;
@@ -4173,7 +4172,8 @@ void PV_ProcessSampleFrame(void *threadContext, void *destinationSamples)
         }
 
         // Optional whole-song normalize scale (MIDI+patch estimate / cache).
-        // Applied after limiter/global volume so HSB, SF2, and DLS share one gain.
+        // Same mix bus as player volume, still before the limiter so a boost
+        // cannot re-clip after brickwalling.
         if (pMixer->songNormalizeGain != XFIXED_1 && pMixer->songNormalizeGain != 0)
         {
             int32_t *buffer = pMixer->songBufferDry;
@@ -4184,6 +4184,8 @@ void PV_ProcessSampleFrame(void *threadContext, void *destinationSamples)
                 buffer[i] = (int32_t)(((int64_t)buffer[i] * (int64_t)ng) / (int64_t)XFIXED_1);
             }
         }
+
+        PV_ApplyOutputLimiter(pMixer);
 
         // mix down to final output stage for output to speaker
         if (pMixer->generate16output)

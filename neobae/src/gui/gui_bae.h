@@ -136,6 +136,7 @@ void bae_set_transpose(int transpose);
 void bae_set_tempo(int tempo);
 // Set master volume using UI percent. Accepted range: 0..NEW_MAX_VOLUME_PCT.
 // UI value 100 corresponds to NEW_BASELINE_PCT engine gain (e.g. 35 -> 0.35).
+// MIDI/RMF uses BAEMixer_SetOutputGain (full mix bus, before the peak limiter).
 void bae_set_volume(int volume);
 void bae_set_loop(bool enabled);
 void bae_set_reverb(int type);

@@ -1713,11 +1713,13 @@ static void render_settings_dialog(SDL_Renderer *R, int mx, int my, bool mclick,
                 {
                     BAESong_SetMidiEventCallback(g_bae.song, NULL, NULL);
                 }
-                // Restore master volume
+                // Restore HSB mute; player slider is OutputGain (re-applied below).
                 if (g_bae.mixer)
                 {
-                    BAEMixer_SetMasterVolume(g_bae.mixer, FLOAT_TO_UNSIGNED_FIXED(g_last_requested_master_volume));
+                    BAEMixer_SetMasterVolume(g_bae.mixer, FLOAT_TO_UNSIGNED_FIXED(1.0));
                     g_master_muted_for_midi_out = false;
+                    if (volume)
+                        bae_set_volume(*volume);
                 }
             }
             save_settings(g_current_bank_path[0] ? g_current_bank_path : NULL, *reverbType, *loopPlay);

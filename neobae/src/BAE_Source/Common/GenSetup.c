@@ -470,8 +470,9 @@ int32_t GM_GetGlobalVolume(void)
 
 // GM_SetOutputGain / GM_GetOutputGain
 // Set output gain percent (100 = normal, >100 = overdrive). Applied on the full
-// mix bus (HSB+SF2+DLS) before the peak limiter — not via scaleBackAmount —
-// so player volume does not skew DLS-RMF vs embedded HSB balance.
+// mix bus (HSB+SF2+DLS) before the peak limiter (same stage as globalVolume) —
+// not via scaleBackAmount — so player volume does not skew DLS-RMF vs
+// embedded HSB balance.
 void GM_SetOutputGain(int32_t gainPct)
 {
     if (MusicGlobals)
@@ -488,8 +489,9 @@ int32_t GM_GetOutputGain(void)
     return 100;
 }
 
-// Final-mix song normalize gain (100 = unity). Applied after limiter/global volume
-// so it affects HSB, SF2, and DLS equally. Values >100 boost; <100 attenuate.
+// Final-mix song normalize gain (100 = unity). Applied after player volume and
+// before the limiter so HSB, SF2, and DLS share one gain. Values >100 boost;
+// <100 attenuate.
 void GM_SetSongNormalizeGain(int32_t gainPct)
 {
     if (MusicGlobals)
