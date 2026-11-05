@@ -3224,7 +3224,7 @@ void PV_ProcessController(GM_Song *pSong, int16_t MIDIChannel, int16_t currentTr
                 switch (value) {
                     case 5:
                         pSong->channelBank[MIDIChannel] = 1;
-                        pSong->channelRawBank[MIDIChannel] = 0;
+                        pSong->channelRawBank[MIDIChannel] = 1;
                         debug_message("Nokia Patch Applied: Changing Bank %i to 1 on channel %d\n", pSong->channelBank[MIDIChannel], MIDIChannel);
                         break;
                     default:

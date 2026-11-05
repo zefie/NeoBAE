@@ -779,14 +779,9 @@ fluid_sample_t* fluid_defsfont_get_sample(fluid_defsfont_t* sfont, char *s)
         if (sample->loopend > sample->end ||
             sample->loopstart >= sample->loopend ||
             sample->loopstart <= sample->start) {
-          /* can pad loop by 8 samples and ensure at least 4 for loop (2*8+4) */
-          if ((sample->end - sample->start) >= 20) {
-            sample->loopstart = sample->start + 8;
-            sample->loopend = sample->end - 8;
-          } else { /* loop is fowled, sample is tiny (can't pad 8 samples) */
-            sample->loopstart = sample->start + 1;
-            sample->loopend = sample->end - 1;
-          }
+          /* invalid loop: disable it rather than inventing one */
+          sample->loopstart = sample->start;
+          sample->loopend = sample->start;
         }
 
         sample->sampletype &= ~FLUID_SAMPLETYPE_OGG_VORBIS;
@@ -3358,20 +3353,15 @@ fixup_sample (SFData * sf)
         /* loop is fowled?? (cluck cluck :) */
         invalid_loops |= TRUE;
 
-        /* force incorrect loop points into the sample range, ignore padding */
-        if(invalid_loopstart)
+        /* Unusable loop points: do NOT invent a loop (it would make one-shot or
+         * badly authored samples loop audibly). Collapse the loop to zero length;
+         * fluid_voice_check_sample_sanity() then forces the voice to unlooped. */
+        if(invalid_loopstart || invalid_loopend)
         {
-          FLUID_LOG (FLUID_DBG, _("Sample '%s' has unusable loop start '%d',"
-                                  " setting to sample start at '%d'+1"), sam->name, sam->loopstart, sam->start);
-          sam->loopstart = sam->start + 1;
-        }
-
-        if(invalid_loopend)
-        {
-          FLUID_LOG (FLUID_DBG, _("Sample '%s' has unusable loop stop '%d',"
-                                  " setting to sample stop at '%d'-1"), sam->name, sam->loopend, sam->end);
-          /* since sam->end points after valid sample data, set loopend to last sample available */
-          sam->loopend = sam->end - 1;
+          FLUID_LOG (FLUID_DBG, _("Sample '%s' has unusable loop points (%d..%d),"
+                                  " disabling loop"), sam->name, sam->loopstart, sam->loopend);
+          sam->loopstart = sam->start;
+          sam->loopend = sam->start;
         }
 
         if(loopend_end_mismatch)
