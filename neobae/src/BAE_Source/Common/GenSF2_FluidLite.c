@@ -1250,7 +1250,9 @@ void GM_SF2_ProcessProgramChange(GM_Song* pSong, int16_t channel, int32_t progra
     }
 
     if (pSong->channelBankMode[channel] == USE_GM_PERC_BANK) {
-        if (midiProgram == 0 && midiBank == 0) {
+        if (midiBank == 128 || (midiProgram == 0 && midiBank == 0)) {
+            // Already resolved to the percussion bank above (odd-bank / MSB128 mapping),
+            // e.g. a non-ch10 channel switched to percussion via NRPN.
             midiBank = 128;  // SF2 percussion bank
         } else {
             // change back to normal channel if the program is not a percussion program

@@ -3165,10 +3165,19 @@ void PV_ProcessController(GM_Song *pSong, int16_t MIDIChannel, int16_t currentTr
         } else
 #endif
         {
-            theBank = 0;
-            pSong->channelRawBank[MIDIChannel] = theBank;
-            pSong->channelBank[MIDIChannel] = 0;
-            pSong->channelLSB[MIDIChannel] = 0;
+            if (pSong->channelRawBank[MIDIChannel] == 1 && pSong->channelLSB[MIDIChannel] == 5)
+            {
+                /* Nokia patch already remapped MSB 120/121 LSB 5 -> bank 1.
+                   Keep it so NRPN percussion mode selects percussion bank 1. */
+                theBank = pSong->channelBank[MIDIChannel];
+            }
+            else
+            {
+                theBank = 0;
+                pSong->channelRawBank[MIDIChannel] = theBank;
+                pSong->channelBank[MIDIChannel] = 0;
+                pSong->channelLSB[MIDIChannel] = 0;
+            }
 #if USE_NATIVE_DLS == TRUE
             if ((GM_IsDLSSong(pSong) || pSong->channelType[MIDIChannel] == CHANNEL_TYPE_DLS) &&
                 pSong->channelType[MIDIChannel] != CHANNEL_TYPE_RMF)
