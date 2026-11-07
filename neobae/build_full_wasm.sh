@@ -1,10 +1,8 @@
 #!/bin/bash
 RDIR="$(realpath "$(pwd)")"
-BDIR="${RDIR}/bin"
-ODIR="${RDIR}/out"
+BDIR="/src/neobae/bin"
+ODIR="/src/neobae/out"
 
-mkdir -p "${BDIR}"
-mkdir -p "${ODIR}"
 
 SILENT=1
 
@@ -15,9 +13,9 @@ fi
 
 function runcmd() {
 	if [ ${SILENT} -eq 1 ]; then
-		"${@}" 2>/dev/null > /dev/null;
+		docker run --rm -it -v "${RDIR}/../:/src" zefie/emsdk:latest "${@}" 2>/dev/null > /dev/null;
 	else
-		"${@}"
+		docker run --rm -it -v "${RDIR}/../:/src" zefie/emsdk:latest "${@}"
 	fi
 }
 
@@ -30,18 +28,22 @@ function install_file() {
 	fi
 }
 
+runcmd bash -c 'mkdir -p "${BDIR}" && mkdir -p "${ODIR}"'
+
 echo "Building Emscripten WebAssembly (NeoBAE Only)..."
-runcmd make clean
-runcmd make -f Makefile.emcc "-j$(nproc)" all
-runcmd make -f Makefile.emcc pack
-install_file "${BDIR}/NeoBAE_WASM.tar.gz" "${ODIR}/NeoBAE_WASM.tar.gz"
-runcmd make -f Makefile.emcc clean
+runcmd bash -c 'cd neobae &&
+make clean &&
+make -f Makefile.emcc "-j$(nproc)" all &&
+make -f Makefile.emcc pack &&
+mv -v "${BDIR}/NeoBAE_WASM.tar.gz" "${ODIR}/NeoBAE_WASM.tar.gz" &&
+make -f Makefile.emcc clean'
 
 
 echo "Building Emscripten WebAssembly (NeoBAE with FluidLite)..."
-runcmd make clean
-runcmd make -f Makefile.emcc-full "-j$(nproc)" all
-runcmd make -f Makefile.emcc-full pack
-install_file "${BDIR}/NeoBAE_WASM_FluidLite.tar.gz" "${ODIR}/NeoBAE_WASM_FluidLite.tar.gz"
-runcmd make -f Makefile.emcc-full clean
+runcmd bash -c 'cd neobae &&
+make clean &&
+make -f Makefile.emcc-full "-j$(nproc)" all &&
+make -f Makefile.emcc-full pack
+mv -v "${BDIR}/NeoBAE_WASM_FluidLite.tar.gz" "${ODIR}/NeoBAE_WASM_FluidLite.tar.gz"
+make -f Makefile.emcc-full clean'
 

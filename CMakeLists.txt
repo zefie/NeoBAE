@@ -598,6 +598,42 @@ if(EXISTS "${BAE_LAME_WRAPPER_SOURCE}")
   set(BAE_LAME_WRAPPER_AVAILABLE ON)
 endif()
 
+if(NEOBAE_EXTERNAL_CODECS)
+  # Cross toolchains (e.g. llvm-mingw) keep target libs in <toolchain>/<triple>/
+  # {include,lib}, next to the compiler's bin/ directory. Add that sysroot to the
+  # search prefixes so both it and the host system paths are considered.
+  set(_bae_ext_prefixes "")
+  if(CMAKE_FIND_ROOT_PATH)
+    list(APPEND _bae_ext_prefixes ${CMAKE_FIND_ROOT_PATH})
+  endif()
+  set(_bae_triple "${CMAKE_C_COMPILER_TARGET}")
+  if(NOT _bae_triple AND CMAKE_C_COMPILER)
+    get_filename_component(_bae_cc_name "${CMAKE_C_COMPILER}" NAME)
+    if(_bae_cc_name MATCHES "^(.+-(mingw32|mingw32uwp|linux-gnu[a-z0-9]*))-")
+      set(_bae_triple "${CMAKE_MATCH_1}")
+    endif()
+  endif()
+  if(CMAKE_C_COMPILER)
+    get_filename_component(_bae_cc_real "${CMAKE_C_COMPILER}" REALPATH)
+    get_filename_component(_bae_cc_bin "${_bae_cc_real}" DIRECTORY)
+    get_filename_component(_bae_cc_root "${_bae_cc_bin}" DIRECTORY)
+    if(_bae_triple AND IS_DIRECTORY "${_bae_cc_root}/${_bae_triple}")
+      list(APPEND _bae_ext_prefixes "${_bae_cc_root}/${_bae_triple}")
+    endif()
+  endif()
+  list(REMOVE_DUPLICATES _bae_ext_prefixes)
+  foreach(_pfx ${_bae_ext_prefixes})
+    if(IS_DIRECTORY "${_pfx}")
+      list(APPEND CMAKE_PREFIX_PATH "${_pfx}")
+      list(APPEND CMAKE_LIBRARY_PATH "${_pfx}/lib")
+      set(ENV{PKG_CONFIG_PATH} "${_pfx}/lib/pkgconfig:${_pfx}/share/pkgconfig:$ENV{PKG_CONFIG_PATH}")
+    endif()
+  endforeach()
+  if(_bae_ext_prefixes)
+    message(STATUS "External codec search prefixes: ${_bae_ext_prefixes} (plus system paths)")
+  endif()
+endif()
+
 find_path(BAE_LAME_INCLUDE_DIR lame/lame.h)
 find_library(BAE_LAME_LIBRARY NAMES mp3lame lame)
 
@@ -655,19 +691,48 @@ endif()
 
 find_path(BAE_OGG_INCLUDE_DIR ogg/ogg.h)
 find_library(BAE_OGG_LIBRARY NAMES ogg)
+
+# System codec header lookup (only used when NEOBAE_EXTERNAL_CODECS is ON).
+# Sources include <opus.h>, <opusfile.h>, <lame.h> directly, so the directory
+# containing those headers (e.g. /usr/include/opus) must be on the include path.
+set(BAE_EXTERNAL_CODEC_INCLUDE_DIRS "")
+if(NEOBAE_EXTERNAL_CODECS)
+  find_package(PkgConfig QUIET)
+  if(PKG_CONFIG_FOUND)
+    pkg_check_modules(PC_FLAC QUIET flac)
+    pkg_check_modules(PC_OPUS QUIET opus)
+    pkg_check_modules(PC_OPUSFILE QUIET opusfile)
+  endif()
+  find_path(BAE_FLAC_INCLUDE_DIR FLAC/stream_decoder.h HINTS ${PC_FLAC_INCLUDE_DIRS})
+  find_path(BAE_OPUS_INCLUDE_DIR NAMES opus.h PATH_SUFFIXES opus HINTS ${PC_OPUS_INCLUDE_DIRS})
+  find_path(BAE_OPUSFILE_INCLUDE_DIR NAMES opusfile.h PATH_SUFFIXES opus HINTS ${PC_OPUSFILE_INCLUDE_DIRS})
+  find_path(BAE_LAME_HEADER_DIR NAMES lame.h PATH_SUFFIXES lame HINTS ${PC_LAME_INCLUDE_DIRS})
+  foreach(_d BAE_FLAC_INCLUDE_DIR BAE_VORBIS_INCLUDE_DIR BAE_OGG_INCLUDE_DIR BAE_OPUS_INCLUDE_DIR BAE_OPUSFILE_INCLUDE_DIR BAE_LAME_HEADER_DIR)
+    if(${_d})
+      list(APPEND BAE_EXTERNAL_CODEC_INCLUDE_DIRS ${${_d}})
+    endif()
+  endforeach()
+  list(REMOVE_DUPLICATES BAE_EXTERNAL_CODEC_INCLUDE_DIRS)
+  message(STATUS "External codec include dirs: ${BAE_EXTERNAL_CODEC_INCLUDE_DIRS}")
+endif()
 set(BAE_OGG_AVAILABLE OFF)
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/neobae/src/thirdparty/libogg/src/framing.c" AND
    EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/neobae/src/thirdparty/libogg/src/bitwise.c")
   set(BAE_OGG_AVAILABLE ON)
 endif()
 
+if(NEOBAE_EXTERNAL_CODECS)
+  set(BAE_CODEC_SRC_MODE "external system libraries")
+else()
+  set(BAE_CODEC_SRC_MODE "bundled sources")
+endif()
 # Auto-disable codec toggles when required external dependencies are missing.
 if(BAE_ENABLE_FLAC_DECODER AND NOT BAE_FLAC_AVAILABLE)
   set(BAE_ENABLE_FLAC_DECODER OFF)
   message(STATUS "Disabling FLAC decoder: bundled libFLAC sources not found (did you forget to submodule update --init --recursive?)")
 else()
   if(BAE_ENABLE_FLAC_DECODER)
-    message(STATUS "Enabling FLAC decoder: using bundled libFLAC sources")
+    message(STATUS "Enabling FLAC decoder: using ${BAE_CODEC_SRC_MODE} (libFLAC)")
   endif()
 endif()
 if(BAE_ENABLE_MP3_ENCODER AND NOT BAE_MP3_ENCODER_AVAILABLE)
@@ -675,7 +740,7 @@ if(BAE_ENABLE_MP3_ENCODER AND NOT BAE_MP3_ENCODER_AVAILABLE)
   message(STATUS "Disabling MP3 encoder: bundled LAME sources not found")
 else()
   if(BAE_ENABLE_MP3_ENCODER)
-    message(STATUS "Enabling MP3 encoder: using bundled LAME sources")
+    message(STATUS "Enabling MP3 encoder: using ${BAE_CODEC_SRC_MODE} (LAME)")
   endif()
 endif()
 if(BAE_ENABLE_FLAC_ENCODER AND NOT BAE_FLAC_AVAILABLE)
@@ -683,7 +748,7 @@ if(BAE_ENABLE_FLAC_ENCODER AND NOT BAE_FLAC_AVAILABLE)
   message(STATUS "Disabling FLAC encoder: bundled libFLAC sources not found (did you forget to submodule update --init --recursive?)")
 else()
   if(BAE_ENABLE_FLAC_ENCODER)
-    message(STATUS "Enabling FLAC encoder: using bundled libFLAC sources")
+    message(STATUS "Enabling FLAC encoder: using ${BAE_CODEC_SRC_MODE} (libFLAC)")
   endif()
 endif()
 
@@ -692,7 +757,7 @@ if(BAE_ENABLE_VORBIS_DECODER AND (NOT BAE_VORBIS_DECODER_AVAILABLE OR NOT BAE_OG
   message(STATUS "Disabling Vorbis decoder: bundled Vorbis/Ogg sources not found (did you forget to submodule update --init --recursive?)")
 else()
   if(BAE_ENABLE_VORBIS_DECODER)
-    message(STATUS "Enabling Vorbis decoder: using bundled Vorbis/Ogg sources")
+    message(STATUS "Enabling Vorbis decoder: using ${BAE_CODEC_SRC_MODE} (Vorbis/Ogg)")
   endif()
 endif()
 if(BAE_ENABLE_VORBIS_ENCODER AND (NOT BAE_VORBIS_ENCODER_AVAILABLE OR NOT BAE_OGG_AVAILABLE))
@@ -700,7 +765,7 @@ if(BAE_ENABLE_VORBIS_ENCODER AND (NOT BAE_VORBIS_ENCODER_AVAILABLE OR NOT BAE_OG
   message(STATUS "Disabling Vorbis encoder: bundled Vorbis/Ogg sources not found (did you forget to submodule update --init --recursive?)")
 else()
   if(BAE_ENABLE_VORBIS_ENCODER)
-    message(STATUS "Enabling Vorbis encoder: using bundled Vorbis/Ogg sources")
+    message(STATUS "Enabling Vorbis encoder: using ${BAE_CODEC_SRC_MODE} (Vorbis/Ogg)")
   endif()
 endif()
 
@@ -709,7 +774,7 @@ if(BAE_ENABLE_OPUS_DECODER AND (NOT BAE_OPUS_DECODER_AVAILABLE OR NOT BAE_OGG_AV
   message(STATUS "Disabling Opus decoder: bundled Opus/Opusfile/Ogg sources not found (did you forget to submodule update --init --recursive?)")
 else()
   if(BAE_ENABLE_OPUS_DECODER)
-    message(STATUS "Enabling Opus decoder: using bundled Opus/Opusfile/Ogg sources")
+    message(STATUS "Enabling Opus decoder: using ${BAE_CODEC_SRC_MODE} (Opus/Opusfile/Ogg)")
   endif()
 endif()
 if(BAE_ENABLE_OPUS_ENCODER AND (NOT BAE_OPUS_ENCODER_AVAILABLE OR NOT BAE_OGG_AVAILABLE))
@@ -717,7 +782,7 @@ if(BAE_ENABLE_OPUS_ENCODER AND (NOT BAE_OPUS_ENCODER_AVAILABLE OR NOT BAE_OGG_AV
   message(STATUS "Disabling Opus encoder: bundled Opus/Ogg sources not found")
 else()
   if(BAE_ENABLE_OPUS_ENCODER)
-    message(STATUS "Enabling Opus encoder: using bundled Opus/Ogg sources")
+    message(STATUS "Enabling Opus encoder: using ${BAE_CODEC_SRC_MODE} (Opus/Ogg)")
   endif()
 endif()
 
@@ -1621,12 +1686,12 @@ if(BAE_ENABLE_MP3_ENCODER OR BAE_ENABLE_MP3_DECODER)
   )
 endif()
 
-if(BAE_ENABLE_MP3_ENCODER)
-  target_include_directories(neobae PUBLIC
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/neobae/src/thirdparty/lame-3.100-slim/include>
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/neobae/src/thirdparty/lame-3.100-slim/libmp3lame>
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/neobae/src/thirdparty/lame-3.100-slim/mpglib>
-  )
+if(BAE_ENABLE_MP3_ENCODER AND NOT NEOBAE_EXTERNAL_CODECS)
+    target_include_directories(neobae PUBLIC
+      $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/neobae/src/thirdparty/lame-3.100-slim/include>
+      $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/neobae/src/thirdparty/lame-3.100-slim/libmp3lame>
+      $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/neobae/src/thirdparty/lame-3.100-slim/mpglib>
+    )
 endif()
 
 if(BAE_ENABLE_MP3_DECODER)
@@ -1635,7 +1700,7 @@ if(BAE_ENABLE_MP3_DECODER)
   )
 endif()
 
-if(BAE_ENABLE_FLAC_ENCODER OR BAE_ENABLE_FLAC_DECODER)
+if((BAE_ENABLE_FLAC_ENCODER OR BAE_ENABLE_FLAC_DECODER) AND NOT NEOBAE_EXTERNAL_CODECS)
   target_include_directories(neobae PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/neobae/src/thirdparty/flac/include>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/neobae/src/thirdparty/flac/src/libFLAC/include>
@@ -1644,17 +1709,19 @@ if(BAE_ENABLE_FLAC_ENCODER OR BAE_ENABLE_FLAC_DECODER)
 endif()
 
 if(BAE_ENABLE_VORBIS_ENCODER OR BAE_ENABLE_VORBIS_DECODER)
-  target_include_directories(neobae PUBLIC
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/neobae/src/thirdparty/libvorbis/include>
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/neobae/src/thirdparty/libvorbis/lib>
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/neobae/src/thirdparty/libogg/include>
-  )
+  if(NOT NEOBAE_EXTERNAL_CODECS)
+    target_include_directories(neobae PUBLIC
+      $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/neobae/src/thirdparty/libvorbis/include>
+      $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/neobae/src/thirdparty/libvorbis/lib>
+      $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/neobae/src/thirdparty/libogg/include>
+    )
+  endif()
   if(BAE_VORBIS_INCLUDE_DIR)
     target_include_directories(neobae PUBLIC $<BUILD_INTERFACE:${BAE_VORBIS_INCLUDE_DIR}>)
   endif()
 endif()
 
-if(BAE_ENABLE_OPUS_ENCODER OR BAE_ENABLE_OPUS_DECODER)
+if((BAE_ENABLE_OPUS_ENCODER OR BAE_ENABLE_OPUS_DECODER) AND NOT NEOBAE_EXTERNAL_CODECS)
   target_include_directories(neobae BEFORE PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/neobae/src/thirdparty/opus/include>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/neobae/src/thirdparty/opus/src>
@@ -1664,7 +1731,7 @@ if(BAE_ENABLE_OPUS_ENCODER OR BAE_ENABLE_OPUS_DECODER)
   )
 endif()
 
-if(BAE_ENABLE_OPUS_DECODER)
+if(BAE_ENABLE_OPUS_DECODER AND NOT NEOBAE_EXTERNAL_CODECS)
   target_include_directories(neobae BEFORE PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/neobae/src/thirdparty/opusfile/include>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/neobae/src/thirdparty/opusfile/src>
@@ -1679,12 +1746,20 @@ endif()
 
 
 if(BAE_ENABLE_FLAC_ENCODER OR BAE_ENABLE_FLAC_DECODER OR BAE_ENABLE_VORBIS_ENCODER OR BAE_ENABLE_VORBIS_DECODER OR BAE_ENABLE_OPUS_ENCODER OR BAE_ENABLE_OPUS_DECODER)
-  target_include_directories(neobae PUBLIC
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/neobae/src/thirdparty/libogg/include>
-  )
+  if(NOT NEOBAE_EXTERNAL_CODECS)
+    target_include_directories(neobae PUBLIC
+      $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/neobae/src/thirdparty/libogg/include>
+    )
+  endif()
   if(BAE_OGG_INCLUDE_DIR)
     target_include_directories(neobae PUBLIC $<BUILD_INTERFACE:${BAE_OGG_INCLUDE_DIR}>)
   endif()
+endif()
+
+if(NEOBAE_EXTERNAL_CODECS AND BAE_EXTERNAL_CODEC_INCLUDE_DIRS)
+  foreach(_inc ${BAE_EXTERNAL_CODEC_INCLUDE_DIRS})
+    target_include_directories(neobae SYSTEM PUBLIC $<BUILD_INTERFACE:${_inc}>)
+  endforeach()
 endif()
 
 if(BAE_ENABLE_SF2_CONVERTER)
@@ -1805,7 +1880,16 @@ if((BAE_ENABLE_OPUS_ENCODER OR BAE_ENABLE_OPUS_DECODER) AND NEOBAE_EXTERNAL_CODE
 endif()
 
 if(BAE_ENABLE_MP3_ENCODER AND NEOBAE_EXTERNAL_CODECS)
-  target_link_libraries(neobae ${NEOBAE_DEP_LINK_VISIBILITY} ${NEOBAE_STATIC_DEP_LINK_PREFIX} mp3lame ${NEOBAE_STATIC_DEP_LINK_SUFFIX})
+  # Some libmp3lame builds (e.g. MSYS2/llvm-mingw static) use libmpg123 for
+  # decoding, so a static link needs it after mp3lame. Link it only if present.
+  find_library(BAE_MPG123_LIBRARY NAMES mpg123 libmpg123)
+  if(BAE_MPG123_LIBRARY)
+    message(STATUS "LAME: also linking libmpg123 (${BAE_MPG123_LIBRARY})")
+    target_link_libraries(neobae ${NEOBAE_DEP_LINK_VISIBILITY} ${NEOBAE_STATIC_DEP_LINK_PREFIX} mp3lame mpg123 ${NEOBAE_STATIC_DEP_LINK_SUFFIX})
+  else()
+    message(STATUS "LAME: libmpg123 not found; if linking fails with undefined mpg123_* symbols, install it in the sysroot")
+    target_link_libraries(neobae ${NEOBAE_DEP_LINK_VISIBILITY} ${NEOBAE_STATIC_DEP_LINK_PREFIX} mp3lame ${NEOBAE_STATIC_DEP_LINK_SUFFIX})
+  endif()
 endif()
 
 
