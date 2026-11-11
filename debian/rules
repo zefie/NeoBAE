@@ -1,0 +1,21 @@
+#!/usr/bin/make -f
+# Source-package build. Mirrors cmake/NeoBAECpack.cmake: one binary package per
+# CMake install component (Runtime/Tools/Development).
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+BUILDDIR = obj-$(DEB_HOST_GNU_TYPE)
+
+%:
+	dh $@ --buildsystem=cmake
+
+override_dh_auto_configure:
+	dh_auto_configure -- -DCMAKE_BUILD_TYPE=Release -DNEOBAE_SHARED_LIBNEOBAE=ON
+
+override_dh_auto_test:
+
+override_dh_auto_install:
+	cmake --install $(BUILDDIR) --component Runtime     --prefix $(CURDIR)/debian/libneobae/usr
+	cmake --install $(BUILDDIR) --component Development --prefix $(CURDIR)/debian/libneobae-dev/usr
+	cmake --install $(BUILDDIR) --component Tools       --prefix $(CURDIR)/debian/neobae-tools/usr
+
+override_dh_shlibdeps:
+	dh_shlibdeps -a -l$(CURDIR)/debian/libneobae/usr/lib/$(DEB_HOST_MULTIARCH)

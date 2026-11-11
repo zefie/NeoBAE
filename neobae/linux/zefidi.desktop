@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=zefidi
+GenericName=Media Player
+Comment=MIDI, RMF and module player powered by NeoBAE
+Exec=zefidi %f
+Icon=zefidi
+Terminal=false
+Categories=AudioVideo;Audio;Player;
+MimeType=audio/midi;audio/x-midi;audio/mid;audio/x-mod;audio/x-wav;audio/x-aiff;audio/flac;audio/ogg;audio/mpeg;
+StartupWMClass=zefidi
+Keywords=midi;rmf;player;neobae;beatnik;

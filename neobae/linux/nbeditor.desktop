@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=NeoBAE Editor
+GenericName=Audio Bank Editor
+Comment=Edit RMF, ZMF, HSB and ZSB files with NeoBAE
+Exec=nbeditor %f
+Icon=nbeditor
+Terminal=false
+Categories=AudioVideo;Audio;AudioVideoEditing;
+StartupWMClass=nbeditor
+Keywords=rmf;zmf;hsb;zsb;editor;neobae;beatnik;

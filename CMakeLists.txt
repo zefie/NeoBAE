@@ -222,7 +222,7 @@ option(USE_SDL2 "Prefer SDL2 as the platform backend (default if SDL2 is found a
 option(BUILD_PLAYBAE "Build playbae when a non-Dummy/non-Ansi backend is selected" ON)
 option(BUILD_ZEFIDI "Build zefidi when SDL2/SDL3 backend and matching SDL_ttf are available" ON)
 option(BUILD_CLITOOLS "Build CLI tools (songtool, rmfutil, rmiutil, xmfutil, sf2-hsb, mod2rmf, bankrecomp, ringtone2mid, …)" ON)
-option(BUILD_NBEDITOR "Build NeoBAE Editor (Dear ImGui + SDL3); requires BAE_ENABLE_RMF_EDITOR" ON)
+option(BUILD_NBEDITOR "Build NeoBAE Editor (Dear ImGui + SDL3 or SDL2); requires BAE_ENABLE_RMF_EDITOR" ON)
 option(BUILD_DEBUG_INFO "Emit debug symbols / PDBs for executables and libneobae" OFF)
 option(BAE_DISABLE_LIB_HYPHEN "nbeditor: syllable Apply-text via vendored libhyphen" OFF)
 set(CMAKE_BUILD_TYPE "${CMAKE_BUILD_TYPE}" CACHE STRING "Build type (Debug, Release, RelWithDebInfo, MinSizeRel)" FORCE)
@@ -2382,7 +2382,25 @@ if(BUILD_NBEDITOR)
     set(NBEDITOR_LIBXMP_LITE_AVAILABLE ON)
   endif()
 
-  if(BAE_SDL3_INCLUDE_DIR AND BAE_SDL3_LIBRARY)
+  # nbeditor builds against SDL3 or SDL2 (neobae/src/nbeditor/nbeditor_sdl_compat.h).
+  # Follow the platform backend so only one SDL ends up in the process.
+  set(NBEDITOR_SDL_VERSION "")
+  if(BAE_SDL3_INCLUDE_DIR AND BAE_SDL3_LIBRARY AND NOT BAE_USING_SDL2 AND NOT USE_SDL2)
+    set(NBEDITOR_SDL_VERSION "SDL3")
+    set(NBEDITOR_SDL_INCLUDE_DIRS ${BAE_SDL3_INCLUDE_DIR})
+    set(NBEDITOR_SDL_LIBRARY ${BAE_SDL3_LIBRARY})
+  elseif(BAE_SDL2_INCLUDE_DIR AND BAE_SDL2_LIBRARY)
+    set(NBEDITOR_SDL_VERSION "SDL2")
+    # imgui_impl_sdl2.cpp includes <SDL.h> directly.
+    set(NBEDITOR_SDL_INCLUDE_DIRS ${BAE_SDL2_INCLUDE_DIR} ${BAE_SDL2_INCLUDE_DIR}/SDL2)
+    set(NBEDITOR_SDL_LIBRARY ${BAE_SDL2_LIBRARY})
+  elseif(BAE_SDL3_INCLUDE_DIR AND BAE_SDL3_LIBRARY)
+    set(NBEDITOR_SDL_VERSION "SDL3")
+    set(NBEDITOR_SDL_INCLUDE_DIRS ${BAE_SDL3_INCLUDE_DIR})
+    set(NBEDITOR_SDL_LIBRARY ${BAE_SDL3_LIBRARY})
+  endif()
+
+  if(NBEDITOR_SDL_VERSION)
     set(NBEDITOR_MAIN ${CMAKE_CURRENT_SOURCE_DIR}/neobae/src/nbeditor/nbeditor_main.cpp)
     set(NBEDITOR_IMGUI_DIR ${CMAKE_CURRENT_SOURCE_DIR}/neobae/src/thirdparty/imgui)
 
@@ -2394,9 +2412,19 @@ if(BUILD_NBEDITOR)
         ${NBEDITOR_IMGUI_DIR}/imgui_draw.cpp
         ${NBEDITOR_IMGUI_DIR}/imgui_tables.cpp
         ${NBEDITOR_IMGUI_DIR}/imgui_widgets.cpp
-        ${NBEDITOR_IMGUI_DIR}/backends/imgui_impl_sdl3.cpp
-        ${NBEDITOR_IMGUI_DIR}/backends/imgui_impl_sdlrenderer3.cpp
       )
+      if(NBEDITOR_SDL_VERSION STREQUAL "SDL2")
+        list(APPEND NBEDITOR_SOURCES
+          ${CMAKE_CURRENT_SOURCE_DIR}/neobae/src/nbeditor/nbeditor_sdl_compat_dialog.cpp
+          ${NBEDITOR_IMGUI_DIR}/backends/imgui_impl_sdl2.cpp
+          ${NBEDITOR_IMGUI_DIR}/backends/imgui_impl_sdlrenderer2.cpp
+        )
+      else()
+        list(APPEND NBEDITOR_SOURCES
+          ${NBEDITOR_IMGUI_DIR}/backends/imgui_impl_sdl3.cpp
+          ${NBEDITOR_IMGUI_DIR}/backends/imgui_impl_sdlrenderer3.cpp
+        )
+      endif()
       if(NBEDITOR_LIBXMP_LITE_AVAILABLE)
         list(APPEND NBEDITOR_SOURCES
           neobae/src/mod2rmf/mod2rmf_common.c
@@ -2465,7 +2493,7 @@ if(BUILD_NBEDITOR)
         ${CMAKE_CURRENT_SOURCE_DIR}/neobae/src/nbeditor
         ${NBEDITOR_IMGUI_DIR}
         ${NBEDITOR_IMGUI_DIR}/backends
-        ${BAE_SDL3_INCLUDE_DIR}
+        ${NBEDITOR_SDL_INCLUDE_DIRS}
       )
       if(BAE_NBEDITOR_LIB_HYPHEN)
         target_include_directories(nbeditor PRIVATE
@@ -2522,7 +2550,17 @@ if(BUILD_NBEDITOR)
       if(NBEDITOR_LIBXMP_LITE_AVAILABLE)
         target_compile_definitions(nbeditor PRIVATE LIBXMP_STATIC=1 LIBXMP_CORE_PLAYER=1 LIBXMP_BUILD=1)
       endif()
-      target_link_libraries(nbeditor PRIVATE neobae ${BAE_SDL3_LIBRARY})
+      target_link_libraries(nbeditor PRIVATE neobae ${NBEDITOR_SDL_LIBRARY})
+      if(NBEDITOR_SDL_VERSION STREQUAL "SDL2")
+        target_compile_definitions(nbeditor PRIVATE NBEDITOR_USE_SDL2=1)
+        find_package(Threads QUIET)
+        if(TARGET Threads::Threads)
+          target_link_libraries(nbeditor PRIVATE Threads::Threads)
+        endif()
+        if(WIN32)
+          target_link_libraries(nbeditor PRIVATE comdlg32)
+        endif()
+      endif()
       # std::clamp and other C++17 library pieces used by nbeditor_main.cpp.
       set_target_properties(nbeditor PROPERTIES
         CXX_STANDARD 17
@@ -2612,12 +2650,12 @@ if(BUILD_NBEDITOR)
         message(STATUS "nbeditor: embedding Liberation Sans Regular + Italic")
       endif()
 
-      message(STATUS "Building nbeditor with SDL3 + Dear ImGui.")
+      message(STATUS "Building nbeditor with ${NBEDITOR_SDL_VERSION} + Dear ImGui.")
     else()
       message(STATUS "Skipping BUILD_NBEDITOR (nbeditor/imgui sources not present in workspace).")
     endif()
   else()
-    message(STATUS "Skipping BUILD_NBEDITOR (SDL3 headers/library not found).")
+    message(STATUS "Skipping BUILD_NBEDITOR (SDL2/SDL3 headers/library not found).")
   endif()
 endif()
 
@@ -2858,6 +2896,10 @@ foreach(_neobae_tool
   )
   if(TARGET ${_neobae_tool})
     list(APPEND NEOBAE_TOOL_TARGETS ${_neobae_tool})
+    # With a shared libneobae, libm is no longer pulled in transitively.
+    if(UNIX AND NOT APPLE)
+      target_link_libraries(${_neobae_tool} PRIVATE m)
+    endif()
   endif()
 endforeach()
 unset(_neobae_tool)

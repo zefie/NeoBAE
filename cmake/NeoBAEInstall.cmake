@@ -120,6 +120,25 @@ if(EXISTS "${BAE_NBEDITOR_DATA_DIR}/hyph_catalog.json")
   endif()
 endif()
 
+# Linux desktop integration: menu entries + hicolor icons (zefidi, nbeditor).
+if(UNIX AND NOT APPLE)
+  set(NEOBAE_LINUX_DIR "${CMAKE_CURRENT_SOURCE_DIR}/neobae/linux")
+  foreach(_app zefidi nbeditor)
+    if(TARGET ${_app})
+      install(FILES "${NEOBAE_LINUX_DIR}/${_app}.desktop"
+        DESTINATION "${CMAKE_INSTALL_DATADIR}/applications"
+        COMPONENT Tools
+      )
+      install(DIRECTORY "${NEOBAE_LINUX_DIR}/icons/hicolor"
+        DESTINATION "${CMAKE_INSTALL_DATADIR}/icons"
+        COMPONENT Tools
+        FILES_MATCHING PATTERN "${_app}.png"
+      )
+    endif()
+  endforeach()
+  unset(_app)
+endif()
+
 # --- Curated public headers ---
 set(NEOBAE_PUBLIC_COMMON_HEADERS
   NeoBAE.h

@@ -1,0 +1,38 @@
+Source: neobae
+Section: sound
+Priority: optional
+Maintainer: zefie <zefie@users.noreply.github.com>
+Build-Depends: debhelper-compat (= 13),
+               cmake (>= 3.10),
+               pkgconf,
+               python3,
+               zlib1g-dev,
+               libasound2-dev,
+               libcurl4-openssl-dev,
+               libsdl3-dev | libsdl2-dev,
+               libsdl3-ttf-dev | libsdl2-ttf-dev
+Standards-Version: 4.7.0
+Homepage: https://github.com/zefie/NeoBAE
+Rules-Requires-Root: no
+
+Package: libneobae
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: NeoBAE shared library
+ Beatnik Audio Engine revival (NeoBAE): the shared audio engine library.
+
+Package: libneobae-dev
+Section: libdevel
+Architecture: any
+Depends: libneobae (= ${binary:Version}), ${misc:Depends}
+Description: NeoBAE headers and CMake package files
+ Development headers and CMake package configuration for NeoBAE.
+
+Package: neobae-tools
+Architecture: any
+Depends: libneobae (= ${binary:Version}), ${shlibs:Depends}, ${misc:Depends}
+Recommends: zenity
+Suggests: hyphen-en-us, hyphen-ru
+Description: NeoBAE command-line and GUI tools
+ playbae, songtool, rmfutil and friends, plus the zefidi media player and
+ the NeoBAE Editor (nbeditor) with desktop menu entries and icons.

@@ -321,7 +321,7 @@
             return;
         }
 
-        const SDL_Scancode sc = event.key.scancode;
+        const SDL_Scancode sc = NBE_KEY_SCANCODE(event);
         const int sc_i = static_cast<int>(sc);
         if (sc_i < 0 || sc_i >= static_cast<int>(m_pc_key_note.size()))
         {

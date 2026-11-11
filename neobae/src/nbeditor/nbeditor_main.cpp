@@ -1,11 +1,22 @@
 #include "imgui.h"
 #include "imgui_internal.h"
+#include "nbeditor_sdl_compat.h"
+#ifdef NBEDITOR_USE_SDL2
+#include "imgui_impl_sdl2.h"
+#include "imgui_impl_sdlrenderer2.h"
+#define ImGui_ImplSDL3_ProcessEvent ImGui_ImplSDL2_ProcessEvent
+#define ImGui_ImplSDL3_NewFrame ImGui_ImplSDL2_NewFrame
+#define ImGui_ImplSDL3_InitForSDLRenderer ImGui_ImplSDL2_InitForSDLRenderer
+#define ImGui_ImplSDL3_Shutdown ImGui_ImplSDL2_Shutdown
+#define ImGui_ImplSDLRenderer3_Init ImGui_ImplSDLRenderer2_Init
+#define ImGui_ImplSDLRenderer3_Shutdown ImGui_ImplSDLRenderer2_Shutdown
+#define ImGui_ImplSDLRenderer3_NewFrame ImGui_ImplSDLRenderer2_NewFrame
+#define ImGui_ImplSDLRenderer3_RenderDrawData ImGui_ImplSDLRenderer2_RenderDrawData
+#else
 #include "imgui_impl_sdl3.h"
 #include "imgui_impl_sdlrenderer3.h"
+#endif
 #include "neobae_theme.inc"
-
-#include <SDL3/SDL.h>
-#include <SDL3/SDL_dialog.h>
 
 #include "NeoBAE.h"
 #include "NeoBAEConfigPath.h"
@@ -7798,12 +7809,12 @@ int main(int argc, char **argv)
     };
     ModalLoopWatchPack watch_pack{&frame_ctx, +run_nbeditor_frame};
 
-    auto modal_loop_watch = [](void *userdata, SDL_Event *event) -> bool {
+    auto modal_loop_watch = [](void *userdata, SDL_Event *event) -> NbeEventWatchResult {
         if (!userdata || !event)
         {
             return true;
         }
-        const Uint32 t = event->type;
+        const Uint32 t = NBE_EVENT_TYPE(*event);
         const bool size_snap = (t == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED ||
                                 t == SDL_EVENT_WINDOW_RESIZED ||
                                 t == SDL_EVENT_WINDOW_MAXIMIZED ||
@@ -7847,24 +7858,26 @@ int main(int argc, char **argv)
         while (SDL_PollEvent(&event))
         {
             ImGui_ImplSDL3_ProcessEvent(&event);
-            if (event.type == SDL_EVENT_QUIT)
+            const Uint32 etype = NBE_EVENT_TYPE(event);
+            if (etype == SDL_EVENT_QUIT)
             {
                 app.RequestQuit();
             }
-            if (event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED &&
+            if (etype == SDL_EVENT_WINDOW_CLOSE_REQUESTED &&
                 event.window.windowID == SDL_GetWindowID(window))
             {
                 app.RequestQuit();
             }
-            if (event.type == SDL_EVENT_DROP_FILE)
+            if (etype == SDL_EVENT_DROP_FILE)
             {
-                const char *dropped = event.drop.data;
+                const char *dropped = NBE_DROP_PATH(event);
                 if (dropped && dropped[0])
                 {
                     app.HandleDroppedPath(dropped);
                 }
+                NBE_DROP_FREE(event);
             }
-            if (event.type == SDL_EVENT_KEY_DOWN || event.type == SDL_EVENT_KEY_UP)
+            if (etype == SDL_EVENT_KEY_DOWN || etype == SDL_EVENT_KEY_UP)
             {
                 app.HandlePcKeyboardEvent(event);
             }

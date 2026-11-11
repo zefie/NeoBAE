@@ -74,6 +74,16 @@ elseif(UNIX AND NOT APPLE)
   set(CPACK_DEB_COMPONENT_INSTALL ON)
   set(CPACK_COMPONENTS_GROUPING IGNORE)
   set(CPACK_DEBIAN_PACKAGE_SECTION "sound")
+  # Derive the DEB architecture from the target (not the host dpkg) so cross builds are labelled correctly.
+  if(NEOBAE_CPACK_ARCH STREQUAL "x86_64")
+    set(CPACK_DEBIAN_PACKAGE_ARCHITECTURE "amd64")
+  elseif(NEOBAE_CPACK_ARCH STREQUAL "aarch64")
+    set(CPACK_DEBIAN_PACKAGE_ARCHITECTURE "arm64")
+  elseif(NEOBAE_CPACK_ARCH STREQUAL "armv7")
+    set(CPACK_DEBIAN_PACKAGE_ARCHITECTURE "armhf")
+  elseif(NEOBAE_CPACK_ARCH STREQUAL "i686")
+    set(CPACK_DEBIAN_PACKAGE_ARCHITECTURE "i386")
+  endif()
   set(CPACK_DEBIAN_PACKAGE_GENERATE_SHLIBS ON)
   set(CPACK_DEBIAN_ENABLE_COMPONENT_DEPENDS ON)
   # Help dpkg-shlibdeps find freshly built libneobae when packaging Tools.
@@ -92,13 +102,16 @@ elseif(UNIX AND NOT APPLE)
   set(CPACK_DEBIAN_DEVELOPMENT_FILE_NAME "DEB-DEFAULT")
 
   set(CPACK_DEBIAN_RUNTIME_PACKAGE_SHLIBDEPS ON)
-  # Tools depend on libneobae explicitly; skip shlibdeps lookup of the private .so.
-  set(CPACK_DEBIAN_TOOLS_PACKAGE_SHLIBDEPS OFF)
+  # Tools use shlibdeps for SDL etc. (libneobae is found via PRIVATE_DIRS) and also depend on it explicitly.
+  set(CPACK_DEBIAN_TOOLS_PACKAGE_SHLIBDEPS ON)
   set(CPACK_DEBIAN_DEVELOPMENT_PACKAGE_SHLIBDEPS OFF)
   set(CPACK_DEBIAN_TOOLS_PACKAGE_DEPENDS "libneobae")
   set(CPACK_DEBIAN_DEVELOPMENT_PACKAGE_DEPENDS "libneobae")
   # Optional system hyphenation dictionaries for nbeditor syllable Apply-text.
   set(CPACK_DEBIAN_TOOLS_PACKAGE_SUGGESTS "hyphen-en-us, hyphen-ru")
+  # File-open/save dialogs: SDL2 builds shell out to a chooser, and SDL3 falls back to
+  # zenity when no desktop portal is present. zenity is the lightest option.
+  set(CPACK_DEBIAN_TOOLS_PACKAGE_RECOMMENDS "zenity")
 
   set(CPACK_DEBIAN_RUNTIME_DESCRIPTION "NeoBAE shared library")
   set(CPACK_DEBIAN_TOOLS_DESCRIPTION "NeoBAE command-line and GUI tools")
