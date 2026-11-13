@@ -6018,6 +6018,49 @@ BAEResult BAEMixer_GetTerpMode(BAEMixer mixer, BAETerpMode *outTerpMode)
     return BAE_TranslateOPErr(err);
 }
 
+// BAEMixer_SetTerpModeLive()
+// --------------------------------------
+// Switch interpolation on a running mixer without touching the audio device,
+// reverb or any playing songs. Only supported when all interpolation modes
+// share one voice position representation (U3232 loops); otherwise returns
+// BAE_NOT_SETUP and the caller should reopen the mixer instead.
+//
+BAEResult BAEMixer_SetTerpModeLive(BAEMixer mixer, BAETerpMode t)
+{
+    if (!mixer)
+        return BAE_NULL_OBJECT;
+    if (!mixer->pMixer)
+        return BAE_NOT_SETUP;
+    switch (t)
+    {
+    case BAE_DROP_SAMPLE:
+    case BAE_2_POINT_INTERPOLATION:
+    case BAE_LINEAR_INTERPOLATION:
+    case BAE_SINC_INTERPOLATION:
+        break;
+    default:
+        return BAE_PARAM_ERR;
+    }
+#if LOOPS_USED == U3232_LOOPS
+    {
+        GM_Mixer *pm = mixer->pMixer;
+        TerpMode newTerp = PV_GetDefaultTerp(t);
+        int32_t count;
+
+        if (pm->interpolationMode != newTerp)
+        {
+            // force every voice to recompute its slice step for the new mode
+            for (count = 0; count < (pm->MaxNotes + pm->MaxEffects); count++)
+                pm->NoteEntry[count].NoteNextSize = 0;
+            pm->interpolationMode = newTerp; // mixer picks its procs from this each frame
+        }
+        return BAE_NO_ERROR;
+    }
+#else
+    return BAE_NOT_SETUP;
+#endif
+}
+
 // BAEMixer_GetRate()
 // --------------------------------------
 //

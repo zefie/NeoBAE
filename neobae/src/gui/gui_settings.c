@@ -1144,6 +1144,8 @@ void save_playlist_settings(void)
 }
 #endif
 
+static bool terpDropdownOpen = false;
+
 static void render_settings_dialog(SDL_Renderer *R, int mx, int my, bool mclick, bool mdown,
                             int *transpose, int *tempo, int *volume, bool *loopPlay,
                             int *reverbType, bool ch_enable[16], int *progress, int *duration, bool *playing);
@@ -1944,7 +1946,7 @@ static void render_settings_dialog(SDL_Renderer *R, int mx, int my, bool mclick,
     // Note: ui_dropdown_two_column handles the button click internally, so we don't handle clicks here
 #endif
     // Right column controls (checkboxes)
-    bool rightColumnCheckboxesEnabled = !(g_volumeCurveDropdownOpen || g_sampleRateDropdownOpen || g_exportDropdownOpen || g_midi_input_device_dd_open || g_midi_output_device_dd_open || g_midiRecordFormatDropdownOpen);
+    bool rightColumnCheckboxesEnabled = !(g_volumeCurveDropdownOpen || g_sampleRateDropdownOpen || g_exportDropdownOpen || g_midi_input_device_dd_open || g_midi_output_device_dd_open || g_midiRecordFormatDropdownOpen || terpDropdownOpen);
 
     Rect kbRect = {rightX, dlg.y + 36, 18, 18};
     if (!rightColumnCheckboxesEnabled)
@@ -2037,25 +2039,6 @@ static void render_settings_dialog(SDL_Renderer *R, int mx, int my, bool mclick,
             save_settings(g_current_bank_path[0] ? g_current_bank_path : NULL, *reverbType, *loopPlay);
         }
 
-        static const char *terpNames[] = {"Drop", "2-point", "Linear", "Sinc"};
-        int terpIndex = g_terp_mode;
-        int terpY = dlg.y + terpOff;
-        if (terpIndex < 0 || terpIndex > 3)
-            terpIndex = 2;
-        draw_text(R, rightX, terpY + 4, "Interpolation:", g_text_color);
-        Rect terpRect = {rightX + 100, terpY, 130, 24};
-        SDL_Color tbg = point_in(mx, my, terpRect) ? g_button_hover : g_button_base;
-        draw_rect(R, terpRect, tbg);
-        draw_frame(R, terpRect, g_button_border);
-        draw_text(R, terpRect.x + 6, terpRect.y + 3, terpNames[terpIndex], g_button_text);
-        if (point_in(mx, my, terpRect) && mclick)
-        {
-            int next = (terpIndex + 1) % 4;
-            g_terp_mode = next;
-            save_settings(g_current_bank_path[0] ? g_current_bank_path : NULL, *reverbType, *loopPlay);
-            (void)recreate_mixer_and_restore(g_sample_rate_hz, *reverbType, *transpose, *tempo, *volume, *loopPlay, ch_enable);
-        }
-
         Rect bitRect = {rightX, dlg.y + bitOff, 18, 18};
         if (!rightColumnCheckboxesEnabled)
         {
@@ -2080,6 +2063,27 @@ static void render_settings_dialog(SDL_Renderer *R, int mx, int my, bool mclick,
         {
             save_settings(g_current_bank_path[0] ? g_current_bank_path : NULL, *reverbType, *loopPlay);
             (void)recreate_mixer_and_restore(g_sample_rate_hz, *reverbType, *transpose, *tempo, *volume, *loopPlay, ch_enable);
+        }
+
+        static const char *terpNames[] = {"Drop", "2-point", "Linear", "Sinc"};
+        int terpIndex = g_terp_mode;
+        int terpY = dlg.y + terpOff;
+        if (terpIndex < 0 || terpIndex > 3)
+            terpIndex = 2;
+        draw_text(R, rightX, terpY + 4, "Interpolation:", g_text_color);
+        Rect terpRect = {rightX + 100, terpY, 130, 24};
+        // Drawn last so the open list overlays the checkboxes below it
+        bool terpChanged = ui_dropdown_above(R, terpRect, &terpIndex, terpNames, 4, &terpDropdownOpen, mx, my, mdown, mclick && (rightColumnCheckboxesEnabled || terpDropdownOpen));
+        if (terpChanged && terpIndex != g_terp_mode)
+        {
+            g_terp_mode = terpIndex;
+            save_settings(g_current_bank_path[0] ? g_current_bank_path : NULL, *reverbType, *loopPlay);
+            // Change interpolation live; the mixer (and any playing song) is kept
+            bool applied = false;
+            if (g_bae.mixer && BAEMixer_SetTerpModeLive(g_bae.mixer, (BAETerpMode)g_terp_mode) == BAE_NO_ERROR)
+                applied = true;
+            if (!applied)
+                (void)recreate_mixer_and_restore(g_sample_rate_hz, *reverbType, *transpose, *tempo, *volume, *loopPlay, ch_enable);
         }
     }
 

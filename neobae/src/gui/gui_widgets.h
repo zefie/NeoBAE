@@ -33,6 +33,8 @@ void draw_frame(SDL_Renderer *R, Rect r, SDL_Color c);
 bool ui_button(SDL_Renderer *R, Rect r, const char *label, int mx, int my, bool mdown);
 bool ui_dropdown(SDL_Renderer *R, Rect r, int *value, const char **items, int count, bool *open,
                  int mx, int my, bool mdown, bool mclick);
+bool ui_dropdown_above(SDL_Renderer *R, Rect r, int *value, const char **items, int count, bool *open,
+                       int mx, int my, bool mdown, bool mclick);
 bool ui_dropdown_two_column(SDL_Renderer *R, Rect r, int *value, const char **items, int count, bool *open,
                             int mx, int my, bool mdown, bool mclick);
 bool ui_dropdown_two_column_above(SDL_Renderer *R, Rect r, int *value, const char **items, int count, bool *open,

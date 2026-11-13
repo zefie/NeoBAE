@@ -81,8 +81,8 @@ bool ui_button(SDL_Renderer *R, Rect r, const char *label, int mx, int my, bool 
 
 // Simple dropdown widget: shows current selection in button; when expanded shows list below.
 // Returns true if selection changed. selected index returned via *value.
-bool ui_dropdown(SDL_Renderer *R, Rect r, int *value, const char **items, int count, bool *open,
-                 int mx, int my, bool mdown, bool mclick)
+static bool ui_dropdown_impl(SDL_Renderer *R, Rect r, int *value, const char **items, int count, bool *open,
+                             int mx, int my, bool mdown, bool mclick, bool above)
 {
     bool changed = false;
     if (count <= 0)
@@ -134,7 +134,7 @@ bool ui_dropdown(SDL_Renderer *R, Rect r, int *value, const char **items, int co
         if (itemH < maxItemTextH + 8)
             itemH = maxItemTextH + 8; // add vertical padding
         int totalH = itemH * count;
-        Rect box = {r.x, r.y + r.h + 1, r.w, totalH};
+        Rect box = {r.x, above ? r.y - totalH - 1 : r.y + r.h + 1, r.w, totalH};
         draw_rect(R, box, g_panel_bg);
         draw_frame(R, box, frame);
         for (int i = 0; i < count; i++)
@@ -177,6 +177,19 @@ bool ui_dropdown(SDL_Renderer *R, Rect r, int *value, const char **items, int co
         }
     }
     return changed;
+}
+
+bool ui_dropdown(SDL_Renderer *R, Rect r, int *value, const char **items, int count, bool *open,
+                 int mx, int my, bool mdown, bool mclick)
+{
+    return ui_dropdown_impl(R, r, value, items, count, open, mx, my, mdown, mclick, false);
+}
+
+// Same as ui_dropdown but the list opens upward.
+bool ui_dropdown_above(SDL_Renderer *R, Rect r, int *value, const char **items, int count, bool *open,
+                       int mx, int my, bool mdown, bool mclick)
+{
+    return ui_dropdown_impl(R, r, value, items, count, open, mx, my, mdown, mclick, true);
 }
 
 // Two-column dropdown variant: when open, lays items in two columns within the same box.

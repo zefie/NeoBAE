@@ -1091,6 +1091,14 @@ extern "C"
     BAEResult BAEMixer_GetTerpMode(BAEMixer mixer,
                                    BAETerpMode *outTerpMode);
 
+    // BAEMixer_SetTerpModeLive()
+    // ------------------------------------
+    // Changes the interpolation mode of an open mixer without restarting the
+    // audio device or interrupting playback. Returns BAE_NOT_SETUP if this
+    // build cannot switch live (caller should reopen the mixer instead).
+    // ------------------------------------
+    BAEResult BAEMixer_SetTerpModeLive(BAEMixer mixer, BAETerpMode t);
+
     // BAEMixer_GetModifiers()
     // ------------------------------------
     // Upon return, parameter outMods will point to a BAEAudioModifiers containing the
