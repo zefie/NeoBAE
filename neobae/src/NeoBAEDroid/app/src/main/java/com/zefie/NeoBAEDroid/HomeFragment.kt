@@ -2701,6 +2701,11 @@ class HomeFragment : Fragment() {
     }
     
     private fun navigateToFolder(path: String) {
+        if (!BuildConfig.USE_MANAGE_EXTERNAL_STORAGE) {
+            // SAF: "/" is the saved-folders list; everything else is a content:// URI.
+            loadFolderContentsSaf(path)
+            return
+        }
         // Handle special refresh button
         if (path == "/" && viewModel.currentFolderPath == "/") {
             // Refresh storage list
@@ -2723,17 +2728,49 @@ class HomeFragment : Fragment() {
         }
     }
 
-    private fun loadFolderContentsSaf(path: String) {
-        val folderUriString = when {
-            path == "/" -> pickedFolderUri?.toString()
-            path.startsWith("content://") -> path
-            else -> pickedFolderUri?.toString()
-        }
+    /**
+     * SAF root ("/"): list every folder the user has granted persisted access to,
+     * so they can jump between saved folders without re-picking them.
+     */
+    private fun loadSafSavedFoldersRoot() {
+        val ctx = context ?: return
+        loadingState?.value = true
+        Thread {
+            val entries = try { getPersistedSafFolderEntries(ctx) } catch (_: Exception) { emptyList() }
+            val labelCounts = entries.groupingBy { it.label }.eachCount()
+            val items = entries.map { entry ->
+                val title = if ((labelCounts[entry.label] ?: 0) > 1) getDisplayPath(entry.uri.toString()) else entry.label
+                PlaylistItem(
+                    file = File(ctx.cacheDir, "saf_folder_${entry.uri.hashCode()}"),
+                    uri = entry.uri,
+                    title = title,
+                    path = entry.uri.toString(),
+                    isFolder = true
+                )
+            }
+            activity?.runOnUiThread {
+                if (::viewModel.isInitialized) {
+                    viewModel.folderFiles.clear()
+                    viewModel.folderFiles.addAll(items)
+                    viewModel.currentFolderPath = "/"
+                    viewModel.invalidateSearchCache()
+                    ctx.getSharedPreferences("NeoBAE_prefs", Context.MODE_PRIVATE)
+                        .edit().putString("current_folder_path", "/").apply()
+                }
+                loadingState?.value = false
+                if (items.isEmpty()) {
+                    (activity as? MainActivity)?.requestFolderPicker()
+                }
+            }
+        }.start()
+    }
 
-        if (folderUriString == null) {
-            (activity as? MainActivity)?.requestFolderPicker()
+    private fun loadFolderContentsSaf(path: String) {
+        if (!path.startsWith("content://")) {
+            loadSafSavedFoldersRoot()
             return
         }
+        val folderUriString = path
 
         val folderDoc = getSafDocumentFile(folderUriString)
         if (folderDoc == null || !folderDoc.isDirectory) {
@@ -2751,17 +2788,14 @@ class HomeFragment : Fragment() {
                         }
                         loadFolderContentsSaf(parentPath)
                     } else {
-                        Toast.makeText(contextRef, "Unable to open folder. Please select a folder.", Toast.LENGTH_SHORT).show()
-                        if (::viewModel.isInitialized) {
-                            viewModel.currentFolderPath = null
-                            viewModel.folderFiles.clear()
+                        Toast.makeText(contextRef, "Unable to open folder.", Toast.LENGTH_SHORT).show()
+                        if (pickedFolderUri?.toString()?.trimEnd('/') == folderUriString.trimEnd('/')) {
                             pickedFolderUri = null
-                            val prefs = contextRef.getSharedPreferences("NeoBAE_prefs", Context.MODE_PRIVATE)
-                            prefs.edit()
-                                .remove("current_folder_path")
-                                .remove("lastFolderUri")
-                                .apply()
+                            contextRef.getSharedPreferences("NeoBAE_prefs", Context.MODE_PRIVATE)
+                                .edit().remove("lastFolderUri").apply()
                         }
+                        // Fall back to the saved-folders list.
+                        loadSafSavedFoldersRoot()
                     }
                 }
             }
@@ -2933,8 +2967,13 @@ class HomeFragment : Fragment() {
 
     private fun getSafDocumentFile(uriString: String): DocumentFile? {
         val uri = try { Uri.parse(normalizeSafUriString(uriString)) } catch (_: Exception) { null } ?: return null
-        return DocumentFile.fromTreeUri(requireContext(), uri)
-            ?: DocumentFile.fromSingleUri(requireContext(), uri)
+        if (uri.scheme != "content") return null // e.g. the "/" saved-folders root
+        return try {
+            DocumentFile.fromTreeUri(requireContext(), uri)
+                ?: DocumentFile.fromSingleUri(requireContext(), uri)
+        } catch (_: IllegalArgumentException) {
+            null
+        }
     }
 
     private fun safCacheFileForUri(uri: Uri, displayName: String): File {

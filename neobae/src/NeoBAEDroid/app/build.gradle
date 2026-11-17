@@ -12,16 +12,39 @@ android {
         applicationId = "com.zefie.NeoBAEDroid"
         minSdk = 24
         targetSdk = 36
-        versionCode = 18
-        versionName = "1.0.17"
+        versionCode = 19
+        versionName = "1.0.18"
         ndk {
             abiFilters += ['armeabi-v7a', 'arm64-v8a', 'x86', 'x86_64']
         }
-        ndkVersion = "27.0.12077973"
+    }
+
+    // Default NDK; the .zefie build scripts can point at a standalone NDK via
+    // -Pneobae.ndkPath=<dir> -Pneobae.ndkVersion=<its Pkg.Revision>.
+    ndkVersion = (project.findProperty("neobae.ndkVersion") ?: "27.0.12077973").toString()
+    if (project.hasProperty("neobae.ndkPath")) {
+        ndkPath = project.property("neobae.ndkPath").toString()
+    }
+
+    // Release signing from the environment (set by the .zefie build scripts), so passwords
+    // never appear on a command line. Without NEOBAE_KEYSTORE, release builds are unsigned.
+    def neobaeKeystore = System.getenv("NEOBAE_KEYSTORE")
+    if (neobaeKeystore) {
+        signingConfigs {
+            neobaeRelease {
+                storeFile = file(neobaeKeystore)
+                storePassword = System.getenv("NEOBAE_KEYSTORE_PASS")
+                keyAlias = System.getenv("NEOBAE_KEY_ALIAS")
+                keyPassword = System.getenv("NEOBAE_KEY_PASS") ?: System.getenv("NEOBAE_KEYSTORE_PASS")
+            }
+        }
     }
 
     buildTypes {
         release {
+            if (neobaeKeystore) {
+                signingConfig = signingConfigs.neobaeRelease
+            }
             minifyEnabled = true
             shrinkResources = true
             proguardFiles(

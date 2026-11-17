@@ -166,7 +166,7 @@ class SQLiteHelper private constructor(private val context: Context) {
     private fun saveIndexMetadata(dbPtr: Long, indexPath: String) {
         val normalizedIndexPath = normalizePath(indexPath) ?: indexPath
         nativeExecute(dbPtr, "CREATE TABLE IF NOT EXISTS index_metadata (key TEXT PRIMARY KEY, value TEXT)")
-        nativeExecute(dbPtr, "INSERT OR REPLACE INTO index_metadata (key, value) VALUES ('indexed_path', '$normalizedIndexPath')")
+        nativeExecute(dbPtr, "INSERT OR REPLACE INTO index_metadata (key, value) VALUES ('indexed_path', '${sqlEscape(normalizedIndexPath)}')")
     }
     
     /**
@@ -201,6 +201,41 @@ class SQLiteHelper private constructor(private val context: Context) {
         nativeExecute(dbPtr, "CREATE INDEX IF NOT EXISTS idx_parent_path ON indexed_files(parent_path)")
     }
     
+    private fun sqlEscape(value: String): String = value.replace("'", "''")
+
+    /**
+     * Build a WHERE fragment matching rows whose parent_path is under [parentPath].
+     * Filesystem paths have several aliases on Android (/sdcard, /storage/emulated/0,
+     * the canonical FUSE path). Index roots are canonicalized but rows keep whatever form
+     * was used when indexing, so match every known alias of the folder.
+     */
+    private fun parentPathClause(parentPath: String): String {
+        val raw = parentPath.trim().trimEnd('/')
+        if (raw.startsWith("content://")) {
+            // SAF document IDs encode subfolders as %2F, so keep a plain prefix match.
+            return "(parent_path LIKE '${sqlEscape(raw)}%')"
+        }
+        val candidates = linkedSetOf(raw)
+        run {
+            val canonical = normalizePath(raw)
+            if (canonical != null) candidates.add(canonical)
+            val aliasRoots = listOf("/sdcard", "/storage/emulated/0", "/storage/self/primary")
+            val canonicalAliasRoots = aliasRoots.mapNotNull { normalizePath(it) }.toSet()
+            for (form in candidates.toList()) {
+                val matchedRoot = (aliasRoots + canonicalAliasRoots).firstOrNull { root ->
+                    form == root || form.startsWith("$root/")
+                } ?: continue
+                val rest = form.removePrefix(matchedRoot)
+                aliasRoots.forEach { candidates.add(it + rest) }
+                canonicalAliasRoots.forEach { candidates.add(it + rest) }
+            }
+        }
+        return candidates.joinToString(" OR ", prefix = "(", postfix = ")") { candidate ->
+            val esc = sqlEscape(candidate)
+            "parent_path = '$esc' OR parent_path LIKE '$esc/%'"
+        }
+    }
+
     fun insertFiles(indexPath: String, entities: List<FileEntity>) {
         if (entities.isEmpty()) return
         val dbPtr = getOrCreateDatabase(indexPath)
@@ -226,7 +261,7 @@ class SQLiteHelper private constructor(private val context: Context) {
         if (dbPtr == 0L) return emptyList()
         
         val limitClause = if (limit > 0) " LIMIT $limit" else ""
-        val sql = "SELECT path, filename, extension, parent_path, size, last_modified FROM indexed_files WHERE filename LIKE '%$query%' ORDER BY filename COLLATE NOCASE$limitClause"
+        val sql = "SELECT path, filename, extension, parent_path, size, last_modified FROM indexed_files WHERE filename LIKE '%${sqlEscape(query)}%' ORDER BY filename COLLATE NOCASE$limitClause"
         val results = executeQuery(dbPtr, sql)
         Log.d("SQLiteHelper", "searchFiles: found ${results.size} results")
         return results
@@ -242,7 +277,7 @@ class SQLiteHelper private constructor(private val context: Context) {
         if (dbPtr == 0L) return emptyList()
         
         val limitClause = if (limit > 0) " LIMIT $limit" else ""
-        val sql = "SELECT path, filename, extension, parent_path, size, last_modified FROM indexed_files WHERE parent_path LIKE '$parentPath%' AND filename LIKE '%$query%' ORDER BY filename COLLATE NOCASE$limitClause"
+        val sql = "SELECT path, filename, extension, parent_path, size, last_modified FROM indexed_files WHERE ${parentPathClause(parentPath)} AND filename LIKE '%${sqlEscape(query)}%' ORDER BY filename COLLATE NOCASE$limitClause"
         val results = executeQuery(dbPtr, sql)
         Log.d("SQLiteHelper", "searchFilesInPath: query=$sql, found ${results.size} results")
         return results
@@ -274,7 +309,7 @@ class SQLiteHelper private constructor(private val context: Context) {
         if (dbPtr == 0L) return emptyList()
         
         val limitClause = if (limit > 0) " LIMIT $limit" else ""
-        val sql = "SELECT path, filename, extension, parent_path, size, last_modified FROM indexed_files WHERE parent_path LIKE '$parentPath%' ORDER BY filename COLLATE NOCASE$limitClause"
+        val sql = "SELECT path, filename, extension, parent_path, size, last_modified FROM indexed_files WHERE ${parentPathClause(parentPath)} ORDER BY filename COLLATE NOCASE$limitClause"
         val results = executeQuery(dbPtr, sql)
         Log.d("SQLiteHelper", "getAllFilesInPath: found ${results.size} results")
         return results
@@ -285,7 +320,7 @@ class SQLiteHelper private constructor(private val context: Context) {
         val dbPtr = getOrCreateDatabase(indexPath)
         if (dbPtr == 0L) return null
         
-        val sql = "SELECT last_modified FROM indexed_files WHERE path = '$path'"
+        val sql = "SELECT last_modified FROM indexed_files WHERE path = '${sqlEscape(path)}'"
         val results = nativeQuery(dbPtr, sql)
         if (results.isNullOrEmpty()) return null
         

@@ -200,7 +200,7 @@ fun HomeScreenContent(
                                     )
                                     Spacer(modifier = Modifier.width(12.dp))
                                     Text(
-                                        text = "Select Folder",
+                                        text = if (viewModel.currentFolderPath == "/") "Add Folder" else "Select Folder",
                                         fontSize = 14.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colors.onBackground
@@ -214,7 +214,8 @@ fun HomeScreenContent(
                     // Show parent directory ".." option
                     viewModel.currentFolderPath?.let { currentPath ->
                         val parentPath = if (currentPath.startsWith("content://")) {
-                            getSafParentPath(currentPath)
+                            // At a SAF tree root, ".." returns to the saved-folders list.
+                            getSafParentPath(currentPath) ?: if (showSelectFolderRow) "/" else null
                         } else {
                             File(currentPath).parent
                         }
