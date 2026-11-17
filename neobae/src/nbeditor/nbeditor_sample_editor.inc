@@ -347,6 +347,7 @@
         state.loop_end = m_sample_editor_loop_end;
         state.loop_enabled = m_sample_editor_loop_enabled;
         state.root_key = m_sample_editor_root_key;
+        state.volume = m_sample_editor_volume;
         state.rate_preset = m_sample_editor_rate_preset;
         state.name = m_sample_editor_sample_name;
         return state;
@@ -364,6 +365,7 @@
         m_sample_editor_loop_end = state.loop_end;
         m_sample_editor_loop_enabled = state.loop_enabled;
         m_sample_editor_root_key = state.root_key;
+        m_sample_editor_volume = state.volume;
         m_sample_editor_rate_preset = state.rate_preset;
         m_sample_editor_sample_name = state.name;
         SeSyncFromCache();
@@ -828,6 +830,8 @@
         m_sample_editor_sample_name = sample.name;
         m_sample_editor_snd_resource_id = sample.snd_resource_id;
         m_sample_editor_root_key = sample.root_key;
+        m_sample_editor_volume = 100;
+        m_sample_editor_volume_editable = false;
         m_sample_editor_preview_needs_reencode = false;
         m_sample_editor_preview_note = sample.root_key;
         m_sample_editor_playing = false;
@@ -889,6 +893,8 @@
             m_sample_editor_snd_storage_type = info.sndStorageType;
             m_sample_editor_opus_mode = info.opusMode;
             m_sample_editor_root_key = static_cast<int>(info.rootKey);
+            m_sample_editor_volume = info.splitVolume;
+            m_sample_editor_volume_editable = true;
             /* sampleSize is the encoded byte size of the sample as stored in the
              * document, so it doubles as the "compressed bytes" readout. */
             m_sample_editor_compressed_bytes = info.sampleSize;
@@ -964,6 +970,16 @@
                 m_sample_editor_bit_depth = info.bitDepth;
                 m_sample_editor_snd_storage_type = info.sndStorageType;
                 m_sample_editor_root_key = static_cast<int>(info.rootKey);
+                m_sample_editor_volume = info.splitVolume;
+                {
+                    BAERmfEditorBankInstrumentInfo vol_ii;
+                    std::memset(&vol_ii, 0, sizeof(vol_ii));
+                    m_sample_editor_volume_editable =
+                        BAERmfEditorBank_GetInstrumentInfo(m_bank_token, resolved_inst, &vol_ii) ==
+                            BAE_NO_ERROR &&
+                        !TEST_FLAG_VALUE(vol_ii.flags2, ZBF_enableSampleOffsetStart) &&
+                        !TEST_FLAG_VALUE(vol_ii.flags2, ZBF_enableSoundModifier);
+                }
                 detected = BankCompressionFromCodec(info.compressionType, info.compressionSubType);
                 /* Keep list SND id — do not adopt info.sndResourceID from a mismatch. */
                 m_sample_editor_snd_resource_id = sample.snd_resource_id;
@@ -1292,6 +1308,10 @@
             info.sndStorageType = m_sample_editor_snd_storage_type;
             info.opusMode = m_sample_editor_opus_mode;
             info.rootKey = static_cast<unsigned char>(std::clamp(m_sample_editor_root_key, 0, 127));
+            if (m_sample_editor_volume_editable)
+            {
+                info.splitVolume = static_cast<int16_t>(m_sample_editor_volume);
+            }
             info.sampleInfo.startLoop = loop_start;
             info.sampleInfo.endLoop = loop_end;
             info.sampleInfo.sampledRate = apply_rate;
@@ -1389,6 +1409,8 @@
             have_bank_info &&
             (bank_info.loopStart != loop_start || bank_info.loopEnd != loop_end ||
              static_cast<uint32_t>(bank_info.rootKey) != want_root ||
+             (m_sample_editor_volume_editable &&
+              static_cast<int>(bank_info.splitVolume) != m_sample_editor_volume) ||
              bank_info.sampleRate != m_sample_editor_sample_rate_hz);
         const bool name_dirty =
             !m_sample_editor_sample_name.empty() &&
@@ -1579,6 +1601,10 @@
                 updated_info.loopStart = applied_start;
                 updated_info.loopEnd = applied_end;
                 updated_info.rootKey = static_cast<unsigned char>(want_root);
+                if (m_sample_editor_volume_editable)
+                {
+                    updated_info.splitVolume = static_cast<int16_t>(m_sample_editor_volume);
+                }
                 /* Preserve SND linkage — never let a zeroed/stale field remint. */
                 updated_info.sndResourceID =
                     static_cast<XShortResourceID>(static_cast<uint16_t>(keep_snd));
@@ -1602,6 +1628,12 @@
                 }
                 /* INST XReplace shifts GetIndexed order. */
                 sync_work_inst_index();
+                /* Single-sample INST: root/volume are header misc words — keep an
+                 * open Instrument Editor from writing its stale copy back. */
+                MirrorFlatInstSampleFieldsToInstrumentEditor(
+                    keep_inst_id,
+                    static_cast<int>(want_root),
+                    m_sample_editor_volume_editable ? m_sample_editor_volume : -1);
 
                 if (m_sample_editor_loop_enabled)
                 {
@@ -3409,6 +3441,32 @@
         if (ImGui::IsItemHovered())
         {
             ImGui::SetTooltip("Choose Note...");
+        }
+        ImGui::SameLine();
+        {
+            int volume = m_sample_editor_volume;
+            ImGui::SetNextItemWidth(90.0f);
+            ImGui::BeginDisabled(!m_sample_editor_volume_editable);
+            ImGui::InputInt("Volume", &volume, 0, 0);
+            const bool vol_committed = ImGui::IsItemDeactivatedAfterEdit();
+            ImGui::EndDisabled();
+            if (vol_committed)
+            {
+                volume = std::clamp(volume, 0, 32767);
+                if (volume != m_sample_editor_volume)
+                {
+                    PushSampleEditorUndo();
+                    m_sample_editor_volume = volume;
+                }
+            }
+            if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+            {
+                ImGui::SetTooltip(m_sample_editor_volume_editable
+                                      ? "Instrument volume for this sample (keysplit Vol, or the\n"
+                                        "instrument volume for single-sample instruments). 100 = default."
+                                      : "Volume unavailable: this instrument uses sample-offset or\n"
+                                        "sound-modifier mode (miscParameter2 is not volume).");
+            }
         }
 
         /* Loop controls — markers are draggable on the waveform; Shift/Ctrl slow the drag. */

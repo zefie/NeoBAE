@@ -722,6 +722,7 @@ struct SampleEditorUndoState
     uint32_t loop_end = 0;
     bool loop_enabled = false;
     int root_key = 60;
+    int volume = 100;
     int rate_preset = 1;
     std::string name;
 };
@@ -1622,6 +1623,7 @@ public:
         DrawTrashWindow();
         DrawEditConfirmDialogs();
         DrawResourceUsageDialog();
+        DrawBatchCompressDialog();
         DrawInstDestDialog();
         DrawDeleteInstrumentAliasConfirmDialog();
         DrawRemoveOrphanAliasesConfirmDialog();
@@ -5707,6 +5709,65 @@ private:
         SetStatus(status);
     }
 
+    /* Click / keyboard select side effects: sync instrument slot + audition. */
+    void OnSampleRowSelected(size_t i)
+    {
+        if (i >= m_samples.size())
+        {
+            return;
+        }
+        const SampleRow &sample = m_samples[i];
+        if (sample.unassigned)
+        {
+            return;
+        }
+        m_selected_bank = sample.bank;
+        m_selected_program = sample.program;
+        m_selected_instrument = -1;
+        for (size_t ii = 0; ii < m_instruments.size(); ++ii)
+        {
+            if (m_instruments[ii].bank == m_selected_bank &&
+                m_instruments[ii].program == m_selected_program)
+            {
+                m_selected_instrument = static_cast<int>(ii);
+                break;
+            }
+        }
+        BAESong audition_song = GetAuditionSong();
+        if (audition_song)
+        {
+            BAESong_ProgramBankChange(audition_song,
+                                      AuditionMidiChannel(),
+                                      static_cast<unsigned char>(m_selected_program),
+                                      static_cast<unsigned char>(m_selected_bank),
+                                      0);
+        }
+    }
+
+    void OnInstrumentRowSelected(size_t i)
+    {
+        if (i >= m_instruments.size())
+        {
+            return;
+        }
+        const InstrumentRow &inst = m_instruments[i];
+        m_selected_bank = inst.bank;
+        m_selected_program = inst.program;
+        BAESong audition_song = GetAuditionSong();
+        if (audition_song)
+        {
+            /* Perc: keep channel program 0 (note selects the drum INST). */
+            const unsigned char prog =
+                inst.percussion ? static_cast<unsigned char>(0)
+                                : static_cast<unsigned char>(m_selected_program);
+            BAESong_ProgramBankChange(audition_song,
+                                      AuditionMidiChannel(),
+                                      prog,
+                                      static_cast<unsigned char>(m_selected_bank),
+                                      0);
+        }
+    }
+
     void DrawSampleListWindow()
     {
         static const char *kSampleShowLabels[] = {
@@ -5832,6 +5893,20 @@ private:
             return;
         }
 
+        if (const int dir = ListCtrlArrowStep())
+        {
+            const int row = StepListSelection(m_multi_samples,
+                                              m_selected_sample,
+                                              m_multi_sample_anchor,
+                                              visible,
+                                              dir);
+            if (row >= 0)
+            {
+                OnSampleRowSelected(static_cast<size_t>(row));
+                m_kb_scroll_sample_dir = dir;
+            }
+        }
+
         for (size_t vi = 0; vi < visible.size(); ++vi)
         {
             const size_t i = visible[vi];
@@ -5878,42 +5953,32 @@ private:
             if (ImGui::Selectable(label, sample_selected))
             {
                 const ImGuiIO &io = ImGui::GetIO();
-                ApplyListSelection(m_multi_samples,
-                                   m_selected_sample,
-                                   static_cast<int>(i),
-                                   m_multi_sample_anchor,
-                                   io.KeyCtrl,
-                                   io.KeyShift);
-                m_multi_sample_anchor = static_cast<int>(i);
-                if (!sample.unassigned)
+                m_multi_sample_anchor = ApplyListSelection(m_multi_samples,
+                                                           m_selected_sample,
+                                                           static_cast<int>(i),
+                                                           m_multi_sample_anchor,
+                                                           io.KeyCtrl,
+                                                           io.KeyShift,
+                                                           &visible);
+                /* Ctrl+click deselect: don't switch audition to the row just dropped. */
+                if (m_multi_samples.count(static_cast<int>(i)) != 0)
                 {
-                    m_selected_bank = sample.bank;
-                    m_selected_program = sample.program;
-                    m_selected_instrument = -1;
-                    for (size_t ii = 0; ii < m_instruments.size(); ++ii)
-                    {
-                        if (m_instruments[ii].bank == m_selected_bank &&
-                            m_instruments[ii].program == m_selected_program)
-                        {
-                            m_selected_instrument = static_cast<int>(ii);
-                            break;
-                        }
-                    }
-                    BAESong audition_song = GetAuditionSong();
-                    if (audition_song)
-                    {
-                        BAESong_ProgramBankChange(audition_song,
-                                                  AuditionMidiChannel(),
-                                                  static_cast<unsigned char>(m_selected_program),
-                                                  static_cast<unsigned char>(m_selected_bank),
-                                                  0);
-                    }
+                    OnSampleRowSelected(i);
                 }
             }
             if (m_scroll_to_selected_sample && m_selected_sample == static_cast<int>(i))
             {
                 ImGui::SetScrollHereY(0.25f);
                 m_scroll_to_selected_sample = false;
+            }
+            if (m_kb_scroll_sample_dir != 0 && m_selected_sample == static_cast<int>(i))
+            {
+                /* Keyboard step: only scroll when the row left the view. */
+                if (!ImGui::IsItemVisible())
+                {
+                    ImGui::SetScrollHereY(m_kb_scroll_sample_dir > 0 ? 1.0f : 0.0f);
+                }
+                m_kb_scroll_sample_dir = 0;
             }
 
             if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
@@ -6013,6 +6078,44 @@ private:
                 {
                     OpenResourceUsageForSample(static_cast<int>(i));
                 }
+                {
+                    /* Right-click inside the selection acts on all of it;
+                     * outside, just this row. */
+                    const bool in_selection = m_multi_samples.count(static_cast<int>(i)) != 0 ||
+                                              m_selected_sample == static_cast<int>(i);
+                    std::vector<int> compress_rows;
+                    if (in_selection)
+                    {
+                        compress_rows = CollectTargetSampleIndices();
+                    }
+                    if (compress_rows.empty())
+                    {
+                        compress_rows.push_back(static_cast<int>(i));
+                    }
+                    char compress_label[64];
+                    if (compress_rows.size() > 1)
+                    {
+                        std::snprintf(compress_label,
+                                      sizeof(compress_label),
+                                      "Compress %zu Selected...",
+                                      compress_rows.size());
+                    }
+                    else
+                    {
+                        std::snprintf(compress_label, sizeof(compress_label), "Compress Sample...");
+                    }
+                    if (ImGui::MenuItem(compress_label,
+                                        nullptr,
+                                        false,
+                                        !sample.unassigned || compress_rows.size() > 1))
+                    {
+                        OpenBatchCompressDialogForSampleRows(compress_rows, "Selected");
+                    }
+                    if (ImGui::MenuItem("Compress All Samples...", nullptr, false, !m_samples.empty()))
+                    {
+                        OpenBatchCompressAllSamples();
+                    }
+                }
                 if (ImGui::MenuItem(sample.source == SampleSource::Song
                                         ? "Remove Song Sample"
                                         : "Move Sample to Trash",
@@ -6053,6 +6156,17 @@ private:
             {
                 SessionSelectAllVisible();
             }
+            if (ImGui::MenuItem("Compress Selected...",
+                                nullptr,
+                                false,
+                                !CollectTargetSampleIndices().empty()))
+            {
+                OpenBatchCompressSelectedSamples();
+            }
+            if (ImGui::MenuItem("Compress All Samples...", nullptr, false, !m_samples.empty()))
+            {
+                OpenBatchCompressAllSamples();
+            }
             if (ImGui::MenuItem("Clean Unused Samples",
                                 nullptr,
                                 false,
@@ -6074,6 +6188,7 @@ private:
     // Phase 2 BE2-style Sample Editor
 #include "nbeditor_sample_editor.inc"
 #endif
+#include "nbeditor_batch_compress.inc"
 
 #include "nbeditor_bank_add.inc"
 #include "nbeditor_instrument_ops.inc"
@@ -6370,6 +6485,21 @@ private:
         }
         ImGui::Separator();
 
+        if (const int dir = ListCtrlArrowStep())
+        {
+            const int row = StepListSelection(m_multi_instruments,
+                                              m_selected_instrument,
+                                              m_multi_instrument_anchor,
+                                              visible,
+                                              dir);
+            if (row >= 0)
+            {
+                m_selected_empty_slot = false;
+                OnInstrumentRowSelected(static_cast<size_t>(row));
+                m_kb_scroll_instrument_dir = dir;
+            }
+        }
+
         for (size_t vi = 0; vi < visible.size(); ++vi)
         {
             const size_t i = visible[vi];
@@ -6400,29 +6530,27 @@ private:
             if (ImGui::Selectable(label, inst_selected))
             {
                 const ImGuiIO &io = ImGui::GetIO();
-                ApplyListSelection(m_multi_instruments,
-                                   m_selected_instrument,
-                                   static_cast<int>(i),
-                                   m_multi_instrument_anchor,
-                                   io.KeyCtrl,
-                                   io.KeyShift);
-                m_multi_instrument_anchor = static_cast<int>(i);
+                m_multi_instrument_anchor = ApplyListSelection(m_multi_instruments,
+                                                               m_selected_instrument,
+                                                               static_cast<int>(i),
+                                                               m_multi_instrument_anchor,
+                                                               io.KeyCtrl,
+                                                               io.KeyShift,
+                                                               &visible);
                 m_selected_empty_slot = false;
-                m_selected_bank = inst.bank;
-                m_selected_program = inst.program;
-                BAESong audition_song = GetAuditionSong();
-                if (audition_song)
+                /* Ctrl+click deselect: don't switch audition to the row just dropped. */
+                if (m_multi_instruments.count(static_cast<int>(i)) != 0)
                 {
-                    /* Perc: keep channel program 0 (note selects the drum INST). */
-                    const unsigned char prog =
-                        inst.percussion ? static_cast<unsigned char>(0)
-                                        : static_cast<unsigned char>(m_selected_program);
-                    BAESong_ProgramBankChange(audition_song,
-                                              AuditionMidiChannel(),
-                                              prog,
-                                              static_cast<unsigned char>(m_selected_bank),
-                                              0);
+                    OnInstrumentRowSelected(i);
                 }
+            }
+            if (m_kb_scroll_instrument_dir != 0 && m_selected_instrument == static_cast<int>(i))
+            {
+                if (!ImGui::IsItemVisible())
+                {
+                    ImGui::SetScrollHereY(m_kb_scroll_instrument_dir > 0 ? 1.0f : 0.0f);
+                }
+                m_kb_scroll_instrument_dir = 0;
             }
             if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
             {
@@ -6507,6 +6635,36 @@ private:
                 if (ImGui::MenuItem("Select All"))
                 {
                     SessionSelectAllVisible();
+                }
+                {
+                    const bool in_selection =
+                        m_multi_instruments.count(static_cast<int>(i)) != 0 ||
+                        (m_selected_instrument == static_cast<int>(i) && !m_selected_empty_slot);
+                    const size_t sel_count = in_selection ? CollectTargetInstrumentIndices().size() : 1u;
+                    char compress_label[64];
+                    if (sel_count > 1)
+                    {
+                        std::snprintf(compress_label,
+                                      sizeof(compress_label),
+                                      "Compress Samples of %zu Selected...",
+                                      sel_count);
+                    }
+                    else
+                    {
+                        std::snprintf(compress_label, sizeof(compress_label), "Compress Samples...");
+                    }
+                    if (ImGui::MenuItem(compress_label))
+                    {
+                        if (!in_selection)
+                        {
+                            m_multi_instruments.clear();
+                            m_multi_instruments.insert(static_cast<int>(i));
+                            m_selected_instrument = static_cast<int>(i);
+                            m_selected_empty_slot = false;
+                            m_multi_instrument_anchor = static_cast<int>(i);
+                        }
+                        OpenBatchCompressSelectedInstruments();
+                    }
                 }
                 if (ImGui::MenuItem("Create Alias...",
                                     nullptr,
@@ -7118,6 +7276,10 @@ private:
     bool m_sample_editor_dirty = false;
     bool m_sample_editor_loop_enabled = false;
     int m_sample_editor_root_key = 60;
+    /* Split / single-sample INST volume (miscParameter2). Not editable when the
+     * INST uses sample-offset or sound-modifier mode (those own misc2). */
+    int m_sample_editor_volume = 100;
+    bool m_sample_editor_volume_editable = false;
     uint32_t m_sample_editor_snd_resource_id = kNoSndResourceId;
     std::string m_sample_editor_usage_text;
     int m_sample_editor_rate_preset = 1;
@@ -7211,6 +7373,17 @@ private:
     std::string m_loaded_session_path;
     std::map<uint32_t, SessionPcmCacheEntry> m_session_pcm_cache;
     std::map<uint32_t, std::vector<unsigned char>> m_app_compression_cache;
+    /* Batch "Compress Selected / All" dialog (nbeditor_batch_compress.inc). */
+    bool m_batch_compress_open = false;
+    std::string m_batch_compress_scope;
+    std::vector<uint32_t> m_batch_compress_snd_ids;
+    std::vector<uint32_t> m_batch_compress_song_samples;
+    int m_batch_compress_unassigned_skipped = 0;
+    int m_batch_compress_codec_index = -1;
+    BAERmfEditorSndStorageType m_batch_compress_storage = BAE_EDITOR_SND_STORAGE_ESND;
+    BAERmfEditorOpusMode m_batch_compress_opus_mode = BAE_EDITOR_OPUS_MODE_AUDIO;
+    bool m_batch_compress_player20 = false;
+    bool m_batch_compress_skip_lossy = true;
     /* RMF/ZMF export dialog: instruments selected for embedding / ghost. */
     bool m_export_rmf_open = false;
     bool m_export_rmf_prepare_pending = false;
@@ -7266,6 +7439,9 @@ private:
     int m_multi_song_anchor = -1;
     int m_multi_instrument_anchor = -1;
     int m_multi_sample_anchor = -1;
+    /* Ctrl+Up/Down stepped the selection: scroll it into view on next draw. */
+    int m_kb_scroll_sample_dir = 0;
+    int m_kb_scroll_instrument_dir = 0;
     std::vector<SessionSongEntry> m_song_clipboard;
     std::vector<uint32_t> m_sample_clipboard_snd_ids;
     bool m_rename_open = false;

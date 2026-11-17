@@ -350,6 +350,33 @@
                 PasteInstrumentsSelection();
             }
             ImGui::Separator();
+            {
+                /* Selection-aware: samples on the Samples tab, the selected
+                 * instruments' samples on the Instruments tab. */
+                const bool inst_tab = (m_session_tab == SessionTab::Instruments);
+                const bool has_sel = inst_tab ? !CollectTargetInstrumentIndices().empty()
+                                              : (m_session_tab == SessionTab::Samples &&
+                                                 !CollectTargetSampleIndices().empty());
+                if (ImGui::MenuItem(inst_tab ? "Compress Samples of Selected Instruments..."
+                                             : "Compress Selected Samples...",
+                                    nullptr,
+                                    false,
+                                    has_sel))
+                {
+                    if (inst_tab)
+                    {
+                        OpenBatchCompressSelectedInstruments();
+                    }
+                    else
+                    {
+                        OpenBatchCompressSelectedSamples();
+                    }
+                }
+                if (ImGui::MenuItem("Compress All Samples...", nullptr, false, !m_samples.empty()))
+                {
+                    OpenBatchCompressAllSamples();
+                }
+            }
             if (ImGui::MenuItem("Clear compression cache..."))
             {
                 RequestClearCompressionCacheConfirm();
@@ -4153,21 +4180,25 @@
                               entry.name.c_str(),
                               tag,
                               (i == m_session_song_index && m_document_dirty) ? " *" : "");
+                /* With a multi-selection, draw only its members — otherwise the
+                 * loaded song stays lit after Ctrl+click deselects it. */
                 const bool selected =
-                    (m_multi_songs.count(i) != 0) || (i == m_session_song_index && m_groovoid_index < 0);
+                    m_multi_songs.empty() ? (i == m_session_song_index && m_groovoid_index < 0)
+                                          : (m_multi_songs.count(i) != 0);
                 if (ImGui::Selectable(line, selected))
                 {
                     const ImGuiIO &io = ImGui::GetIO();
                     int primary = m_session_song_index;
-                    ApplyListSelection(m_multi_songs,
-                                       primary,
-                                       i,
-                                       m_multi_song_anchor,
-                                       io.KeyCtrl,
-                                       io.KeyShift);
-                    m_multi_song_anchor = i;
+                    m_multi_song_anchor = ApplyListSelection(m_multi_songs,
+                                                             primary,
+                                                             i,
+                                                             m_multi_song_anchor,
+                                                             io.KeyCtrl,
+                                                             io.KeyShift);
                     m_groovoid_index = -1;
-                    if (primary != m_session_song_index)
+                    /* Only load on select — a Ctrl+click deselect must not switch
+                     * to some other song in the selection. */
+                    if (primary >= 0 && primary == i && primary != m_session_song_index)
                     {
                         ActivateSessionSongAt(primary);
                     }
@@ -6688,6 +6719,54 @@
         }
     }
 
+    /* Flat (non-keysplit) INSTs keep the sample root (when
+     * useSoundModifierAsRootKey) and volume in header miscParameter1/2 — the
+     * same words the Output / Volume tabs edit through m_ie_ext. After a Keymap
+     * row or Sample Editor writes them to the bank, mirror them here so Apply /
+     * live patch / undo don't stomp the new values with stale ones. Keysplit
+     * INSTs keep these per split, so nothing to do there. Pass -1 to skip. */
+    void MirrorFlatInstSampleFieldsToInstrumentEditor(uint32_t inst_id, int root_key, int volume)
+    {
+        if (!m_instrument_editor_open || m_ie_from_song || !m_bank_token || inst_id != m_ie_inst_id)
+        {
+            return;
+        }
+        SyncInstrumentEditorBankIndex();
+        BAERmfEditorBankInstrumentInfo ii;
+        std::memset(&ii, 0, sizeof(ii));
+        if (BAERmfEditorBank_GetInstrumentInfo(m_bank_token, m_ie_instrument_index, &ii) != BAE_NO_ERROR ||
+            ii.instID != inst_id || ii.keySplitCount > 0)
+        {
+            return;
+        }
+        /* Same rules BAERmfEditorBank_SetInstrumentSampleInfo uses to write them. */
+        const bool root_in_misc1 =
+            root_key >= 0 && TEST_FLAG_VALUE(ii.flags2, ZBF_useSoundModifierAsRootKey);
+        const bool vol_in_misc2 = volume >= 0 &&
+                                  !TEST_FLAG_VALUE(ii.flags2, ZBF_enableSampleOffsetStart) &&
+                                  !TEST_FLAG_VALUE(ii.flags2, ZBF_enableSoundModifier);
+        auto patch = [&](BAERmfEditorInstrumentExtInfo &ext) {
+            if (root_in_misc1)
+            {
+                ext.miscParameter1 = static_cast<int16_t>(root_key);
+            }
+            if (vol_in_misc2)
+            {
+                ext.miscParameter2 = static_cast<int16_t>(volume);
+            }
+        };
+        patch(m_ie_ext);
+        patch(m_ie_ext_pre_edit);
+        for (auto &e : m_ie_undo)
+        {
+            patch(e);
+        }
+        for (auto &e : m_ie_redo)
+        {
+            patch(e);
+        }
+    }
+
     void LivePatchInstrumentOnSong(BAESong song,
                                    BAE_INSTRUMENT inst,
                                    bool reload_samples_from_bank,
@@ -7587,7 +7666,11 @@
                         m_ie_ext.midiRootKey = static_cast<int16_t>(root);
                         MarkInstrumentEditorDirty();
                     }
-                    if (ImGui::InputInt("miscParameter1", &misc1))
+                    const bool misc1_is_root =
+                        TEST_FLAG_VALUE(m_ie_ext.flags2, ZBF_useSoundModifierAsRootKey) &&
+                        !TEST_FLAG_VALUE(m_ie_ext.flags2, ZBF_enableSampleOffsetStart);
+                    if (ImGui::InputInt(misc1_is_root ? "Sample root key (misc1)" : "miscParameter1",
+                                        &misc1))
                     {
                         m_ie_ext.miscParameter1 = static_cast<int16_t>(misc1);
                         MarkInstrumentEditorDirty();
@@ -8036,6 +8119,24 @@
 
         DrawKeymapZoneDiagram(split_count);
 
+        /* Single-sample INST: its one row's Root/Vol ARE header misc1/misc2,
+         * which the Output/Volume tabs edit in m_ie_ext (bank only on Apply).
+         * Show and commit the editor's values so both places agree. */
+        bool flat_inst = false;
+        {
+            BAERmfEditorBankInstrumentInfo ii;
+            std::memset(&ii, 0, sizeof(ii));
+            flat_inst = BAERmfEditorBank_GetInstrumentInfo(m_bank_token, m_ie_instrument_index, &ii) ==
+                            BAE_NO_ERROR &&
+                        ii.keySplitCount <= 0;
+        }
+        const bool flat_root_in_misc1 =
+            flat_inst && TEST_FLAG_VALUE(m_ie_ext.flags2, ZBF_useSoundModifierAsRootKey) &&
+            m_ie_ext.miscParameter1 >= 0 && m_ie_ext.miscParameter1 <= 127;
+        const bool flat_vol_in_misc2 = flat_inst &&
+                                       !TEST_FLAG_VALUE(m_ie_ext.flags2, ZBF_enableSampleOffsetStart) &&
+                                       !TEST_FLAG_VALUE(m_ie_ext.flags2, ZBF_enableSoundModifier);
+
         ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, ImVec2(8.0f, 6.0f));
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(6.0f, 4.0f));
         if (ImGui::BeginTable("keymap",
@@ -8114,6 +8215,14 @@
                     DeleteInstrumentSplitAt(s);
                     break;
                 }
+                if (flat_root_in_misc1)
+                {
+                    info.rootKey = static_cast<unsigned char>(m_ie_ext.miscParameter1);
+                }
+                if (flat_vol_in_misc2)
+                {
+                    info.splitVolume = m_ie_ext.miscParameter2;
+                }
                 int low = info.lowKey, high = info.highKey, root = info.rootKey, vol = info.splitVolume;
                 /* step=0 hides +/- (they crush 72px cells). Commit on deactivate so
                  * typing does not rebuild INST on every keystroke. */
@@ -8153,6 +8262,10 @@
                         SyncInstrumentEditorBankIndex();
                         m_ie_dirty = true;
                         info.sampleRate = saved_rate;
+                        /* Single-sample INST: root/vol live in the header misc
+                         * words — keep the editor's copy in step. */
+                        MirrorFlatInstSampleFieldsToInstrumentEditor(
+                            m_ie_inst_id, info.rootKey, info.splitVolume);
                         /* Soft-patch audition/playback so Root/Low/High/Vol are heard
                          * without waiting for Apply / instrument reload. */
                         live_patch_split(info);

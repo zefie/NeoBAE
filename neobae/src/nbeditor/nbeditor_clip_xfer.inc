@@ -1450,44 +1450,198 @@
         return false;
     }
 
-    void ApplyListSelection(std::set<int> &multi,
-                            int &primary,
-                            int index,
-                            int last_anchor,
-                            bool ctrl,
-                            bool shift)
+    /* Ctrl+Up/Down in a session list, relative to the last-clicked row (anchor):
+     * moving away from the anchor adds the next row; moving back toward it
+     * deselects the row being left. E.g. click 3, Ctrl+Down selects 4, Ctrl+Up
+     * deselects 4 again. The cursor is the primary row; the anchor never moves.
+     * Returns the row now current, or -1 at the list edge / empty list. */
+    int StepListSelection(std::set<int> &multi,
+                          int &primary,
+                          int &anchor,
+                          const std::vector<size_t> &visible_order,
+                          int dir)
+    {
+        if (visible_order.empty() || dir == 0)
+        {
+            return -1;
+        }
+        auto pos_of = [&](int row) {
+            for (size_t vi = 0; vi < visible_order.size(); ++vi)
+            {
+                if (static_cast<int>(visible_order[vi]) == row)
+                {
+                    return static_cast<int>(vi);
+                }
+            }
+            return -1;
+        };
+        const int pos = (primary >= 0) ? pos_of(primary) : -1;
+        if (pos < 0)
+        {
+            /* Nothing current on screen: start a fresh selection at an end. */
+            const int start = (dir > 0) ? 0 : static_cast<int>(visible_order.size()) - 1;
+            const int row = static_cast<int>(visible_order[static_cast<size_t>(start)]);
+            multi.clear();
+            multi.insert(row);
+            primary = row;
+            anchor = row;
+            return row;
+        }
+        const int target_pos = pos + (dir > 0 ? 1 : -1);
+        if (target_pos < 0 || target_pos >= static_cast<int>(visible_order.size()))
+        {
+            return -1;
+        }
+        int anchor_pos = (anchor >= 0) ? pos_of(anchor) : -1;
+        if (anchor_pos < 0)
+        {
+            anchor = primary;
+            anchor_pos = pos;
+        }
+        /* Lone primary is drawn selected but not in the set — keep it. */
+        multi.insert(primary);
+        const int target = static_cast<int>(visible_order[static_cast<size_t>(target_pos)]);
+        const bool toward_anchor = std::abs(target_pos - anchor_pos) < std::abs(pos - anchor_pos);
+        if (toward_anchor)
+        {
+            multi.erase(primary); /* shrink: drop the row we're leaving */
+        }
+        multi.insert(target);
+        primary = target;
+        return target;
+    }
+
+    /* True when Ctrl+Up/Down should drive the list being drawn: the list's
+     * window has focus, no text field is active, no popup is open. Returns
+     * -1 (Up), +1 (Down) or 0. Claims the keys so ImGui nav doesn't also move. */
+    int ListCtrlArrowStep()
+    {
+        const ImGuiIO &io = ImGui::GetIO();
+        if (!io.KeyCtrl || io.KeyShift || io.KeyAlt || io.WantTextInput ||
+            !ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) ||
+            ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel))
+        {
+            return 0;
+        }
+        int dir = 0;
+        if (ImGui::IsKeyPressed(ImGuiKey_UpArrow, true))
+        {
+            dir = -1;
+        }
+        else if (ImGui::IsKeyPressed(ImGuiKey_DownArrow, true))
+        {
+            dir = 1;
+        }
+        if (dir != 0)
+        {
+            ImGui::SetKeyOwner(ImGuiKey_UpArrow, ImGui::GetID("##list_ctrl_arrows"));
+            ImGui::SetKeyOwner(ImGuiKey_DownArrow, ImGui::GetID("##list_ctrl_arrows"));
+        }
+        return dir;
+    }
+
+    /* visible_order: row indices in on-screen order (sorted/filtered lists).
+     * Shift ranges walk that order so they match what the user sees; null →
+     * contiguous model indices. Returns the anchor to keep (unchanged on Shift). */
+    int ApplyListSelection(std::set<int> &multi,
+                           int &primary,
+                           int index,
+                           int last_anchor,
+                           bool ctrl,
+                           bool shift,
+                           const std::vector<size_t> *visible_order = nullptr)
     {
         if (shift && last_anchor >= 0)
         {
-            const int a = std::min(last_anchor, index);
-            const int b = std::max(last_anchor, index);
             if (!ctrl)
             {
                 multi.clear();
             }
-            for (int i = a; i <= b; ++i)
+            bool ranged = false;
+            if (visible_order)
             {
-                multi.insert(i);
+                int pa = -1;
+                int pb = -1;
+                for (size_t vi = 0; vi < visible_order->size(); ++vi)
+                {
+                    const int row = static_cast<int>((*visible_order)[vi]);
+                    if (row == last_anchor)
+                    {
+                        pa = static_cast<int>(vi);
+                    }
+                    if (row == index)
+                    {
+                        pb = static_cast<int>(vi);
+                    }
+                }
+                if (pa >= 0 && pb >= 0)
+                {
+                    const int a = std::min(pa, pb);
+                    const int b = std::max(pa, pb);
+                    for (int vi = a; vi <= b; ++vi)
+                    {
+                        multi.insert(static_cast<int>((*visible_order)[static_cast<size_t>(vi)]));
+                    }
+                    ranged = true;
+                }
             }
-            primary = index;
-            return;
+            if (!ranged && !visible_order)
+            {
+                const int a = std::min(last_anchor, index);
+                const int b = std::max(last_anchor, index);
+                for (int i = a; i <= b; ++i)
+                {
+                    multi.insert(i);
+                }
+                ranged = true;
+            }
+            if (ranged)
+            {
+                primary = index;
+                return last_anchor;
+            }
+            /* Anchor scrolled out of the filter — fall through to plain click. */
         }
         if (ctrl)
         {
+            /* A lone primary is drawn selected without being in the set — adopt
+             * it so the first Ctrl+click adds to it instead of replacing it. */
+            if (multi.empty() && primary >= 0 && primary != index)
+            {
+                multi.insert(primary);
+            }
             if (multi.count(index))
             {
                 multi.erase(index);
+                /* Rows draw selected when in the set OR primary — so the
+                 * deselected row must not stay primary or it stays lit. */
+                if (primary == index || multi.count(primary) == 0)
+                {
+                    if (multi.empty())
+                    {
+                        primary = -1;
+                    }
+                    else if (multi.count(last_anchor) != 0)
+                    {
+                        primary = last_anchor;
+                    }
+                    else
+                    {
+                        primary = *multi.rbegin();
+                    }
+                }
             }
             else
             {
                 multi.insert(index);
+                primary = index;
             }
-            primary = index;
-            return;
+            return index;
         }
         multi.clear();
         multi.insert(index);
         primary = index;
+        return index;
     }
 
     void OpenRenameDialog(const char *kind, int index, const std::string &current)
