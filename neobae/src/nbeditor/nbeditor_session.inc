@@ -7524,7 +7524,12 @@
                 {
                     m_ie_page = 2;
                     int pan = m_ie_ext.panPlacement;
-                    int vol = m_ie_ext.miscParameter2;
+                    /* misc2 is volume only when offset-start / sound-modifier are clear. */
+                    const bool misc2_is_volume =
+                        !TEST_FLAG_VALUE(m_ie_ext.flags2, ZBF_enableSampleOffsetStart) &&
+                        !TEST_FLAG_VALUE(m_ie_ext.flags2, ZBF_enableSoundModifier);
+                    int vol = misc2_is_volume ? DisplayInstVolume(m_ie_ext.miscParameter2)
+                                              : m_ie_ext.miscParameter2;
                     int rev = m_ie_ext.defaultReverbSend;
                     int cho = m_ie_ext.defaultChorusSend;
                     if (ImGui::SliderInt("Pan", &pan, -63, 63))
@@ -7534,6 +7539,10 @@
                     }
                     if (ImGui::InputInt("Volume (misc2)", &vol))
                     {
+                        if (misc2_is_volume)
+                        {
+                            vol = std::clamp(vol, 1, 32767);
+                        }
                         m_ie_ext.miscParameter2 = static_cast<int16_t>(vol);
                         MarkInstrumentEditorDirty();
                     }
@@ -8404,10 +8413,11 @@
                                                            ZBF_enableSoundModifier);
                 if (vol_editable)
                 {
+                    vol = DisplayInstVolume(vol);
                     ImGui::InputInt("##vol", &vol, 0, 0);
                     if (ImGui::IsItemDeactivatedAfterEdit())
                     {
-                        info.splitVolume = static_cast<int16_t>(vol);
+                        info.splitVolume = static_cast<int16_t>(std::clamp(vol, 1, 32767));
                         commit_split(false);
                     }
                 }

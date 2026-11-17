@@ -1128,6 +1128,13 @@ static const SampleCodecOption *GetSampleCodecOptions(size_t *out_count)
     return options;
 }
 
+/* INST / keysplit volume (miscParameter2): the engine treats a stored 0 as the
+ * default 100 (GenPatch), so show it as 100. 0 can't be meaningfully entered. */
+static inline int DisplayInstVolume(int stored)
+{
+    return stored == 0 ? 100 : stored;
+}
+
 static const char *GetSampleCodecLabel(BAERmfEditorCompressionType type)
 {
     size_t option_count = 0;

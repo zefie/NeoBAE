@@ -893,7 +893,7 @@
             m_sample_editor_snd_storage_type = info.sndStorageType;
             m_sample_editor_opus_mode = info.opusMode;
             m_sample_editor_root_key = static_cast<int>(info.rootKey);
-            m_sample_editor_volume = info.splitVolume;
+            m_sample_editor_volume = DisplayInstVolume(info.splitVolume);
             m_sample_editor_volume_editable = true;
             /* sampleSize is the encoded byte size of the sample as stored in the
              * document, so it doubles as the "compressed bytes" readout. */
@@ -970,7 +970,7 @@
                 m_sample_editor_bit_depth = info.bitDepth;
                 m_sample_editor_snd_storage_type = info.sndStorageType;
                 m_sample_editor_root_key = static_cast<int>(info.rootKey);
-                m_sample_editor_volume = info.splitVolume;
+                m_sample_editor_volume = DisplayInstVolume(info.splitVolume);
                 {
                     BAERmfEditorBankInstrumentInfo vol_ii;
                     std::memset(&vol_ii, 0, sizeof(vol_ii));
@@ -1410,7 +1410,7 @@
             (bank_info.loopStart != loop_start || bank_info.loopEnd != loop_end ||
              static_cast<uint32_t>(bank_info.rootKey) != want_root ||
              (m_sample_editor_volume_editable &&
-              static_cast<int>(bank_info.splitVolume) != m_sample_editor_volume) ||
+              DisplayInstVolume(bank_info.splitVolume) != m_sample_editor_volume) ||
              bank_info.sampleRate != m_sample_editor_sample_rate_hz);
         const bool name_dirty =
             !m_sample_editor_sample_name.empty() &&
@@ -3452,7 +3452,7 @@
             ImGui::EndDisabled();
             if (vol_committed)
             {
-                volume = std::clamp(volume, 0, 32767);
+                volume = std::clamp(volume, 1, 32767);
                 if (volume != m_sample_editor_volume)
                 {
                     PushSampleEditorUndo();
