@@ -13,9 +13,9 @@ fi
 
 function runcmd() {
 	if [ ${SILENT} -eq 1 ]; then
-		docker run --rm -it -v "${RDIR}/../:/src" zefie/emsdk:latest "${@}" 2>/dev/null > /dev/null;
+		docker run --rm -it -e BDIR="${BDIR}" -e ODIR="${ODIR}" -v "${RDIR}/../:/src" zefie/emsdk:latest "${@}" 2>/dev/null > /dev/null;
 	else
-		docker run --rm -it -v "${RDIR}/../:/src" zefie/emsdk:latest "${@}"
+		docker run --rm -it -e BDIR="${BDIR}" -e ODIR="${ODIR}" -v "${RDIR}/../:/src" zefie/emsdk:latest "${@}"
 	fi
 }
 
