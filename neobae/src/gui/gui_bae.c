@@ -2523,6 +2523,13 @@ bool recreate_mixer_and_restore(int sampleRateHz, int reverbType,
     BAEMixer_ReengageAudio(g_bae.mixer);
     gui_apply_eq_from_settings();
     BAE_SetClassicLFO(g_classic_lfo_enabled ? TRUE : FALSE);
+    // Classic chorus and pan LFO DC fix live on the mixer: restore them on the new one.
+#if BAE_FIX_SPAN_DC
+    BAE_SetSpanDCFix(g_panfix_enabled ? TRUE : FALSE);
+#endif
+#if BAE_CLASSIC_CHORUS
+    BAE_SetClassicChorus(g_classic_chorus_enabled ? TRUE : FALSE);
+#endif
     // reverbType may be a UI index beyond BAE_REVERB_TYPE_COUNT when using custom presets
     bae_set_reverb(reverbType);
     BAEMixer_SetMasterVolume(g_bae.mixer, FLOAT_TO_UNSIGNED_FIXED(1.0));
