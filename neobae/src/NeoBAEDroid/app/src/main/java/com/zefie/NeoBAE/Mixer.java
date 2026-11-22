@@ -136,6 +136,8 @@ public class Mixer
 	private static native boolean _getSpanDCFix();
 	private static native int _setClassicChorus(boolean enable);
 	private static native boolean _getClassicChorus();
+	private static native int _setWebTVMode(boolean enable);
+	private static native boolean _getWebTVMode();
 	private static native int _setSongNormalizeGain(long reference, int gainPct);
 	private static native int _setDLSCompatibilityMode(boolean enable);
 	private static native boolean _getDLSCompatibilityMode();
@@ -212,6 +214,11 @@ public class Mixer
 	public static boolean getSpanDCFix(){ return _getSpanDCFix(); }
 	public static int setClassicChorus(boolean enable){ return _setClassicChorus(enable); }
 	public static boolean getClassicChorus(){ return _getClassicChorus(); }
+	// WebTV Mode: WebTV velocity curve, LFO shapes, default pans, filter glide.
+	// Returns BAE_NOT_SETUP when the library was built without USE_WEBTV_MODE.
+	// Default pans apply to songs started after enabling (reload/seek to apply now).
+	public static int setWebTVMode(boolean enable){ return _setWebTVMode(enable); }
+	public static boolean getWebTVMode(){ return _getWebTVMode(); }
 	public static int setSongNormalizeGain(int gainPct){
 		if(mMixer==null) return -1;
 		return _setSongNormalizeGain(mMixer.mReference, gainPct);

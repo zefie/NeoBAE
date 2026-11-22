@@ -3181,6 +3181,36 @@ BAEResult BAE_GetClassicChorus(BAE_BOOL *outEnable)
 #endif
 }
 
+BAEResult BAE_SetWebTVMode(BAE_BOOL enable)
+{
+#if USE_WEBTV_MODE
+    GM_Mixer *pMixer = MusicGlobals;
+    if (!pMixer)
+        return BAE_NOT_SETUP;
+    pMixer->webtvMode = (bool)enable;
+    return BAE_NO_ERROR;
+#else
+    (void)enable;
+    return BAE_NOT_SETUP;
+#endif
+}
+
+BAEResult BAE_GetWebTVMode(BAE_BOOL *outEnable)
+{
+    if (!outEnable)
+        return BAE_PARAM_ERR;
+#if USE_WEBTV_MODE
+    GM_Mixer *pMixer = MusicGlobals;
+    if (!pMixer)
+        return BAE_NOT_SETUP;
+    *outEnable = (BAE_BOOL)pMixer->webtvMode;
+    return BAE_NO_ERROR;
+#else
+    *outEnable = FALSE;
+    return BAE_NOT_SETUP;
+#endif
+}
+
 BAEResult BAE_SetClassicLFO(BAE_BOOL enable)
 {
     GM_Mixer *pMixer = MusicGlobals;

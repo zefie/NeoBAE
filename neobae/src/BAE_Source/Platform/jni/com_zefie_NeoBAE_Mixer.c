@@ -717,6 +717,24 @@ JNIEXPORT jboolean JNICALL Java_com_zefie_NeoBAE_Mixer__1getClassicChorus
 	return (jboolean)(enabled ? JNI_TRUE : JNI_FALSE);
 }
 
+JNIEXPORT jint JNICALL Java_com_zefie_NeoBAE_Mixer__1setWebTVMode
+	(JNIEnv* env, jclass clazz, jboolean enable)
+{
+	(void)env;
+	(void)clazz;
+	return (jint)BAE_SetWebTVMode(enable ? TRUE : FALSE);
+}
+
+JNIEXPORT jboolean JNICALL Java_com_zefie_NeoBAE_Mixer__1getWebTVMode
+	(JNIEnv* env, jclass clazz)
+{
+	BAE_BOOL enabled = FALSE;
+	(void)env;
+	(void)clazz;
+	BAE_GetWebTVMode(&enabled);
+	return (jboolean)(enabled ? JNI_TRUE : JNI_FALSE);
+}
+
 JNIEXPORT jint JNICALL Java_com_zefie_NeoBAE_Mixer__1setDLSCompatibilityMode
 	(JNIEnv* env, jclass clazz, jboolean enable)
 {

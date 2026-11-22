@@ -627,6 +627,12 @@ int main(int argc, char *argv[])
         g_classic_chorus_enabled = settings.classic_chorus_enabled;
     }
 #endif
+#if USE_WEBTV_MODE
+    if (settings.has_webtv_mode)
+    {
+        g_webtv_mode_enabled = settings.webtv_mode_enabled;
+    }
+#endif
 #if BAE_FIX_SPAN_DC
     if (settings.has_panfix)
     {
@@ -657,6 +663,9 @@ int main(int argc, char *argv[])
 
 #if BAE_CLASSIC_CHORUS
     BAE_SetClassicChorus(g_classic_chorus_enabled ? TRUE : FALSE);
+#endif
+#if USE_WEBTV_MODE
+    BAE_SetWebTVMode(g_webtv_mode_enabled ? TRUE : FALSE);
 #endif
     BAE_SetClassicLFO(g_classic_lfo_enabled ? TRUE : FALSE);
 

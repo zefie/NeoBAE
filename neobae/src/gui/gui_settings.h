@@ -67,6 +67,10 @@ typedef struct
     bool has_classic_chorus;
     bool classic_chorus_enabled;
 #endif
+#if USE_WEBTV_MODE
+    bool has_webtv_mode;
+    bool webtv_mode_enabled;
+#endif
     bool has_classic_lfo;
     bool classic_lfo_enabled;
     bool has_terp_mode;
@@ -150,6 +154,9 @@ extern bool g_panfix_enabled;
 #endif
 #if BAE_CLASSIC_CHORUS
 extern bool g_classic_chorus_enabled;
+#endif
+#if USE_WEBTV_MODE
+extern bool g_webtv_mode_enabled;
 #endif
 extern bool g_classic_lfo_enabled;
 extern int g_terp_mode;

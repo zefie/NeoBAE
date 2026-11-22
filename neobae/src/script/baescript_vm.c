@@ -109,7 +109,9 @@ static const char *HELP_TEXT =
     "    mixer.reverbtype       Default reverb type enum value\n"
     "    mixer.classicchorus    Classic chorus mode (0/1, default 0)\n"
     "    mixer.stereodcpanfix   Stereo pan DC fix (0/1, default 1)\n"
-    "    mixer.reset()          Restore mixer defaults (volume=100, classicchorus=0, stereodcpanfix=1)\n"
+    "    mixer.webtvmode        WebTV Mode (0/1, default 0): WebTV velocity curve, LFO shapes,\n"
+    "                           filter glide; default pans apply to songs started afterwards\n"
+    "    mixer.reset()          Restore mixer defaults (volume=100, classicchorus=0, stereodcpanfix=1, webtvmode=0)\n"
     "    exporter.loopcount     Export-time BAESong loop count override\n"
     "    midi.stop()            Stop playback and export\n"
     "\n"
@@ -468,6 +470,12 @@ int32_t BAEScript_Eval(BAEScript_Context *ctx, BAEScript_Node *node)
                     return enabled ? 1 : 0;
                 return 0;
             }
+            if (node->data.mixer_prop == MIXERPROP_WEBTV_MODE) {
+                BAE_BOOL enabled = FALSE;
+                if (BAE_GetWebTVMode(&enabled) == BAE_NO_ERROR)
+                    return enabled ? 1 : 0;
+                return 0;
+            }
             if (node->data.mixer_prop == MIXERPROP_VOICES) {
                 BAEMixer mixer = get_bound_mixer(ctx);
                 BAEAudioInfo info;
@@ -676,6 +684,9 @@ void BAEScript_Exec(BAEScript_Context *ctx, BAEScript_Node *node)
                 case MIXERPROP_STEREO_DCPAN_FIX:
                     BAE_SetSpanDCFix(v ? TRUE : FALSE);
                     break;
+                case MIXERPROP_WEBTV_MODE:
+                    BAE_SetWebTVMode(v ? TRUE : FALSE);
+                    break;
                 case MIXERPROP_REVERBTYPE: {
                     BAEMixer mixer = get_bound_mixer(ctx);
                     if (mixer)
@@ -713,6 +724,7 @@ void BAEScript_Exec(BAEScript_Context *ctx, BAEScript_Node *node)
             }
             BAE_SetClassicChorus(FALSE);
             BAE_SetSpanDCFix(TRUE);
+            BAE_SetWebTVMode(FALSE);
             break;
         }
 

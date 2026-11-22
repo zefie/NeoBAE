@@ -2077,6 +2077,14 @@ extern "C"
     BAEResult BAE_SetClassicChorus(BAE_BOOL enable);
     BAEResult BAE_GetClassicChorus(BAE_BOOL *outEnable);
 
+    // WebTV Mode (runtime toggle for USE_WEBTV_MODE). Matches the WebTV (LC2)
+    // Beatnik engine: WebTV velocity curve on every song, LFO SINE as a real
+    // sine / SQU2 unipolar / unknown shapes as SINE, boot ROM default channel
+    // pans for channels without CC10, and LC2 filter glide. Off by default.
+    // Default pans apply to songs started after it is enabled.
+    BAEResult BAE_SetWebTVMode(BAE_BOOL enable);
+    BAEResult BAE_GetWebTVMode(BAE_BOOL *outEnable);
+
     // Classic (BAE 1.x) LFO/envelope slice clock. Default off uses the 2.x
     // mixer-buffer-scaled lfoBufferTime.
     BAEResult BAE_SetClassicLFO(BAE_BOOL enable);

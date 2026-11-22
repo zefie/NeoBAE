@@ -225,7 +225,7 @@ void PV_ServeInterp2FilterPartialBuffer (GM_Voice *this_voice, bool looping)
     {
         for (a = MusicGlobals->Four_Loop; a > 0; --a)
         {
-            this_voice->previous_zFrequency += (this_voice->LPF_frequency - this_voice->previous_zFrequency) >> 5;
+            this_voice->previous_zFrequency += (this_voice->LPF_frequency - this_voice->previous_zFrequency) >> BAE_FILTER_GLIDE_BLOCK(5);
             zIndex1 = zIndex2 - (this_voice->previous_zFrequency >> 8);
 
             for (inner = 0; inner < 4; inner++)
@@ -348,7 +348,7 @@ void PV_ServeInterp2FilterFullBuffer(GM_Voice *this_voice)
     {
         for (a = MusicGlobals->Four_Loop; a > 0; --a)
         {
-            this_voice->previous_zFrequency += (this_voice->LPF_frequency - this_voice->previous_zFrequency) >> 5;
+            this_voice->previous_zFrequency += (this_voice->LPF_frequency - this_voice->previous_zFrequency) >> BAE_FILTER_GLIDE_BLOCK(5);
             zIndex1 = zIndex2 - (this_voice->previous_zFrequency >> 8);
 
             for (inner = 0; inner < 4; inner++)
@@ -510,7 +510,7 @@ void PV_ServeInterp2FilterPartialBuffer16 (GM_Voice *this_voice, bool looping)
     {
         for (a = MusicGlobals->Four_Loop; a > 0; --a)
         {
-            this_voice->previous_zFrequency += (this_voice->LPF_frequency - this_voice->previous_zFrequency) >> 5;
+            this_voice->previous_zFrequency += (this_voice->LPF_frequency - this_voice->previous_zFrequency) >> BAE_FILTER_GLIDE_BLOCK(5);
             zIndex1 = zIndex2 - (this_voice->previous_zFrequency >> 8);
 
             for (inner = 0; inner < 4; inner++)

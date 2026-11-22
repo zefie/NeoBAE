@@ -701,6 +701,11 @@ static void PV_SF2_ResyncSongStateToSynth(GM_Song* pSong)
         int expr = (int)pSong->channelExpression[ch];
         int pan = (int)pSong->channelStereoPosition[ch];
         int mod = (int)pSong->channelModWheel[ch];
+        if (pan & kChannelPanDefault)
+        {
+            // WebTV Mode default pan: signed log pan (+ = left) to MIDI pan.
+            pan = 64 - (int)(signed char)(pan & 0xFF);
+        }
         if (vol < 0) { vol = 0; } if (vol > 127) { vol = 127; }
         if (expr < 0) { expr = 0; } if (expr > 127) { expr = 127; }
         if (pan < 0) { pan = 0; } if (pan > 127) { pan = 127; }

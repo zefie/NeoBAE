@@ -61,6 +61,9 @@ static int g_settings_wheel_delta = 0;
 typedef struct {
     int w, h;
     int lfoOff, terpOff, bitOff, stereoOff;
+#if USE_WEBTV_MODE
+    int webtvOff;
+#endif
 #if SUPPORT_MIDI_HW == TRUE
     int midiOff;
 #endif
@@ -75,6 +78,11 @@ static SettingsDlgMetrics settings_metrics(void)
     m.lfoOff = 216;
 #if BAE_CLASSIC_CHORUS != TRUE
     m.lfoOff = 180;
+#endif
+#if USE_WEBTV_MODE
+    /* WebTV Mode sits after chorus; LFO and everything below move down. */
+    m.webtvOff = m.lfoOff;
+    m.lfoOff += 36;
 #endif
     m.terpOff = m.lfoOff + 32;
     m.bitOff = m.terpOff + 28;
@@ -368,6 +376,9 @@ bool g_panfix_enabled = true;
 #if BAE_CLASSIC_CHORUS
 bool g_classic_chorus_enabled = false;
 #endif
+#if USE_WEBTV_MODE
+bool g_webtv_mode_enabled = false;
+#endif
 bool g_classic_lfo_enabled = false;
 int g_terp_mode = BAE_LINEAR_INTERPOLATION;
 bool g_output_16bit = true;
@@ -582,6 +593,13 @@ Settings load_settings(void)
             settings.has_classic_chorus = true;
         }
 #endif
+#if USE_WEBTV_MODE
+        else if (strncmp(line, "webtv_mode_enabled=", 19) == 0)
+        {
+            settings.webtv_mode_enabled = (atoi(line + 19) != 0);
+            settings.has_webtv_mode = true;
+        }
+#endif
         else if (strncmp(line, "classic_lfo_enabled=", 20) == 0)
         {
             settings.classic_lfo_enabled = (atoi(line + 20) != 0);
@@ -712,6 +730,9 @@ void save_settings(const char *last_bank_path, int reverb_type, bool loop_enable
 #endif
 #if BAE_CLASSIC_CHORUS
         fprintf(f, "classic_chorus_enabled=%d\n", g_classic_chorus_enabled ? 1 : 0);
+#endif
+#if USE_WEBTV_MODE
+        fprintf(f, "webtv_mode_enabled=%d\n", g_webtv_mode_enabled ? 1 : 0);
 #endif
         fprintf(f, "classic_lfo_enabled=%d\n", g_classic_lfo_enabled ? 1 : 0);
         if (g_bae.mixer)
@@ -935,6 +956,12 @@ void save_full_settings(const Settings *settings)
             fprintf(f, "classic_chorus_enabled=%d\n", settings->classic_chorus_enabled ? 1 : 0);
         }
 #endif
+#if USE_WEBTV_MODE
+        if (settings->has_webtv_mode)
+        {
+            fprintf(f, "webtv_mode_enabled=%d\n", settings->webtv_mode_enabled ? 1 : 0);
+        }
+#endif
         if (settings->has_classic_lfo)
         {
             fprintf(f, "classic_lfo_enabled=%d\n", settings->classic_lfo_enabled ? 1 : 0);
@@ -1111,6 +1138,12 @@ void apply_settings_to_ui(const Settings *settings, int *transpose, int *tempo, 
     if (settings->has_classic_chorus)
     {
         g_classic_chorus_enabled = settings->classic_chorus_enabled;
+    }
+#endif
+#if USE_WEBTV_MODE
+    if (settings->has_webtv_mode)
+    {
+        g_webtv_mode_enabled = settings->webtv_mode_enabled;
     }
 #endif
     if (settings->has_classic_lfo)
@@ -1373,6 +1406,36 @@ static void render_settings_dialog(SDL_Renderer *R, int mx, int my, bool mclick,
     const char *volumeCurveNames[] = {"NeoBAE S Curve", "Peaky S Curve", "WebTV Curve", "2x Exponential", "2x Linear", "No Curve"};
     int vcCount = 6;
     bool volumeCurveEnabled = !g_midiRecordFormatDropdownOpen && !g_midi_input_device_dd_open && !g_midi_output_device_dd_open;
+    bool volumeCurveForced = false;
+#if USE_WEBTV_MODE
+    /* WebTV Mode forces the WebTV curve in the engine; show it and lock the
+       selector. g_volume_curve keeps the user's choice for when it is off. */
+    if (g_webtv_mode_enabled)
+    {
+        bool othersIdle = volumeCurveEnabled && !g_sampleRateDropdownOpen && !g_exportDropdownOpen;
+        volumeCurveForced = true;
+        volumeCurveEnabled = false;
+        g_volumeCurveDropdownOpen = false;
+        if (othersIdle && point_in(mx, my, vcRect))
+        {
+            const char *tooltip_text = "Forced to WebTV Curve while WebTV Mode is on";
+            int text_w = 0, text_h = 0;
+            measure_text(tooltip_text, &text_w, &text_h);
+            int tooltip_w = text_w + 8;
+            int tooltip_h = text_h + 8;
+            if (tooltip_w > 500)
+                tooltip_w = 500;
+            int tooltip_x = mx + 10;
+            int tooltip_y = my - 30;
+            if (tooltip_x + tooltip_w > dlg.w - 4)
+                tooltip_x = dlg.w - tooltip_w - 4;
+            if (tooltip_y < 4)
+                tooltip_y = my + 25;
+            ui_set_tooltip((Rect){tooltip_x, tooltip_y, tooltip_w, tooltip_h}, tooltip_text,
+                           &g_dls_compat_tooltip_visible, &g_dls_compat_tooltip_rect, g_dls_compat_tooltip_text, sizeof(g_dls_compat_tooltip_text));
+        }
+    }
+#endif
     SDL_Color dd_bg = g_button_base;
     SDL_Color dd_txt = g_button_text;
     SDL_Color dd_frame = g_button_border;
@@ -1386,6 +1449,8 @@ static void render_settings_dialog(SDL_Renderer *R, int mx, int my, bool mclick,
     draw_rect(R, vcRect, dd_bg);
     draw_frame(R, vcRect, dd_frame);
     const char *vcCur = (g_volume_curve >= 0 && g_volume_curve < vcCount) ? volumeCurveNames[g_volume_curve] : "?";
+    if (volumeCurveForced)
+        vcCur = volumeCurveNames[2]; /* "WebTV Curve" */
     draw_text(R, vcRect.x + 6, vcRect.y + 3, vcCur, dd_txt);
     draw_text(R, vcRect.x + vcRect.w - 16, vcRect.y + 3, g_volumeCurveDropdownOpen ? "^" : "v", dd_txt);
     if (volumeCurveEnabled && point_in(mx, my, vcRect) && mclick)
@@ -2024,6 +2089,48 @@ static void render_settings_dialog(SDL_Renderer *R, int mx, int my, bool mclick,
     }
 #endif
 
+#if USE_WEBTV_MODE
+    {
+        /* WebTV velocity curve, LFO shapes, default pans, filter glide.
+           Default pans take effect on the next song start. */
+        Rect webtvModeRect = {rightX, dlg.y + met.webtvOff, 18, 18};
+        if (!rightColumnCheckboxesEnabled)
+        {
+            bool over = point_in(mx, my, webtvModeRect);
+            draw_custom_checkbox(R, webtvModeRect, g_webtv_mode_enabled, over);
+            draw_text(R, webtvModeRect.x + webtvModeRect.w + 6, webtvModeRect.y + 2, "WebTV Mode", g_text_color);
+        }
+        else if (ui_toggle(R, webtvModeRect, &g_webtv_mode_enabled, "WebTV Mode", mx, my, mclick))
+        {
+            save_settings(g_current_bank_path[0] ? g_current_bank_path : NULL, *reverbType, *loopPlay);
+            /* Curve, default pans and voice state are fixed at song start: rebuild
+               the mixer and reload/seek the song (re-applies WebTV Mode first). */
+            BAE_SetWebTVMode(g_webtv_mode_enabled ? TRUE : FALSE);
+            (void)recreate_mixer_and_restore(g_sample_rate_hz, *reverbType, *transpose, *tempo, *volume, *loopPlay, ch_enable);
+        }
+        /* Tooltip only while the right column is live (no dropdown open over it). */
+        Rect webtvModeFullRect = {webtvModeRect.x, webtvModeRect.y, 200, 24};
+        if (rightColumnCheckboxesEnabled && point_in(mx, my, webtvModeFullRect))
+        {
+            const char *tooltip_text = "Modifies synth params to be more accurate to WebTV";
+            int text_w = 0, text_h = 0;
+            measure_text(tooltip_text, &text_w, &text_h);
+            int tooltip_w = text_w + 8;
+            int tooltip_h = text_h + 8;
+            if (tooltip_w > 500)
+                tooltip_w = 500;
+            int tooltip_x = mx + 10;
+            int tooltip_y = my - 30;
+            if (tooltip_x + tooltip_w > dlg.w - 4)
+                tooltip_x = dlg.w - tooltip_w - 4;
+            if (tooltip_y < 4)
+                tooltip_y = my + 25;
+            ui_set_tooltip((Rect){tooltip_x, tooltip_y, tooltip_w, tooltip_h}, tooltip_text,
+                           &g_dls_compat_tooltip_visible, &g_dls_compat_tooltip_rect, g_dls_compat_tooltip_text, sizeof(g_dls_compat_tooltip_text));
+        }
+    }
+#endif
+
     {
         int lfoY = dlg.y + lfoOff;
         Rect lfoRect = {rightX, lfoY, 18, 18};
@@ -2485,6 +2592,9 @@ void settings_init(void)
 #endif
 #if BAE_CLASSIC_CHORUS == TRUE
     g_classic_chorus_enabled = false;
+#endif
+#if USE_WEBTV_MODE
+    g_webtv_mode_enabled = false;
 #endif
     g_classic_lfo_enabled = false;
     g_terp_mode = BAE_LINEAR_INTERPOLATION;

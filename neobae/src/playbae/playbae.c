@@ -459,6 +459,9 @@ static const char usageMain[] =
 #if BAE_CLASSIC_CHORUS
     "                 --classicchorus {enable pre-DLS classic chorus}\n"
 #endif
+#if USE_WEBTV_MODE
+    "                 --webtv {WebTV Mode: WebTV velocity curve, LFO shapes, default pans, filter glide}\n"
+#endif
     "                 -x  {additional options}\n";
 
 static const char usageExtra[] =
@@ -2137,6 +2140,16 @@ int main(int argc, char *argv[])
             strcmp(argv[i], "--classicchorus=on") == 0) {
             BAE_SetClassicChorus(TRUE);
             playbae_dprintf("Classic chorus enabled\n");
+            break;
+        }
+    }
+#endif
+#if USE_WEBTV_MODE
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--webtv") == 0 ||
+            strcmp(argv[i], "--webtv=on") == 0) {
+            BAE_SetWebTVMode(TRUE);
+            playbae_dprintf("WebTV Mode enabled\n");
             break;
         }
     }

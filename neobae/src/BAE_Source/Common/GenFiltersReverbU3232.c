@@ -193,7 +193,7 @@ void PV_ServeU3232FilterPartialBufferNewReverb (GM_Voice *this_voice, bool loopi
         {
             for (a = MusicGlobals->Four_Loop; a > 0; --a)
             {
-                this_voice->previous_zFrequency += (this_voice->LPF_frequency - this_voice->previous_zFrequency) >> 5;
+                this_voice->previous_zFrequency += (this_voice->LPF_frequency - this_voice->previous_zFrequency) >> BAE_FILTER_GLIDE_BLOCK(5);
                 zIndex1 = zIndex2 - (this_voice->previous_zFrequency >> 8);
                 amplitudeReverb = (amplitudeL >> 7) * this_voice->reverbLevel;
                 amplitudeChorus = (amplitudeL >> 7) * this_voice->chorusLevel;
@@ -323,7 +323,7 @@ void PV_ServeU3232StereoFilterPartialBufferNewReverb (GM_Voice *this_voice, bool
             for (a = MusicGlobals->Four_Loop; a > 0; --a)
             {
                 zIndex1 = zIndex2 - (this_voice->previous_zFrequency >> 8);
-                this_voice->previous_zFrequency += (this_voice->LPF_frequency - this_voice->previous_zFrequency) >> 3;
+                this_voice->previous_zFrequency += (this_voice->LPF_frequency - this_voice->previous_zFrequency) >> BAE_FILTER_GLIDE_BLOCK(3);
                 amplitudeReverb = ((amplitudeL + amplitudeR) >> 8) * this_voice->reverbLevel;
                 amplitudeChorus = ((amplitudeL + amplitudeR) >> 8) * this_voice->chorusLevel;
 
@@ -436,7 +436,7 @@ void PV_ServeU3232FilterFullBufferNewReverb (GM_Voice *this_voice)
         {
             for (a = MusicGlobals->Four_Loop; a > 0; --a)
             {
-                this_voice->previous_zFrequency += (this_voice->LPF_frequency - this_voice->previous_zFrequency) >> 5;
+                this_voice->previous_zFrequency += (this_voice->LPF_frequency - this_voice->previous_zFrequency) >> BAE_FILTER_GLIDE_BLOCK(5);
                 zIndex1 = zIndex2 - (this_voice->previous_zFrequency >> 8);
                 amplitudeReverb = (amplitudeL * this_voice->reverbLevel) >> 7;
                 amplitudeChorus = (amplitudeL * this_voice->chorusLevel) >> 7;
@@ -554,7 +554,7 @@ void PV_ServeU3232StereoFilterFullBufferNewReverb (GM_Voice *this_voice)
             for (a = MusicGlobals->Four_Loop; a > 0; --a)
             {
                 zIndex1 = zIndex2 - (this_voice->previous_zFrequency >> 8);
-                this_voice->previous_zFrequency += (this_voice->LPF_frequency - this_voice->previous_zFrequency) >> 3;
+                this_voice->previous_zFrequency += (this_voice->LPF_frequency - this_voice->previous_zFrequency) >> BAE_FILTER_GLIDE_BLOCK(3);
                 amplitudeReverb = ((amplitudeL + amplitudeR) * this_voice->reverbLevel) >> 8;
                 amplitudeChorus = ((amplitudeL + amplitudeR) * this_voice->chorusLevel) >> 8;
 
@@ -675,7 +675,7 @@ void PV_ServeU3232FilterPartialBufferNewReverb16 (GM_Voice *this_voice, bool loo
         {
             for (a = MusicGlobals->Four_Loop; a > 0; --a)
             {
-                this_voice->previous_zFrequency += (this_voice->LPF_frequency - this_voice->previous_zFrequency) >> 5;
+                this_voice->previous_zFrequency += (this_voice->LPF_frequency - this_voice->previous_zFrequency) >> BAE_FILTER_GLIDE_BLOCK(5);
                 zIndex1 = zIndex2 - (this_voice->previous_zFrequency >> 8);
                 amplitudeReverb = (amplitudeL * this_voice->reverbLevel) >> 9;
                 amplitudeChorus = (amplitudeL * this_voice->chorusLevel) >> 9;
@@ -802,7 +802,7 @@ void PV_ServeU3232StereoFilterPartialBufferNewReverb16 (GM_Voice *this_voice, bo
             for (a = MusicGlobals->Four_Loop; a > 0; --a)
             {
                 zIndex1 = zIndex2 - (this_voice->previous_zFrequency >> 8);
-                this_voice->previous_zFrequency += (this_voice->LPF_frequency - this_voice->previous_zFrequency) >> 3;
+                this_voice->previous_zFrequency += (this_voice->LPF_frequency - this_voice->previous_zFrequency) >> BAE_FILTER_GLIDE_BLOCK(3);
                 amplitudeReverb = ((amplitudeL + amplitudeR) * this_voice->reverbLevel) >> 9;
                 amplitudeChorus = ((amplitudeL + amplitudeR) * this_voice->chorusLevel) >> 9;
 

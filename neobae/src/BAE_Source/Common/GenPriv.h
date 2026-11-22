@@ -816,6 +816,9 @@ struct GM_Mixer
     bool       /*9*/   classicChorus;                  // if TRUE, use pre-DLS chorus ordering (reverb before chorus, no chorus in fixed reverb)
 #endif
     bool               classicLFO;                     // if TRUE, use BAE 1.x fixed LFO slice clock
+#if USE_WEBTV_MODE
+    bool               webtvMode;                      // if TRUE, match WebTV (LC2) Beatnik: velocity curve, LFO shapes, default pans, filter glide
+#endif
     unsigned char       /*0*/   processExternalMidiQueue;       // counter flag to lock processing of queue. 0 means process
     GM_SampleCacheEntry *sampleCaches[MAX_SAMPLES];     // cache of samples loaded
 
@@ -1414,6 +1417,20 @@ OPErr PV_ProcessMidiSequencerSlice(void *threadContext, GM_Song *pSong);
 void PV_ConfigureInstruments(GM_Song *theSong);
 OPErr PV_ConfigureMusic(GM_Song *theSong);
 void PV_ResetControlers(GM_Song *pSong, int16_t channel2Reset, bool completeReset);
+
+// Resonant filter cutoff glide. WebTV Mode uses LC2's rate: >>3 per 4-sample
+// block (16406 0x804aa854), which is about >>5 when applied every sample.
+#if USE_WEBTV_MODE
+#define BAE_FILTER_GLIDE_BLOCK(n)   ((MusicGlobals && MusicGlobals->webtvMode) ? 3 : (n))
+#define BAE_FILTER_GLIDE_SAMPLE(n)  ((MusicGlobals && MusicGlobals->webtvMode) ? 5 : (n))
+#else
+#define BAE_FILTER_GLIDE_BLOCK(n)   (n)
+#define BAE_FILTER_GLIDE_SAMPLE(n)  (n)
+#endif
+
+// channelStereoPosition holding a default pan (low byte = signed log pan).
+enum { kChannelPanDefault = 0x100 };
+int16_t PV_DefaultChannelStereoPosition(int32_t channel);
 
 // GenPatch.c
 

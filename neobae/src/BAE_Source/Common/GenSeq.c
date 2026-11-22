@@ -450,6 +450,30 @@ static void PV_ScaleDivision(GM_Song *pSong, UFLOAT div)
 // will be reset.
 // If completeReset is TRUE, then a complete controler reset will be done, otherwise just a
 // semi complete to support the new GM reset controller protocol
+// Default (pre-CC10) channel pan. Center, except in WebTV Mode, which uses
+// the WebTV (LC2) boot ROM table (stage2 0x8033fdb0): channels without a
+// CC10 keep a left/right spread and percussion stays centered. The boot ROM
+// pan math has no sign flip, ours does, so the values are negated to give
+// the same image. Stored as kChannelPanDefault | signed log pan;
+// SetChannelStereoPosition uses it as-is and a real CC10 replaces it.
+int16_t PV_DefaultChannelStereoPosition(int32_t channel)
+{
+#if USE_WEBTV_MODE
+    static const signed char kWebTVDefaultChannelPan[16] =
+    {
+        -40, 40, -30, 30, -20, 20, -10, 10, -5, 0, -15, 15, -25, 25, -35, 35
+    };
+
+    if (MusicGlobals && MusicGlobals->webtvMode && channel >= 0 && channel < 16)
+    {
+        return (int16_t)(kChannelPanDefault | (unsigned char)kWebTVDefaultChannelPan[channel]);
+    }
+#else
+    (void)channel;
+#endif
+    return 64; // set to middle
+}
+
 void PV_ResetControlers(GM_Song *pSong, int16_t channel2Reset, bool completeReset)
 {
     register int32_t count, max, start;
@@ -486,7 +510,7 @@ void PV_ResetControlers(GM_Song *pSong, int16_t channel2Reset, bool completeRese
             pSong->channelReverb[count] = DEFAULT_REVERB_LEVEL; // enable reverb
             pSong->channelChorus[count] = DEFAULT_CHORUS_LEVEL; // (default is zero)
 #endif
-            pSong->channelStereoPosition[count] = 64; // set to middle
+            pSong->channelStereoPosition[count] = PV_DefaultChannelStereoPosition(count);
 
             //          pSong->channelLowPassAmount[count] = 0;
             //          pSong->channelResonanceFilterAmount[count] = 0;
@@ -3577,6 +3601,8 @@ char GM_GetControllerValue(GM_Song *pSong, int16_t channel, int16_t controller)
     case 10:
         // current channel stereo position
         value = (char)pSong->channelStereoPosition[channel];
+        if (pSong->channelStereoPosition[channel] & kChannelPanDefault)
+            value = 64; // default pan, no CC10 yet
         break;
 
     case 11:

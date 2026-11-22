@@ -44,7 +44,7 @@
  *               | noteOn | noteOff
  *   chProp      = "ch" "[" expr "]" "." PROP
  *   midiProp    = "midi" "." ("timestamp" | "position" | "ticks" | "length" | "exporting" | "volume" | "tempo" | "tempobpm" | "transpose")
- *   mixerProp   = "mixer" "." ("volume" | "classicchorus" | "stereodcpanfix" | "reverbtype")
+ *   mixerProp   = "mixer" "." ("volume" | "classicchorus" | "stereodcpanfix" | "reverbtype" | "webtvmode")
  *   exporterProp= "exporter" "." "loopcount"
  *   midiStop    = "midi" "." "stop" "(" ")" ";"
  *   midiAllOff  = "midi" "." "allnotesoff" "(" ")" ";"
@@ -231,7 +231,8 @@ static BAEScript_Node *parse_mixer_access(Parser *p)
         else if (strcmp(tok.value.str, "stereodcpanfix") == 0) mp = MIXERPROP_STEREO_DCPAN_FIX;
         else if (strcmp(tok.value.str, "reverbtype") == 0) mp = MIXERPROP_REVERBTYPE;
         else if (strcmp(tok.value.str, "voices") == 0) mp = MIXERPROP_VOICES;
-        else parser_error(p, "Expected mixer property: volume, classicchorus, stereodcpanfix, reverbtype, or voices");
+        else if (strcmp(tok.value.str, "webtvmode") == 0) mp = MIXERPROP_WEBTV_MODE;
+        else parser_error(p, "Expected mixer property: volume, classicchorus, stereodcpanfix, reverbtype, voices, or webtvmode");
     } else {
         parser_error(p, "Expected mixer property name");
     }

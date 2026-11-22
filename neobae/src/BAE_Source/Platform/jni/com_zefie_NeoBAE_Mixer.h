@@ -82,6 +82,12 @@ JNIEXPORT jint JNICALL Java_com_zefie_NeoBAE_Mixer__1setClassicChorus
 JNIEXPORT jboolean JNICALL Java_com_zefie_NeoBAE_Mixer__1getClassicChorus
   (JNIEnv *, jclass);
 
+JNIEXPORT jint JNICALL Java_com_zefie_NeoBAE_Mixer__1setWebTVMode
+  (JNIEnv *, jclass, jboolean);
+
+JNIEXPORT jboolean JNICALL Java_com_zefie_NeoBAE_Mixer__1getWebTVMode
+  (JNIEnv *, jclass);
+
 JNIEXPORT jboolean JNICALL Java_com_zefie_NeoBAE_Mixer__1hasEggsDLSBank
   (JNIEnv *, jclass, jlong);
 

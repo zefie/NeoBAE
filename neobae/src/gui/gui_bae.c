@@ -968,6 +968,9 @@ bool bae_init(int sampleRateHz)
 
     gui_apply_eq_from_settings();
     BAE_SetClassicLFO(g_classic_lfo_enabled ? TRUE : FALSE);
+#if USE_WEBTV_MODE
+    BAE_SetWebTVMode(g_webtv_mode_enabled ? TRUE : FALSE);
+#endif
 
     BAE_PRINTF("BAE initialized: %d Hz\n", sampleRateHz);
 
@@ -2529,6 +2532,10 @@ bool recreate_mixer_and_restore(int sampleRateHz, int reverbType,
 #endif
 #if BAE_CLASSIC_CHORUS
     BAE_SetClassicChorus(g_classic_chorus_enabled ? TRUE : FALSE);
+#endif
+#if USE_WEBTV_MODE
+    // Before the song reload below: its controller reset picks the default pans.
+    BAE_SetWebTVMode(g_webtv_mode_enabled ? TRUE : FALSE);
 #endif
     // reverbType may be a UI index beyond BAE_REVERB_TYPE_COUNT when using custom presets
     bae_set_reverb(reverbType);

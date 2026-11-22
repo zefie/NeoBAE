@@ -241,7 +241,7 @@ void PV_ServeU3232FilterPartialBuffer (GM_Voice *this_voice, bool looping)
                                                             &Z1value,
                                                             &this_voice->previous_zFrequency,
                                                             this_voice->LPF_frequency,
-                                                            5);
+                                                            BAE_FILTER_GLIDE_SAMPLE(5));
                         *destL += sample * amplitudeL;
                         destL++;
                         ADD_U3232(cur_wave_i, cur_wave_f, wave_increment);
@@ -294,7 +294,7 @@ void PV_ServeU3232FilterPartialBuffer (GM_Voice *this_voice, bool looping)
                                                             &Z1value,
                                                             &this_voice->previous_zFrequency,
                                                             this_voice->LPF_frequency,
-                                                            5);
+                                                            BAE_FILTER_GLIDE_SAMPLE(5));
                         sampleRight = PV_FilterStepWithResonance(sampleRight,
                                                                  Xn,
                                                                  Z1,
@@ -304,7 +304,7 @@ void PV_ServeU3232FilterPartialBuffer (GM_Voice *this_voice, bool looping)
                                                                  &Z1valueRight,
                                                                  &this_voice->previous_zFrequencyRight,
                                                                  this_voice->LPF_frequency,
-                                                                 5);
+                                                                 BAE_FILTER_GLIDE_SAMPLE(5));
                     }
 
                     *destL += ((sample + sampleRight) >> 1) * amplitudeL;
@@ -433,7 +433,7 @@ void PV_ServeU3232StereoFilterPartialBuffer (GM_Voice *this_voice, bool looping)
                                                             &Z1value,
                                                             &this_voice->previous_zFrequency,
                                                             this_voice->LPF_frequency,
-                                                            3);
+                                                            BAE_FILTER_GLIDE_SAMPLE(3));
                         destL[0] += sample * amplitudeL;
                         destL[1] += sample * amplitudeR;
                         destL += 2;
@@ -488,7 +488,7 @@ void PV_ServeU3232StereoFilterPartialBuffer (GM_Voice *this_voice, bool looping)
                                                             &Z1value,
                                                             &this_voice->previous_zFrequency,
                                                             this_voice->LPF_frequency,
-                                                            3);
+                                                            BAE_FILTER_GLIDE_SAMPLE(3));
                         sampleRight = PV_FilterStepWithResonance(sampleRight,
                                                                  Xn,
                                                                  Z1,
@@ -498,7 +498,7 @@ void PV_ServeU3232StereoFilterPartialBuffer (GM_Voice *this_voice, bool looping)
                                                                  &Z1valueRight,
                                                                  &this_voice->previous_zFrequencyRight,
                                                                  this_voice->LPF_frequency,
-                                                                 3);
+                                                                 BAE_FILTER_GLIDE_SAMPLE(3));
                     }
 
                     destL[0] += sample * amplitudeL;
@@ -613,7 +613,7 @@ void PV_ServeU3232FilterFullBuffer(GM_Voice *this_voice)
                                                             &Z1value,
                                                             &this_voice->previous_zFrequency,
                                                             this_voice->LPF_frequency,
-                                                            5);
+                                                            BAE_FILTER_GLIDE_SAMPLE(5));
                         *destL += sample * amplitudeL;
                         destL++;
                         ADD_U3232(cur_wave_i, cur_wave_f, wave_increment);
@@ -665,7 +665,7 @@ void PV_ServeU3232FilterFullBuffer(GM_Voice *this_voice)
                                                             &Z1value,
                                                             &this_voice->previous_zFrequency,
                                                             this_voice->LPF_frequency,
-                                                            5);
+                                                            BAE_FILTER_GLIDE_SAMPLE(5));
                         sampleRight = PV_FilterStepWithResonance(sampleRight,
                                                                  Xn,
                                                                  Z1,
@@ -675,7 +675,7 @@ void PV_ServeU3232FilterFullBuffer(GM_Voice *this_voice)
                                                                  &Z1valueRight,
                                                                  &this_voice->previous_zFrequencyRight,
                                                                  this_voice->LPF_frequency,
-                                                                 5);
+                                                                 BAE_FILTER_GLIDE_SAMPLE(5));
                     }
 
                     *destL += ((sample + sampleRight) >> 1) * amplitudeL;
@@ -792,7 +792,7 @@ void PV_ServeU3232StereoFilterFullBuffer (GM_Voice *this_voice)
                                                             &Z1value,
                                                             &this_voice->previous_zFrequency,
                                                             this_voice->LPF_frequency,
-                                                            3);
+                                                            BAE_FILTER_GLIDE_SAMPLE(3));
                         destL[0] += sample * amplitudeL;
                         destL[1] += sample * amplitudeR;
                         destL += 2;
@@ -846,7 +846,7 @@ void PV_ServeU3232StereoFilterFullBuffer (GM_Voice *this_voice)
                                                             &Z1value,
                                                             &this_voice->previous_zFrequency,
                                                             this_voice->LPF_frequency,
-                                                            3);
+                                                            BAE_FILTER_GLIDE_SAMPLE(3));
                         sampleRight = PV_FilterStepWithResonance(sampleRight,
                                                                  Xn,
                                                                  Z1,
@@ -856,7 +856,7 @@ void PV_ServeU3232StereoFilterFullBuffer (GM_Voice *this_voice)
                                                                  &Z1valueRight,
                                                                  &this_voice->previous_zFrequencyRight,
                                                                  this_voice->LPF_frequency,
-                                                                 3);
+                                                                 BAE_FILTER_GLIDE_SAMPLE(3));
                     }
 
                     destL[0] += sample * amplitudeL;
@@ -979,7 +979,7 @@ void PV_ServeU3232FilterPartialBuffer16 (GM_Voice *this_voice, bool looping)
                                                             &Z1value,
                                                             &this_voice->previous_zFrequency,
                                                             this_voice->LPF_frequency,
-                                                            5);
+                                                            BAE_FILTER_GLIDE_SAMPLE(5));
                         *destL += (sample * amplitudeL) >> 2;
                         destL++;
                         ADD_U3232(cur_wave_i, cur_wave_f, wave_increment);
@@ -1024,7 +1024,7 @@ void PV_ServeU3232FilterPartialBuffer16 (GM_Voice *this_voice, bool looping)
                                                             &Z1value,
                                                             &this_voice->previous_zFrequency,
                                                             this_voice->LPF_frequency,
-                                                            5);
+                                                            BAE_FILTER_GLIDE_SAMPLE(5));
                         sampleRight = PV_FilterStepWithResonance(sampleRight,
                                                                  Xn,
                                                                  Z1,
@@ -1034,7 +1034,7 @@ void PV_ServeU3232FilterPartialBuffer16 (GM_Voice *this_voice, bool looping)
                                                                  &Z1valueRight,
                                                                  &this_voice->previous_zFrequencyRight,
                                                                  this_voice->LPF_frequency,
-                                                                 5);
+                                                                 BAE_FILTER_GLIDE_SAMPLE(5));
                     }
 
                     *destL += (((sample + sampleRight) >> 1) * amplitudeL) >> 2;
@@ -1156,7 +1156,7 @@ void PV_ServeU3232StereoFilterPartialBuffer16 (GM_Voice *this_voice, bool loopin
                                                             &Z1value,
                                                             &this_voice->previous_zFrequency,
                                                             this_voice->LPF_frequency,
-                                                            3);
+                                                            BAE_FILTER_GLIDE_SAMPLE(3));
                         destL[0] += (sample * amplitudeL) >> 2;
                         destL[1] += (sample * amplitudeR) >> 2;
                         destL += 2;
@@ -1203,7 +1203,7 @@ void PV_ServeU3232StereoFilterPartialBuffer16 (GM_Voice *this_voice, bool loopin
                                                             &Z1value,
                                                             &this_voice->previous_zFrequency,
                                                             this_voice->LPF_frequency,
-                                                            3);
+                                                            BAE_FILTER_GLIDE_SAMPLE(3));
                         sampleRight = PV_FilterStepWithResonance(sampleRight,
                                                                  Xn,
                                                                  Z1,
@@ -1213,7 +1213,7 @@ void PV_ServeU3232StereoFilterPartialBuffer16 (GM_Voice *this_voice, bool loopin
                                                                  &Z1valueRight,
                                                                  &this_voice->previous_zFrequencyRight,
                                                                  this_voice->LPF_frequency,
-                                                                 3);
+                                                                 BAE_FILTER_GLIDE_SAMPLE(3));
                     }
 
                     destL[0] += (sample * amplitudeL) >> 2;

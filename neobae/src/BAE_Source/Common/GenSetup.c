@@ -776,6 +776,9 @@ OPErr GM_InitGeneralSound(void *threadContext, Rate theRate, TerpMode theTerp, A
         pMixer->classicChorus = FALSE;      // use DLS-spec chorus ordering by default
 #endif
         pMixer->classicLFO = FALSE;
+#if USE_WEBTV_MODE
+        pMixer->webtvMode = FALSE;
+#endif
         pMixer->syncCount = XMicroseconds();
         pMixer->samplesPlayed = 0;
         pMixer->samplesWritten = 0;
@@ -1345,7 +1348,12 @@ int16_t SetChannelStereoPosition(GM_Song *pSong, int16_t the_channel, uint16_t n
 
     pMixer = MusicGlobals;
     // make sure and set the channel stereo position
-    newLogPosition = stereoScale[newPosition];
+    if (newPosition & kChannelPanDefault)
+        newLogPosition = (signed char)(newPosition & 0xFF); // WebTV Mode default pan
+    else if (newPosition > 127)
+        newLogPosition = 0;
+    else
+        newLogPosition = stereoScale[newPosition];
     // update the current notes playing to the new stereo position. It will get incorporated into the mix at the
     // next audio frame
     for (count = 0; count < pMixer->MaxNotes; count++)

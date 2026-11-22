@@ -759,6 +759,13 @@ int32_t PV_ModifyVelocityFromCurve(GM_Song *pSong, int32_t volume)
     int32_t sourceVelocity = volume & 0x7FL;
 
     volume = 127L - sourceVelocity; // restrict to 0-127 and reverse for lookup tables
+#if USE_WEBTV_MODE
+    // WebTV Mode: LC2 sets the WebTV curve (2) on its ROM-bank songs; force it.
+    if (MusicGlobals && MusicGlobals->webtvMode)
+    {
+        return volumeScaleSubtle[volume];
+    }
+#endif
     switch (pSong->velocityCurveType)
     {
     default: // just in case its out of range
@@ -1493,8 +1500,49 @@ static void PV_ADSRModule(GM_ADSR *a, bool sustaining)
     }
 }
 
+#if USE_WEBTV_MODE
+// LC2 sine1024 (WebTV 16406 0x8062c9b0): integer cubic sine, period 1024,
+// range -65536..65536.
+static INLINE int32_t PV_WebTVSine1024(uint32_t x)
+{
+    int32_t v;
+
+    x &= 0x3FF;
+    v = (int32_t)x;
+    if (x > 0x100)
+    {
+        if (x <= 0x300)
+            v = 0x200 - (int32_t)x;
+        else
+            v = (int32_t)x - 0x400;
+    }
+    return ((0x30000 - v * v) * v) >> 9;
+}
+#endif
+
 static INLINE int32_t PV_GetWaveShape(int32_t where, int32_t what_kind)
 {
+#if USE_WEBTV_MODE
+    // WebTV Mode: LC2 PV_GetWaveShape (16406 0x804a7c80). SINE is a real
+    // (cosine-phase) sine, SQU2 is unipolar 0/+1, unknown shapes are SINE.
+    if (MusicGlobals && MusicGlobals->webtvMode)
+    {
+        switch (what_kind)
+        {
+        case SAWTOOTH_WAVE:
+        case SAWTOOTH_WAVE2:
+        case TRIANGLE_WAVE:
+        case SQUARE_WAVE:
+        case SINE_WAVE_REAL:
+            break;  // same as the default path below
+        case SQUARE_WAVE2:
+            return (where > 32768) ? 65536 : 0;
+        case SINE_WAVE:
+        default:
+            return -PV_WebTVSine1024((uint32_t)((where >> 6) + 0x100));
+        }
+    }
+#endif
     switch (what_kind)
     {
     // this matches TRIANGLE_WAVE, but we cant change it, to preserve the existing processing

@@ -62,6 +62,7 @@
  *   mixer.reverbtype                  // BAEReverbType enum value
  *   mixer.classicchorus               // 0 or 1 (default 0)
  *   mixer.stereodcpanfix              // 0 or 1 (default 1)
+ *   mixer.webtvmode                   // 0 or 1 (default 0), WebTV Mode
  *   mixer.reset();                    // restore default mixer values
  *   abs(x), min(a,b), max(a,b), clamp(x,lo,hi)
  *   midi.stop();                      // stop playback and export

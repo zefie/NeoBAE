@@ -53,6 +53,7 @@ All feature flags default to `OFF` (feature enabled). Set to `ON` to disable.
 | `BAE_DISABLE_BUILTIN_PATCHES_WITH_SF2` | Disable loading built-in patches in the background for SF2. |
 | `BAE_DISABLE_BUILTIN_PATCHES_WITH_DLS` | Disable loading built-in patches in the background for DLS. |
 | `BAE_DISABLE_CLASSIC_CHORUS` | Disable classic chorus path. |
+| `BAE_DISABLE_WEBTV_MODE` | Disable the runtime WebTV Mode (WebTV velocity curve, LFO shapes, default channel pans, filter glide). |
 | `BAE_DISABLE_CREATION_API` | Disable Creation API support (alias for RMF editor APIs). |
 | `BAE_DISABLE_EMBED_FONT` | Disable embedded GUI font. |
 | `BAE_DISABLE_EMBED_PATCHES` | Disable embedded built-in patches. |

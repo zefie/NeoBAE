@@ -192,6 +192,7 @@ Properties:
 - `mixer.reverbtype` (default reverb enum value, read/write)
 - `mixer.classicchorus` (0/1, read/write)
 - `mixer.stereodcpanfix` (0/1, read/write)
+- `mixer.webtvmode` (0/1, read/write; WebTV velocity curve, LFO shapes and filter glide apply at once, default channel pans apply to songs started afterwards; only when built with `USE_WEBTV_MODE`)
 
 Command:
 

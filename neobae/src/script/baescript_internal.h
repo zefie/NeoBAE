@@ -196,6 +196,7 @@ typedef enum {
     MIXERPROP_STEREO_DCPAN_FIX,
     MIXERPROP_REVERBTYPE,
     MIXERPROP_VOICES,
+    MIXERPROP_WEBTV_MODE,
 } BAEScript_MixerProp;
 
 typedef enum {
