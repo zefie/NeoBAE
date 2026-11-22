@@ -682,7 +682,9 @@ OPErr GM_PrerollSong(GM_Song *pSong, GM_SongCallbackProcPtr theCallbackProc,
                 XClearBit(&pSong->allowPitchShift, PERCUSSION_CHANNEL); // don't allow pitch changes on percussion
             }
 
-            pSong->velocityCurveType = DEFAULT_VELOCITY_CURVE;
+            // Keep the velocity curve chosen before start (BAESong_SetVelocityCurve,
+            // BAE_SetDefaultVelocityCurve at load). Resetting it here made every
+            // song start on curve 0 regardless of the API, playbae -vc or the apps.
 
 #if REVERB_USED != REVERB_DISABLED
             // reconfigure reverb settings if desired
@@ -1090,7 +1092,9 @@ OPErr GM_StartLiveSong(GM_Song *pSong, bool loadPatches, XBankToken bankToken)
                 XClearBit(&pSong->allowPitchShift, PERCUSSION_CHANNEL); // don't allow pitch changes on percussion
             }
 
-            pSong->velocityCurveType = DEFAULT_VELOCITY_CURVE;
+            // Keep the velocity curve chosen before start (BAESong_SetVelocityCurve,
+            // BAE_SetDefaultVelocityCurve at load). Resetting it here made every
+            // song start on curve 0 regardless of the API, playbae -vc or the apps.
 
             // Start song playing now.
             pMixer->pSongsToPlay[songSlot] = pSong;
