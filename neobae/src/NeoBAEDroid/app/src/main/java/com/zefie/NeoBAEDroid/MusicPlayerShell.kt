@@ -130,6 +130,7 @@ fun NewMusicPlayerScreen(
     velocityCurve: Int,
     fixPanLfoBias: Boolean,
     classicChorus: Boolean,
+    webtvMode: Boolean,
     dlsCompatibilityMode: Boolean,
     normalizePlayback: Boolean,
     exportCodec: Int,
@@ -142,6 +143,7 @@ fun NewMusicPlayerScreen(
     onCurveChange: (Int) -> Unit,
     onFixPanLfoChange: (Boolean) -> Unit,
     onClassicChorusChange: (Boolean) -> Unit,
+    onWebTVModeChange: (Boolean) -> Unit,
     onDLSCompatibilityModeChange: (Boolean) -> Unit,
     onNormalizePlaybackChange: (Boolean) -> Unit,
     onExportCodecChange: (Int) -> Unit,
@@ -655,6 +657,7 @@ fun NewMusicPlayerScreen(
                     velocityCurve = velocityCurve,
                     fixPanLfoBias = fixPanLfoBias,
                     classicChorus = classicChorus,
+                    webtvMode = webtvMode,
                     dlsCompatibilityMode = dlsCompatibilityMode,
                     normalizePlayback = normalizePlayback,
                     exportCodec = exportCodec,
@@ -667,6 +670,7 @@ fun NewMusicPlayerScreen(
                     onCurveChange = onCurveChange,
                     onFixPanLfoChange = onFixPanLfoChange,
                     onClassicChorusChange = onClassicChorusChange,
+                    onWebTVModeChange = onWebTVModeChange,
                     onDLSCompatibilityModeChange = { enabled ->
                         HomeFragment.dlsCompatibilityMode.value = enabled
                         Mixer.setDLSCompatibilityMode(enabled)

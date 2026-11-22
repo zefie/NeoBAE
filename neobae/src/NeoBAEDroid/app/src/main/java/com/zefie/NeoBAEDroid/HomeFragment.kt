@@ -85,6 +85,7 @@ class HomeFragment : Fragment() {
         val velocityCurve get() = NeoBAEPrefs.velocityCurve
         val fixPanLfoBias get() = NeoBAEPrefs.fixPanLfoBias
         val classicChorus get() = NeoBAEPrefs.classicChorus
+        val webtvMode get() = NeoBAEPrefs.webtvMode
         val dlsCompatibilityMode get() = NeoBAEPrefs.dlsCompatibilityMode
         val normalizePlayback get() = NeoBAEPrefs.normalizePlayback
 
@@ -854,6 +855,7 @@ class HomeFragment : Fragment() {
                     velocityCurve.value = prefs.getInt("velocity_curve", 1) // Default to 2nd option
                     fixPanLfoBias.value = prefs.getBoolean("fix_pan_lfo_bias", true)
                     classicChorus.value = prefs.getBoolean("classic_chorus", false)
+                    webtvMode.value = prefs.getBoolean("webtv_mode", false)
                     dlsCompatibilityMode.value = prefs.getBoolean("dls_compatibility_mode", true)
                     normalizePlayback.value = prefs.getBoolean("normalize_playback", false)
                     exportCodec.value = prefs.getInt("export_codec", 2) // Default to OGG
@@ -1154,6 +1156,7 @@ class HomeFragment : Fragment() {
                         velocityCurve = velocityCurve.value,
                         fixPanLfoBias = fixPanLfoBias.value,
                         classicChorus = classicChorus.value,
+                        webtvMode = webtvMode.value,
                         dlsCompatibilityMode = dlsCompatibilityMode.value,
                         normalizePlayback = normalizePlayback.value,
                         exportCodec = exportCodec.value,
@@ -1209,6 +1212,17 @@ class HomeFragment : Fragment() {
                             Mixer.setClassicChorus(enabled)
                             val prefs = requireContext().getSharedPreferences("NeoBAE_prefs", Context.MODE_PRIVATE)
                             prefs.edit().putBoolean("classic_chorus", enabled).apply()
+                        },
+                        onWebTVModeChange = { enabled ->
+                            webtvMode.value = enabled
+                            val prefs = requireContext().getSharedPreferences("NeoBAE_prefs", Context.MODE_PRIVATE)
+                            prefs.edit().putBoolean("webtv_mode", enabled).apply()
+                            Mixer.setWebTVMode(enabled)
+                            // Curve, default pans and voice state are fixed at song start:
+                            // reload the current song at its position so the change applies now.
+                            if (currentSong != null) {
+                                reloadCurrentSongForBankSwap()
+                            }
                         },
                         onDLSCompatibilityModeChange = { enabled ->
                             dlsCompatibilityMode.value = enabled
@@ -1594,6 +1608,7 @@ class HomeFragment : Fragment() {
                                         Mixer.setDefaultReverb(reverbType.value)
                                         Mixer.setSpanDCFix(fixPanLfoBias.value)
                                         Mixer.setClassicChorus(classicChorus.value)
+                                        Mixer.setWebTVMode(webtvMode.value)
                                         Mixer.setDLSCompatibilityMode(dlsCompatibilityMode.value)
                                         // Re-apply Neo Reverb custom parameters after mixer recreation.
                                         val prefs = ctx.getSharedPreferences("NeoBAE_prefs", Context.MODE_PRIVATE)
@@ -2269,6 +2284,10 @@ class HomeFragment : Fragment() {
                 val classicChorusPref = prefs.getBoolean("classic_chorus", false)
                 HomeFragment.classicChorus.value = classicChorusPref
                 Mixer.setClassicChorus(classicChorusPref)
+                // Restore WebTV Mode setting
+                val webtvModePref = prefs.getBoolean("webtv_mode", false)
+                HomeFragment.webtvMode.value = webtvModePref
+                Mixer.setWebTVMode(webtvModePref)
                 // If we have an active song, apply the curve immediately.
                 try {
                     currentSong?.let { song ->
@@ -3504,6 +3523,7 @@ class HomeFragment : Fragment() {
                                     Mixer.setDefaultReverb(reverbType.value)
                                     Mixer.setSpanDCFix(fixPanLfoBias.value)
                                     Mixer.setClassicChorus(classicChorus.value)
+                                    Mixer.setWebTVMode(webtvMode.value)
                                     Mixer.setDLSCompatibilityMode(dlsCompatibilityMode.value)
                                     val prefs = requireContext().getSharedPreferences("NeoBAE_prefs", Context.MODE_PRIVATE)
                                     val currentReverb = prefs.getInt("default_reverb", reverbType.value)
@@ -3688,6 +3708,7 @@ class HomeFragment : Fragment() {
                                 Mixer.setDefaultReverb(reverbType.value)
                                 Mixer.setSpanDCFix(fixPanLfoBias.value)
                                 Mixer.setClassicChorus(classicChorus.value)
+                                Mixer.setWebTVMode(webtvMode.value)
                                 Mixer.setDLSCompatibilityMode(dlsCompatibilityMode.value)
                                 val prefs = requireContext().getSharedPreferences("NeoBAE_prefs", Context.MODE_PRIVATE)
                                 val currentReverb = prefs.getInt("default_reverb", reverbType.value)

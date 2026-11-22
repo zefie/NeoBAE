@@ -343,6 +343,7 @@ class MainActivity : AppCompatActivity() {
                 try {
                     val prefs = getSharedPreferences("NeoBAE_prefs", Context.MODE_PRIVATE)
                     Mixer.setDLSCompatibilityMode(prefs.getBoolean("dls_compatibility_mode", true))
+                    Mixer.setWebTVMode(prefs.getBoolean("webtv_mode", false))
                 } catch (_: Exception) {
                 }
             }

@@ -79,6 +79,7 @@ fun SettingsScreenContent(
     velocityCurve: Int,
     fixPanLfoBias: Boolean,
     classicChorus: Boolean,
+    webtvMode: Boolean,
     dlsCompatibilityMode: Boolean,
     normalizePlayback: Boolean,
     exportCodec: Int,
@@ -91,6 +92,7 @@ fun SettingsScreenContent(
     onCurveChange: (Int) -> Unit,
     onFixPanLfoChange: (Boolean) -> Unit,
     onClassicChorusChange: (Boolean) -> Unit,
+    onWebTVModeChange: (Boolean) -> Unit,
     onDLSCompatibilityModeChange: (Boolean) -> Unit,
     onNormalizePlaybackChange: (Boolean) -> Unit,
     onVolumeChange: (Int) -> Unit,
@@ -939,16 +941,18 @@ fun SettingsScreenContent(
                 Box {
                     OutlinedButton(
                         onClick = { curveExpanded = true },
+                        enabled = !webtvMode,
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(
-                            text = curveOptions.getOrNull(velocityCurve) ?: "Default",
+                            // WebTV Mode forces the WebTV curve; the saved choice returns when it is off.
+                            text = if (webtvMode) curveOptions[2] else (curveOptions.getOrNull(velocityCurve) ?: "Default"),
                             modifier = Modifier.weight(1f)
                         )
                         Icon(Icons.Filled.ArrowDropDown, contentDescription = null)
                     }
                     DropdownMenu(
-                        expanded = curveExpanded,
+                        expanded = curveExpanded && !webtvMode,
                         onDismissRequest = { curveExpanded = false }
                     ) {
                         curveOptions.forEachIndexed { index, option ->
@@ -1524,16 +1528,18 @@ fun SettingsScreenContent(
                     Box {
                         OutlinedButton(
                             onClick = { curveExpanded = true },
+                            enabled = !webtvMode,
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Text(
-                                text = curveOptions.getOrNull(velocityCurve) ?: "Default",
+                                // WebTV Mode forces the WebTV curve; the saved choice returns when it is off.
+                                text = if (webtvMode) curveOptions[2] else (curveOptions.getOrNull(velocityCurve) ?: "Default"),
                                 modifier = Modifier.weight(1f)
                             )
                             Icon(Icons.Filled.ArrowDropDown, contentDescription = null)
                         }
                         DropdownMenu(
-                            expanded = curveExpanded,
+                            expanded = curveExpanded && !webtvMode,
                             onDismissRequest = { curveExpanded = false }
                         ) {
                             curveOptions.forEachIndexed { index, option ->
@@ -1913,6 +1919,49 @@ fun SettingsScreenContent(
             }
         }
         
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // WebTV Mode Section (same for both orientations)
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            elevation = 4.dp,
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onWebTVModeChange(!webtvMode) },
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Filled.Tune,
+                        contentDescription = null,
+                        tint = MaterialTheme.colors.primary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "WebTV Mode",
+                        style = MaterialTheme.typography.h6,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colors.primary,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Checkbox(
+                        checked = webtvMode,
+                        onCheckedChange = { onWebTVModeChange(it) }
+                    )
+                }
+                Text(
+                    text = "Modifies synth params to be more accurate to WebTV",
+                    style = MaterialTheme.typography.caption,
+                    color = MaterialTheme.colors.onSurface.copy(alpha = 0.6f),
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
+        }
+
         Spacer(modifier = Modifier.height(16.dp))
 
         Card(

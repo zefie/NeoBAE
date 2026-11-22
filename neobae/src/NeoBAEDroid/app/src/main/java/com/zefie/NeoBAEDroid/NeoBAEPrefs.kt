@@ -24,6 +24,8 @@ object NeoBAEPrefs {
     val fixPanLfoBias = mutableStateOf(true)
     // Classic chorus ordering (off by default)
     val classicChorus = mutableStateOf(false)
+    // WebTV Mode: WebTV velocity curve, LFO shapes, default pans, filter glide (off by default)
+    val webtvMode = mutableStateOf(false)
     // Native DLS compatibility mode (disables MobileBAE quirks, off by default)
     val dlsCompatibilityMode = mutableStateOf(true) /* default on for new installs */
     // Optional whole-song peak normalize via MIDI+patch estimate (off by default)
