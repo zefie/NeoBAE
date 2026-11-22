@@ -41,6 +41,7 @@ ifneq ($(WASM),1)
 		USE_BUILTIN_PATCHES_WITH_DLS := 1
 		FIX_SPAN_DC := 1
 		CLASSIC_CHORUS := 1
+		WEBTV_MODE := 1
 		LZMA_SUPPORT := 1
 		MTHC_SUPPORT := 1
 		ADP_SUPPORT := 1
@@ -70,6 +71,7 @@ ifeq ($(NBEDITOR),1)
 	CREATION_API := 1
 	FIX_SPAN_DC := 1
 	CLASSIC_CHORUS := 1
+	WEBTV_MODE := 1
 	BAE_FLAGS += -DNBEDITOR=1 -DNBEDITOR_MVP=1 -DNBEDITOR_PLAYER_WINDOW=1 -DNBEDITOR_SAMPLE_LIST_WINDOW=1 -DNBEDITOR_INSTRUMENT_LIST_WINDOW=1
 	INC_PATH += -Isrc/thirdparty/imgui -Isrc/thirdparty/imgui/backends
 	# Embed Liberation Sans Regular + Italic (same as CMake / zefidi path).
@@ -128,6 +130,7 @@ ifeq ($(ZMF_SUPPORT),1)
 	LZMA_SUPPORT := 1
 	FIX_SPAN_DC := 1
 	CLASSIC_CHORUS := 1
+	WEBTV_MODE := 1
 endif	
 
 # Disable SDL2 if using SDL3
@@ -231,6 +234,10 @@ endif
 
 ifeq ($(CLASSIC_CHORUS),1)
 	BAE_FLAGS += -DBAE_CLASSIC_CHORUS=1
+endif
+
+ifeq ($(WEBTV_MODE),1)
+	BAE_FLAGS += -DUSE_WEBTV_MODE=1
 endif
 
 ifeq ($(ZMF_SUPPORT),1)

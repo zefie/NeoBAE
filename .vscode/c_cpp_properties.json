@@ -60,7 +60,8 @@
                 "SUPPORT_BAESCRIPT=1",
                 "SUPPORT_PLAYLIST=1",
                 "BAE_FIX_SPAN_DC=1",
-                "BAE_CLASSIC_CHORUS=1"
+                "BAE_CLASSIC_CHORUS=1",
+                "USE_WEBTV_MODE=1"
             ],
             "compilerPath": "/usr/bin/x86_64-w64-mingw32-gcc",
             "intelliSenseMode": "linux-gcc-x64",
