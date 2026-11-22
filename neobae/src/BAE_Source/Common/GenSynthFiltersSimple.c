@@ -179,10 +179,12 @@ void PV_ServeInterp2FilterPartialBuffer (GM_Voice *this_voice, bool looping)
 
     amplitudeL = this_voice->lastAmplitudeL;
     ampValueL = (this_voice->NoteVolume * this_voice->NoteVolumeEnvelope) >> VOLUME_PRECISION_SCALAR;
+    /* Ramp in full precision (lastAmplitude is the accumulator) and shift only for the
+       multiply. Shifting the step itself truncated it to 0 below Four_Loop<<2, so quiet
+       voices stuck at a fixed level or dropped out. */
     amplitudeLincrement = (ampValueL - amplitudeL) / MusicGlobals->Four_Loop;
     
     amplitudeL = amplitudeL >> 2;
-    amplitudeLincrement = amplitudeLincrement >> 2;
 
     destL = &MusicGlobals->songBufferDry[0];
     source = this_voice->NotePtr;
@@ -216,7 +218,7 @@ void PV_ServeInterp2FilterPartialBuffer (GM_Voice *this_voice, bool looping)
                 destL++;
                 cur_wave += wave_increment;
             }
-            amplitudeL += amplitudeLincrement;
+            this_voice->lastAmplitudeL += amplitudeLincrement; amplitudeL = this_voice->lastAmplitudeL >> 2;
         }
     }
     else
@@ -241,14 +243,14 @@ void PV_ServeInterp2FilterPartialBuffer (GM_Voice *this_voice, bool looping)
                 destL++;
                 cur_wave += wave_increment;
             }
-            amplitudeL += amplitudeLincrement;
+            this_voice->lastAmplitudeL += amplitudeLincrement; amplitudeL = this_voice->lastAmplitudeL >> 2;
         }
     }
 
     this_voice->Z1value = Z1value;
     this_voice->zIndex = zIndex2;
     this_voice->NoteWave = cur_wave;
-    this_voice->lastAmplitudeL = amplitudeL << 2;
+    /* lastAmplitudeL holds the full-precision ramp end. */
 FINISH:
     return;
 #endif
@@ -311,10 +313,12 @@ void PV_ServeInterp2FilterFullBuffer(GM_Voice *this_voice)
 
     amplitudeL = this_voice->lastAmplitudeL;
     ampValueL = (this_voice->NoteVolume * this_voice->NoteVolumeEnvelope) >> VOLUME_PRECISION_SCALAR;
+    /* Ramp in full precision (lastAmplitude is the accumulator) and shift only for the
+       multiply. Shifting the step itself truncated it to 0 below Four_Loop<<2, so quiet
+       voices stuck at a fixed level or dropped out. */
     amplitudeLincrement = (ampValueL - amplitudeL) / MusicGlobals->Four_Loop;
     
     amplitudeL = amplitudeL >> 2;
-    amplitudeLincrement = amplitudeLincrement >> 2;
 
     destL = &MusicGlobals->songBufferDry[0];
     source = this_voice->NotePtr;
@@ -337,7 +341,7 @@ void PV_ServeInterp2FilterFullBuffer(GM_Voice *this_voice)
                 destL++;
                 cur_wave += wave_increment;
             }
-            amplitudeL += amplitudeLincrement;
+            this_voice->lastAmplitudeL += amplitudeLincrement; amplitudeL = this_voice->lastAmplitudeL >> 2;
         }
     }
     else
@@ -361,14 +365,14 @@ void PV_ServeInterp2FilterFullBuffer(GM_Voice *this_voice)
                 destL++;
                 cur_wave += wave_increment;
             }
-            amplitudeL += amplitudeLincrement;
+            this_voice->lastAmplitudeL += amplitudeLincrement; amplitudeL = this_voice->lastAmplitudeL >> 2;
         }
     }
 
     this_voice->Z1value = Z1value;
     this_voice->zIndex = zIndex2;
     this_voice->NoteWave = cur_wave;
-    this_voice->lastAmplitudeL = amplitudeL << 2;
+    /* lastAmplitudeL holds the full-precision ramp end. */
 #endif
 }
 

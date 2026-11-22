@@ -137,10 +137,12 @@ void PV_ServeU3232FilterPartialBufferNewReverb (GM_Voice *this_voice, bool loopi
 
     amplitudeL = this_voice->lastAmplitudeL;
     ampValueL = (this_voice->NoteVolume * this_voice->NoteVolumeEnvelope) >> VOLUME_PRECISION_SCALAR;
+    /* Ramp in full precision (lastAmplitude is the accumulator) and shift only for the
+       multiply. Shifting the step itself truncated it to 0 below Four_Loop<<2, so quiet
+       voices stuck at a fixed level or dropped out. */
     amplitudeLincrement = (ampValueL - amplitudeL) / MusicGlobals->Four_Loop;
     
     amplitudeL = amplitudeL >> 2;
-    amplitudeLincrement = amplitudeLincrement >> 2;
 
     destL = &MusicGlobals->songBufferDry[0];
     destReverb = &MusicGlobals->songBufferReverb[0];
@@ -184,7 +186,7 @@ void PV_ServeU3232FilterPartialBufferNewReverb (GM_Voice *this_voice, bool loopi
                     *destChorus++ += sample * amplitudeChorus;
                     ADD_U3232(cur_wave_i, cur_wave_f, wave_increment);
                 }
-                amplitudeL += amplitudeLincrement;
+                this_voice->lastAmplitudeL += amplitudeLincrement; amplitudeL = this_voice->lastAmplitudeL >> 2;
             }
         }
         else
@@ -214,7 +216,7 @@ void PV_ServeU3232FilterPartialBufferNewReverb (GM_Voice *this_voice, bool loopi
                     destReverb++;
                     *destChorus++ += sample * amplitudeChorus;
                 }
-                amplitudeL += amplitudeLincrement;
+                this_voice->lastAmplitudeL += amplitudeLincrement; amplitudeL = this_voice->lastAmplitudeL >> 2;
             }
         }
     }
@@ -222,7 +224,7 @@ void PV_ServeU3232FilterPartialBufferNewReverb (GM_Voice *this_voice, bool loopi
     this_voice->zIndex = zIndex2;
     this_voice->samplePosition.i = cur_wave_i;
     this_voice->samplePosition.f = cur_wave_f;
-    this_voice->lastAmplitudeL = amplitudeL << 2;
+    /* lastAmplitudeL holds the full-precision ramp end. */
 FINISH:
     return;
 }
@@ -260,8 +262,11 @@ void PV_ServeU3232StereoFilterPartialBufferNewReverb (GM_Voice *this_voice, bool
 
     amplitudeL = this_voice->lastAmplitudeL;
     amplitudeR = this_voice->lastAmplitudeR;
-    amplitudeLincrement = ((ampValueL - amplitudeL) / MusicGlobals->Four_Loop) >> 2;
-    amplitudeRincrement = ((ampValueR - amplitudeR) / MusicGlobals->Four_Loop) >> 2;
+    /* Ramp in full precision (lastAmplitude is the accumulator) and shift only for the
+       multiply. Shifting the step itself truncated it to 0 below Four_Loop<<2, so quiet
+       voices stuck at a fixed level or dropped out. */
+    amplitudeLincrement = (ampValueL - amplitudeL) / MusicGlobals->Four_Loop;
+    amplitudeRincrement = (ampValueR - amplitudeR) / MusicGlobals->Four_Loop;
 
     amplitudeL = amplitudeL >> 2;
     amplitudeR = amplitudeR >> 2;
@@ -309,8 +314,8 @@ void PV_ServeU3232StereoFilterPartialBufferNewReverb (GM_Voice *this_voice, bool
                     destReverb++;
                     *destChorus++ += sample * amplitudeChorus;
                 }
-                amplitudeL += amplitudeLincrement;
-                amplitudeR += amplitudeRincrement;
+                this_voice->lastAmplitudeL += amplitudeLincrement; amplitudeL = this_voice->lastAmplitudeL >> 2;
+                this_voice->lastAmplitudeR += amplitudeRincrement; amplitudeR = this_voice->lastAmplitudeR >> 2;
             }
         }
         else
@@ -341,8 +346,8 @@ void PV_ServeU3232StereoFilterPartialBufferNewReverb (GM_Voice *this_voice, bool
                     *destChorus++ += sample * amplitudeChorus;
                     ADD_U3232(cur_wave_i, cur_wave_f, wave_increment);
                 }
-                amplitudeL += amplitudeLincrement;
-                amplitudeR += amplitudeRincrement;
+                this_voice->lastAmplitudeL += amplitudeLincrement; amplitudeL = this_voice->lastAmplitudeL >> 2;
+                this_voice->lastAmplitudeR += amplitudeRincrement; amplitudeR = this_voice->lastAmplitudeR >> 2;
             }
         }
     }
@@ -350,8 +355,8 @@ void PV_ServeU3232StereoFilterPartialBufferNewReverb (GM_Voice *this_voice, bool
     this_voice->zIndex = zIndex2;
     this_voice->samplePosition.i = cur_wave_i;
     this_voice->samplePosition.f = cur_wave_f;
-    this_voice->lastAmplitudeL = (int32_t)(((unsigned int)amplitudeL) << 2);
-    this_voice->lastAmplitudeR = (int32_t)(((unsigned int)amplitudeR) << 2);
+    /* lastAmplitudeL holds the full-precision ramp end. */
+    /* lastAmplitudeR holds the full-precision ramp end. */
 FINISH:
     return;
 }
@@ -386,10 +391,12 @@ void PV_ServeU3232FilterFullBufferNewReverb (GM_Voice *this_voice)
 
     amplitudeL = this_voice->lastAmplitudeL;
     ampValueL = (this_voice->NoteVolume * this_voice->NoteVolumeEnvelope) >> VOLUME_PRECISION_SCALAR;
+    /* Ramp in full precision (lastAmplitude is the accumulator) and shift only for the
+       multiply. Shifting the step itself truncated it to 0 below Four_Loop<<2, so quiet
+       voices stuck at a fixed level or dropped out. */
     amplitudeLincrement = (ampValueL - amplitudeL) / MusicGlobals->Four_Loop;
     
     amplitudeL = amplitudeL >> 2;
-    amplitudeLincrement = amplitudeLincrement >> 2;
 
     destL = &MusicGlobals->songBufferDry[0];
     destReverb = &MusicGlobals->songBufferReverb[0];
@@ -422,7 +429,7 @@ void PV_ServeU3232FilterFullBufferNewReverb (GM_Voice *this_voice)
                     destReverb++;
                     *destChorus++ += sample * amplitudeChorus;
                 }
-                amplitudeL += amplitudeLincrement;
+                this_voice->lastAmplitudeL += amplitudeLincrement; amplitudeL = this_voice->lastAmplitudeL >> 2;
             }
         }
         else
@@ -451,7 +458,7 @@ void PV_ServeU3232FilterFullBufferNewReverb (GM_Voice *this_voice)
                     destReverb++;
                     *destChorus++ += sample * amplitudeChorus;
                 }
-                amplitudeL += amplitudeLincrement;
+                this_voice->lastAmplitudeL += amplitudeLincrement; amplitudeL = this_voice->lastAmplitudeL >> 2;
             }
         }
     }
@@ -459,7 +466,7 @@ void PV_ServeU3232FilterFullBufferNewReverb (GM_Voice *this_voice)
     this_voice->zIndex = zIndex2;
     this_voice->samplePosition.i = cur_wave_i;
     this_voice->samplePosition.f = cur_wave_f;
-    this_voice->lastAmplitudeL = amplitudeL << 2;
+    /* lastAmplitudeL holds the full-precision ramp end. */
     return;
 }
 
@@ -497,8 +504,11 @@ void PV_ServeU3232StereoFilterFullBufferNewReverb (GM_Voice *this_voice)
 
     amplitudeL = this_voice->lastAmplitudeL;
     amplitudeR = this_voice->lastAmplitudeR;
-    amplitudeLincrement = ((ampValueL - amplitudeL) / MusicGlobals->Four_Loop) >> 2;
-    amplitudeRincrement = ((ampValueR - amplitudeR) / MusicGlobals->Four_Loop) >> 2;
+    /* Ramp in full precision (lastAmplitude is the accumulator) and shift only for the
+       multiply. Shifting the step itself truncated it to 0 below Four_Loop<<2, so quiet
+       voices stuck at a fixed level or dropped out. */
+    amplitudeLincrement = (ampValueL - amplitudeL) / MusicGlobals->Four_Loop;
+    amplitudeRincrement = (ampValueR - amplitudeR) / MusicGlobals->Four_Loop;
 
     amplitudeL = amplitudeL >> 2;
     amplitudeR = amplitudeR >> 2;
@@ -535,8 +545,8 @@ void PV_ServeU3232StereoFilterFullBufferNewReverb (GM_Voice *this_voice)
                     *destChorus++ += sample * amplitudeChorus;
                     ADD_U3232(cur_wave_i, cur_wave_f, wave_increment);
                 }
-                amplitudeL += amplitudeLincrement;
-                amplitudeR += amplitudeRincrement;
+                this_voice->lastAmplitudeL += amplitudeLincrement; amplitudeL = this_voice->lastAmplitudeL >> 2;
+                this_voice->lastAmplitudeR += amplitudeRincrement; amplitudeR = this_voice->lastAmplitudeR >> 2;
             }
         }
         else
@@ -566,8 +576,8 @@ void PV_ServeU3232StereoFilterFullBufferNewReverb (GM_Voice *this_voice)
                     *destChorus++ += sample * amplitudeChorus;
                     ADD_U3232(cur_wave_i, cur_wave_f, wave_increment);
                 }
-                amplitudeL += amplitudeLincrement;
-                amplitudeR += amplitudeRincrement;
+                this_voice->lastAmplitudeL += amplitudeLincrement; amplitudeL = this_voice->lastAmplitudeL >> 2;
+                this_voice->lastAmplitudeR += amplitudeRincrement; amplitudeR = this_voice->lastAmplitudeR >> 2;
             }
         }
     }
@@ -575,8 +585,8 @@ void PV_ServeU3232StereoFilterFullBufferNewReverb (GM_Voice *this_voice)
     this_voice->zIndex = zIndex2;
     this_voice->samplePosition.i = cur_wave_i;
     this_voice->samplePosition.f = cur_wave_f;
-    this_voice->lastAmplitudeL = (int32_t)(((unsigned int)amplitudeL) << 2);
-    this_voice->lastAmplitudeR = (int32_t)(((unsigned int)amplitudeR) << 2);
+    /* lastAmplitudeL holds the full-precision ramp end. */
+    /* lastAmplitudeR holds the full-precision ramp end. */
 }
 
 // ������������� ������������� ������������� ������������� ������������� ������������� ����������

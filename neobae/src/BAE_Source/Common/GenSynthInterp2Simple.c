@@ -394,7 +394,10 @@ void PV_ServeInterp2FullBuffer16 (GM_Voice *this_voice)
 
     amplitude = this_voice->lastAmplitudeL;
     amplitudeAdjust = (this_voice->NoteVolume * this_voice->NoteVolumeEnvelope) >> VOLUME_PRECISION_SCALAR;
-    amplitudeAdjust = (amplitudeAdjust - amplitude) / MusicGlobals->Four_Loop >> 4;
+    /* Ramp in full precision (lastAmplitude is the accumulator) and shift only for the
+       multiply. Shifting the step itself truncated it to 0 below Four_Loop<<4, so quiet
+       voices stuck at a fixed level or dropped out. */
+    amplitudeAdjust = (amplitudeAdjust - amplitude) / MusicGlobals->Four_Loop;
     amplitude = amplitude >> 4;
 
     dest = &MusicGlobals->songBufferDry[0];
@@ -421,7 +424,7 @@ void PV_ServeInterp2FullBuffer16 (GM_Voice *this_voice)
                     cur_wave += wave_increment;
                 }
                 dest += 4;
-                amplitude += amplitudeAdjust;
+                this_voice->lastAmplitudeL += amplitudeAdjust; amplitude = this_voice->lastAmplitudeL >> 4;
             }
         }
         else
@@ -448,7 +451,7 @@ void PV_ServeInterp2FullBuffer16 (GM_Voice *this_voice)
                 dest[3] += ((((((int32_t) (cur_wave & STEP_FULL_RANGE) * (c-b)))>>STEP_BIT_RANGE) + b) * amplitude) >> 4;
                 dest += 4;
                 cur_wave += wave_increment;
-                amplitude += amplitudeAdjust;
+                this_voice->lastAmplitudeL += amplitudeAdjust; amplitude = this_voice->lastAmplitudeL >> 4;
             }
         }
     }
@@ -472,7 +475,7 @@ void PV_ServeInterp2FullBuffer16 (GM_Voice *this_voice)
                     dest++;
                     cur_wave += wave_increment;
                 }
-                amplitude += amplitudeAdjust;
+                this_voice->lastAmplitudeL += amplitudeAdjust; amplitude = this_voice->lastAmplitudeL >> 4;
             }
         }
         else
@@ -489,13 +492,13 @@ void PV_ServeInterp2FullBuffer16 (GM_Voice *this_voice)
                     dest++;
                     cur_wave += wave_increment;
                 }
-                amplitude += amplitudeAdjust;
+                this_voice->lastAmplitudeL += amplitudeAdjust; amplitude = this_voice->lastAmplitudeL >> 4;
             }
         }
     }
 
     this_voice->NoteWave = cur_wave;
-    this_voice->lastAmplitudeL = amplitude << 4;
+    /* lastAmplitudeL holds the full-precision ramp end. */
 
 #if WRITE_LOOPS == TRUE
     fwrite(&this_voice->NoteWave, sizeof(this_voice->NoteWave), 1, file);
@@ -552,7 +555,10 @@ void PV_ServeInterp2PartialBuffer16 (GM_Voice *this_voice, bool looping)
 
     amplitude = this_voice->lastAmplitudeL;
     amplitudeAdjust = (this_voice->NoteVolume * this_voice->NoteVolumeEnvelope) >> VOLUME_PRECISION_SCALAR;
-    amplitudeAdjust = (amplitudeAdjust - amplitude) / MusicGlobals->Four_Loop >> 4;
+    /* Ramp in full precision (lastAmplitude is the accumulator) and shift only for the
+       multiply. Shifting the step itself truncated it to 0 below Four_Loop<<4, so quiet
+       voices stuck at a fixed level or dropped out. */
+    amplitudeAdjust = (amplitudeAdjust - amplitude) / MusicGlobals->Four_Loop;
     amplitude = amplitude >> 4;
 
     dest = &MusicGlobals->songBufferDry[0];
@@ -624,7 +630,7 @@ void PV_ServeInterp2PartialBuffer16 (GM_Voice *this_voice, bool looping)
                     }
                 }
                 dest += 4;
-                amplitude += amplitudeAdjust;
+                this_voice->lastAmplitudeL += amplitudeAdjust; amplitude = this_voice->lastAmplitudeL >> 4;
             }
         }
         else
@@ -685,7 +691,7 @@ void PV_ServeInterp2PartialBuffer16 (GM_Voice *this_voice, bool looping)
                 }
                 dest += 4;
                 cur_wave += wave_increment;
-                amplitude += amplitudeAdjust;
+                this_voice->lastAmplitudeL += amplitudeAdjust; amplitude = this_voice->lastAmplitudeL >> 4;
             }
         }
     }
@@ -730,7 +736,7 @@ void PV_ServeInterp2PartialBuffer16 (GM_Voice *this_voice, bool looping)
                     dest++;
                     cur_wave += wave_increment;
                 }
-                amplitude += amplitudeAdjust;
+                this_voice->lastAmplitudeL += amplitudeAdjust; amplitude = this_voice->lastAmplitudeL >> 4;
             }
         }
         else
@@ -748,13 +754,13 @@ void PV_ServeInterp2PartialBuffer16 (GM_Voice *this_voice, bool looping)
                     dest++;
                     cur_wave += wave_increment;
                 }
-                amplitude += amplitudeAdjust;
+                this_voice->lastAmplitudeL += amplitudeAdjust; amplitude = this_voice->lastAmplitudeL >> 4;
             }
         }
     }
 
     this_voice->NoteWave = cur_wave;
-    this_voice->lastAmplitudeL = amplitude << 4;
+    /* lastAmplitudeL holds the full-precision ramp end. */
 FINISH:
 #if WRITE_LOOPS == TRUE
     fwrite(&this_voice->NoteWave, sizeof(this_voice->NoteWave), 1, file);
