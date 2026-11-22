@@ -754,6 +754,30 @@ static uint32_t PV_GetLFOAdjustedTimeInMicroseconds(void)
 }
 
 // given a midi volume, translate it via a table to a new value
+// Post-mix makeup gain while the WebTV velocity curve is in use (see the
+// mix stage in the slice builder).
+#define WEBTV_CURVE_MAKEUP_NUM  13
+#define WEBTV_CURVE_MAKEUP_DEN  10
+
+static bool PV_WebTVCurveInUse(GM_Mixer *pMixer)
+{
+    int32_t si;
+
+    if (pMixer == NULL)
+        return FALSE;
+#if USE_WEBTV_MODE
+    if (pMixer->webtvMode)
+        return TRUE;
+#endif
+    for (si = 0; si < MAX_SONGS; si++)
+    {
+        GM_Song *song = pMixer->pSongsToPlay[si];
+        if (song && song->velocityCurveType == 2)  // WebTV curve
+            return TRUE;
+    }
+    return FALSE;
+}
+
 int32_t PV_ModifyVelocityFromCurve(GM_Song *pSong, int32_t volume)
 {
     int32_t sourceVelocity = volume & 0x7FL;
@@ -4230,6 +4254,22 @@ void PV_ProcessSampleFrame(void *threadContext, void *destinationSamples)
             for (int32_t i = 0; i < samples; i++)
             {
                 buffer[i] = (int32_t)(((int64_t)buffer[i] * (int64_t)ng) / (int64_t)XFIXED_1);
+            }
+        }
+
+        // WebTV velocity curve makeup gain. The WebTV curve (2) maps the mid
+        // velocities below the default S curve (velocity 64 -> 63/254 vs
+        // 86/252) and is long-standing feedback as too quiet. Boost the mix by
+        // 1.3x while it is in use (forced by WebTV Mode or chosen per song),
+        // still before the limiter so it cannot clip. The normalize estimate
+        // ignores the velocity curve, so this applies alongside it.
+        if (PV_WebTVCurveInUse(pMixer))
+        {
+            int32_t *buffer = pMixer->songBufferDry;
+            int32_t samples = pMixer->One_Loop * (pMixer->generateStereoOutput ? 2 : 1);
+            for (int32_t i = 0; i < samples; i++)
+            {
+                buffer[i] = (int32_t)(((int64_t)buffer[i] * WEBTV_CURVE_MAKEUP_NUM) / WEBTV_CURVE_MAKEUP_DEN);
             }
         }
 
