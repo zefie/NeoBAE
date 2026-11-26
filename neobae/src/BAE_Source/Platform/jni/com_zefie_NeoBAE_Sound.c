@@ -556,13 +556,33 @@ JNIEXPORT jboolean JNICALL Java_com_zefie_NeoBAE_Song__1hasEmbeddedBank
 	return (jboolean)BAESong_HasEmbeddedBank(song);
 }
 
+/* Preroll, keeping the mixer reverb the app chose. GM_PrerollSong applies the
+ * song's stored reverb: "None" for plain MIDI (placeholder song header) and the
+ * header reverb for RMF. zefidi re-applies the user's reverb after preroll, so do
+ * the same here; reverb changes inside the song (NRPN, CC 90) still apply while
+ * it plays. */
+static BAEResult PV_PrerollKeepingReverb(BAESong song)
+{
+	BAEMixer mixer = NULL;
+	BAEReverbType before = BAE_REVERB_NO_CHANGE;
+	BAEReverbType after = BAE_REVERB_NO_CHANGE;
+	BAE_BOOL haveReverb = (BAESong_GetMixer(song, &mixer) == BAE_NO_ERROR && mixer &&
+	                      BAEMixer_GetDefaultReverb(mixer, &before) == BAE_NO_ERROR);
+	BAEResult r = BAESong_Preroll(song);
+	if (haveReverb && BAEMixer_GetDefaultReverb(mixer, &after) == BAE_NO_ERROR && after != before)
+	{
+		BAEMixer_SetDefaultReverb(mixer, before);
+	}
+	return r;
+}
+
 JNIEXPORT jint JNICALL Java_com_zefie_NeoBAE_Song__1prerollSong
 	(JNIEnv* env, jobject jsong, jlong songReference)
 {
 	BAESong song = (BAESong)(intptr_t)songReference;
 	if(!song) return (jint)BAE_PARAM_ERR;
 	__android_log_print(ANDROID_LOG_DEBUG, "neoBAE", "_prerollSong song=%p", (void*)(intptr_t)songReference);
-	BAEResult r = BAESong_Preroll(song);
+	BAEResult r = PV_PrerollKeepingReverb(song);
 	__android_log_print(ANDROID_LOG_DEBUG, "neoBAE", "BAESong_Preroll returned %d", r);
 	return (jint)r;
 }
@@ -587,7 +607,7 @@ JNIEXPORT jint JNICALL Java_com_zefie_NeoBAE_Song__1startSong
 		uint64_t lenUs = 0;
 		(void)BAESong_GetMicrosecondLength64(song, &lenUs);
 	}
-	BAESong_Preroll(song);
+	PV_PrerollKeepingReverb(song);
 	BAEResult r = BAESong_Start(song, 0);
 	__android_log_print(ANDROID_LOG_DEBUG, "neoBAE", "BAESong_Start returned %d", r);
 	return (jint)r;

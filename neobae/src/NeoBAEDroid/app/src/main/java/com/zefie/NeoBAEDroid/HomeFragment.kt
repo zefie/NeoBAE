@@ -1706,12 +1706,6 @@ class HomeFragment : Fragment() {
             val bytes = file.readBytes()
             val loadResult = com.zefie.NeoBAE.LoadResult()
 
-            // A MIDI song records the mixer's reverb at load time as its default and
-            // re-applies it on start. Restore the user's reverb first, so a reverb override
-            // from the previous song (NRPN, CC 90 or an RMF header) doesn't carry over.
-            // The new song can still override it itself.
-            Mixer.setDefaultReverb(reverbType.value)
-
             val status = Mixer.loadFromMemory(bytes, loadResult)
             
             if (status == 0) {
