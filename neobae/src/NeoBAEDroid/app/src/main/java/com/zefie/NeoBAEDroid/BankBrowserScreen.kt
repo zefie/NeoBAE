@@ -76,6 +76,16 @@ fun BankBrowserScreen(
     onPickFolder: () -> Unit,
     onClose: () -> Unit
 ) {
+    // In SAF builds "/" is the saved-folders list (every folder the user has authorized),
+    // and ".." at a SAF tree root returns there, matching the main file browser.
+    val atSafRoot = showPickFolderAction && !currentPath.startsWith("content://")
+    val parentPath: String? = when {
+        currentPath.startsWith("content://") ->
+            getSafParentPath(currentPath) ?: if (showPickFolderAction) "/" else null
+        currentPath == "/" || atSafRoot -> null
+        else -> File(currentPath).parent
+    }
+
     Column(modifier = Modifier.fillMaxSize()) {
         // Current path bar
         Surface(
@@ -97,7 +107,7 @@ fun BankBrowserScreen(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = getDisplayPath(currentPath),
+                    text = if (atSafRoot) "Saved Folders" else getDisplayPath(currentPath),
                     style = MaterialTheme.typography.caption,
                     color = MaterialTheme.colors.onSurface.copy(alpha = 0.7f),
                     maxLines = 1,
@@ -137,7 +147,7 @@ fun BankBrowserScreen(
                                     )
                                     Spacer(modifier = Modifier.width(12.dp))
                                     Text(
-                                        text = "Choose Different Folder",
+                                        text = if (atSafRoot) "Add Folder" else "Choose Different Folder",
                                         fontSize = 14.sp,
                                         fontWeight = FontWeight.SemiBold,
                                         color = MaterialTheme.colors.onBackground
@@ -196,9 +206,7 @@ fun BankBrowserScreen(
                     }
                     
                     // Show parent directory ".." if not at root
-                    val file = File(currentPath)
-                    val parentPath = file.parent
-                    if (parentPath != null && currentPath != "/") {
+                    if (parentPath != null) {
                         item {
                             Surface(
                                 modifier = Modifier
@@ -242,7 +250,7 @@ fun BankBrowserScreen(
                                     tint = Color.Gray
                                 )
                                 Spacer(modifier = Modifier.height(16.dp))
-                                Text("No bank files in this folder", color = Color.Gray)
+                                Text(if (atSafRoot) "No saved folders yet" else "No bank files in this folder", color = Color.Gray)
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Text(
                                     "Supported: .sf2, .sf3, .sfo, .hsb, .dls",
@@ -278,7 +286,7 @@ fun BankBrowserScreen(
                                     )
                                     Spacer(modifier = Modifier.width(12.dp))
                                     Text(
-                                        text = "Choose Different Folder",
+                                        text = if (atSafRoot) "Add Folder" else "Choose Different Folder",
                                         fontSize = 14.sp,
                                         fontWeight = FontWeight.SemiBold,
                                         color = MaterialTheme.colors.onBackground
@@ -337,9 +345,7 @@ fun BankBrowserScreen(
                     }
                     
                     // Show parent directory ".." if not at root
-                    val file = File(currentPath)
-                    val parentPath = file.parent
-                    if (parentPath != null && currentPath != "/") {
+                    if (parentPath != null) {
                         item {
                             Surface(
                                 modifier = Modifier

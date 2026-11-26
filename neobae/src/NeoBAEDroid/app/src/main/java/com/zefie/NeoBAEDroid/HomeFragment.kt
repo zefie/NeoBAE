@@ -1345,14 +1345,13 @@ class HomeFragment : Fragment() {
                         bankBrowserLoading = bankBrowserLoading.value,
                         onBrowseBanks = {
                             if (!BuildConfig.USE_MANAGE_EXTERNAL_STORAGE) {
-                                if (pickedBankFolderUri == null) {
-                                    (activity as? MainActivity)?.requestBankFolderPicker()
-                                } else {
-                                    val startPath = bankBrowserPath.value.ifBlank { pickedBankFolderUri!!.toString() }
-                                    bankBrowserPath.value = startPath
-                                    navigateToBankFolder(startPath)
-                                    showBankBrowser.value = true
-                                }
+                                // No saved bank folder: open the saved-folders list ("/"), which
+                                // offers already-authorized folders and asks for one only if none exist.
+                                val startPath = if (pickedBankFolderUri == null) "/"
+                                    else bankBrowserPath.value.ifBlank { pickedBankFolderUri!!.toString() }
+                                bankBrowserPath.value = startPath
+                                navigateToBankFolder(startPath)
+                                showBankBrowser.value = true
                             } else {
                                 val prefs = requireContext().getSharedPreferences("NeoBAE_prefs", Context.MODE_PRIVATE)
                                 val startPath = prefs.getString("last_bank_browser_path", "/") ?: "/"
@@ -1706,6 +1705,12 @@ class HomeFragment : Fragment() {
             
             val bytes = file.readBytes()
             val loadResult = com.zefie.NeoBAE.LoadResult()
+
+            // A MIDI song records the mixer's reverb at load time as its default and
+            // re-applies it on start. Restore the user's reverb first, so a reverb override
+            // from the previous song (NRPN, CC 90 or an RMF header) doesn't carry over.
+            // The new song can still override it itself.
+            Mixer.setDefaultReverb(reverbType.value)
 
             val status = Mixer.loadFromMemory(bytes, loadResult)
             
@@ -3211,24 +3216,55 @@ class HomeFragment : Fragment() {
         Toast.makeText(requireContext(), "Added ${midiFiles.size} files to playlist (recursive scan)", Toast.LENGTH_SHORT).show()
     }
 
-    private fun loadBankFolderContentsSaf(path: String) {
-        val folderUriString = when {
-            path == "/" -> pickedBankFolderUri?.toString()
-            path.startsWith("content://") -> path
-            else -> pickedBankFolderUri?.toString()
-        }
+    /**
+     * SAF bank browser root ("/"): list every folder the user has granted persisted access to
+     * (including MIDI folders), so they can switch bank folders without re-picking them.
+     */
+    private fun loadBankSafSavedFoldersRoot() {
+        val ctx = context ?: return
+        bankBrowserLoading.value = true
+        Thread {
+            val entries = try { getPersistedSafFolderEntries(ctx) } catch (_: Exception) { emptyList() }
+            val labelCounts = entries.groupingBy { it.label }.eachCount()
+            val items = entries.map { entry ->
+                val title = if ((labelCounts[entry.label] ?: 0) > 1) getDisplayPath(entry.uri.toString()) else entry.label
+                PlaylistItem(
+                    file = File(ctx.cacheDir, "saf_folder_${entry.uri.hashCode()}"),
+                    uri = entry.uri,
+                    title = title,
+                    path = entry.uri.toString(),
+                    isFolder = true
+                )
+            }
+            activity?.runOnUiThread {
+                bankBrowserFiles.clear()
+                bankBrowserFiles.addAll(items)
+                bankBrowserPath.value = "/"
+                bankBrowserLoading.value = false
+                ctx.getSharedPreferences("NeoBAE_prefs", Context.MODE_PRIVATE)
+                    .edit().putString("last_bank_browser_path", "/").apply()
+                if (items.isEmpty()) {
+                    (activity as? MainActivity)?.requestBankFolderPicker()
+                }
+            }
+        }.start()
+    }
 
-        if (folderUriString == null) {
-            (activity as? MainActivity)?.requestBankFolderPicker()
+    private fun loadBankFolderContentsSaf(path: String) {
+        if (!path.startsWith("content://")) {
+            loadBankSafSavedFoldersRoot()
             return
         }
+        val folderUriString = path
 
         val folderDoc = getSafDocumentFile(folderUriString)
         if (folderDoc == null || !folderDoc.isDirectory) {
-            activity?.runOnUiThread {
-                bankBrowserLoading.value = false
-                Toast.makeText(requireContext(), "Unable to open SAF bank folder", Toast.LENGTH_SHORT).show()
+            Toast.makeText(requireContext(), "Unable to open SAF bank folder", Toast.LENGTH_SHORT).show()
+            if (pickedBankFolderUri?.toString()?.trimEnd('/') == folderUriString.trimEnd('/')) {
+                pickedBankFolderUri = null
             }
+            // Fall back to the saved-folders list.
+            loadBankSafSavedFoldersRoot()
             return
         }
 
@@ -3242,6 +3278,7 @@ class HomeFragment : Fragment() {
                     bankBrowserFiles.clear()
                     bankBrowserFiles.addAll(items)
                     bankBrowserPath.value = folderUriString
+                    pickedBankFolderUri = Uri.parse(folderUriString)
                     bankBrowserLoading.value = false
                 }
             } catch (ex: Exception) {
